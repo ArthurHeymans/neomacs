@@ -3,6 +3,7 @@ use super::chartable::{for_each_non_nil_char_table_run, is_char_table};
 use super::error::{Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
 use regex::Regex;
@@ -691,7 +692,7 @@ pub(crate) fn resolve_fontset_name_arg(value: &Value) -> Result<String, Flow> {
             Ok(query_fontset_registry(&requested, false).unwrap_or(requested))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -1175,7 +1176,7 @@ fn expect_target_char(value: &Value) -> Result<u32, Flow> {
     match value.kind() {
         ValueKind::Fixnum(ch) => Ok(ch as u32),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }

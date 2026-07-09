@@ -1,6 +1,7 @@
 use super::error::{Flow, signal};
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::buffer::{Buffer, BufferManager, EmacsByteRange, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use malachite::integer::Integer;
 
 pub(crate) fn fix_position_with_buffers(
@@ -14,7 +15,7 @@ pub(crate) fn fix_position_with_buffers(
         }
         ValueKind::Veclike(VecLikeType::Bignum) => Ok(fix_position_bignum(value)),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -28,7 +29,7 @@ pub(crate) fn fix_position_eval(eval: &super::eval::Context, value: &Value) -> R
         }
         ValueKind::Veclike(VecLikeType::Bignum) => Ok(fix_position_bignum(value)),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -103,7 +104,7 @@ impl LispRegionArgs {
         let (start, end) = self.ordered_positions();
         if start < point_min || end > point_max {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![Value::make_buffer(buffer.id), self.start_arg, self.end_arg],
             ));
         }

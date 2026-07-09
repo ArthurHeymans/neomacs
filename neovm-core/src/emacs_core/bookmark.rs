@@ -13,6 +13,7 @@
 //! - `bookmark-save` -- serialize bookmarks to a string
 //! - `bookmark-load` -- deserialize bookmarks from a string
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -342,7 +343,7 @@ fn optional_bookmark_string_to_runtime(text: Option<&LispString>) -> String {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -354,7 +355,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -370,7 +371,7 @@ fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -381,7 +382,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -404,7 +405,7 @@ pub(crate) fn builtin_bookmark_set(
     expect_min_args("bookmark-set", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-set"),
                 Value::fixnum(args.len() as i64),
@@ -456,7 +457,7 @@ pub(crate) fn builtin_bookmark_jump(
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-jump"),
                 Value::fixnum(args.len() as i64),
@@ -514,7 +515,7 @@ pub(crate) fn builtin_bookmark_delete(
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-delete"),
                 Value::fixnum(args.len() as i64),
@@ -542,7 +543,7 @@ pub(crate) fn builtin_bookmark_rename(
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-rename"),
                 Value::fixnum(args.len() as i64),
@@ -553,7 +554,7 @@ pub(crate) fn builtin_bookmark_rename(
     // Batch-mode prompt fallbacks in GNU Emacs become end-of-file.
     if args.len() == 1 || args.get(1).is_some_and(|v| v.is_nil()) {
         return Err(signal(
-            "end-of-file",
+            LispCondition::EndOfFile,
             vec![Value::string("Error reading from stdin")],
         ));
     }
@@ -621,7 +622,7 @@ pub(crate) fn builtin_bookmark_rename(
     }
 
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("consp"), Value::NIL],
     ))
 }
@@ -798,7 +799,7 @@ pub(crate) fn builtin_bookmark_save(
 ) -> EvalResult {
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-save"),
                 Value::fixnum(args.len() as i64),
@@ -812,7 +813,7 @@ pub(crate) fn builtin_bookmark_save(
 
     if !file_arg.is_nil() && !file_arg.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), file_arg],
         ));
     }
@@ -845,7 +846,7 @@ pub(crate) fn builtin_bookmark_save(
     } else {
         if !parg.is_nil() {
             return Err(signal(
-                "end-of-file",
+                LispCondition::EndOfFile,
                 vec![Value::string("Error reading from stdin")],
             ));
         }
@@ -881,7 +882,7 @@ pub(crate) fn builtin_bookmark_load(
 ) -> EvalResult {
     if args.is_empty() || args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("bookmark-load"),
                 Value::fixnum(args.len() as i64),
@@ -896,7 +897,7 @@ pub(crate) fn builtin_bookmark_load(
             .clone(),
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -907,7 +908,7 @@ pub(crate) fn builtin_bookmark_load(
         Ok(data) => data,
         Err(_) => {
             return Err(signal(
-                "user-error",
+                LispCondition::UserError,
                 vec![Value::string(format!(
                     "Cannot read bookmark file {file_display}"
                 ))],

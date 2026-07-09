@@ -7,6 +7,7 @@
 //! - **Obsolete aliases**: `define-obsolete-function-alias`,
 //!   `define-obsolete-variable-alias`, `make-obsolete`, `make-obsolete-variable`.
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -368,7 +369,7 @@ pub(crate) fn plan_autoload_do_load_in_state(
 ) -> Result<AutoloadDoLoadPlan, Flow> {
     if args.is_empty() || args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("autoload-do-load"),
                 Value::fixnum(args.len() as i64),
@@ -548,7 +549,7 @@ pub(crate) fn register_autoload_in_state(
 ) -> EvalResult {
     if args.len() < 2 || args.len() > 5 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("autoload"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -567,7 +568,7 @@ pub(crate) fn register_autoload_in_state(
         })
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), func_val],
             )
         })?;
@@ -586,7 +587,7 @@ pub(crate) fn register_autoload_in_state(
         Some(file) => file.clone(),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), file_val],
             ));
         }
@@ -646,7 +647,7 @@ pub(crate) fn builtin_autoload(eval: &mut super::eval::Context, args: Vec<Value>
 pub(crate) fn builtin_symbol_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.is_empty() || args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("symbol-file"),
                 Value::fixnum(args.len() as i64),

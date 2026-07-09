@@ -20,7 +20,7 @@ pub(crate) fn is_post_startup_tracing() -> bool {
     TRACE_ALL_BUILTINS.load(Ordering::Relaxed)
 }
 
-pub(super) use super::error::{EvalResult, Flow, signal};
+pub(super) use super::error::{EvalResult, Flow, LispCondition, signal};
 pub(super) use super::intern::{SymId, intern, resolve_sym};
 pub(super) use super::keyboard::pure::{
     KEY_CHAR_CODE_MASK, KEY_CHAR_META, convert_lucid_event_list, describe_single_key_value,
@@ -123,7 +123,7 @@ pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_m
 pub(super) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -135,7 +135,7 @@ pub(super) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Fl
 pub(super) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -147,7 +147,7 @@ pub(super) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<
 pub(super) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -163,7 +163,7 @@ pub(super) fn expect_range_args(
 ) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -176,7 +176,7 @@ pub(super) fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -186,7 +186,7 @@ pub(super) fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }
@@ -197,7 +197,7 @@ pub(super) fn expect_char_table_index(value: &Value) -> Result<i64, Flow> {
     if !(0..=0x3F_FFFF).contains(&idx) {
         maybe_trace_characterp_nil(value, "expect_char_table_index");
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         ));
     }
@@ -210,7 +210,7 @@ pub(super) fn expect_char_equal_code(value: &Value) -> Result<i64, Flow> {
         _other => {
             maybe_trace_characterp_nil(value, "expect_char_equal_code");
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), *value],
             ))
         }
@@ -223,7 +223,7 @@ pub(super) fn expect_character_code(value: &Value) -> Result<i64, Flow> {
         _other => {
             maybe_trace_characterp_nil(value, "expect_character_code");
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), *value],
             ))
         }
@@ -266,7 +266,7 @@ pub(super) fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => Ok(n),
         _ if super::marker::is_marker(value) => super::marker::marker_position_as_int(value),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -282,7 +282,7 @@ pub(super) fn expect_integer_or_marker_eval(
             super::marker::marker_position_as_int_eval(eval, value)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -294,14 +294,14 @@ pub(super) fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("wholenump"), *value],
             ));
         }
     };
     if n < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *value],
         ));
     }
@@ -328,7 +328,7 @@ pub(super) fn expect_number_or_marker(value: &Value) -> Result<NumberOrMarker, F
             super::marker::marker_position_as_int(value)?,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -348,7 +348,7 @@ pub(super) fn expect_number_or_marker_eval(
             super::marker::marker_position_as_int_eval(eval, value)?,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -363,7 +363,7 @@ pub(super) fn expect_number(value: &Value) -> Result<f64, Flow> {
             Ok(f64::rounding_from(value.as_bignum().unwrap(), RoundingMode::Nearest).0)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *value],
         )),
     }
@@ -390,7 +390,7 @@ pub(super) fn expect_integer_or_marker_after_number_check(value: &Value) -> Resu
     match expect_number_or_marker(value)? {
         NumberOrMarker::Int(n) => Ok(n),
         NumberOrMarker::Float(_) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -403,7 +403,7 @@ pub(super) fn expect_integer_or_marker_after_number_check_eval(
     match expect_number_or_marker_eval(eval, value)? {
         NumberOrMarker::Int(n) => Ok(n),
         NumberOrMarker::Float(_) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -445,14 +445,14 @@ pub(super) fn normalize_string_start_arg(
 
     let Some(start_idx) = normalized else {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::string(string), Value::fixnum(raw_start)],
         ));
     };
 
     if !(0..=len).contains(&start_idx) {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::string(string), Value::fixnum(raw_start)],
         ));
     }
@@ -559,7 +559,7 @@ pub(super) fn expect_lisp_string(
 ) -> Result<&'static crate::heap_types::LispString, Flow> {
     value.as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )
     })
@@ -586,7 +586,7 @@ pub(super) fn expect_string_comparison_operand(
             .map(crate::heap_types::LispString::from_utf8)
             .ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), *value],
                 )
             }),
@@ -5487,7 +5487,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 ls.as_bytes().to_vec()
             } else {
                 return Err(super::error::signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), bytestr],
                 ));
             };
@@ -5498,7 +5498,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 }
                 _ => {
                     return Err(super::error::signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("vectorp"), constants_vec],
                     ));
                 }

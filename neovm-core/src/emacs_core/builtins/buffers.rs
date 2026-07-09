@@ -28,7 +28,7 @@ pub(super) fn expect_buffer_id(value: &Value) -> Result<BufferId, Flow> {
     match value.kind() {
         ValueKind::Veclike(VecLikeType::Buffer) => Ok(value.as_buffer_id().unwrap()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), *value],
         )),
     }
@@ -40,7 +40,7 @@ fn expect_buffer_name_string(value: &Value) -> Result<String, Flow> {
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *value],
             )
         })
@@ -155,7 +155,10 @@ pub(crate) fn normalize_narrow_region_in_buffers(
     let full_min = 1_i64;
     let full_max = buf.z_lisp_char_pos().as_i64();
     if s < full_min || s > full_max || e < full_min || e > full_max {
-        return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![start_arg, end_arg],
+        ));
     }
     if let Some(labeled) = buffers.current_labeled_restriction_char_bounds(current_id) {
         let labeled_min = labeled.start_lisp().as_i64();
@@ -256,7 +259,7 @@ pub(crate) fn prepare_make_indirect_buffer_in_manager(
         }
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -322,7 +325,7 @@ pub(crate) fn builtin_get_buffer(eval: &mut super::eval::Context, args: Vec<Valu
             .map(Value::make_buffer)
             .unwrap_or(Value::NIL)),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )),
     }
@@ -335,7 +338,7 @@ pub(crate) fn builtin_find_buffer(eval: &mut super::eval::Context, args: Vec<Val
     expect_args("find-buffer", &args, 2)?;
     let name = args[0].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;
@@ -347,7 +350,7 @@ pub(crate) fn builtin_find_buffer(eval: &mut super::eval::Context, args: Vec<Val
         .rev()
         .find_map(|frame| frame.get(&name_id).cloned())
         .or_else(|| obarray.symbol_value(name).cloned())
-        .ok_or_else(|| signal("void-variable", vec![Value::symbol(name)]))?;
+        .ok_or_else(|| signal(LispCondition::VoidVariable, vec![Value::symbol(name)]))?;
 
     let mut scan_order = Vec::new();
     let current_id = buffers.current_buffer().map(|buf| buf.id);
@@ -493,7 +496,7 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), *arg],
                 ));
             }
@@ -695,7 +698,7 @@ pub(crate) fn builtin_set_buffer(eval: &mut super::eval::Context, args: Vec<Valu
         }
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -872,7 +875,7 @@ fn resolve_buffer_designator_allow_nil_current(
                 })
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *arg],
         )),
     }
@@ -940,7 +943,7 @@ fn validate_accessible_lisp_range(
     let point_min = buf.point_min_lisp_char_pos();
     let point_max = buf.point_max_lisp_char_pos();
     if start < point_min || start > point_max || end < point_min || end > point_max {
-        return Err(signal("args-out-of-range", error_values));
+        return Err(signal(LispCondition::ArgsOutOfRange, error_values));
     }
     Ok(())
 }
@@ -1051,7 +1054,7 @@ pub(crate) fn resolve_buffer_designator_allow_nil_current_in_manager(
             })
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *arg],
         )),
     }
@@ -1079,7 +1082,10 @@ fn checked_buffer_slice_for_char_region_in_manager(
         || end.as_i64() < point_min
         || end.as_i64() > point_max
     {
-        return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![start_arg, end_arg],
+        ));
     }
 
     // Issue #131: return the byte-faithful buffer substring as a `LispString`
@@ -1116,7 +1122,10 @@ fn checked_buffer_substring_for_char_region_in_manager(
         || end.as_i64() < point_min
         || end.as_i64() > point_max
     {
-        return Err(signal("args-out-of-range", vec![start_arg, end_arg]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![start_arg, end_arg],
+        ));
     }
 
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
@@ -1286,7 +1295,7 @@ fn replace_region_source_value_in_state(
             let items = source.as_vector_data().unwrap().clone();
             if items.len() != 3 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![replace_region_contents_type_predicate(), *source],
                 ));
             }
@@ -1311,7 +1320,7 @@ fn replace_region_source_value_in_state(
             )
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![replace_region_contents_type_predicate(), *source],
         )),
     }
@@ -1421,7 +1430,7 @@ pub(crate) fn builtin_ntake(args: Vec<Value>) -> EvalResult {
     }
     if !head.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), head],
         ));
     }
@@ -1436,7 +1445,7 @@ pub(crate) fn builtin_ntake(args: Vec<Value>) -> EvalResult {
                     ValueKind::Nil => return Ok(head),
                     _other => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), next],
                         ));
                     }
@@ -1445,7 +1454,7 @@ pub(crate) fn builtin_ntake(args: Vec<Value>) -> EvalResult {
             ValueKind::Nil => return Ok(head),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), cursor],
                 ));
             }
@@ -1459,7 +1468,7 @@ pub(crate) fn builtin_ntake(args: Vec<Value>) -> EvalResult {
         }
         ValueKind::Nil => Ok(head),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), cursor],
         )),
     }
@@ -1742,7 +1751,7 @@ pub(crate) fn builtin_replace_region_contents(
         }
     });
     if let Some(name) = read_only_buffer_name {
-        return Err(signal("buffer-read-only", vec![name]));
+        return Err(signal(LispCondition::BufferReadOnly, vec![name]));
     }
 
     let byte_range = {
@@ -2186,7 +2195,7 @@ pub(crate) fn builtin_split_window_internal(
     }
     if !args[2].is_nil() && !args[2].is_symbol() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[2]],
         ));
     }
@@ -2245,7 +2254,7 @@ pub(crate) fn builtin_buffer_text_pixel_size(
         let window = &args[1];
         if !window.is_nil() && !window.is_window() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *window],
             ));
         }
@@ -2256,7 +2265,7 @@ pub(crate) fn builtin_buffer_text_pixel_size(
             ValueKind::Nil | ValueKind::T => Ok(None),
             ValueKind::Fixnum(n) if n >= 0 => Ok(Some(n as usize)),
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("natnump"), *value],
             )),
         }
@@ -2368,14 +2377,14 @@ pub(crate) fn builtin_compute_motion(
     let from = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
     if !args[1].is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), args[1]],
         ));
     }
     let to = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[2])?;
     if !args[3].is_nil() && !args[3].is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), args[3]],
         ));
     }
@@ -2384,13 +2393,13 @@ pub(crate) fn builtin_compute_motion(
     }
     if !args[5].is_nil() && !args[5].is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), args[5]],
         ));
     }
     if !args[6].is_nil() && !args[6].is_window() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), args[6]],
         ));
     }
@@ -2415,7 +2424,7 @@ pub(crate) fn builtin_compute_motion(
         let (hscroll, tab_offset) = extract_cons_fixnums(args[5])?;
         if hscroll < 0 || tab_offset < 0 || tab_offset > i32::MAX as i64 {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![args[5].cons_car(), args[5].cons_cdr()],
             ));
         }
@@ -2448,7 +2457,7 @@ pub(crate) fn builtin_compute_motion(
     let point_max = buf.point_max_lisp_char_pos().as_i64();
     if from < point_min || from > point_max {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(from),
                 Value::fixnum(point_min),
@@ -2458,7 +2467,7 @@ pub(crate) fn builtin_compute_motion(
     }
     if to < point_min || to > point_max {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(to),
                 Value::fixnum(point_min),
@@ -2550,7 +2559,7 @@ fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
                 ValueKind::Fixnum(n) => n,
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("fixnump"), car],
                     ));
                 }
@@ -2559,7 +2568,7 @@ fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
                 ValueKind::Fixnum(n) => n,
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("fixnump"), cdr],
                     ));
                 }
@@ -2567,7 +2576,7 @@ fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
             Ok((a, b))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), val],
         )),
     }
@@ -2589,7 +2598,7 @@ pub(crate) fn builtin_coordinates_in_window_p(
             ValueKind::Float => car.xfloat(),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("numberp"), car],
                 ));
             }
@@ -2599,7 +2608,7 @@ pub(crate) fn builtin_coordinates_in_window_p(
             ValueKind::Float => cdr.xfloat(),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("numberp"), cdr],
                 ));
             }
@@ -2607,7 +2616,7 @@ pub(crate) fn builtin_coordinates_in_window_p(
         (x, y)
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), args[0]],
         ));
     };
@@ -2837,7 +2846,10 @@ fn resolve_field_position_in_buffers(
         Some(value) => expect_integer_or_marker_in_buffers(buffers, value)?,
     };
     if pos < point_min || pos > point_max {
-        return Err(signal("args-out-of-range", vec![Value::fixnum(pos)]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![Value::fixnum(pos)],
+        ));
     }
     Ok((pos, point_min, point_max))
 }
@@ -2974,7 +2986,10 @@ pub(crate) fn builtin_field_beginning(
         Some(limit_value) if !limit_value.is_nil() => {
             let limit = expect_integer_or_marker_in_buffers(&eval.buffers, limit_value)?;
             if limit <= 0 {
-                return Err(signal("args-out-of-range", vec![Value::fixnum(limit)]));
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![Value::fixnum(limit)],
+                ));
             }
             Some(limit)
         }
@@ -3142,7 +3157,7 @@ fn expect_goto_char_position(buffers: &BufferManager, value: &Value) -> Result<i
             super::marker::marker_position_as_int_with_buffers(buffers, value)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -3335,9 +3350,12 @@ fn buffer_insert_piece_from_string(
     value: Value,
     target_multibyte: bool,
 ) -> Result<InsertPiece, Flow> {
-    let source = value
-        .as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))?;
+    let source = value.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), value],
+        )
+    })?;
     let text = buffer_insert_lisp_string_from_lisp_string(source, target_multibyte);
     let text_props = get_string_text_properties_table_for_value(value).and_then(|table| {
         if table.is_empty() {
@@ -3549,7 +3567,7 @@ fn collect_insert_pieces(args: &[Value], target_multibyte: bool) -> Result<Vec<I
                     .map(|bytes| lisp_string_from_buffer_bytes(bytes, target_multibyte))
                     .ok_or_else(|| {
                         signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("char-or-string-p"), *arg],
                         )
                     })?;
@@ -3560,7 +3578,7 @@ fn collect_insert_pieces(args: &[Value], target_multibyte: bool) -> Result<Vec<I
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("char-or-string-p"), *arg],
                 ));
             }
@@ -3744,7 +3762,7 @@ fn insert_pieces_in_state(
         .is_some_and(|buf| super::editfns::buffer_read_only_active_in_state(obarray, dynamic, buf))
     {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -3824,7 +3842,7 @@ pub(super) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(c as i64),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -3848,7 +3866,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
         bytes
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), args[0]],
         ));
     };
@@ -3865,7 +3883,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
         super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
     }) {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -3910,7 +3928,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
     let byte = expect_fixnum(&args[0])?;
     if !(0..=255).contains(&byte) {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(byte), Value::fixnum(0), Value::fixnum(255)],
         ));
     }
@@ -3932,7 +3950,7 @@ pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Val
         super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
     }) {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -4010,14 +4028,14 @@ pub(crate) fn builtin_subst_char_in_region(
     let from_bytes = encode_char_code_for_buffer_bytes(from_code as u32, target_multibyte)
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[2]],
             )
         })?;
     let to_bytes =
         encode_char_code_for_buffer_bytes(to_code as u32, target_multibyte).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[3]],
             )
         })?;
@@ -4046,7 +4064,7 @@ pub(crate) fn builtin_subst_char_in_region(
         super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
     }) {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -4107,7 +4125,7 @@ fn subst_char_in_region_scan(
     let point_max = buf.point_max_lisp_char_pos().as_i64();
     if start < point_min || start > point_max || end < point_min || end > point_max {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
@@ -4129,7 +4147,7 @@ pub(crate) fn builtin_buffer_enable_undo(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("buffer-enable-undo"),
                 Value::fixnum(args.len() as i64),
@@ -4162,7 +4180,7 @@ pub(crate) fn builtin_buffer_enable_undo(
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[0]],
                 ));
             }
@@ -4180,7 +4198,7 @@ pub(crate) fn builtin_buffer_disable_undo(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("buffer-disable-undo"),
                 Value::fixnum(args.len() as i64),
@@ -4211,7 +4229,7 @@ pub(crate) fn builtin_buffer_disable_undo(
                     Some(id) => id,
                     None => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("stringp"), Value::NIL],
                         ));
                     }
@@ -4219,7 +4237,7 @@ pub(crate) fn builtin_buffer_disable_undo(
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[0]],
                 ));
             }
@@ -4649,7 +4667,7 @@ pub(crate) fn builtin_generate_new_buffer_name(
             || args[1].as_keyword_id().is_some())
     {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[1]],
         ));
     }
@@ -4822,7 +4840,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         // would fail for non-UTF-8 unibyte strings).
         if !args[1].is_string() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[1]],
             ));
         }
@@ -4836,7 +4854,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         let char_len = string.schars();
         if pos >= char_len && !args[0].is_nil() {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![string_value, Value::fixnum(pos as i64)],
             ));
         }
@@ -4871,7 +4889,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
         let point_max = buf.point_max_lisp_char_pos().as_i64();
         if pos < point_min || pos >= point_max {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![args[0], Value::fixnum(point_min), Value::fixnum(point_max)],
             ));
         }
@@ -4917,7 +4935,7 @@ pub(crate) fn builtin_buffer_local_value(
         ValueKind::T => intern("t"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -4948,7 +4966,7 @@ pub(crate) fn builtin_buffer_local_value(
                 .read_localized(resolved_id, target_buf, buf.local_var_alist)
         {
             if value.is_unbound() {
-                return Err(signal("void-variable", vec![original_arg]));
+                return Err(signal(LispCondition::VoidVariable, vec![original_arg]));
             }
             return Ok(value);
         }
@@ -4957,7 +4975,7 @@ pub(crate) fn builtin_buffer_local_value(
     match buf.get_buffer_local_binding_by_sym_id(resolved_id) {
         Some(binding) => binding
             .as_value()
-            .ok_or_else(|| signal("void-variable", vec![original_arg])),
+            .ok_or_else(|| signal(LispCondition::VoidVariable, vec![original_arg])),
         None if let Some(info) =
             crate::buffer::buffer::lookup_buffer_slot_by_sym_id(resolved_id) =>
         {
@@ -4969,6 +4987,6 @@ pub(crate) fn builtin_buffer_local_value(
         None => eval
             .obarray()
             .find_symbol_value(resolved_id)
-            .ok_or_else(|| signal("void-variable", vec![original_arg])),
+            .ok_or_else(|| signal(LispCondition::VoidVariable, vec![original_arg])),
     }
 }

@@ -10,6 +10,7 @@
 //! - `view-register` -- describe a register's contents
 //! - `list-registers` -- list all non-empty registers
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
@@ -196,7 +197,7 @@ impl GcTrace for RegisterManager {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -208,7 +209,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -220,7 +221,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -238,7 +239,7 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
         ValueKind::Nil => Ok(LispString::from_unibyte(b"nil".to_vec())),
         ValueKind::T => Ok(LispString::from_unibyte(b"t".to_vec())),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -249,7 +250,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -271,7 +272,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
             let string = value.as_lisp_string().expect("string");
             if string.schars() != 1 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), *value],
                 ));
             }
@@ -288,7 +289,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
             })
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }

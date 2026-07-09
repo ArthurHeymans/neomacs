@@ -10,6 +10,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::heap_types::LispString;
 use std::collections::VecDeque;
 #[cfg(unix)]
@@ -51,7 +52,7 @@ impl FileIdFormat {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -66,7 +67,7 @@ fn expect_lisp_string(_name: &str, value: &Value) -> Result<LispString, Flow> {
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -176,11 +177,11 @@ fn parse_wholenump_count(arg: Option<&Value>) -> Result<Option<usize>, Flow> {
             Ok(Some(v.as_fixnum().unwrap() as usize))
         }
         Some(v) if v.is_fixnum() => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *v],
         )),
         Some(v) if v.is_truthy() => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *v],
         )),
         _ => Ok(None),
@@ -554,7 +555,7 @@ fn directory_files_and_attributes_with_dir(args: &[Value], dir: &LispString) -> 
             )
             .map_err(|msg| {
                 signal(
-                    "invalid-regexp",
+                    LispCondition::InvalidRegexp,
                     vec![Value::string(format!(
                         "Invalid regexp \"{}\": {}",
                         super::emacs_char::to_utf8_lossy(pattern.as_bytes()),
@@ -1331,7 +1332,7 @@ fn file_attributes_lessp_car(val: &Value) -> Result<Value, Flow> {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => Ok(val.cons_car()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *val],
         )),
     }

@@ -3,6 +3,7 @@
 //! Provides path manipulation, file predicates, read/write operations,
 //! directory operations, and file attribute queries.
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::{HashMap, VecDeque};
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
@@ -1624,7 +1625,7 @@ fn file_modes(filename: &str) -> Option<u32> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1635,7 +1636,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1646,7 +1647,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1661,7 +1662,7 @@ fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispStr
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -1673,7 +1674,7 @@ fn expect_lisp_filename_string_strict(
     let string = expect_lisp_string_strict(value)?;
     if string.as_bytes().contains(&0) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("filenamep"), *value],
         ));
     }
@@ -2064,11 +2065,11 @@ fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Fl
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         ValueKind::Nil | ValueKind::Cons | ValueKind::Veclike(VecLikeType::Vector) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *value],
         )),
     }
@@ -2078,7 +2079,7 @@ fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }
@@ -2107,23 +2108,26 @@ fn parse_timestamp_arg(value: &Value) -> Result<(i64, i64), Flow> {
         }
         ValueKind::Cons => {
             let items = list_to_vec(value).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), *value])
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), *value],
+                )
             })?;
             if items.len() < 2 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), *value],
                 ));
             }
             let high = items[0].as_int().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), items[0]],
                 )
             })?;
             let low = items[1].as_int().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), items[1]],
                 )
             })?;
@@ -2137,7 +2141,7 @@ fn parse_timestamp_arg(value: &Value) -> Result<(i64, i64), Flow> {
             Ok(normalize_secs_nanos(secs, nanos))
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *value],
         )),
     }
@@ -2150,7 +2154,7 @@ fn validate_file_truename_counter(counter: &Value) -> Result<(), Flow> {
     }
     if !counter.is_list() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *counter],
         ));
     }
@@ -2160,7 +2164,7 @@ fn validate_file_truename_counter(counter: &Value) -> Result<(), Flow> {
         // to fixnums and floats.
         if !(first.is_number() || first.as_char().is_some()) {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), first],
             ));
         }
@@ -2386,7 +2390,7 @@ fn make_temp_file_internal_impl(
     }
 
     Err(signal(
-        "file-error",
+        LispCondition::FileError,
         vec![Value::string("Cannot create temporary file")],
     ))
 }
@@ -2466,7 +2470,7 @@ pub(crate) fn builtin_expand_file_name(eval: &mut Context, args: Vec<Value>) -> 
     expect_min_args("expand-file-name", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("expand-file-name"),
                 Value::fixnum(args.len() as i64),
@@ -2603,7 +2607,7 @@ pub(crate) fn builtin_make_temp_file(eval: &mut Context, args: Vec<Value>) -> Ev
     expect_min_args("make-temp-file", &args, 1)?;
     if args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-temp-file"),
                 Value::fixnum(args.len() as i64),
@@ -2646,7 +2650,7 @@ pub(crate) fn builtin_make_nearby_temp_file(eval: &mut Context, args: Vec<Value>
     expect_min_args("make-nearby-temp-file", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-nearby-temp-file"),
                 Value::fixnum(args.len() as i64),
@@ -2680,7 +2684,7 @@ pub(crate) fn builtin_file_truename(eval: &mut Context, args: Vec<Value>) -> Eva
     expect_min_args("file-truename", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("file-truename"),
                 Value::fixnum(args.len() as i64),
@@ -2762,7 +2766,7 @@ pub(crate) fn builtin_file_name_concat(args: Vec<Value>) -> EvalResult {
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), value],
                 ));
             }
@@ -2863,7 +2867,10 @@ fn implicit_default_directory_lisp_for_eval(
                 return Ok(fallback_root_default_directory());
             }
             return value.as_lisp_string().cloned().ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("stringp"), value])
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("stringp"), value],
+                )
             });
         }
     }
@@ -2873,7 +2880,7 @@ fn implicit_default_directory_lisp_for_eval(
         }
         return value.as_lisp_string().cloned().ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *value],
             )
         });
@@ -2907,9 +2914,12 @@ fn implicit_default_directory_value_for_expand_file_name(eval: &mut Context) -> 
     if value.is_nil() {
         return Ok(Value::heap_string(fallback_root_default_directory()));
     }
-    let filename = value
-        .as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))?;
+    let filename = value.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), value],
+        )
+    })?;
     if lisp_file_name_absolute_system_p(filename) {
         return Ok(value);
     }
@@ -3002,7 +3012,7 @@ fn get_file_errno_data(err: &std::io::Error, action: &str, name_items: Vec<Value
         // `(file-already-exists STRERROR . NAME)` — no ACTION prefix.
         let mut data = vec![Value::string(strerror)];
         data.extend(name_items);
-        signal("file-already-exists", data)
+        signal(LispCondition::FileAlreadyExists, data)
     } else {
         let symbol = match errno {
             libc::ENOENT => "file-missing",
@@ -3040,7 +3050,7 @@ fn signal_directory_files_error(
             &crate::emacs_core::emacs_char::to_utf8_lossy(dir.as_bytes()),
         ),
         DirectoryFilesError::InvalidRegexp(msg) => {
-            signal("invalid-regexp", vec![Value::string(msg)])
+            signal(LispCondition::InvalidRegexp, vec![Value::string(msg)])
         }
     }
 }
@@ -3069,12 +3079,12 @@ fn signal_existing_path_value(path: &Path, value: Value) -> Flow {
         .unwrap_or(false)
     {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string("File is a directory"), value],
         )
     } else {
         signal(
-            "file-already-exists",
+            LispCondition::FileAlreadyExists,
             vec![Value::string("File already exists"), value],
         )
     }
@@ -3118,7 +3128,7 @@ fn barf_or_query_if_file_exists(
         if let Ok(metadata) = fs::symlink_metadata(&path) {
             if metadata.is_dir() {
                 return Err(signal(
-                    "file-error",
+                    LispCondition::FileError,
                     vec![Value::string("File is a directory"), absname_value],
                 ));
             }
@@ -3132,7 +3142,7 @@ fn barf_or_query_if_file_exists(
 
     if !interactive {
         return Err(signal(
-            "file-already-exists",
+            LispCondition::FileAlreadyExists,
             vec![Value::string("File already exists"), absname_value],
         ));
     }
@@ -3160,7 +3170,7 @@ fn barf_or_query_if_file_exists(
 
     if answer.is_nil() {
         return Err(signal(
-            "file-already-exists",
+            LispCondition::FileAlreadyExists,
             vec![Value::string("File already exists"), absname_value],
         ));
     }
@@ -3432,7 +3442,7 @@ fn set_file_times_compat(
         {
             let c_path = CString::new(filename.as_bytes()).map_err(|_| {
                 signal(
-                    "file-error",
+                    LispCondition::FileError,
                     vec![
                         Value::string("Setting file times"),
                         Value::string("embedded NUL in file name"),
@@ -3481,7 +3491,7 @@ fn set_file_times_compat(
         {
             let _ = timestamp;
             return Err(signal(
-                "file-error",
+                LispCondition::FileError,
                 vec![
                     Value::string("Setting file times"),
                     Value::string("nofollow is unsupported on this platform"),
@@ -3885,7 +3895,7 @@ pub(crate) fn builtin_file_modes(eval: &mut Context, args: Vec<Value>) -> EvalRe
     expect_min_args("file-modes", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("file-modes"),
                 Value::fixnum(args.len() as i64),
@@ -3912,7 +3922,7 @@ pub(crate) fn builtin_set_file_modes(eval: &mut Context, args: Vec<Value>) -> Ev
     expect_min_args("set-file-modes", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-file-modes"),
                 Value::fixnum(args.len() as i64),
@@ -3943,7 +3953,7 @@ pub(crate) fn builtin_set_file_times(eval: &mut Context, args: Vec<Value>) -> Ev
     expect_min_args("set-file-times", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-file-times"),
                 Value::fixnum(args.len() as i64),
@@ -3995,19 +4005,19 @@ fn validate_optional_buffer_arg_in_state(
                         Ok(())
                     } else {
                         Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("bufferp"), *bufferish],
                         ))
                     }
                 } else {
                     Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("bufferp"), *bufferish],
                     ))
                 }
             }
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), *bufferish],
             )),
         }?
@@ -4157,7 +4167,7 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
         .map(lisp_file_name_to_path_buf);
     let Some(path) = path else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     };
@@ -4213,7 +4223,7 @@ pub(crate) fn builtin_delete_file(eval: &mut Context, args: Vec<Value>) -> EvalR
     expect_min_args("delete-file", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("delete-file"),
                 Value::fixnum(args.len() as i64),
@@ -4269,7 +4279,7 @@ pub(crate) fn builtin_delete_directory(eval: &mut Context, args: Vec<Value>) -> 
     expect_min_args("delete-directory", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("delete-directory"),
                 Value::fixnum(args.len() as i64),
@@ -4295,7 +4305,7 @@ pub(crate) fn builtin_make_symbolic_link(eval: &mut Context, args: Vec<Value>) -
     expect_min_args("make-symbolic-link", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-symbolic-link"),
                 Value::fixnum(args.len() as i64),
@@ -4367,7 +4377,7 @@ pub(crate) fn builtin_make_symbolic_link(eval: &mut Context, args: Vec<Value>) -
     {
         let _ = (target, linkname, ok_if_exists);
         Err(signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string(
                 "Symbolic links are unsupported on this platform",
             )],
@@ -4380,7 +4390,7 @@ pub(crate) fn builtin_rename_file(eval: &mut Context, args: Vec<Value>) -> EvalR
     expect_min_args("rename-file", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("rename-file"),
                 Value::fixnum(args.len() as i64),
@@ -4442,7 +4452,7 @@ pub(crate) fn builtin_copy_file(eval: &mut Context, args: Vec<Value>) -> EvalRes
     expect_min_args("copy-file", &args, 2)?;
     if args.len() > 6 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("copy-file"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -4528,7 +4538,7 @@ pub(crate) fn builtin_add_name_to_file(eval: &mut Context, args: Vec<Value>) -> 
     expect_min_args("add-name-to-file", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("add-name-to-file"),
                 Value::fixnum(args.len() as i64),
@@ -4609,7 +4619,7 @@ pub(crate) fn builtin_find_file_name_handler(eval: &mut Context, args: Vec<Value
             .expect("ValueKind::String must carry LispString payload"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -4887,7 +4897,7 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
     expect_min_args("directory-files", &args, 1)?;
     if args.len() > 5 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("directory-files"),
                 Value::fixnum(args.len() as i64),
@@ -4911,7 +4921,7 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
             ValueKind::Fixnum(n) if n >= 0 => Some(n as usize),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("wholenump"), *val],
                 ));
             }
@@ -4935,7 +4945,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -4945,7 +4955,7 @@ fn expect_file_offset(value: &Value) -> Result<i64, Flow> {
     let offset = expect_int(value)?;
     if offset < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("file-offset"), *value],
         ));
     }
@@ -5274,7 +5284,7 @@ fn expect_inserted_char_count(value: &Value) -> Result<i64, Flow> {
     let inserted = expect_int(value)?;
     if inserted < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         ));
     }
@@ -5390,7 +5400,7 @@ fn write_region_content_in_state(
     if start.is_string() {
         return start.as_lisp_string().cloned().ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *start],
             )
         });
@@ -5852,7 +5862,7 @@ pub(crate) fn builtin_insert_file_contents(
         }
         if crate::emacs_core::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
             return Err(signal(
-                "buffer-read-only",
+                LispCondition::BufferReadOnly,
                 vec![Value::make_buffer(current_id)],
             ));
         }
@@ -5894,7 +5904,7 @@ pub(crate) fn builtin_insert_file_contents(
 
     if begin > file_len {
         return Err(signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string("Read error"),
                 Value::string("Bad address"),
@@ -6177,7 +6187,10 @@ pub(crate) fn builtin_write_region(
         && name != "nil"
         && !eval.coding_systems.is_known_or_derived(name)
     {
-        return Err(signal("coding-system-error", vec![coding_for_write]));
+        return Err(signal(
+            LispCondition::CodingSystemError,
+            vec![coding_for_write],
+        ));
     }
 
     // --- Encode using the appropriate coding system ---

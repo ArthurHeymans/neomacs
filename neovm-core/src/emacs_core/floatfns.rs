@@ -6,6 +6,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
@@ -17,7 +18,7 @@ use malachite::base::rounding_modes::RoundingMode;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -41,7 +42,7 @@ fn extract_number(val: &Value) -> Result<f64, Flow> {
             Ok(f64::rounding_from(val.as_bignum().unwrap(), RoundingMode::Nearest).0)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *val],
         )),
     }
@@ -52,7 +53,7 @@ fn extract_float(val: &Value) -> Result<f64, Flow> {
     match val.kind() {
         ValueKind::Float => Ok(val.xfloat()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("floatp"), *val],
         )),
     }
@@ -63,7 +64,7 @@ fn extract_fixnum(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *val],
         )),
     }

@@ -22,6 +22,7 @@ use super::error::{
 use super::intern::{SymId, intern, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use std::collections::{HashMap, HashSet};
 
@@ -593,7 +594,10 @@ fn extract_parent_symbols(value: &Value) -> Result<Vec<String>, Flow> {
         ValueKind::T => Ok(vec!["t".to_string()]),
         ValueKind::Cons => {
             let items = list_to_vec(value).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), *value])
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), *value],
+                )
             })?;
             let mut parents = Vec::with_capacity(items.len());
             for item in &items {
@@ -601,7 +605,7 @@ fn extract_parent_symbols(value: &Value) -> Result<Vec<String>, Flow> {
                     Some(name) => parents.push(name.to_string()),
                     None => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("symbolp"), *item],
                         ));
                     }
@@ -614,7 +618,7 @@ fn extract_parent_symbols(value: &Value) -> Result<Vec<String>, Flow> {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
     }
@@ -646,7 +650,7 @@ fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) 
 
     let Some(symbol_id) = error_symbol.as_symbol_id() else {
         return signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), error_symbol],
         );
     };
@@ -691,7 +695,7 @@ fn build_signal_flow_id_suppressed(symbol: SymId, data: Value) -> Flow {
 pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("signal"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -727,7 +731,7 @@ pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) 
     // the flow from the symbol's name would re-intern to a different symbol.
     let Some(symbol_id) = args[0].as_symbol_id() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
@@ -762,7 +766,7 @@ fn build_resignal_flow(eval: &super::eval::Context, error_object: Value) -> Flow
     // non-symbol car signals `wrong-type-argument symbolp <car>`.
     let Some(symbol_id) = error_symbol.as_symbol_id() else {
         return signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), error_symbol],
         );
     };
@@ -809,7 +813,7 @@ pub(crate) fn builtin_error_message_string(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("error-message-string"),
                 Value::fixnum(args.len() as i64),
@@ -834,7 +838,7 @@ pub(crate) fn builtin_error_message_string(
         ValueKind::Nil => return Ok(Value::heap_string(lisp_lit("peculiar error"))),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), *error_data],
             ));
         }

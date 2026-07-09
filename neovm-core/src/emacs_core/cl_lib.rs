@@ -8,6 +8,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::intern_uninterned;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
@@ -21,7 +22,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -33,7 +34,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -45,7 +46,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -61,7 +62,7 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *val],
         )),
     }
@@ -73,7 +74,7 @@ fn expect_number_or_marker(val: &Value) -> Result<f64, Flow> {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(val.xfloat()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *val],
         )),
     }
@@ -159,7 +160,7 @@ fn cl_list_nth(list: &Value, index: usize) -> EvalResult {
             }
             _tail => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), cursor],
                 ));
             }
@@ -170,7 +171,7 @@ fn cl_list_nth(list: &Value, index: usize) -> EvalResult {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => Ok(cursor.cons_car()),
         _tail => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), cursor],
         )),
     }
@@ -254,7 +255,7 @@ pub(crate) fn builtin_cl_rest(args: Vec<Value>) -> EvalResult {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => Ok(args[0].cons_cdr()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), args[0]],
         )),
     }
@@ -340,7 +341,7 @@ fn seq_position_list_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
             }
             _tail => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), cursor],
                 ));
             }
@@ -356,7 +357,7 @@ fn seq_position_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
         ValueKind::Veclike(VecLikeType::Vector) => Ok(seq.as_vector_data().unwrap().clone()),
         ValueKind::String => Ok(lisp_string_elements(seq)),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *seq],
         )),
     }
@@ -391,7 +392,7 @@ fn seq_collect_concat_arg(arg: &Value) -> Result<Vec<Value>, Flow> {
                     }
                     _tail => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), cursor],
                         ));
                     }
@@ -430,7 +431,7 @@ pub(crate) fn builtin_seq_reverse(args: Vec<Value>) -> EvalResult {
             for value in &elems {
                 let ValueKind::Fixnum(c) = value.kind() else {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("characterp"), args[0]],
                     ));
                 };
@@ -486,7 +487,7 @@ pub(crate) fn builtin_seq_drop(args: Vec<Value>) -> EvalResult {
                     }
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), args[0]],
                         ));
                     }
@@ -495,7 +496,7 @@ pub(crate) fn builtin_seq_drop(args: Vec<Value>) -> EvalResult {
             Ok(cursor)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -547,7 +548,7 @@ pub(crate) fn builtin_seq_take(args: Vec<Value>) -> EvalResult {
                     }
                     _tail => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), cursor],
                         ));
                     }
@@ -556,7 +557,7 @@ pub(crate) fn builtin_seq_take(args: Vec<Value>) -> EvalResult {
             Ok(Value::list(out))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -692,7 +693,7 @@ pub(crate) fn builtin_seq_empty_p(args: Vec<Value>) -> EvalResult {
             args[0].as_vector_data().unwrap().len() == 0,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -705,7 +706,7 @@ pub(crate) fn builtin_seq_min(args: Vec<Value>) -> EvalResult {
     let elems = seq_position_elements(&args[0])?;
     if elems.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::subr_from_sym_id(intern("min")), Value::fixnum(0)],
         ));
     }
@@ -728,7 +729,7 @@ pub(crate) fn builtin_seq_max(args: Vec<Value>) -> EvalResult {
     let elems = seq_position_elements(&args[0])?;
     if elems.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::subr_from_sym_id(intern("max")), Value::fixnum(0)],
         ));
     }
@@ -1100,13 +1101,19 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
         Some(ClMapResultType::List) => Ok(mapped),
         Some(ClMapResultType::Vector) => {
             let items = list_to_vec(&mapped).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), mapped])
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), mapped],
+                )
             })?;
             Ok(Value::vector(items))
         }
         Some(ClMapResultType::String) => {
             let items = list_to_vec(&mapped).ok_or_else(|| {
-                signal("wrong-type-argument", vec![Value::symbol("listp"), mapped])
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), mapped],
+                )
             })?;
             let mut bytes = Vec::new();
             let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
@@ -1137,7 +1144,7 @@ pub(crate) fn builtin_seq_contains_p(
 ) -> EvalResult {
     if !(2..=3).contains(&args.len()) {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("seq-contains-p"),
                 Value::fixnum(args.len() as i64),

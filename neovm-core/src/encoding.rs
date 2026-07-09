@@ -4,6 +4,7 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
 use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor};
@@ -1369,7 +1370,7 @@ use crate::emacs_core::error::{EvalResult, signal};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), crate::emacs_core::error::Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1385,7 +1386,7 @@ fn expect_range_args(
 ) -> Result<(), crate::emacs_core::error::Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1400,7 +1401,7 @@ fn expect_min_args(
 ) -> Result<(), crate::emacs_core::error::Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1420,7 +1421,7 @@ fn validate_coding_system(
     if known(name) {
         Ok(())
     } else {
-        Err(signal("coding-system-error", vec![arg]))
+        Err(signal(LispCondition::CodingSystemError, vec![arg]))
     }
 }
 
@@ -1454,9 +1455,12 @@ fn coding_string_trivial_ascii_nocopy(bytes: &[u8], coding: &str, encode: bool) 
 }
 
 fn copy_lisp_string_value(value: Value) -> Result<Value, crate::emacs_core::error::Flow> {
-    let string = value
-        .as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))?;
+    let string = value.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), value],
+        )
+    })?;
     Ok(Value::heap_string(string.clone()))
 }
 
@@ -1469,7 +1473,7 @@ fn context_coding_name(
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), coding_arg],
             ));
         }
@@ -1511,7 +1515,7 @@ fn coding_region_destination(
         Ok(Some(Some(buffer_id)))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), value],
         ))
     }
@@ -1572,10 +1576,12 @@ fn coding_string_destination(
     if value.is_nil() || value.is_t() {
         return Ok(None);
     }
-    value
-        .as_buffer_id()
-        .map(Some)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("bufferp"), value]))
+    value.as_buffer_id().map(Some).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("bufferp"), value],
+        )
+    })
 }
 
 /// If `coding` is a plain charset-type coding system that the family branches
@@ -2539,7 +2545,7 @@ fn run_coding_with_conversion_hook(
         let transformed = run_pre_write_conversion(ctx, hook, args[0])?;
         let transformed_str = transformed.as_lisp_string().ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), transformed],
             )
         })?;
@@ -3158,13 +3164,13 @@ fn builtin_coding_string_in_context(
     expect_min_args(name, &args, 2)?;
     if args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ));
     }
     let _ = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -3258,7 +3264,7 @@ fn builtin_coding_string_in_context(
             .as_lisp_string()
             .ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), result],
                 )
             })?
@@ -3364,7 +3370,7 @@ fn builtin_coding_string_in_context(
         .as_lisp_string()
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), result],
             )
         })?
@@ -3493,7 +3499,7 @@ fn builtin_coding_region(
         .as_lisp_string()
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), result],
             )
         })?
@@ -3644,14 +3650,14 @@ fn builtin_char_width_with_display_table(
         ValueKind::Fixnum(c) => c as i64,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             ));
         }
     };
     if !(0..=MAX_CHAR_CODE).contains(&code) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), Value::fixnum(code)],
         ));
     }
@@ -3664,7 +3670,7 @@ pub(crate) fn builtin_string_bytes(args: Vec<Value>) -> EvalResult {
     expect_args("string-bytes", &args, 1)?;
     let string = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -3703,7 +3709,7 @@ pub(crate) fn builtin_encode_coding_string_with_known(
     expect_min_args("encode-coding-string", &args, 2)?;
     if args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("encode-coding-string"),
                 Value::fixnum(args.len() as i64),
@@ -3712,7 +3718,7 @@ pub(crate) fn builtin_encode_coding_string_with_known(
     }
     let string = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -3727,7 +3733,7 @@ pub(crate) fn builtin_encode_coding_string_with_known(
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[1]],
             ));
         }
@@ -3757,7 +3763,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
     expect_min_args("decode-coding-string", &args, 2)?;
     if args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("decode-coding-string"),
                 Value::fixnum(args.len() as i64),
@@ -3766,7 +3772,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
     }
     let s = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -3781,7 +3787,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[1]],
             ));
         }
@@ -3854,14 +3860,14 @@ pub(crate) fn builtin_char_displayable_p(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(c) => c as i64,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), args[0]],
             ));
         }
     };
     if !(0..=MAX_CHAR_CODE).contains(&code) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), Value::fixnum(code)],
         ));
     }
@@ -3878,7 +3884,7 @@ pub(crate) fn builtin_char_displayable_p(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_max_char(args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("max-char"), Value::fixnum(args.len() as i64)],
         ));
     }

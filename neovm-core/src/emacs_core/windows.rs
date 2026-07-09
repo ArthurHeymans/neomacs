@@ -103,7 +103,7 @@ fn expect_string_runtime(value: &Value) -> Result<String, Flow> {
                 .as_bytes(),
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -387,7 +387,7 @@ fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }

@@ -22,6 +22,7 @@ use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};
@@ -33,7 +34,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -44,7 +45,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -55,7 +56,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -71,7 +72,7 @@ fn expect_integer_or_marker(val: &Value) -> Result<(), Flow> {
     match val.kind() {
         ValueKind::Fixnum(_) => Ok(()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
     }
@@ -112,7 +113,7 @@ fn coding_system_name(val: &Value) -> Result<String, Flow> {
         ValueKind::String => coding_runtime_string(val),
         ValueKind::Nil => Ok("nil".to_string()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *val],
         )),
     }
@@ -124,7 +125,7 @@ fn coding_symbol_name(val: &Value) -> Result<String, Flow> {
     match val.as_symbol_name() {
         Some(name) => Ok(name.to_string()),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *val],
         )),
     }
@@ -136,7 +137,7 @@ fn coding_runtime_string(value: &Value) -> Result<String, Flow> {
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *value],
             )
         })
@@ -306,7 +307,7 @@ fn check_symbol_hook_arg(value: &Value) -> Result<Option<SymId>, Flow> {
         Ok(Some(id))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         ))
     }
@@ -1303,13 +1304,13 @@ pub(crate) fn builtin_coding_system_aliases(
     expect_args("coding-system-aliases", &args, 1)?;
     if args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
     let raw_name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &raw_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let base = strip_eol_suffix(&resolved_name);
 
     if matches!(base, "binary" | "no-conversion") {
@@ -1323,11 +1324,11 @@ pub(crate) fn builtin_coding_system_aliases(
         .map(|eol| eol.suffix())
         .unwrap_or("");
     let canonical = runtime_bucket_name(mgr, &resolved_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let display = display_base_name(strip_eol_suffix(&resolved_name)).to_string();
     let canonical_id = mgr
         .resolve(&canonical)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let aliases = mgr.aliases_for(canonical_id);
     let mut names = vec![format!("{display}{suffix}")];
     for alias in aliases {
@@ -1354,12 +1355,12 @@ pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Val
     expect_args("coding-system-get", &args, 2)?;
     let coding_name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &coding_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let bucket = runtime_bucket_name(mgr, &resolved_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let info = mgr
         .get(&bucket)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
 
     if let Some(prop_id) = args[1].as_symbol_id() {
         let prop_name = resolve_sym(prop_id);
@@ -1406,7 +1407,7 @@ pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Val
     }
 
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("symbolp"), args[1]],
     ))
 }
@@ -1739,19 +1740,19 @@ pub(crate) fn builtin_coding_system_plist(
     expect_args("coding-system-plist", &args, 1)?;
     if args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
 
     let coding_name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &coding_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let bucket = runtime_bucket_name(mgr, &resolved_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let info = mgr
         .get(&bucket)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
 
     // Coding systems defined via `define-coding-system-internal` carry their
     // verbatim plist (arg 11, already led with :name/:docstring by mule.el).
@@ -1875,19 +1876,19 @@ pub(crate) fn builtin_coding_system_put(
 
     if args[0].is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("coding-system-p"), Value::NIL],
         ));
     }
 
     let coding_name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &coding_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let bucket = runtime_bucket_name(mgr, &resolved_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let info = mgr
         .get_mut(&bucket)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
 
     if let Some(prop_id) = args[1].as_symbol_id() {
         let prop_name = resolve_sym(prop_id);
@@ -1909,7 +1910,7 @@ pub(crate) fn builtin_coding_system_put(
         let stored_val = if matches!(prop_name, ":mnemonic" | "mnemonic") {
             let Some(code) = first_emacs_char_code(val) else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), val],
                 ));
             };
@@ -1955,7 +1956,7 @@ pub(crate) fn builtin_coding_system_base(
     expect_args("coding-system-base", &args, 1)?;
     let name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     Ok(Value::symbol(display_base_name(strip_eol_suffix(
         &resolved_name,
     ))))
@@ -2052,16 +2053,16 @@ pub(crate) fn builtin_coding_system_type(
     expect_args("coding-system-type", &args, 1)?;
     let name = coding_symbol_name(&args[0])?;
     let resolved_name = resolve_runtime_name(mgr, &name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let base = strip_eol_suffix(&resolved_name);
     if let Some(kind) = coding_type_for_base(base) {
         return Ok(Value::symbol(kind));
     }
     let bucket = runtime_bucket_name(mgr, &resolved_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     let info = mgr
         .get(&bucket)
-        .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?;
     Ok(Value::from_sym_id(info.coding_type))
 }
 
@@ -2097,11 +2098,11 @@ impl EolConversionRequest {
         match self {
             Self::Integer(index) => Ok(index),
             Self::Nil => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), Value::NIL],
             )),
             Self::Float { value, .. } | Self::NonNumber(value) => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), value],
             )),
         }
@@ -2112,11 +2113,11 @@ impl EolConversionRequest {
             Self::Integer(value) => Ok(value == rhs),
             Self::Float { number, .. } => Ok(number == rhs as f64),
             Self::Nil => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), Value::NIL],
             )),
             Self::NonNumber(value) => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), value],
             )),
         }
@@ -2131,7 +2132,7 @@ fn eol_vector_ref(vector: Value, request: EolConversionRequest) -> EvalResult {
         .expect("coding-system-eol-type vector value");
     if index < 0 || index as usize >= data.len() {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![vector, Value::fixnum(index)],
         ));
     }
@@ -2149,13 +2150,13 @@ pub(crate) fn builtin_coding_system_change_eol_conversion(
     expect_args("coding-system-change-eol-conversion", &args, 2)?;
     if args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
     let raw_name = coding_symbol_name(&args[0])?;
     if resolve_runtime_name(mgr, &raw_name).is_none() {
-        return Err(signal("coding-system-error", vec![args[0]]));
+        return Err(signal(LispCondition::CodingSystemError, vec![args[0]]));
     }
 
     let request = EolConversionRequest::from_lisp_value(args[1]);
@@ -2231,7 +2232,7 @@ pub(crate) fn builtin_coding_system_change_text_conversion(
         text_raw.clone()
     };
     let resolved_text = resolve_runtime_name(mgr, &text_name)
-        .ok_or_else(|| signal("coding-system-error", vec![args[1]]))?;
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[1]]))?;
     let resolved_text_base = strip_eol_suffix(&resolved_text);
 
     if let Some(eol) = first_eol {
@@ -2279,11 +2280,11 @@ pub(crate) fn builtin_check_coding_system(
             if is_known_or_derived_coding_system(mgr, resolve_sym(id)) {
                 Ok(args[0])
             } else {
-                Err(signal("coding-system-error", vec![args[0]]))
+                Err(signal(LispCondition::CodingSystemError, vec![args[0]]))
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )),
     }
@@ -2297,10 +2298,16 @@ fn validate_coding_system_list_cars_for_non_ascii(
     while tail.is_cons() {
         let coding_system = tail.cons_car();
         let Some(name) = coding_system.as_symbol_name() else {
-            return Err(signal("coding-system-error", vec![coding_system]));
+            return Err(signal(
+                LispCondition::CodingSystemError,
+                vec![coding_system],
+            ));
         };
         if !is_known_or_derived_coding_system(mgr, name) {
-            return Err(signal("coding-system-error", vec![coding_system]));
+            return Err(signal(
+                LispCondition::CodingSystemError,
+                vec![coding_system],
+            ));
         }
         tail = tail.cons_cdr();
     }
@@ -2406,7 +2413,10 @@ pub(crate) fn builtin_check_coding_systems_region(
         let buffer_start = 1;
         let buffer_end = buffer.total_char_len().get() as i64 + 1;
         if !(buffer_start <= start && start <= end && end <= buffer_end) {
-            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], args[1]],
+            ));
         }
 
         if !buffer.get_multibyte() {
@@ -2479,7 +2489,7 @@ pub(crate) fn builtin_unencodable_char_position(
     // for raw-text which encodes every byte verbatim.
     let coding_name = coding_symbol_name(&args[2])?;
     if !is_known_or_derived_coding_system(&eval.coding_systems, &coding_name) {
-        return Err(signal("coding-system-error", vec![args[2]]));
+        return Err(signal(LispCondition::CodingSystemError, vec![args[2]]));
     }
     let resolved = resolve_runtime_name(&eval.coding_systems, &coding_name)
         .unwrap_or_else(|| coding_name.clone());
@@ -2503,7 +2513,7 @@ pub(crate) fn builtin_unencodable_char_position(
             ValueKind::Fixnum(n) if n >= 0 => (n as usize, true),
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("natnump"), count],
                 ));
             }
@@ -2513,7 +2523,7 @@ pub(crate) fn builtin_unencodable_char_position(
     let (text, base_pos) = if !string_arg.is_nil() {
         let string = string_arg.as_lisp_string().ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), string_arg],
             )
         })?;
@@ -2539,7 +2549,10 @@ pub(crate) fn builtin_unencodable_char_position(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let buffer_end = buffer.total_char_len().get() as i64 + 1;
         if !(1 <= start && start <= end && end <= buffer_end) {
-            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], args[1]],
+            ));
         }
         if !buffer.get_multibyte() {
             return Ok(Value::NIL);
@@ -2589,7 +2602,7 @@ fn substring_char_bounds(
             ValueKind::Fixnum(n) => n,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), value],
                 ));
             }
@@ -2599,7 +2612,7 @@ fn substring_char_bounds(
     let from_idx = normalize(from, 0, size)?;
     let to_idx = normalize(to, size, size)?;
     if !(0 <= from_idx && from_idx <= to_idx && to_idx <= size) {
-        return Err(signal("args-out-of-range", vec![array, from, to]));
+        return Err(signal(LispCondition::ArgsOutOfRange, vec![array, from, to]));
     }
     Ok((from_idx, to_idx))
 }
@@ -2783,7 +2796,7 @@ fn coding_symbol_name_required(val: &Value) -> Result<String, Flow> {
     match val.kind() {
         ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *val],
         )),
     }
@@ -2802,7 +2815,7 @@ pub(crate) fn builtin_define_coding_system_alias(
         ValueKind::Nil => "nil".to_string(),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -2812,21 +2825,24 @@ pub(crate) fn builtin_define_coding_system_alias(
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
         ValueKind::Nil => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("coding-system-p"), Value::NIL],
             ));
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[1]],
             ));
         }
     };
 
-    let canonical = mgr
-        .resolve(&target)
-        .ok_or_else(|| signal("coding-system-error", vec![Value::symbol(&target)]))?;
+    let canonical = mgr.resolve(&target).ok_or_else(|| {
+        signal(
+            LispCondition::CodingSystemError,
+            vec![Value::symbol(&target)],
+        )
+    })?;
     mgr.add_alias(&alias, resolve_sym(canonical));
     Ok(Value::NIL)
 }
@@ -2852,21 +2868,21 @@ pub(crate) fn builtin_set_coding_system_priority(
     for arg in &args {
         if arg.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("coding-system-p"), Value::NIL],
             ));
         }
         let Some(name) = arg.as_symbol_name().map(|s| s.to_string()) else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), *arg],
             ));
         };
         // Resolve through aliases / EOL variants; GNU prefers the base name.
         resolve_runtime_name(mgr, &name)
-            .ok_or_else(|| signal("coding-system-error", vec![*arg]))?;
+            .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![*arg]))?;
         let category = coding_category_of(mgr, &name)
-            .ok_or_else(|| signal("coding-system-error", vec![*arg]))?;
+            .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![*arg]))?;
         // GNU stores the coding system's *base* name in the priority list.
         let base = coding_system_base_name(mgr, &name);
         requested.push((category, intern(&base)));
@@ -4016,7 +4032,7 @@ pub(crate) fn builtin_detect_coding_string(
     expect_max_args("detect-coding-string", &args, 2)?;
     let Some(s) = args[0].as_lisp_string() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     };
@@ -4046,7 +4062,7 @@ fn validate_detect_coding_region(buffers: &BufferManager, args: &[Value]) -> Res
     let point_max = buf.point_max_lisp_char_pos().as_i64();
     if !(point_min <= beg && end <= point_max) {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
@@ -4120,12 +4136,12 @@ pub(crate) fn builtin_set_keyboard_coding_system(
     }
     let Some(name) = args[0].as_symbol_name().map(|s| s.to_string()) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
     if !is_known_or_derived_coding_system(mgr, &name) {
-        return Err(signal("coding-system-error", vec![args[0]]));
+        return Err(signal(LispCondition::CodingSystemError, vec![args[0]]));
     }
     let normalization_input = if matches!(EolType::from_suffix(&name), Some(EolType::Unix)) {
         name.clone()
@@ -4133,7 +4149,7 @@ pub(crate) fn builtin_set_keyboard_coding_system(
         name.clone()
     } else {
         canonical_runtime_name(mgr, &name)
-            .ok_or_else(|| signal("coding-system-error", vec![args[0]]))?
+            .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![args[0]]))?
     };
     let base = strip_eol_suffix(&normalization_input);
     if matches!(base, "utf-8-auto" | "prefer-utf-8") {
@@ -4171,12 +4187,12 @@ pub(crate) fn builtin_set_terminal_coding_system(
     }
     let Some(name) = args[0].as_symbol_name().map(|s| s.to_string()) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
     if !is_known_or_derived_coding_system(mgr, &name) {
-        return Err(signal("coding-system-error", vec![args[0]]));
+        return Err(signal(LispCondition::CodingSystemError, vec![args[0]]));
     }
     mgr.terminal_coding = intern(&name);
     Ok(Value::NIL)
@@ -4547,9 +4563,12 @@ fn coding_exclude_list(exclude: Option<Value>) -> Result<Option<Vec<Value>>, Flo
     match exclude {
         None => Ok(None),
         Some(value) if value.is_nil() => Ok(None),
-        Some(value) => super::value::list_to_vec(&value)
-            .map(Some)
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), value])),
+        Some(value) => super::value::list_to_vec(&value).map(Some).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), value],
+            )
+        }),
     }
 }
 
@@ -4624,7 +4643,7 @@ fn marker_or_integer_position(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -4662,7 +4681,10 @@ pub(crate) fn builtin_find_coding_systems_region_internal(
     let char_count = buffer.total_char_len().get() as i64;
     if !(1..=char_count + 1).contains(&start) || !(1..=char_count + 1).contains(&end) || start > end
     {
-        return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![args[0], args[1]],
+        ));
     }
 
     let byte_range = EmacsByteRange::new(
@@ -4791,11 +4813,11 @@ pub(crate) fn builtin_set_buffer_file_coding_system(
         match cs_val.as_symbol_name() {
             Some(name) if is_known_or_derived_coding_system(&eval.coding_systems, name) => {}
             Some(_) => {
-                return Err(signal("coding-system-error", vec![cs_val]));
+                return Err(signal(LispCondition::CodingSystemError, vec![cs_val]));
             }
             None => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), cs_val],
                 ));
             }

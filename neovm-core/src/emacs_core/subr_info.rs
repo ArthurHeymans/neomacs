@@ -9,6 +9,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_name, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::tagged::header::{SubrDispatchKind, SubrObj};
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -20,7 +21,7 @@ use std::sync::OnceLock;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -32,7 +33,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -44,7 +45,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -253,7 +254,7 @@ fn lambda_arity_from_arglist(function: Value, arglist: Value) -> EvalResult {
             next
         };
         let Some(name) = next.as_symbol_name() else {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         };
 
         match name {
@@ -269,7 +270,7 @@ fn lambda_arity_from_arglist(function: Value, arglist: Value) -> EvalResult {
     }
 
     if !syms_left.is_nil() {
-        return Err(signal("invalid-function", vec![function]));
+        return Err(signal(LispCondition::InvalidFunction, vec![function]));
     }
 
     Ok(arity_cons(minargs, Some(maxargs)))
@@ -278,7 +279,7 @@ fn lambda_arity_from_arglist(function: Value, arglist: Value) -> EvalResult {
 fn lambda_arity_from_cons(function: Value) -> EvalResult {
     let syms_left = function.cons_cdr();
     if !syms_left.is_cons() {
-        return Err(signal("invalid-function", vec![function]));
+        return Err(signal(LispCondition::InvalidFunction, vec![function]));
     }
     lambda_arity_from_arglist(function, syms_left.cons_car())
 }
@@ -403,7 +404,7 @@ pub(crate) fn builtin_subr_name(args: Vec<Value>) -> EvalResult {
             Ok(Value::string(resolve_sym(id)))
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("subrp"), args[0]],
         )),
     }
@@ -422,7 +423,7 @@ pub(crate) fn builtin_subr_arity(ctx: &mut super::eval::Context, args: Vec<Value
             Ok(subr_arity_from_registry(ctx, id))
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("subrp"), args[0]],
         )),
     }
@@ -608,7 +609,7 @@ pub(crate) fn builtin_func_arity_ctx(
     let function = macro_wrapper_payload(original).unwrap_or(original);
     if super::autoload::is_autoload_value(&function) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), function],
         ));
     }
@@ -639,7 +640,7 @@ pub(crate) fn builtin_func_arity_ctx(
         ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
             lambda_arity_from_cons(function)
         }
-        _other => Err(signal("invalid-function", vec![original])),
+        _other => Err(signal(LispCondition::InvalidFunction, vec![original])),
     }
 }
 
@@ -651,7 +652,7 @@ pub(crate) fn builtin_func_arity_impl(args: Vec<Value>) -> EvalResult {
     let function = macro_wrapper_payload(original).unwrap_or(original);
     if super::autoload::is_autoload_value(&function) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), function],
         ));
     }
@@ -681,7 +682,7 @@ pub(crate) fn builtin_func_arity_impl(args: Vec<Value>) -> EvalResult {
         ValueKind::Cons if function.cons_car().as_symbol_name() == Some("lambda") => {
             lambda_arity_from_cons(function)
         }
-        _other => Err(signal("invalid-function", vec![original])),
+        _other => Err(signal(LispCondition::InvalidFunction, vec![original])),
     }
 }
 

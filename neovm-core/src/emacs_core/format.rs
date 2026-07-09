@@ -8,6 +8,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::timefns::zone_offset_name_for_time;
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -16,7 +17,7 @@ use super::value::*;
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -27,7 +28,12 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn require_string(_name: &str, val: &Value) -> Result<String, Flow> {
     val.as_lisp_string()
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
+        .ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), *val],
+            )
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +245,7 @@ pub(crate) fn builtin_format_time_string(args: Vec<Value>) -> EvalResult {
     expect_min_args("format-time-string", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("format-time-string"),
                 Value::fixnum(args.len() as i64),

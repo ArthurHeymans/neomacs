@@ -4,6 +4,7 @@
 //! - `zlib-available-p`
 //! - `zlib-decompress-region`
 
+use crate::emacs_core::error::LispCondition;
 use std::io::Read;
 
 use super::editfns::{
@@ -61,7 +62,10 @@ pub(crate) fn builtin_zlib_decompress_region(
 
     // Check read-only.
     if buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
-        return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
+        return Err(signal(
+            LispCondition::BufferReadOnly,
+            vec![Value::make_buffer(buf.id)],
+        ));
     }
 
     let from_byte = byte_range.start().get();

@@ -8,6 +8,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use super::value::*;
 use crate::buffer::BufferId;
+use crate::emacs_core::error::LispCondition;
 use crate::gc_trace::GcTrace;
 
 /// Rust-side registry for customization state.
@@ -36,7 +37,7 @@ impl GcTrace for CustomManager {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -47,7 +48,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -58,7 +59,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -87,14 +88,14 @@ pub(crate) fn builtin_make_variable_buffer_local_with_state(
         ValueKind::T => intern("t"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
     };
     let resolved_id = super::builtins::resolve_variable_alias_id_in_obarray(obarray, symbol)?;
     if obarray.is_constant_id(resolved_id) {
-        return Err(signal("setting-constant", vec![args[0]]));
+        return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
 
     // Flip the symbol's redirect tag to LOCALIZED and mark it as
@@ -128,14 +129,14 @@ pub(crate) fn builtin_make_local_variable(
         ValueKind::T => intern("t"),
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
     };
     let resolved = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     if ctx.obarray.is_constant_id(resolved) {
-        return Err(signal("setting-constant", vec![args[0]]));
+        return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
 
     if resolved == intern("buffer-undo-list") {
@@ -245,7 +246,7 @@ pub(crate) fn builtin_local_variable_p(
         ValueKind::T => intern("t"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -259,7 +260,7 @@ pub(crate) fn builtin_local_variable_p(
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("bufferp"), args[1]],
                 ));
             }
@@ -323,7 +324,7 @@ pub(crate) fn builtin_buffer_local_variables(
         Some(v) if v.is_buffer() => v.as_buffer_id().unwrap(),
         Some(other) => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), *other],
             ));
         }
@@ -377,7 +378,7 @@ fn buffer_arg_or_current(
                 }
             }
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), value],
             )),
         },
@@ -441,7 +442,7 @@ pub(crate) fn builtin_buffer_local_toplevel_value(
 
     let is_local = builtin_local_variable_p(ctx, vec![args[0], buffer_value])?;
     if is_local.is_nil() {
-        return Err(signal("void-variable", vec![args[0]]));
+        return Err(signal(LispCondition::VoidVariable, vec![args[0]]));
     }
 
     if let Some(value) = local_toplevel_binding_value(ctx.specpdl.as_slice(), resolved, buffer_id) {
@@ -520,7 +521,7 @@ pub(crate) fn builtin_kill_local_variable_impl(
         ValueKind::T => intern("t"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -688,7 +689,7 @@ pub(crate) fn builtin_default_value(
         ValueKind::Symbol(id) => id,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -727,7 +728,7 @@ pub(crate) fn builtin_default_value(
         {
             Ok(Value::from_kw_id(resolved))
         }
-        None => Err(signal("void-variable", vec![args[0]])),
+        None => Err(signal(LispCondition::VoidVariable, vec![args[0]])),
     }
 }
 
@@ -747,7 +748,7 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
         ValueKind::Symbol(id) => id,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }

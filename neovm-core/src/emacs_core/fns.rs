@@ -7,6 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
+use crate::emacs_core::error::LispCondition;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
 use super::value::*;
@@ -85,7 +86,7 @@ fn collation_errno_message(errno: libc::c_int) -> String {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -97,7 +98,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -108,7 +109,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -123,14 +124,19 @@ fn require_string_or_symbol_name(val: &Value) -> Result<String, Flow> {
             val.as_lisp_string()
                 .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         })
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
+        .ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), *val],
+            )
+        })
 }
 
 fn require_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *val],
         )),
     }
@@ -143,7 +149,7 @@ fn require_int_or_marker(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
     }
@@ -170,7 +176,10 @@ fn validate_md5_coding_system_arg(args: &[Value]) -> Result<(), Flow> {
     if valid || noerror {
         Ok(())
     } else {
-        Err(signal("coding-system-error", vec![*coding_system]))
+        Err(signal(
+            LispCondition::CodingSystemError,
+            vec![*coding_system],
+        ))
     }
 }
 
@@ -458,7 +467,7 @@ pub(crate) fn builtin_base64_encode_string(args: Vec<Value>) -> EvalResult {
     expect_range_args("base64-encode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -473,7 +482,7 @@ pub(crate) fn builtin_base64_decode_string(args: Vec<Value>) -> EvalResult {
     expect_range_args("base64-decode-string", &args, 1, 3)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -501,7 +510,7 @@ pub(crate) fn builtin_base64url_encode_string(args: Vec<Value>) -> EvalResult {
     expect_range_args("base64url-encode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -517,7 +526,7 @@ pub(crate) fn builtin_base64url_decode_string(args: Vec<Value>) -> EvalResult {
     expect_range_args("base64url-decode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -583,7 +592,10 @@ impl ValidatedBufferLispRegion {
             || self.end < point_min
             || self.end > point_max
         {
-            return Err(signal("args-out-of-range", vec![*start_arg, *end_arg]));
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![*start_arg, *end_arg],
+            ));
         }
         Ok(self)
     }
@@ -952,7 +964,7 @@ fn md5_hex_for_string(
 
     if start > end {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*object, start_arg, end_arg],
         ));
     }
@@ -967,7 +979,7 @@ fn md5_hex_for_string(
     };
     if byte_to > bytes.len() {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*object, start_arg, end_arg],
         ));
     }
@@ -1022,7 +1034,7 @@ fn secure_hash_algorithm_name(val: &Value) -> Result<String, Flow> {
         ValueKind::Nil => Ok("nil".to_string()),
         ValueKind::T => Ok("t".to_string()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *val],
         )),
     }
@@ -1044,7 +1056,7 @@ fn normalize_secure_hash_index(
     let idx = if raw < 0 { len + raw } else { raw };
     if idx < 0 || idx > len {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*object, *start_arg, *end_arg],
         ));
     }
@@ -1081,7 +1093,7 @@ fn hash_slice_for_string(
 
     if start > end {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*object, start_arg, end_arg],
         ));
     }
@@ -1097,7 +1109,7 @@ fn hash_slice_for_string(
     };
     if byte_to > bytes.len() {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*object, start_arg, end_arg],
         ));
     }
@@ -1204,7 +1216,7 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[0]],
                 ));
             }
@@ -1348,7 +1360,7 @@ pub(crate) fn builtin_widget_apply(
 
     let function = builtin_widget_get(vec![widget, property])?;
     if function.is_nil() {
-        return Err(signal("void-function", vec![Value::NIL]));
+        return Err(signal(LispCondition::VoidFunction, vec![Value::NIL]));
     }
 
     let mut call_args = Vec::with_capacity(args.len().saturating_sub(1));
@@ -1361,17 +1373,20 @@ pub(crate) fn builtin_widget_apply(
             if let Some(result) = eval.dispatch_subr(name, call_args) {
                 result
             } else {
-                Err(signal("void-function", vec![Value::symbol(name)]))
+                Err(signal(
+                    LispCondition::VoidFunction,
+                    vec![Value::symbol(name)],
+                ))
             }
         }
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
             if let Some(result) = eval.dispatch_subr_value(function, call_args) {
                 result
             } else {
-                Err(signal("void-function", vec![function]))
+                Err(signal(LispCondition::VoidFunction, vec![function]))
             }
         }
-        _ => Err(signal("invalid-function", vec![function])),
+        _ => Err(signal(LispCondition::InvalidFunction, vec![function])),
     }
 }
 
@@ -1381,7 +1396,7 @@ pub(crate) fn builtin_string_make_multibyte(args: Vec<Value>) -> EvalResult {
     expect_args("string-make-multibyte", &args, 1)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -1420,7 +1435,7 @@ pub(crate) fn builtin_string_make_unibyte(args: Vec<Value>) -> EvalResult {
             ))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )),
     }
@@ -1510,7 +1525,7 @@ fn validate_compare_strings_subarray(
         ValueKind::Nil => 0,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), from],
             ));
         }
@@ -1526,14 +1541,14 @@ fn validate_compare_strings_subarray(
         ValueKind::Nil => size_i64,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), to],
             ));
         }
     };
 
     if !(0 <= from_index && from_index <= to_index && to_index <= size_i64) {
-        return Err(signal("args-out-of-range", vec![array, from, to]));
+        return Err(signal(LispCondition::ArgsOutOfRange, vec![array, from, to]));
     }
 
     Ok(CharRange::new(
@@ -1579,7 +1594,7 @@ fn compare_strings_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
 fn require_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     value.as_lisp_string().cloned().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )
     })
@@ -1749,7 +1764,7 @@ fn require_optional_locale(locale: Option<&Value>) -> Result<Option<String>, Flo
             .map(Some)
             .ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), *value],
                 )
             }),

@@ -1,5 +1,6 @@
 //! GNU-style synchronous subprocess owner, corresponding to `callproc.c`.
 
+use crate::emacs_core::error::LispCondition;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -90,7 +91,7 @@ pub(crate) fn isolate_child_command(command: &mut Command) {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -100,7 +101,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -141,7 +142,10 @@ struct DestinationSpec {
 }
 
 fn signal_wrong_type_string(value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol("stringp"), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("stringp"), value],
+    )
 }
 
 fn callproc_owned_runtime_string(value: Value) -> String {
@@ -1175,7 +1179,7 @@ fn builtin_call_process_region_impl(
         ValueKind::String => {
             if delete {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integer-or-marker-p"), args[0]],
                 ));
             }

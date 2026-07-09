@@ -11,6 +11,7 @@
 //!   `this-command-keys-vector`, `thing-at-point`, `bounds-of-thing-at-point`,
 //!   `symbol-at-point`.
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
@@ -306,7 +307,7 @@ pub(crate) fn builtin_subr_interactive_form(name: &str) -> Option<Value> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -317,7 +318,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -328,7 +329,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -340,7 +341,7 @@ fn expect_optional_command_keys_vector(keys: Option<&Value>) -> Result<(), Flow>
     if let Some(keys_value) = keys {
         if !keys_value.is_nil() && !keys_value.is_vector() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("vectorp"), *keys_value],
             ));
         }
@@ -385,13 +386,13 @@ pub(crate) fn builtin_call_interactively(eval: &mut Context, args: Vec<Value>) -
 
     if !is_command {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("commandp"), func_val],
         ));
     }
 
     let Some((resolved_symbol, func)) = resolve_command_target(&eval, &func_val) else {
-        return Err(signal("void-function", vec![func_val]));
+        return Err(signal(LispCondition::VoidFunction, vec![func_val]));
     };
     let context =
         InteractiveInvocationContext::from_keys_arg_in_state(eval.read_command_keys(), args.get(2));
@@ -425,7 +426,7 @@ pub(crate) fn builtin_called_interactively_p(eval: &mut Context, args: Vec<Value
     // Accept 0 or 1 args
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("called-interactively-p"),
                 Value::fixnum(args.len() as i64),
@@ -593,7 +594,7 @@ fn command_modes_from_quoted_interactive_form(form: &Value) -> Result<Option<Val
             Ok(Some(arg_pair_cdr))
         }
         _tail => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), pair_cdr],
         )),
     }
@@ -728,7 +729,7 @@ pub(crate) fn builtin_command_remapping_impl(
     if let Some(keymap) = args.get(2) {
         if !keymap.is_nil() && !command_remapping_keymap_arg_valid(keymap) {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("keymapp"), *keymap],
             ));
         }
@@ -2010,7 +2011,7 @@ fn default_command_execute_args_in_state(
         "capitalize-region" => interactive_region_args_in_buffers(buffers, "error"),
         "upcase-initials-region" => interactive_region_args_in_buffers(buffers, "error"),
         "upcase-region" | "downcase-region" => Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::string(""), Value::fixnum(0)],
         )),
         _ => Ok(Vec::new()),
@@ -2143,7 +2144,10 @@ fn interactive_require_writable_current_buffer_in_state(
         return Ok(());
     }
     if interactive_buffer_read_only_active_in_state(obarray, dynamic, buf) {
-        return Err(signal("buffer-read-only", vec![buf.name_value()]));
+        return Err(signal(
+            LispCondition::BufferReadOnly,
+            vec![buf.name_value()],
+        ));
     }
     Ok(())
 }
@@ -2430,7 +2434,7 @@ fn interactive_form_value_to_args(value: Value) -> Result<Vec<Value>, Flow> {
         return Ok(values);
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("listp"), value],
     ))
 }
@@ -2520,7 +2524,7 @@ fn interactive_prompt_with_visible_args(
     let formatted = formatted?;
     formatted.as_lisp_string().cloned().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), formatted],
         )
     })
@@ -3016,12 +3020,12 @@ pub(crate) fn plan_call_interactively_in_state(
     let func_val = args[0];
     if !command_designator_p_in_state(obarray, interactive, &func_val, false) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("commandp"), func_val],
         ));
     }
     let Some((resolved_symbol, func)) = resolve_command_target_in_state(obarray, &func_val) else {
-        return Err(signal("void-function", vec![func_val]));
+        return Err(signal(LispCondition::VoidFunction, vec![func_val]));
     };
     let context =
         InteractiveInvocationContext::from_keys_arg_in_state(read_command_keys, args.get(2));
@@ -3365,7 +3369,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_with_vm_fallback(
 pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("self-insert-command"),
                 Value::fixnum(args.len() as i64),
@@ -3377,7 +3381,7 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         ValueKind::Fixnum(n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), args[0]],
             ));
         }
@@ -3684,7 +3688,7 @@ fn self_insert_should_auto_fill(eval: &Context, ch: char) -> bool {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_keyboard_quit(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("keyboard-quit", &args, 0)?;
-    Err(signal("quit", vec![]))
+    Err(signal(LispCondition::Quit, vec![]))
 }
 
 /// `(key-binding KEY &optional ACCEPT-DEFAULTS NO-REMAP POSITION)`
@@ -3717,7 +3721,10 @@ pub(crate) fn builtin_key_binding_impl(
             let lisp_max = buf.point_max_lisp_char_pos().as_i64();
             if pos_int < lisp_min || pos_int > lisp_max {
                 let buffer_value = Value::make_buffer(buf_id);
-                return Err(signal("args-out-of-range", vec![buffer_value, *position]));
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![buffer_value, *position],
+                ));
             }
         }
     }
@@ -3727,7 +3734,7 @@ pub(crate) fn builtin_key_binding_impl(
         Ok(events) => events,
         Err(super::kbd::KeyDesignatorError::WrongType(other)) => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("arrayp"), other],
             ));
         }
@@ -3773,7 +3780,7 @@ pub(crate) fn builtin_local_key_binding_impl(
         Ok(events) => events,
         Err(super::kbd::KeyDesignatorError::WrongType(other)) => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("arrayp"), other],
             ));
         }

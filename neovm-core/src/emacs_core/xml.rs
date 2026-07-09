@@ -8,6 +8,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::EmacsByteRange;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -27,7 +28,7 @@ fn expect_optional_string(v: Value) -> Result<Option<String>, Flow> {
                 .to_string(),
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), v],
         )),
     }

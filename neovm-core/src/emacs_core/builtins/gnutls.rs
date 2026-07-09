@@ -1,6 +1,7 @@
 use super::{
     EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args, signal,
 };
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::tls::format_x509_certificate_pem;
@@ -176,7 +177,7 @@ pub(crate) fn builtin_gnutls_peer_status_warning_describe(args: Vec<Value>) -> E
     }
     let Some(symbol) = args[0].as_symbol_name() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
@@ -605,7 +606,7 @@ fn gnutls_crypto_input_bytes(
 
     let Some(items) = list_to_vec(value) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), *value],
         ));
     };

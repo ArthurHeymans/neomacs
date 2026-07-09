@@ -15,6 +15,7 @@
 //!   `condition-wait`, `condition-notify`
 //! - Special form: `with-mutex`
 
+use crate::emacs_core::error::LispCondition;
 use std::{collections::HashMap, time::Duration};
 
 use super::error::{
@@ -691,7 +692,7 @@ impl GcTrace for ThreadManager {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -702,7 +703,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -713,7 +714,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_args_range(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -765,7 +766,7 @@ fn expect_thread_id(manager: &ThreadManager, value: &Value) -> Result<u64, Flow>
     match manager.thread_id_from_handle(value) {
         Some(id) => Ok(id),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("threadp"), *value],
         )),
     }
@@ -776,7 +777,7 @@ fn expect_mutex_id(manager: &ThreadManager, value: &Value) -> Result<u64, Flow> 
     match manager.mutex_id_from_handle(value) {
         Some(id) => Ok(id),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), *value],
         )),
     }
@@ -787,7 +788,7 @@ fn expect_cv_id(manager: &ThreadManager, value: &Value) -> Result<u64, Flow> {
     match manager.condition_variable_id_from_handle(value) {
         Some(id) => Ok(id),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), *value],
         )),
     }
@@ -824,7 +825,7 @@ pub(crate) fn prepare_make_thread(
             ValueKind::Nil => None,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[1]],
                 ));
             }
@@ -956,7 +957,7 @@ pub(crate) fn builtin_thread_join(
     let id = expect_thread_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_thread(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("threadp"), args[0]],
         ));
     }
@@ -1034,7 +1035,7 @@ pub(crate) fn builtin_thread_name(
     let id = expect_thread_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_thread(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("threadp"), args[0]],
         ));
     }
@@ -1053,7 +1054,7 @@ pub(crate) fn builtin_thread_live_p(
     let id = expect_thread_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_thread(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("threadp"), args[0]],
         ));
     }
@@ -1084,14 +1085,14 @@ pub(crate) fn builtin_thread_signal(
     let id = expect_thread_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_thread(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("threadp"), args[0]],
         ));
     }
     let error_symbol = args[1];
     let Some(error_name) = error_symbol.as_symbol_name() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), error_symbol],
         ));
     };
@@ -1145,7 +1146,7 @@ pub(crate) fn builtin_thread_last_error(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("thread-last-error"),
                 Value::fixnum(args.len() as i64),
@@ -1189,7 +1190,7 @@ pub(crate) fn builtin_thread_set_buffer_disposition(
     let value = args[1];
     if id == 0 && !value.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("null"), value],
         ));
     }
@@ -1208,7 +1209,7 @@ pub(crate) fn builtin_make_mutex(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-mutex"),
                 Value::fixnum(args.len() as i64),
@@ -1221,7 +1222,7 @@ pub(crate) fn builtin_make_mutex(
             ValueKind::Nil => None,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), *v],
                 ));
             }
@@ -1256,7 +1257,7 @@ pub(crate) fn builtin_mutex_name(
     let id = expect_mutex_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_mutex(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
@@ -1277,7 +1278,7 @@ pub(crate) fn builtin_mutex_lock(
     let id = expect_mutex_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_mutex(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
@@ -1299,7 +1300,7 @@ pub(crate) fn builtin_mutex_unlock(
     let id = expect_mutex_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_mutex(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
@@ -1329,7 +1330,7 @@ pub(crate) fn builtin_make_condition_variable(
     expect_min_args("make-condition-variable", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-condition-variable"),
                 Value::fixnum(args.len() as i64),
@@ -1339,7 +1340,7 @@ pub(crate) fn builtin_make_condition_variable(
     let mutex_id = expect_mutex_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_mutex(mutex_id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
@@ -1349,7 +1350,7 @@ pub(crate) fn builtin_make_condition_variable(
             ValueKind::Nil => None,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[1]],
                 ));
             }
@@ -1363,7 +1364,7 @@ pub(crate) fn builtin_make_condition_variable(
             .condition_variable_handle(id)
             .unwrap_or_else(|| tagged_object_value("condition-variable", id))),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), args[0]],
         )),
     }
@@ -1391,7 +1392,7 @@ pub(crate) fn builtin_condition_name(
     let id = expect_cv_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_condition_variable(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     }
@@ -1410,19 +1411,19 @@ pub(crate) fn builtin_condition_mutex(
     let id = expect_cv_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_condition_variable(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     }
     let Some(mutex_id) = ctx.threads.condition_variable_mutex(id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     };
     ctx.threads.mutex_handle(mutex_id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         )
     })
@@ -1439,13 +1440,13 @@ pub(crate) fn builtin_condition_wait(
     let id = expect_cv_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_condition_variable(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     }
     let Some(mutex_id) = ctx.threads.condition_variable_mutex(id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     };
@@ -1470,7 +1471,7 @@ pub(crate) fn builtin_condition_notify(
     expect_min_args("condition-notify", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("condition-notify"),
                 Value::fixnum(args.len() as i64),
@@ -1480,13 +1481,13 @@ pub(crate) fn builtin_condition_notify(
     let id = expect_cv_id(&ctx.threads, &args[0])?;
     if !ctx.threads.is_condition_variable(id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     }
     let Some(mutex_id) = ctx.threads.condition_variable_mutex(id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("condition-variable-p"), args[0]],
         ));
     };
@@ -1514,7 +1515,7 @@ pub(crate) fn builtin_condition_notify(
 pub(crate) fn sf_with_mutex(eval: &mut super::eval::Context, tail: &[Value]) -> EvalResult {
     if tail.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::cons(Value::fixnum(1), Value::fixnum(1)),
                 Value::fixnum(0),
@@ -1525,7 +1526,7 @@ pub(crate) fn sf_with_mutex(eval: &mut super::eval::Context, tail: &[Value]) -> 
     let mutex_id = expect_mutex_id(&eval.threads, &mutex_val)?;
     if !eval.threads.is_mutex(mutex_id) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("mutexp"), mutex_val],
         ));
     }

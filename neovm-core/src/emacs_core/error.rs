@@ -90,23 +90,135 @@ impl SignalData {
 
 pub(crate) type EvalResult = Result<Value, Flow>;
 
+/// Standard error conditions defined by the GNU C core (`define_error`
+/// in data.c, eval.c, and friends). Signaling through the enum instead
+/// of a string literal makes the condition name typo-proof at compile
+/// time; user-defined conditions (`define-error` from Lisp) still
+/// signal by name through the `&str` impl of [`IntoConditionSym`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, IntoStaticStr)]
+pub(crate) enum LispCondition {
+    #[strum(serialize = "args-out-of-range")]
+    ArgsOutOfRange,
+    #[strum(serialize = "arith-error")]
+    ArithError,
+    #[strum(serialize = "beginning-of-buffer")]
+    BeginningOfBuffer,
+    #[strum(serialize = "buffer-read-only")]
+    BufferReadOnly,
+    #[strum(serialize = "circular-list")]
+    CircularList,
+    #[strum(serialize = "coding-system-error")]
+    CodingSystemError,
+    #[strum(serialize = "cyclic-function-indirection")]
+    CyclicFunctionIndirection,
+    #[strum(serialize = "cyclic-variable-indirection")]
+    CyclicVariableIndirection,
+    #[strum(serialize = "dbus-error")]
+    DbusError,
+    #[strum(serialize = "end-of-buffer")]
+    EndOfBuffer,
+    #[strum(serialize = "end-of-file")]
+    EndOfFile,
+    #[strum(serialize = "error")]
+    // The generic condition. Existing call sites still signal("error", ...)
+    // by name (the string arm is also the user-defined-condition escape
+    // hatch); the variant exists so new code can stay typo-proof throughout.
+    #[allow(dead_code)]
+    Error,
+    #[strum(serialize = "file-already-exists")]
+    FileAlreadyExists,
+    #[strum(serialize = "file-error")]
+    FileError,
+    #[strum(serialize = "file-missing")]
+    FileMissing,
+    #[strum(serialize = "invalid-function")]
+    InvalidFunction,
+    #[strum(serialize = "invalid-read-syntax")]
+    InvalidReadSyntax,
+    #[strum(serialize = "invalid-regexp")]
+    InvalidRegexp,
+    #[strum(serialize = "kill-emacs")]
+    KillEmacs,
+    #[strum(serialize = "malformed-keyword-arg-list")]
+    MalformedKeywordArgList,
+    #[strum(serialize = "no-catch")]
+    NoCatch,
+    #[strum(serialize = "overflow-error")]
+    OverflowError,
+    #[strum(serialize = "quit")]
+    Quit,
+    #[strum(serialize = "scan-error")]
+    ScanError,
+    #[strum(serialize = "search-failed")]
+    SearchFailed,
+    #[strum(serialize = "setting-constant")]
+    SettingConstant,
+    #[strum(serialize = "sqlite-error")]
+    SqliteError,
+    #[strum(serialize = "sqlite-locked-error")]
+    SqliteLockedError,
+    #[strum(serialize = "text-read-only")]
+    TextReadOnly,
+    #[strum(serialize = "treesit-node-buffer-killed")]
+    TreesitNodeBufferKilled,
+    #[strum(serialize = "treesit-node-outdated")]
+    TreesitNodeOutdated,
+    #[strum(serialize = "treesit-parse-error")]
+    TreesitParseError,
+    #[strum(serialize = "treesit-parser-deleted")]
+    TreesitParserDeleted,
+    #[strum(serialize = "treesit-predicate-not-found")]
+    TreesitPredicateNotFound,
+    #[strum(serialize = "treesit-query-error")]
+    TreesitQueryError,
+    #[strum(serialize = "type-mismatch")]
+    TypeMismatch,
+    #[strum(serialize = "user-error")]
+    UserError,
+    #[strum(serialize = "void-function")]
+    VoidFunction,
+    #[strum(serialize = "void-variable")]
+    VoidVariable,
+    #[strum(serialize = "wrong-length-argument")]
+    WrongLengthArgument,
+    #[strum(serialize = "wrong-number-of-arguments")]
+    WrongNumberOfArguments,
+    #[strum(serialize = "wrong-type-argument")]
+    WrongTypeArgument,
+}
+
+impl LispCondition {
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
+}
+
+/// A condition designator accepted by the signal constructors: a typed
+/// standard condition, or any symbol name for user-defined conditions.
+pub(crate) trait IntoConditionSym {
+    fn condition_sym(self) -> SymId;
+}
+
+impl IntoConditionSym for LispCondition {
+    fn condition_sym(self) -> SymId {
+        intern(self.name())
+    }
+}
+
+impl IntoConditionSym for &str {
+    fn condition_sym(self) -> SymId {
+        intern(self)
+    }
+}
+
 /// Create a signal flow.
-pub(crate) fn signal(symbol: &str, data: Vec<Value>) -> Flow {
-    signal_internal(symbol, data, None, false)
+pub(crate) fn signal(symbol: impl IntoConditionSym, data: Vec<Value>) -> Flow {
+    signal_internal_id(symbol.condition_sym(), data, None, false)
 }
 
 /// Create a signal flow without running `signal-hook-function`.
-pub(crate) fn signal_suppressed(symbol: &str, data: Vec<Value>) -> Flow {
-    signal_internal(symbol, data, None, true)
-}
-
-fn signal_internal(
-    symbol: &str,
-    data: Vec<Value>,
-    raw_data: Option<Value>,
-    suppress_signal_hook: bool,
-) -> Flow {
-    signal_internal_id(intern(symbol), data, raw_data, suppress_signal_hook)
+pub(crate) fn signal_suppressed(symbol: impl IntoConditionSym, data: Vec<Value>) -> Flow {
+    signal_internal_id(symbol.condition_sym(), data, None, true)
 }
 
 /// Like `signal_internal` but takes the error symbol by identity.  GNU's
@@ -134,19 +246,28 @@ pub(crate) fn signal_internal_id(
 /// Create a signal where DATA is used as the raw cdr payload.
 ///
 /// This preserves dotted signal data shapes such as `(foo . 1)`.
-pub(crate) fn signal_with_data(symbol: &str, data: Value) -> Flow {
+pub(crate) fn signal_with_data(symbol: impl IntoConditionSym, data: Value) -> Flow {
     signal_with_data_internal(symbol, data, false)
 }
 
 /// Create a signal with raw cdr payload without running `signal-hook-function`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn signal_with_data_suppressed(symbol: &str, data: Value) -> Flow {
+pub(crate) fn signal_with_data_suppressed(symbol: impl IntoConditionSym, data: Value) -> Flow {
     signal_with_data_internal(symbol, data, true)
 }
 
-fn signal_with_data_internal(symbol: &str, data: Value, suppress_signal_hook: bool) -> Flow {
+fn signal_with_data_internal(
+    symbol: impl IntoConditionSym,
+    data: Value,
+    suppress_signal_hook: bool,
+) -> Flow {
     let normalized = super::value::list_to_vec(&data).unwrap_or_else(|| vec![data]);
-    signal_internal(symbol, normalized, Some(data), suppress_signal_hook)
+    signal_internal_id(
+        symbol.condition_sym(),
+        normalized,
+        Some(data),
+        suppress_signal_hook,
+    )
 }
 
 /// Identity-preserving signal flow (see `signal_internal_id`).

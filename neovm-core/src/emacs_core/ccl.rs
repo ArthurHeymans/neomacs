@@ -11,6 +11,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::SymId;
+use crate::emacs_core::error::LispCondition;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -161,7 +162,7 @@ fn ccl_program_code_index_message(
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -172,7 +173,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -183,7 +184,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -211,7 +212,7 @@ pub(crate) fn builtin_ccl_execute_impl(args: Vec<Value>) -> EvalResult {
     expect_args("ccl-execute", &args, 2)?;
     if !args[1].is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), args[1]],
         ));
     }
@@ -245,7 +246,7 @@ pub(crate) fn builtin_ccl_execute_on_string_impl(args: Vec<Value>) -> EvalResult
     expect_max_args("ccl-execute-on-string", &args, 5)?;
     if !args[1].is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), args[1]],
         ));
     }
@@ -282,7 +283,7 @@ pub(crate) fn builtin_ccl_execute_on_string_impl(args: Vec<Value>) -> EvalResult
         _other => {
             // Type error: STRING must be a string or nil
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[2]],
             ))
         }
@@ -295,7 +296,7 @@ pub(crate) fn builtin_register_ccl_program_impl(args: Vec<Value>) -> EvalResult 
     expect_args("register-ccl-program", &args, 2)?;
     if !args[0].is_symbol() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
@@ -305,7 +306,7 @@ pub(crate) fn builtin_register_ccl_program_impl(args: Vec<Value>) -> EvalResult 
     } else {
         if !args[1].is_vector() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("vectorp"), args[1]],
             ));
         }
@@ -329,13 +330,13 @@ pub(crate) fn builtin_register_code_conversion_map_impl(args: Vec<Value>) -> Eva
     expect_args("register-code-conversion-map", &args, 2)?;
     if !args[0].is_symbol() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
     if !args[1].is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), args[1]],
         ));
     }

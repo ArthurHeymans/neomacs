@@ -8,6 +8,7 @@ use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteRange};
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -17,7 +18,7 @@ use crate::emacs_core::value::ValueKind;
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -28,7 +29,7 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -39,7 +40,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -52,7 +53,7 @@ fn expect_integerp(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *arg],
         )),
     }
@@ -62,7 +63,7 @@ fn expect_integer_or_marker_p(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *arg],
         )),
     }
@@ -80,7 +81,7 @@ fn expect_composition_components(arg: Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), arg],
         ))
     }
@@ -99,8 +100,12 @@ fn composition_property(
 }
 
 fn expect_string_value(arg: &Value) -> Result<&crate::heap_types::LispString, Flow> {
-    arg.as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *arg]))
+    arg.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *arg],
+        )
+    })
 }
 
 fn validate_subarray_indices(
@@ -117,7 +122,7 @@ fn validate_subarray_indices(
             ValueKind::Fixnum(n) => n,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), value],
                 ));
             }
@@ -128,7 +133,7 @@ fn validate_subarray_indices(
     let from_idx = normalize_index(from, 0, size)?;
     let to_idx = normalize_index(to, size, size)?;
     if !(0 <= from_idx && from_idx <= to_idx && to_idx <= size) {
-        return Err(signal("args-out-of-range", vec![array, from, to]));
+        return Err(signal(LispCondition::ArgsOutOfRange, vec![array, from, to]));
     }
     Ok((from_idx, to_idx))
 }
@@ -167,7 +172,7 @@ pub(crate) fn builtin_compose_region_internal(
     if beg < point_min || end > point_max {
         // GNU `args_out_of_range_3` reports the original (un-swapped) arguments.
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![buffer_handle, args[0], args[1]],
         ));
     }
@@ -194,7 +199,7 @@ pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
     expect_range_args("compose-string-internal", &args, 3, 5)?;
     if !args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
@@ -658,7 +663,7 @@ pub(crate) fn builtin_find_composition_internal(
     }
     if !args[2].is_nil() && !args[2].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[2]],
         ));
     }
@@ -675,7 +680,7 @@ pub(crate) fn builtin_find_composition_internal(
         let len = text.schars() as i64;
         if pos < 0 || pos > len {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![args[2], Value::fixnum(pos)],
             ));
         }
@@ -701,7 +706,7 @@ pub(crate) fn builtin_find_composition_internal(
         let (begv, zv) = {
             let Some(buf) = ctx.buffers.current_buffer() else {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![Value::NIL, Value::fixnum(pos)],
                 ));
             };
@@ -717,7 +722,7 @@ pub(crate) fn builtin_find_composition_internal(
                 .map(|b| Value::make_buffer(b.id))
                 .unwrap_or(Value::NIL);
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![handle, Value::fixnum(pos)],
             ));
         }
@@ -894,8 +899,12 @@ pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
         return Ok(Value::NIL);
     }
 
-    let items = list_to_vec(&args[0])
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[0]]))?;
+    let items = list_to_vec(&args[0]).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), args[0]],
+        )
+    })?;
 
     for item in items {
         if !item.is_cons() {

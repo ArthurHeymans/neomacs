@@ -4,6 +4,7 @@ use super::eval::Context;
 use super::intern::{SymId, intern};
 use super::symbol::Obarray;
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 
 pub(crate) trait HookRuntime {
@@ -338,7 +339,7 @@ pub(crate) fn run_hook_query_error_with_timeout<R: HookRuntime>(
     match run_hook_value(runtime, hook_sym, hook_value, &[], true) {
         Ok(value) => Ok(value),
         Err(Flow::Signal(_)) => Err(signal(
-            "end-of-file",
+            LispCondition::EndOfFile,
             vec![Value::string("Error reading from stdin")],
         )),
         Err(flow) => Err(flow),

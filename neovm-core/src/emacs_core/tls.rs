@@ -8,6 +8,7 @@ use super::builtins::{EvalResult, expect_args, signal};
 use super::error::Flow;
 use super::value::Value;
 use super::value::list_to_vec;
+use crate::emacs_core::error::LispCondition;
 use base64::Engine;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -56,7 +57,7 @@ pub(crate) fn parse_gnutls_boot_parameters(
         }
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), credential_type],
             ));
         }
@@ -64,7 +65,7 @@ pub(crate) fn parse_gnutls_boot_parameters(
 
     let Some(items) = list_to_vec(&proplist) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), proplist],
         ));
     };

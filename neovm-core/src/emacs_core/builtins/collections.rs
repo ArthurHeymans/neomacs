@@ -56,19 +56,19 @@ fn builtin_aref_values(array: Value, index: Value) -> EvalResult {
                 items.len() >= 2 && items[0].as_symbol_name() == Some("--bool-vector--");
             if is_bool_vector {
                 return super::chartable::bool_vector_ref_value(&array, idx)
-                    .ok_or_else(|| signal("args-out-of-range", vec![array, index]));
+                    .ok_or_else(|| signal(LispCondition::ArgsOutOfRange, vec![array, index]));
             }
             items
                 .get(idx)
                 .copied()
-                .ok_or_else(|| signal("args-out-of-range", vec![array, index]))
+                .ok_or_else(|| signal(LispCondition::ArgsOutOfRange, vec![array, index]))
         }
         ValueKind::String => {
             let idx = idx_fixnum as usize;
             let string = array.as_lisp_string().expect("string");
             super::lisp_string_char_at(string, idx)
                 .map(|cp| Value::fixnum(cp as i64))
-                .ok_or_else(|| signal("args-out-of-range", vec![array, index]))
+                .ok_or_else(|| signal(LispCondition::ArgsOutOfRange, vec![array, index]))
         }
         // In official Emacs, closures support aref for oclosure slot access.
         // The closure vector layout is:
@@ -78,7 +78,7 @@ fn builtin_aref_values(array: Value, index: Value) -> EvalResult {
             let vec = lambda_to_closure_vector(&array);
             vec.get(idx)
                 .cloned()
-                .ok_or_else(|| signal("args-out-of-range", vec![array, index]))
+                .ok_or_else(|| signal(LispCondition::ArgsOutOfRange, vec![array, index]))
         }
         // ByteCode closures: [0]=ARGLIST [1]=CODE [2]=ENV/CONSTANTS [3]=DEPTH [4]=DOC
         ValueKind::Veclike(VecLikeType::ByteCode) => {
@@ -86,10 +86,10 @@ fn builtin_aref_values(array: Value, index: Value) -> EvalResult {
             let vec = bytecode_to_closure_vector(&array);
             vec.get(idx)
                 .cloned()
-                .ok_or_else(|| signal("args-out-of-range", vec![array, index]))
+                .ok_or_else(|| signal(LispCondition::ArgsOutOfRange, vec![array, index]))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), array],
         )),
     }
@@ -102,7 +102,7 @@ pub(crate) fn aset_string_replacement(
 ) -> Result<Value, Flow> {
     if !array.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *array],
         ));
     };
@@ -111,13 +111,13 @@ pub(crate) fn aset_string_replacement(
     let multibyte = array.string_is_multibyte();
     let mut codes = super::lisp_string_char_codes(array.as_lisp_string().expect("string"));
     if idx >= codes.len() {
-        return Err(signal("args-out-of-range", vec![*array, *index]));
+        return Err(signal(LispCondition::ArgsOutOfRange, vec![*array, *index]));
     }
 
     let replacement_code = insert_char_code_from_value(new_element)?;
     if !(0..=0x3F_FFFF).contains(&replacement_code) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *new_element],
         ));
     }
@@ -171,7 +171,7 @@ pub(crate) fn aset_string_replacement(
         } else {
             if code > 0xff {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), *new_element],
                 ));
             }
@@ -230,17 +230,23 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
                     Some(n) => n,
                     None => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("bool-vector-p"), args[0]],
                         ));
                     }
                 };
                 if idx >= len {
-                    return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+                    return Err(signal(
+                        LispCondition::ArgsOutOfRange,
+                        vec![args[0], args[1]],
+                    ));
                 }
                 let store_idx = idx + 2;
                 if store_idx >= vec_len {
-                    return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+                    return Err(signal(
+                        LispCondition::ArgsOutOfRange,
+                        vec![args[0], args[1]],
+                    ));
                 }
                 let val = Value::fixnum(if args[2].is_truthy() { 1 } else { 0 });
                 match args[0].veclike_type() {
@@ -255,7 +261,10 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
                 return Ok(args[2]);
             }
             if idx >= vec_len {
-                return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![args[0], args[1]],
+                ));
             }
             match args[0].veclike_type() {
                 Some(VecLikeType::Vector) => {
@@ -273,7 +282,7 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
             Ok(args[2])
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), args[0]],
         )),
     }
@@ -294,7 +303,7 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
                     let bit =
                         super::chartable::bool_vector_ref_value(arg, index).ok_or_else(|| {
                             signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("bool-vector-p"), *arg],
                             )
                         })?;
@@ -303,13 +312,13 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
             }
             ValueKind::Veclike(VecLikeType::Vector) if super::chartable::is_char_table(arg) => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("sequencep"), *arg],
                 ));
             }
             ValueKind::Veclike(VecLikeType::CharTable) => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("sequencep"), *arg],
                 ));
             }
@@ -332,7 +341,7 @@ pub(crate) fn builtin_vconcat_slice(args: &[Value]) -> EvalResult {
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("sequencep"), *arg],
                 ));
             }
@@ -457,7 +466,7 @@ pub(crate) fn builtin_define_hash_table_test(args: Vec<Value>) -> EvalResult {
     expect_args("define-hash-table-test", &args, 3)?;
     let Some(alias_name) = args[0].as_symbol_name() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
@@ -514,7 +523,7 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
         _ => {
             let Some(name) = test_arg.as_symbol_name() else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), test_arg],
                 ));
             };
@@ -715,7 +724,7 @@ fn builtin_gethash_values(
             Ok(ht.data.get(&key).cloned().unwrap_or(default))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), table],
         )),
     }
@@ -819,7 +828,7 @@ fn builtin_puthash_values(
             Ok(value)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), table],
         )),
     }
@@ -911,7 +920,7 @@ fn builtin_remhash_values(
             Ok(Value::NIL)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), table],
         )),
     }
@@ -932,7 +941,7 @@ pub(crate) fn builtin_clrhash(args: Vec<Value>) -> EvalResult {
             Ok(args[0])
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -945,7 +954,7 @@ pub(crate) fn builtin_hash_table_count(args: Vec<Value>) -> EvalResult {
             args[0].as_hash_table().unwrap().data.len() as i64,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -976,7 +985,7 @@ pub(crate) fn builtin_string_to_char(args: Vec<Value>) -> EvalResult {
     expect_args("string-to-char", &args, 1)?;
     let string = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -1045,7 +1054,7 @@ fn builtin_plist_get_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) ->
     expect_max_args("plist-get", &args, 3)?;
     if args.get(2).is_some_and(|value| !value.is_nil()) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[2]],
         ));
     }
@@ -1088,7 +1097,7 @@ pub(crate) fn builtin_plist_put_with_ctx(
                 let entry_rest = cursor.cons_cdr();
                 if !entry_rest.is_cons() {
                     break Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("plistp"), plist],
                     ));
                 }
@@ -1115,7 +1124,7 @@ pub(crate) fn builtin_plist_put_with_ctx(
             }
             _ => {
                 break Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }
@@ -1131,7 +1140,7 @@ fn builtin_plist_put_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) ->
     expect_max_args("plist-put", &args, 4)?;
     if args.get(3).is_some_and(|value| !value.is_nil()) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[3]],
         ));
     }
@@ -1164,7 +1173,7 @@ fn builtin_plist_put_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) ->
                     }
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("plistp"), plist],
                         ));
                     }
@@ -1180,7 +1189,7 @@ fn builtin_plist_put_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) ->
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }
@@ -1245,7 +1254,7 @@ pub(crate) fn builtin_plist_member(
                     }
                     _ => {
                         break Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("plistp"), plist],
                         ));
                     }
@@ -1254,7 +1263,7 @@ pub(crate) fn builtin_plist_member(
             ValueKind::Nil => break Ok(Value::NIL),
             _ => {
                 break Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }
@@ -1275,7 +1284,7 @@ pub(crate) fn plist_member_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bo
     let prop = args[1];
     if args.get(2).is_some_and(|value| !value.is_nil()) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[2]],
         ));
     }
@@ -1308,7 +1317,7 @@ pub(crate) fn plist_member_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bo
                     _ => {
                         // Dotted tail after a key: malformed plist.
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("plistp"), plist],
                         ));
                     }
@@ -1317,7 +1326,7 @@ pub(crate) fn plist_member_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bo
             ValueKind::Nil => return Ok(Value::NIL),
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }

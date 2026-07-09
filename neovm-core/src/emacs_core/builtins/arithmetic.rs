@@ -27,7 +27,7 @@ fn try_i64_from_value(eval: &super::eval::Context, value: &Value) -> Result<Opti
             super::marker::marker_position_as_int_eval(eval, value)?,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -36,7 +36,7 @@ fn try_i64_from_value(eval: &super::eval::Context, value: &Value) -> Result<Opti
 #[inline]
 fn wrong_number_or_marker(value: &Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("number-or-marker-p"), *value],
     )
 }
@@ -44,7 +44,7 @@ fn wrong_number_or_marker(value: &Value) -> Flow {
 #[inline]
 fn wrong_integer_or_marker(value: &Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("integer-or-marker-p"), *value],
     )
 }
@@ -433,14 +433,14 @@ pub(crate) fn builtin_div(args: Vec<Value>) -> EvalResult {
             let mut bacc = Integer::from(acc);
             let big = a.as_bignum().unwrap();
             if *big == Integer::from(0) {
-                return Err(signal("arith-error", vec![]));
+                return Err(signal(LispCondition::ArithError, vec![]));
             }
             bacc /= big;
             return continue_bignum_div(&args[i + 2..], bacc);
         }
         let d = expect_integer_or_marker_after_number_check(a)?;
         if d == 0 {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         match acc.checked_div(d) {
             Some(q) => acc = q,
@@ -462,13 +462,13 @@ fn div_one_arg(arg: &Value) -> EvalResult {
     if let Some(big) = arg.as_bignum() {
         // GNU: dividing 1 by any bignum yields 0 (since |bignum| > MAX_FIXNUM).
         if *big == Integer::from(0) {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         return Ok(Value::fixnum(0));
     }
     let d = expect_integer_or_marker_after_number_check(arg)?;
     if d == 0 {
-        return Err(signal("arith-error", vec![]));
+        return Err(signal(LispCondition::ArithError, vec![]));
     }
     Ok(Value::fixnum(1 / d))
 }
@@ -477,14 +477,14 @@ fn continue_bignum_div(rest: &[Value], mut acc: Integer) -> EvalResult {
     for a in rest {
         if let Some(big) = a.as_bignum() {
             if *big == Integer::from(0) {
-                return Err(signal("arith-error", vec![]));
+                return Err(signal(LispCondition::ArithError, vec![]));
             }
             acc /= big;
             continue;
         }
         let d = expect_integer_or_marker_after_number_check(a)?;
         if d == 0 {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         acc /= Integer::from(d);
     }
@@ -532,7 +532,7 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
         let num_big = bignum_or_int_to_integer(num)?;
         let den_big = bignum_or_int_to_integer(den)?;
         if den_big == Integer::from(0) {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         let mut r = Integer::from(&num_big % &den_big);
         if modulo {
@@ -552,7 +552,7 @@ fn integer_remainder(num: &Value, den: &Value, modulo: bool) -> EvalResult {
     let a = expect_integer_or_marker_after_number_check(num)?;
     let b = expect_integer_or_marker_after_number_check(den)?;
     if b == 0 {
-        return Err(signal("arith-error", vec![]));
+        return Err(signal(LispCondition::ArithError, vec![]));
     }
     // i64::MIN % -1 is 0 mathematically, but checked_rem returns None.
     let r = match a.checked_rem(b) {
@@ -577,7 +577,7 @@ fn bignum_or_int_to_integer(value: &Value) -> Result<Integer, Flow> {
             Ok(Integer::from(super::marker::marker_position_as_int(value)?))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -613,7 +613,7 @@ fn add1_value(arg: Value) -> EvalResult {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), arg],
         )),
     }
@@ -649,7 +649,7 @@ fn sub1_value(arg: Value) -> EvalResult {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), arg],
         )),
     }
@@ -725,7 +725,7 @@ pub(crate) fn builtin_abs(args: Vec<Value>) -> EvalResult {
             args[0].as_bignum().unwrap().clone().abs(),
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), args[0]],
         )),
     }
@@ -980,18 +980,18 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
                     }
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("integerp"), *value],
                         ));
                     }
                 };
                 return Ok(Value::fixnum(if sign_neg { -1 } else { 0 }));
             }
-            return Err(signal("overflow-error", vec![]));
+            return Err(signal(LispCondition::OverflowError, vec![]));
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), *count_val],
             ));
         }
@@ -1005,7 +1005,7 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Bignum) => value.as_bignum().unwrap().clone(),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), *value],
             ));
         }
@@ -1023,7 +1023,7 @@ pub(crate) fn builtin_ash_slice(args: &[Value]) -> EvalResult {
         // overflow check.) So `(ash 0 (expt 2 50))` must signal
         // `overflow-error`, not return 0.
         if mul_2exp_would_overflow(&value_big, count_i64) {
-            return Err(signal("overflow-error", vec![]));
+            return Err(signal(LispCondition::OverflowError, vec![]));
         }
         // The overflow check guarantees `count_i64` fits the bignum size
         // limit, hence well within `u32`, so this conversion is exact.
@@ -1133,7 +1133,7 @@ fn integer_or_marker_to_big(
             super::marker::marker_position_as_int_eval(eval, v)?,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *v],
         )),
     }
@@ -1302,7 +1302,7 @@ pub(crate) fn builtin_float(args: Vec<Value>) -> EvalResult {
             f64::rounding_from(args[0].as_bignum().unwrap(), RoundingMode::Nearest).0,
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), args[0]],
         )),
     }
@@ -1317,7 +1317,7 @@ fn value_to_f64(_name: &str, v: &Value) -> Result<f64, Flow> {
             Ok(f64::rounding_from(v.as_bignum().unwrap(), RoundingMode::Nearest).0)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *v],
         )),
     }
@@ -1354,7 +1354,7 @@ fn rounding_with_divisor(
                 Ok(Value::make_integer(args[0].as_bignum().unwrap().clone()))
             }
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("numberp"), args[0]],
             )),
         };
@@ -1363,21 +1363,21 @@ fn rounding_with_divisor(
     if args[1].is_float() {
         let divisor = args[1].xfloat();
         if divisor == 0.0 {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         let dividend = value_to_f64(name, &args[0])?;
         return float_to_lisp_integer(round_fn(dividend / divisor));
     }
     if let Some(d) = args[1].as_fixnum() {
         if d == 0 {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         if let Some(a) = args[0].as_fixnum() {
             return Ok(Value::make_int(int_div(a, d)));
         }
     }
     if args[1].is_bignum() && *args[1].as_bignum().unwrap() == Integer::from(0) {
-        return Err(signal("arith-error", vec![]));
+        return Err(signal(LispCondition::ArithError, vec![]));
     }
     // Mixed bignum / float / fixnum 2-arg fallback. For non-float
     // operands fall through to the float path; this loses precision
@@ -1388,7 +1388,7 @@ fn rounding_with_divisor(
         let dividend = value_to_f64(name, &args[0])?;
         let divisor = value_to_f64(name, &args[1])?;
         if divisor == 0.0 {
-            return Err(signal("arith-error", vec![]));
+            return Err(signal(LispCondition::ArithError, vec![]));
         }
         return float_to_lisp_integer(round_fn(dividend / divisor));
     }
@@ -1397,7 +1397,7 @@ fn rounding_with_divisor(
     let a = bignum_or_int_to_integer(&args[0])?;
     let d = bignum_or_int_to_integer(&args[1])?;
     if d == Integer::from(0) {
-        return Err(signal("arith-error", vec![]));
+        return Err(signal(LispCondition::ArithError, vec![]));
     }
     // Truncation (toward-zero) division as the building block.
     let q = Integer::from(&a / &d);
@@ -1462,7 +1462,7 @@ fn rounding_with_divisor(
 /// `double_to_integer` (`src/bignum.c:81`).
 fn float_to_lisp_integer(value: f64) -> EvalResult {
     if !value.is_finite() {
-        return Err(signal("overflow-error", vec![]));
+        return Err(signal(LispCondition::OverflowError, vec![]));
     }
     // i64::MIN..=i64::MAX is the safe `as i64` range; outside that we
     // need a bignum. But fixnum range is even tighter (62-bit), so always
@@ -1632,7 +1632,7 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Bignum) => *exp_val.as_bignum().unwrap() < Integer::from(0),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), *exp_val],
             ));
         }
@@ -1679,12 +1679,12 @@ pub(crate) fn builtin_expt(args: Vec<Value>) -> EvalResult {
     let exp_u64: u64 = match exp_val.kind() {
         ValueKind::Fixnum(n) => match u64::try_from(n) {
             Ok(v) => v,
-            Err(_) => return Err(signal("overflow-error", vec![])),
+            Err(_) => return Err(signal(LispCondition::OverflowError, vec![])),
         },
         ValueKind::Veclike(VecLikeType::Bignum) => {
             match u64::try_from(exp_val.as_bignum().unwrap()) {
                 Ok(v) => v,
-                Err(_) => return Err(signal("overflow-error", vec![])),
+                Err(_) => return Err(signal(LispCondition::OverflowError, vec![])),
             }
         }
         _ => unreachable!("non-int exponent handled above"),
@@ -1706,7 +1706,7 @@ pub(crate) fn builtin_random(args: Vec<Value>) -> EvalResult {
             }
             ValueKind::Fixnum(lim) => {
                 if lim <= 0 {
-                    return Err(signal("args-out-of-range", vec![*limit]));
+                    return Err(signal(LispCondition::ArgsOutOfRange, vec![*limit]));
                 }
                 return Ok(Value::fixnum(emacs_get_random_fixnum(lim)));
             }
@@ -1837,7 +1837,7 @@ pub(crate) fn builtin_isnan(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Float => Ok(Value::bool_val(args[0].xfloat().is_nan())),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("floatp"), args[0]],
         )),
     }

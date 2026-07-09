@@ -9,6 +9,7 @@ use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::{BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -19,7 +20,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -30,7 +31,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -41,7 +42,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -53,7 +54,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -91,7 +92,7 @@ fn line_count_arg(value: &Value) -> Result<LineCountArg, Flow> {
         // `CHECK_INTEGER`, which signals `integerp` — not `integer-or-marker-p`.
         // N is a line count, never a buffer position, so markers are not valid.
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -729,7 +730,7 @@ pub(crate) fn builtin_line_number_at_pos(
                 let z = buf.point_max_lisp_char_pos().as_i64();
                 if pos < beg || pos > z {
                     return Err(signal(
-                        "args-out-of-range",
+                        LispCondition::ArgsOutOfRange,
                         vec![args[0], Value::fixnum(beg), Value::fixnum(z)],
                     ));
                 }
@@ -737,7 +738,7 @@ pub(crate) fn builtin_line_number_at_pos(
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("fixnump"), args[0]],
                 ));
             }
@@ -945,10 +946,10 @@ pub(crate) fn builtin_forward_char(
     // the requested position falls outside the accessible portion.
     let desired = cur_char as i64 + n;
     if desired < begv_char as i64 {
-        return Err(signal("beginning-of-buffer", vec![]));
+        return Err(signal(LispCondition::BeginningOfBuffer, vec![]));
     }
     if desired > zv_char as i64 {
-        return Err(signal("end-of-buffer", vec![]));
+        return Err(signal(LispCondition::EndOfBuffer, vec![]));
     }
     check_point_motion_hooks(eval, old_byte, adjusted)?;
     Ok(Value::NIL)
@@ -1184,7 +1185,7 @@ pub(crate) fn builtin_skip_chars_forward(
         Some(string) => super::builtins::lisp_string_char_codes(string),
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -1234,7 +1235,7 @@ pub(crate) fn builtin_skip_chars_backward(
         Some(string) => super::builtins::lisp_string_char_codes(string),
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -1344,7 +1345,7 @@ pub(crate) fn builtin_transient_mark_mode(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("transient-mark-mode"),
                 Value::fixnum(args.len() as i64),

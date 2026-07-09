@@ -14,6 +14,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::{Context, ImageResolveRequest, ImageResolveSource};
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -25,7 +26,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -36,7 +37,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -47,7 +48,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -58,7 +59,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -74,7 +75,7 @@ fn expect_frame_designator(_name: &str, value: &Value) -> Result<(), Flow> {
             Ok(())
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *value],
         )),
     }
@@ -491,7 +492,7 @@ pub(crate) fn builtin_image_type_available_p(args: Vec<Value>) -> EvalResult {
         Some(name) => name.to_string(),
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -759,7 +760,7 @@ pub(crate) fn builtin_put_image(args: Vec<Value>) -> EvalResult {
     // Validate POINT is integer-or-marker in batch.
     if !integer_or_marker_p(&args[1]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), args[1]],
         ));
     }
@@ -808,13 +809,13 @@ pub(crate) fn builtin_remove_images(args: Vec<Value>) -> EvalResult {
     // Validate START and END are integer-or-marker in batch.
     if !integer_or_marker_p(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), args[0]],
         ));
     }
     if !integer_or_marker_p(&args[1]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), args[1]],
         ));
     }
@@ -892,7 +893,7 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
 pub(crate) fn builtin_clear_image_cache(args: Vec<Value>) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("clear-image-cache"),
                 Value::fixnum(args.len() as i64),
@@ -904,7 +905,7 @@ pub(crate) fn builtin_clear_image_cache(args: Vec<Value>) -> EvalResult {
         let animation_cache = &args[1];
         if !animation_cache.is_nil() && !animation_cache.is_cons() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), *animation_cache],
             ));
         }

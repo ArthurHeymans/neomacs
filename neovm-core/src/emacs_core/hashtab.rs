@@ -12,6 +12,7 @@ use super::intern::{SymId, resolve_sym};
 use super::print::print_value;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, CharRange};
+use crate::emacs_core::error::LispCondition;
 use crate::tagged::gc::with_tagged_heap;
 use std::collections::{BTreeMap, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
@@ -33,7 +34,7 @@ const KNUTH_ALPHA: u32 = 2_654_435_769;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -44,7 +45,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -55,7 +56,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -592,7 +593,7 @@ pub(crate) fn builtin_hash_table_test(args: Vec<Value>) -> EvalResult {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -607,7 +608,7 @@ pub(crate) fn builtin_hash_table_size(args: Vec<Value>) -> EvalResult {
             Ok(Value::fixnum(table.size))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -622,7 +623,7 @@ pub(crate) fn builtin_hash_table_rehash_size(args: Vec<Value>) -> EvalResult {
             Ok(Value::make_float(table.rehash_size))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -637,7 +638,7 @@ pub(crate) fn builtin_hash_table_rehash_threshold(args: Vec<Value>) -> EvalResul
             Ok(Value::make_float(table.rehash_threshold))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -655,7 +656,7 @@ pub(crate) fn builtin_hash_table_weakness(args: Vec<Value>) -> EvalResult {
             })
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -670,7 +671,7 @@ pub(crate) fn builtin_copy_hash_table(args: Vec<Value>) -> EvalResult {
             Ok(with_tagged_heap(|h| h.alloc_hash_table(new_table)))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -692,7 +693,7 @@ pub(crate) fn builtin_hash_table_keys(args: Vec<Value>) -> EvalResult {
             Ok(Value::list(keys))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -713,7 +714,7 @@ pub(crate) fn builtin_hash_table_values(args: Vec<Value>) -> EvalResult {
             Ok(Value::list(values))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -758,7 +759,7 @@ pub(crate) fn builtin_internal_hash_table_index_size(args: Vec<Value>) -> EvalRe
             ))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -787,7 +788,7 @@ pub(crate) fn builtin_internal_hash_table_buckets(args: Vec<Value>) -> EvalResul
             Ok(Value::list(rendered))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -816,7 +817,7 @@ pub(crate) fn builtin_internal_hash_table_histogram(args: Vec<Value>) -> EvalRes
             Ok(Value::list(entries))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[0]],
         )),
     }
@@ -831,7 +832,7 @@ pub(crate) fn builtin_maphash(eval: &mut super::eval::Context, args: Vec<Value>)
     expect_args("maphash", &args, 2)?;
     if !args[1].is_hash_table() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[1]],
         ));
     }
@@ -888,7 +889,7 @@ pub(crate) fn validate_maphash_args(args: &[Value]) -> Result<(Value, Value), Fl
     expect_args("maphash", args, 2)?;
     if !args[1].is_hash_table() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), args[1]],
         ));
     }
@@ -989,7 +990,7 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
         )),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }

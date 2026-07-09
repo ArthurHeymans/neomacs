@@ -8,6 +8,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -28,7 +29,7 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -39,7 +40,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -50,7 +51,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -62,7 +63,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -73,7 +74,7 @@ fn expect_list_like(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *value],
         ))
     }
@@ -589,14 +590,14 @@ pub(crate) fn builtin_undo(eval: &mut super::eval::Context, args: Vec<Value>) ->
         } else {
             "No undo information in this buffer"
         };
-        return Err(signal("user-error", vec![Value::string(msg)]));
+        return Err(signal(LispCondition::UserError, vec![Value::string(msg)]));
     }
 
     if outcome.had_boundary {
         Ok(Value::string("Undo"))
     } else {
         Err(signal(
-            "user-error",
+            LispCondition::UserError,
             vec![Value::string("No further undo information")],
         ))
     }

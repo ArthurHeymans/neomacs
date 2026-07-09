@@ -12,6 +12,7 @@ use super::terminal::pure::{
 };
 use super::value::*;
 use super::{Context, PopupMenuEntry, PopupMenuRequest};
+use crate::emacs_core::error::LispCondition;
 use crate::window::{FrameId, WindowId};
 use strum::{EnumString, IntoStaticStr};
 
@@ -63,7 +64,7 @@ impl WindowSystemKind {
 pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -74,7 +75,7 @@ pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<
 pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -90,7 +91,7 @@ pub(crate) fn expect_range_args(
 ) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -102,7 +103,7 @@ pub(crate) fn expect_symbol_key(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
         ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => Ok(*value),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
     }
@@ -268,7 +269,7 @@ pub(crate) fn expect_frame_designator(value: &Value) -> Result<(), Flow> {
         ValueKind::Veclike(VecLikeType::Frame) => Ok(()),
         ValueKind::Nil => Ok(()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *value],
         )),
     }
@@ -397,7 +398,7 @@ fn x_display_query_first_arg_error(value: &Value) -> Flow {
                 err
             } else {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), *value],
                 )
             }
@@ -476,7 +477,7 @@ fn frame_window_system_symbol_read_only_in_state(
                 .get(FrameId(v.as_frame_id().unwrap()))
                 .and_then(|frame| frame.effective_window_system())),
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("framep"), *v],
             )),
         },
@@ -570,7 +571,7 @@ fn expect_optional_window_system_frame_arg(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *value],
         ))
     }
@@ -585,7 +586,7 @@ fn expect_optional_window_system_frame_arg_in_state(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *value],
         ))
     }
@@ -746,7 +747,7 @@ fn x_optional_display_query_error(name: &str, args: &[Value]) -> EvalResult {
             ))
         }
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *other],
         )),
     }
@@ -1057,7 +1058,7 @@ pub(crate) fn builtin_x_frame_edges(args: Vec<Value>) -> EvalResult {
     if let Some(frame) = args.first() {
         if !frame.is_nil() && !frame.is_frame() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *frame],
             ));
         }
@@ -1071,7 +1072,7 @@ pub(crate) fn builtin_x_frame_geometry(args: Vec<Value>) -> EvalResult {
     if let Some(frame) = args.first() {
         if !frame.is_nil() && !frame.is_frame() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *frame],
             ));
         }
@@ -1121,7 +1122,7 @@ fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
 
     if !args[0].is_frame() && !args[0].is_t() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), Value::NIL],
         ));
     }
@@ -1129,7 +1130,7 @@ fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
     let contents = &args[1];
     if contents.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     }
@@ -1138,21 +1139,21 @@ fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
         (contents.cons_car(), contents.cons_cdr())
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *contents],
         ));
     };
 
     if !title.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), title],
         ));
     }
 
     if !rest.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), rest],
         ));
     }
@@ -1853,7 +1854,7 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         (position.cons_car(), position.cons_cdr())
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *position],
         ));
     };
@@ -1861,25 +1862,25 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
     if !position_car.is_list() {
         if position_car.is_fixnum() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), position_car],
             ));
         }
         if menu.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), Value::NIL],
             ));
         }
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), Value::T],
         ));
     }
 
     if !position_cdr.is_list() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), position_cdr],
         ));
     }
@@ -1894,7 +1895,7 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
             _ => Value::NIL,
         };
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), window_designator],
         ));
     }
@@ -1904,7 +1905,7 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
     // PANE = (PANE-TITLE . PANE-ITEMS)
     if menu.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     }
@@ -1913,14 +1914,14 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         (menu.cons_car(), menu.cons_cdr())
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *menu],
         ));
     };
 
     if !title.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), title],
         ));
     }
@@ -1933,7 +1934,7 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         rest.cons_car()
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), rest],
         ));
     };
@@ -1944,21 +1945,21 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         (Value::NIL, Value::NIL)
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), pane],
         ));
     };
 
     if !pane_title.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), pane_title],
         ));
     }
 
     if !pane_items.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), pane_items],
         ));
     }
@@ -2005,7 +2006,7 @@ pub(crate) fn builtin_x_export_frames(args: Vec<Value>) -> EvalResult {
         None => Err(x_window_system_frame_error()),
         Some(frame) if frame.is_nil() || frame.is_frame() => Err(x_window_system_frame_error()),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *other],
         )),
     }
@@ -2061,7 +2062,7 @@ pub(crate) fn builtin_x_show_tip(args: Vec<Value>) -> EvalResult {
     expect_range_args("x-show-tip", &args, 1, 6)?;
     if !args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
@@ -2075,11 +2076,11 @@ pub(crate) fn builtin_x_setup_function_keys(args: Vec<Value>) -> EvalResult {
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Frame) => Ok(Value::NIL),
         ValueKind::Fixnum(_) | ValueKind::String => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), args[0]],
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), args[0]],
         )),
     }
@@ -2099,7 +2100,7 @@ pub(crate) fn builtin_x_wm_set_size_hint(args: Vec<Value>) -> EvalResult {
         Some(frame) if frame.is_nil() => Err(x_window_system_frame_error()),
         Some(v) if v.is_frame() => Err(x_window_system_frame_error()),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *other],
         )),
     }
@@ -2123,7 +2124,7 @@ pub(crate) fn builtin_x_family_fonts(args: Vec<Value>) -> EvalResult {
     if let Some(family) = args.first() {
         if !family.is_nil() && !family.is_string() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *family],
             ));
         }
@@ -2183,7 +2184,7 @@ pub(crate) fn builtin_x_parse_geometry(args: Vec<Value>) -> EvalResult {
             Ok(parse_x_geometry(&spec).unwrap_or(Value::NIL))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )),
     }
@@ -2220,7 +2221,7 @@ pub(crate) fn builtin_x_get_local_selection(args: Vec<Value>) -> EvalResult {
     let selection = args.first().cloned().unwrap_or(Value::NIL);
     if !selection.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), selection],
         ));
     }
@@ -2483,7 +2484,7 @@ pub(crate) fn builtin_x_open_connection(
             ))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )),
     }
@@ -2522,7 +2523,7 @@ pub(crate) fn builtin_x_close_connection(
                 Err(err)
             } else {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), args[0]],
                 ))
             }

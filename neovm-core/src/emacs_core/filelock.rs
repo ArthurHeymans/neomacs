@@ -4,6 +4,7 @@
 //! `restore-buffer-modified-p` when a file-visiting buffer changes between
 //! modified and unmodified states.
 
+use crate::emacs_core::error::LispCondition;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use crate::heap_types::LispString;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -28,7 +29,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -38,7 +39,7 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 
 fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow {
     signal(
-        "file-error",
+        LispCondition::FileError,
         vec![
             Value::string(context),
             Value::heap_string(filename.clone()),
@@ -127,7 +128,7 @@ fn make_lock_file_name(
                 .expect("ValueKind::String must carry LispString payload"),
         ))),
         Ok(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), other],
         )),
         Err(_) => Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(

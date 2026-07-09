@@ -4,6 +4,7 @@
 //! motion functions (forward/backward word, sexp scanning), and the
 //! `string-to-syntax` descriptor parser.
 
+use crate::emacs_core::error::LispCondition;
 use std::cell::{Cell, RefCell};
 use std::ops::Deref;
 
@@ -508,7 +509,7 @@ fn syntax_runtime_string(value: &Value) -> Result<String, Flow> {
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *value],
             )
         })
@@ -2150,7 +2151,7 @@ fn scan_sexp_backward(
 pub(crate) fn builtin_string_to_syntax(args: Vec<Value>) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("string-to-syntax"),
                 Value::fixnum(args.len() as i64),
@@ -2170,7 +2171,7 @@ pub(crate) fn builtin_string_to_syntax(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_make_syntax_table(args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-syntax-table"),
                 Value::fixnum(args.len() as i64),
@@ -2194,7 +2195,7 @@ pub(crate) fn builtin_make_syntax_table(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_copy_syntax_table(args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("copy-syntax-table"),
                 Value::fixnum(args.len() as i64),
@@ -2208,7 +2209,7 @@ pub(crate) fn builtin_copy_syntax_table(args: Vec<Value>) -> EvalResult {
         let table = args[0];
         if builtin_syntax_table_p(vec![table])?.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("syntax-table-p"), table],
             ));
         }
@@ -2463,7 +2464,7 @@ fn syntax_entry_from_chartable_entry(entry: &Value) -> Option<SyntaxEntry> {
 fn syntax_table_from_chartable(table: Value) -> Result<SyntaxTable, Flow> {
     if builtin_syntax_table_p(vec![table])?.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("syntax-table-p"), table],
         ));
     }
@@ -2654,7 +2655,7 @@ fn maybe_syntax_propertize_for_scan(
 pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("syntax-class-to-char"),
                 Value::fixnum(args.len() as i64),
@@ -2666,7 +2667,7 @@ pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), args[0]],
             ));
         }
@@ -2674,7 +2675,7 @@ pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
 
     let Some(class) = SyntaxClass::from_plain_code(class) else {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(15), Value::fixnum(class)],
         ));
     };
@@ -2700,7 +2701,7 @@ pub(crate) fn builtin_matching_paren_in_buffers(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("matching-paren"),
                 Value::fixnum(args.len() as i64),
@@ -2711,13 +2712,13 @@ pub(crate) fn builtin_matching_paren_in_buffers(
     let ch = match args[0].kind() {
         ValueKind::Fixnum(n) => char::from_u32(n as u32).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             )
         })?,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             ));
         }
@@ -2740,7 +2741,7 @@ pub(crate) fn builtin_matching_paren_in_buffers(
 pub(crate) fn builtin_standard_syntax_table(args: Vec<Value>) -> EvalResult {
     if !args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("standard-syntax-table"),
                 Value::fixnum(args.len() as i64),
@@ -2754,7 +2755,7 @@ pub(crate) fn builtin_standard_syntax_table(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_syntax_table_p(args: Vec<Value>) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("syntax-table-p"),
                 Value::fixnum(args.len() as i64),
@@ -2795,7 +2796,7 @@ pub(crate) fn builtin_syntax_table_in_buffers(
 ) -> EvalResult {
     if !args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("syntax-table"),
                 Value::fixnum(args.len() as i64),
@@ -2822,7 +2823,7 @@ pub(crate) fn builtin_set_syntax_table_in_buffers(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-syntax-table"),
                 Value::fixnum(args.len() as i64),
@@ -2831,7 +2832,7 @@ pub(crate) fn builtin_set_syntax_table_in_buffers(
     }
     if builtin_syntax_table_p(vec![args[0]])?.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("syntax-table-p"), args[0]],
         ));
     }
@@ -2860,7 +2861,7 @@ pub(crate) fn modify_syntax_entry_in_buffers(
 ) -> EvalResult {
     if args.len() < 2 || args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("modify-syntax-entry"),
                 Value::fixnum(args.len() as i64),
@@ -2873,7 +2874,7 @@ pub(crate) fn modify_syntax_entry_in_buffers(
     let target_table = if let Some(table) = args.get(2) {
         if builtin_syntax_table_p(vec![*table])?.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("syntax-table-p"), *table],
             ));
         }
@@ -2921,7 +2922,7 @@ pub(crate) fn builtin_char_syntax_in_buffers(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("char-syntax"),
                 Value::fixnum(args.len() as i64),
@@ -2936,13 +2937,13 @@ pub(crate) fn builtin_char_syntax_in_buffers(
         }
         ValueKind::Fixnum(_) => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             ));
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             ));
         }
@@ -3040,7 +3041,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("syntax-after"),
                 Value::fixnum(args.len() as i64),
@@ -3052,7 +3053,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         ValueKind::Fixnum(n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), args[0]],
             ));
         }
@@ -3102,7 +3103,7 @@ pub(crate) fn builtin_forward_comment_in_buffers(
 ) -> EvalResult {
     if args.len() != 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("forward-comment"),
                 Value::fixnum(args.len() as i64),
@@ -3114,7 +3115,7 @@ pub(crate) fn builtin_forward_comment_in_buffers(
         ValueKind::Fixnum(n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), args[0]],
             ));
         }
@@ -3833,7 +3834,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
 ) -> EvalResult {
     if !args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("backward-prefix-chars"),
                 Value::fixnum(args.len() as i64),
@@ -3891,7 +3892,7 @@ pub(crate) fn builtin_forward_word(
             ValueKind::Fixnum(n) => n,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -3991,7 +3992,7 @@ pub(crate) fn builtin_forward_word_in_buffers(
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -4026,7 +4027,7 @@ pub(crate) fn builtin_backward_word(
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -4063,7 +4064,7 @@ pub(crate) fn builtin_forward_sexp(
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -4094,7 +4095,7 @@ pub(crate) fn builtin_forward_sexp(
         honor_properties,
         ignore_comments,
     )
-    .map_err(|err| signal("scan-error", err.signal_data()))?
+    .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
     {
         Some(pos) => EmacsBytePos::new(pos),
         None if count < 0 => buf.accessible_emacs_byte_region().start(),
@@ -4123,7 +4124,7 @@ pub(crate) fn builtin_backward_sexp(
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -4155,7 +4156,7 @@ pub(crate) fn builtin_backward_sexp(
         honor_properties,
         ignore_comments,
     )
-    .map_err(|err| signal("scan-error", err.signal_data()))?
+    .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
     {
         Some(pos) => EmacsBytePos::new(pos),
         None if count < 0 => buf.accessible_emacs_byte_region().end(),
@@ -4176,7 +4177,7 @@ pub(crate) fn builtin_backward_sexp(
 pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("scan-lists"),
                 Value::fixnum(args.len() as i64),
@@ -4188,7 +4189,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integer-or-marker-p"), args[0]],
             ));
         }
@@ -4197,7 +4198,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), args[1]],
             ));
         }
@@ -4206,7 +4207,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), args[2]],
             ));
         }
@@ -4246,7 +4247,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     ) {
         Ok(Some(new_char)) => Ok(Value::fixnum(char_pos_to_lisp_i64(new_char))),
         Ok(None) => Ok(Value::NIL),
-        Err(err) => Err(signal("scan-error", err.signal_data())),
+        Err(err) => Err(signal(LispCondition::ScanError, err.signal_data())),
     }
 }
 
@@ -4254,7 +4255,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
 pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("scan-sexps"),
                 Value::fixnum(args.len() as i64),
@@ -4266,7 +4267,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("number-or-marker-p"), args[0]],
             ));
         }
@@ -4275,7 +4276,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), args[1]],
             ));
         }
@@ -4316,7 +4317,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
             EmacsBytePos::new(new_byte),
         ))),
         Ok(None) => Ok(Value::NIL),
-        Err(err) => Err(signal("scan-error", err.signal_data())),
+        Err(err) => Err(signal(LispCondition::ScanError, err.signal_data())),
     }
 }
 
@@ -5085,7 +5086,7 @@ pub(crate) fn builtin_parse_partial_sexp(
 ) -> EvalResult {
     if args.len() < 2 || args.len() > 6 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("parse-partial-sexp"),
                 Value::fixnum(args.len() as i64),
@@ -5112,7 +5113,7 @@ pub(crate) fn builtin_parse_partial_sexp(
     let point_max = accessible_chars.end_lisp().as_i64();
     if from < point_min || from > point_max || to < point_min || to > point_max {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::make_buffer(buf.id), args[0], args[1]],
         ));
     }
@@ -5122,7 +5123,7 @@ pub(crate) fn builtin_parse_partial_sexp(
             ValueKind::Fixnum(n) => Some(n),
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), *v],
                 ));
             }
@@ -5157,7 +5158,7 @@ pub(crate) fn builtin_parse_partial_sexp(
 pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("syntax-ppss"),
                 Value::fixnum(args.len() as i64),
@@ -5182,7 +5183,7 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("number-or-marker-p"), args[0]],
                 ));
             }
@@ -5236,7 +5237,7 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
 ) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("syntax-ppss-flush-cache"), Value::fixnum(0)],
         ));
     }
@@ -5247,7 +5248,7 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
             Ok(Value::NIL)
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), args[0]],
         )),
     }
@@ -5274,7 +5275,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
 ) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("skip-syntax-forward"), Value::fixnum(0)],
         ));
     }
@@ -5284,7 +5285,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
             ValueKind::Fixnum(n) => Some(n),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[1]],
                 ));
             }
@@ -5341,7 +5342,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
 ) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("skip-syntax-backward"), Value::fixnum(0)],
         ));
     }
@@ -5351,7 +5352,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
             ValueKind::Fixnum(n) => Some(n),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[1]],
                 ));
             }

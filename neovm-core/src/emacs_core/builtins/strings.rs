@@ -129,7 +129,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                         let idx = if raw < 0 { len + raw } else { raw };
                         if idx < 0 || idx > len {
                             return Err(signal(
-                                "args-out-of-range",
+                                LispCondition::ArgsOutOfRange,
                                 vec![args[0], args[1], args.get(2).cloned().unwrap_or(Value::NIL)],
                             ));
                         }
@@ -152,7 +152,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                     } as usize;
                     if from > to {
                         return Err(signal(
-                            "args-out-of-range",
+                            LispCondition::ArgsOutOfRange,
                             vec![
                                 args[0],
                                 args.get(1).cloned().unwrap_or(Value::fixnum(0)),
@@ -184,7 +184,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
 
                 if from > to {
                     return Err(signal(
-                        "args-out-of-range",
+                        LispCondition::ArgsOutOfRange,
                         vec![
                             args[0],
                             args.get(1).cloned().unwrap_or(Value::fixnum(0)),
@@ -201,7 +201,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                 };
                 if byte_to > src_bytes.len() {
                     return Err(signal(
-                        "args-out-of-range",
+                        LispCondition::ArgsOutOfRange,
                         vec![
                             args[0],
                             args.get(1).cloned().unwrap_or(Value::fixnum(0)),
@@ -252,7 +252,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
                 let idx = if raw < 0 { len + raw } else { raw };
                 if idx < 0 || idx > len {
                     return Err(signal(
-                        "args-out-of-range",
+                        LispCondition::ArgsOutOfRange,
                         vec![args[0], args[1], args.get(2).cloned().unwrap_or(Value::NIL)],
                     ));
                 }
@@ -270,7 +270,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
             } as usize;
             if from > to {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![
                         args[0],
                         args.get(1).cloned().unwrap_or(Value::fixnum(0)),
@@ -283,7 +283,7 @@ fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResul
         _ => {
             if name == "substring" {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("arrayp"), args[0]],
                 ))
             } else {
@@ -372,7 +372,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
         fn push_concat_int(result: &mut Vec<u8>, n: i64, dest_multibyte: bool) -> Result<(), Flow> {
             if !(0..=0x3FFFFF).contains(&n) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), Value::fixnum(n)],
                 ));
             }
@@ -403,7 +403,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                     Ok(1)
                 }
                 _ => Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), *value],
                 )),
             }
@@ -481,7 +481,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                             }
                             _tail => {
                                 return Err(signal(
-                                    "wrong-type-argument",
+                                    LispCondition::WrongTypeArgument,
                                     vec![Value::symbol("listp"), cursor],
                                 ));
                             }
@@ -499,7 +499,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                 }
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), *arg],
                     ));
                 }
@@ -547,7 +547,10 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
     };
 
     if !(2..=16).contains(&base) {
-        return Err(signal("args-out-of-range", vec![Value::fixnum(base)]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![Value::fixnum(base)],
+        ));
     }
 
     let s = s.trim_start_matches(|c: char| c == ' ' || c == '\t');
@@ -674,7 +677,7 @@ pub(crate) fn builtin_number_to_string(
             Ok(Value::string(args[0].as_bignum().unwrap().to_string()))
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), args[0]],
         )),
     }
@@ -728,11 +731,11 @@ fn upcase_with_override(
             }
         }
         ValueKind::Fixnum(_) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
@@ -1037,11 +1040,11 @@ fn downcase_with_word_pred(
             }
         }
         ValueKind::Fixnum(_) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
@@ -1153,7 +1156,7 @@ struct FormatCharArgument {
 fn format_char_argument(n: i64) -> Result<FormatCharArgument, Flow> {
     if !(0..=KEY_CHAR_CODE_MASK).contains(&n) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), Value::fixnum(n)],
         ));
     }
@@ -1168,7 +1171,7 @@ fn format_char_argument(n: i64) -> Result<FormatCharArgument, Flow> {
         .map(|c| c.to_emacs_bytes())
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), Value::fixnum(n)],
             )
         })?;
@@ -1893,7 +1896,7 @@ fn do_format(
     // eight-bit / non-Unicode content keeps its disjoint extended encoding.
     let fmt_ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -2307,7 +2310,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(c) => {
             if c < 0 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), args[1]],
                 ));
             }
@@ -2315,7 +2318,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
         }
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[1]],
             ));
         }
@@ -2328,7 +2331,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
     use crate::emacs_core::emacs_char;
     if ch > emacs_char::MAX_CHAR {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), args[1]],
         ));
     }
@@ -2346,7 +2349,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
     } else {
         if ch > 0xff {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[1]],
             ));
         }
@@ -2373,7 +2376,7 @@ pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
                 // modifier bits are not valid character codes here.
                 if !(0..=emacs_char::MAX_CHAR as i64).contains(&c) {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("characterp"), *arg],
                     ));
                 }
@@ -2384,7 +2387,7 @@ pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
             }
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("characterp"), *arg],
                 ));
             }
@@ -2409,14 +2412,14 @@ pub(crate) fn builtin_unibyte_string(args: Vec<Value>) -> EvalResult {
             ValueKind::Fixnum(v) => v,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), arg],
                 ));
             }
         };
         if !(0..=255).contains(&n) {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![Value::fixnum(n), Value::fixnum(0), Value::fixnum(255)],
             ));
         }
@@ -2458,7 +2461,7 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
     expect_max_args("string-width", &args, 3)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -2504,7 +2507,7 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
         let idx = if raw < 0 { len + raw } else { raw };
         if idx < 0 || idx > len {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![
                     args[0],
                     args.get(1).copied().unwrap_or(Value::fixnum(0)),
@@ -2526,7 +2529,7 @@ pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Val
     };
     if from > to {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 args[0],
                 args.get(1).copied().unwrap_or(Value::fixnum(0)),

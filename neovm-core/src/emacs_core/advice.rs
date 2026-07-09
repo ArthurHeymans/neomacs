@@ -3,6 +3,7 @@
 //! Provides callbacks invoked when a watched variable changes
 //! (like Emacs `add-variable-watcher` / `remove-variable-watcher`).
 
+use crate::emacs_core::error::LispCondition;
 use rustc_hash::FxHashMap;
 
 use super::intern::SymId;
@@ -193,7 +194,7 @@ use super::error::{EvalResult, Flow, signal};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {

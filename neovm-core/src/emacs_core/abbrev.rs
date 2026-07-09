@@ -12,6 +12,7 @@
 //!   plist.
 //! - `abbrev-table-get` / `abbrev-table-put` access the header symbol's plist.
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
@@ -498,7 +499,7 @@ fn obarray_all_symbols(vec_val: Value) -> Vec<Value> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -510,7 +511,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -529,7 +530,7 @@ fn expect_string(value: &Value) -> Result<String, Flow> {
         ValueKind::Nil => Ok("nil".to_string()),
         ValueKind::T => Ok("t".to_string()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -541,7 +542,7 @@ fn expect_abbrev_table(eval: &super::eval::Context, value: &Value) -> Result<Val
         Ok(*value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("abbrev-table-p"), *value],
         ))
     }
@@ -825,7 +826,7 @@ pub(crate) fn builtin_abbrev_table_get(
     let vec_val = expect_abbrev_table(eval, &args[0])?;
     let prop = args[1].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         )
     })?;
@@ -844,7 +845,7 @@ pub(crate) fn builtin_abbrev_table_put(
     let vec_val = expect_abbrev_table(eval, &args[0])?;
     let prop = args[1].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         )
     })?;
@@ -938,7 +939,7 @@ pub(crate) fn builtin_define_abbrev_table(
     // NAME must be a symbol (quoted)
     let name = args[0].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;
@@ -1070,7 +1071,7 @@ pub(crate) fn builtin_insert_abbrev_table_description(
 
     let name = args[0].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;

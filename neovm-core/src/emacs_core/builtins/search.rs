@@ -11,7 +11,7 @@ fn regex_error_signal(msg: String) -> crate::emacs_core::error::Flow {
     if msg == crate::emacs_core::regex_emacs::MATCHER_OVERFLOW_MESSAGE {
         signal("error", vec![Value::string(msg)])
     } else {
-        signal("invalid-regexp", vec![Value::string(msg)])
+        signal(LispCondition::InvalidRegexp, vec![Value::string(msg)])
     }
 }
 
@@ -141,7 +141,7 @@ pub(crate) fn builtin_search_forward_with_state(
             }
             Ok(None) => {
                 // regex::search_* with `noerror = false` never returns None.
-                return Err(signal("search-failed", vec![args[0]]));
+                return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
             }
             Err(_) => {
                 return handle_search_failure_in_manager(
@@ -207,7 +207,7 @@ fn search_count_arg(args: &[Value]) -> Result<i64, Flow> {
         Some(v) => match v.kind() {
             ValueKind::Fixnum(n) => Ok(n),
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), *v],
             )),
         },
@@ -342,7 +342,7 @@ fn handle_search_failure_in_manager(
         SearchErrorKind::NotFound => match opts.noerror_mode {
             SearchNoErrorMode::Signal => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, start_pt);
-                Err(signal("search-failed", vec![pattern]))
+                Err(signal(LispCondition::SearchFailed, vec![pattern]))
             }
             SearchNoErrorMode::KeepPoint => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, start_pt);
@@ -421,7 +421,7 @@ pub(crate) fn builtin_search_backward_with_state(
                 last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
             }
             Ok(None) => {
-                return Err(signal("search-failed", vec![args[0]]));
+                return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
             }
             Err(_) => {
                 return handle_search_failure_in_manager(
@@ -531,7 +531,7 @@ pub(crate) fn re_search_forward_with_state_posix(
                 last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
             }
             Ok(None) => {
-                return Err(signal("search-failed", vec![args[0]]));
+                return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
@@ -640,7 +640,7 @@ pub(crate) fn re_search_backward_with_state_posix(
                 last_pos = Some(record_buffer_search_success(buffers, current_id, pos)?)
             }
             Ok(None) => {
-                return Err(signal("search-failed", vec![args[0]]));
+                return Err(signal(LispCondition::SearchFailed, vec![args[0]]));
             }
             Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
@@ -1230,7 +1230,7 @@ pub(crate) fn builtin_match_string(
     let group_index = expect_int(&args[0])?;
     if group_index < 0 {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(group_index), Value::fixnum(0)],
         ));
     }
@@ -1348,7 +1348,7 @@ pub(crate) fn builtin_match_beginning_with_state(
             let group = expect_int(&args[0])?;
             if group < 0 {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![Value::fixnum(group), Value::fixnum(0)],
                 ));
             }
@@ -1405,7 +1405,7 @@ pub(crate) fn builtin_match_end_with_state(
             let group = expect_int(&args[0])?;
             if group < 0 {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![Value::fixnum(group), Value::fixnum(0)],
                 ));
             }
@@ -1454,7 +1454,7 @@ pub(crate) fn builtin_match_data_with_state(
 ) -> EvalResult {
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("match-data"),
                 Value::fixnum(args.len() as i64),
@@ -1609,7 +1609,7 @@ fn expect_match_data_item_in_manager(
             match_data_item_buffer_id_in_manager(buffers, value),
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -1627,7 +1627,7 @@ pub(crate) fn builtin_set_match_data_with_state(
     expect_min_args("set-match-data", args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-match-data"),
                 Value::fixnum(args.len() as i64),
@@ -1640,8 +1640,12 @@ pub(crate) fn builtin_set_match_data_with_state(
         return Ok(Value::NIL);
     }
 
-    let items = list_to_vec(&args[0])
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[0]]))?;
+    let items = list_to_vec(&args[0]).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), args[0]],
+        )
+    })?;
 
     let explicit_buffer_id = if items.len() % 2 == 1 {
         items.last().and_then(|value| value.as_buffer_id())
@@ -1830,7 +1834,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     expect_min_args("replace-match", args, 1)?;
     if args.len() > 5 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("replace-match"),
                 Value::fixnum(args.len() as i64),
@@ -1852,7 +1856,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         if n < 0 {
             return if let Some(source) = string_arg.as_ref() {
                 Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![
                         Value::fixnum(n),
                         Value::fixnum(0),
@@ -1860,7 +1864,10 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                     ],
                 ))
             } else {
-                Err(signal("args-out-of-range", vec![Value::fixnum(n)]))
+                Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![Value::fixnum(n)],
+                ))
             };
         }
         n as usize
@@ -1896,7 +1903,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
             && subexp >= md.groups.len()
         {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![
                     Value::fixnum(subexp as i64),
                     Value::fixnum(0),
@@ -1922,13 +1929,16 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     }
 
     if md_snapshot.as_ref().is_some_and(|m| m.is_string_match()) {
-        return Err(signal("args-out-of-range", vec![Value::fixnum(0)]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![Value::fixnum(0)],
+        ));
     }
     if let Some(md) = md_snapshot.as_ref()
         && subexp >= md.groups.len()
     {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(subexp as i64),
                 Value::fixnum(0),

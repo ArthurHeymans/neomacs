@@ -17,6 +17,7 @@ use crate::buffer::{
     Buffer, BufferManager, CharLen, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
     TextChange, TextEditRange, TextExtent,
 };
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use malachite::integer::Integer;
@@ -31,7 +32,7 @@ use strum::IntoStaticStr;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -42,7 +43,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -53,7 +54,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -66,7 +67,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_integer(_name: &str, val: &Value) -> Result<i64, Flow> {
     val.as_int().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *val],
         )
     })
@@ -131,7 +132,10 @@ pub(crate) fn ensure_current_buffer_writable_in_state(
     if let Some(buf) = buffers.current_buffer()
         && buffer_read_only_active_in_state(obarray, dynamic, buf)
     {
-        return Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]));
+        return Err(signal(
+            LispCondition::BufferReadOnly,
+            vec![Value::make_buffer(buf.id)],
+        ));
     }
     Ok(())
 }
@@ -959,7 +963,7 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
         || end.as_i64() > point_max
     {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::make_buffer(buf.id), *start_arg, *end_arg],
         ));
     }
@@ -994,7 +998,10 @@ pub(crate) fn collect_insert_text(_name: &str, args: &[Value]) -> Result<Vec<u8>
         match arg.kind() {
             ValueKind::String => {
                 let ls = arg.as_lisp_string().ok_or_else(|| {
-                    signal("wrong-type-argument", vec![Value::symbol("stringp"), *arg])
+                    signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("stringp"), *arg],
+                    )
                 })?;
                 if ls.is_multibyte() {
                     bytes.extend_from_slice(ls.as_bytes());
@@ -1018,7 +1025,7 @@ pub(crate) fn collect_insert_text(_name: &str, args: &[Value]) -> Result<Vec<u8>
                 let code = super::builtins::expect_character_code(arg)? as u32;
                 if code > emacs_char::MAX_CHAR {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("characterp"), *arg],
                     ));
                 }
@@ -1029,7 +1036,7 @@ pub(crate) fn collect_insert_text(_name: &str, args: &[Value]) -> Result<Vec<u8>
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("char-or-string-p"), *arg],
                 ));
             }
@@ -1079,12 +1086,12 @@ pub(crate) fn builtin_delete_char(
                 let mut end = pt;
                 for _ in 0..n {
                     if end >= accessible.end() {
-                        return Err(signal("end-of-buffer", vec![]));
+                        return Err(signal(LispCondition::EndOfBuffer, vec![]));
                     }
                     match buf.char_after_emacs_byte_len(end) {
                         Some(char_len) => end = end.add_len(char_len),
                         None => {
-                            return Err(signal("end-of-buffer", vec![]));
+                            return Err(signal(LispCondition::EndOfBuffer, vec![]));
                         }
                     }
                 }
@@ -1094,12 +1101,12 @@ pub(crate) fn builtin_delete_char(
                 let mut start = pt;
                 for _ in 0..(-n) {
                     if start <= accessible.start() {
-                        return Err(signal("beginning-of-buffer", vec![]));
+                        return Err(signal(LispCondition::BeginningOfBuffer, vec![]));
                     }
                     match buf.char_before_emacs_byte_len(start) {
                         Some(char_len) => start = start.saturating_sub_len(char_len),
                         None => {
-                            return Err(signal("beginning-of-buffer", vec![]));
+                            return Err(signal(LispCondition::BeginningOfBuffer, vec![]));
                         }
                     }
                 }
@@ -1157,7 +1164,7 @@ pub(crate) fn builtin_delete_region(
         .is_some_and(|buf| buffer_read_only_active_in_state(&ctx.obarray, &[], buf));
     if read_only {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -1206,7 +1213,7 @@ pub(crate) fn builtin_delete_and_extract_region(
         };
         if buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
             return Err(signal(
-                "buffer-read-only",
+                LispCondition::BufferReadOnly,
                 vec![Value::make_buffer(current_id)],
             ));
         }
@@ -1274,7 +1281,7 @@ pub(crate) fn erase_buffer_impl(
     });
     if should_signal_read_only {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -1490,7 +1497,7 @@ pub(crate) fn builtin_logcount(args: Vec<Value>) -> EvalResult {
             Ok(Value::fixnum(bits))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), args[0]],
         )),
     }

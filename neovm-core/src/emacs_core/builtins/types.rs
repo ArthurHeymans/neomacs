@@ -594,7 +594,7 @@ fn builtin_symbol_with_pos_pos_1_value(arg: Value) -> EvalResult {
         Ok(Value::fixnum(pos))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbol-with-pos-p"), arg],
         ))
     }

@@ -1197,14 +1197,14 @@ pub(crate) fn provide_value_in_state(
     // Use symbol_id to transparently handle symbol-with-pos wrappers.
     let sym_id = super::builtins::symbols::symbol_id(&feature).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), feature],
         )
     })?;
     if let Some(value) = subfeatures {
         if crate::emacs_core::value::list_to_vec(&value).is_none() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), value],
             ));
         }
@@ -2223,7 +2223,7 @@ pub(crate) fn plan_require_in_state(
     // Use symbol_id to transparently handle symbol-with-pos wrappers.
     let sym_id = super::builtins::symbols::symbol_id(&feature).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), feature],
         )
     })?;
@@ -2256,7 +2256,7 @@ pub(crate) fn plan_require_in_state(
             .unwrap_or_default(),
         Some(other) => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), other],
             ));
         }
@@ -2324,7 +2324,7 @@ pub(crate) fn parse_eval_lexical_arg(arg: Option<Value>) -> Result<(bool, Option
     // Cons (alist) => lexical mode, env = the alist
     if list_to_vec(&arg).is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), arg],
         ));
     }
@@ -2607,20 +2607,20 @@ fn bind_lambda_args_from_arglist(
         syms_left = syms_left.cons_cdr();
         let Some(next_id) = bare_lambda_arg_symbol_id(next) else {
             unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-            return Err(signal("invalid-function", vec![fun]));
+            return Err(signal(LispCondition::InvalidFunction, vec![fun]));
         };
 
         if next_id == rest_sym {
             if rest || previous_rest {
                 unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-                return Err(signal("invalid-function", vec![fun]));
+                return Err(signal(LispCondition::InvalidFunction, vec![fun]));
             }
             rest = true;
             previous_rest = true;
         } else if next_id == optional_sym {
             if optional || rest || previous_rest {
                 unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-                return Err(signal("invalid-function", vec![fun]));
+                return Err(signal(LispCondition::InvalidFunction, vec![fun]));
             }
             optional = true;
         } else {
@@ -2635,7 +2635,7 @@ fn bind_lambda_args_from_arglist(
             } else if !optional {
                 unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
                 return Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![fun, Value::fixnum(args.len() as i64)],
                 ));
             } else {
@@ -2659,12 +2659,12 @@ fn bind_lambda_args_from_arglist(
 
     if !syms_left.is_nil() || previous_rest {
         unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
-        return Err(signal("invalid-function", vec![fun]));
+        return Err(signal(LispCondition::InvalidFunction, vec![fun]));
     }
     if arg_index < args.len() {
         unwind_lambda_bindings_after_error(obarray, specpdl, lexenv, specpdl_count);
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![fun, Value::fixnum(args.len() as i64)],
         ));
     }
@@ -5982,7 +5982,7 @@ impl Context {
             Err(Flow::Throw { ref tag, ref value }) if tag.is_symbol_named("exit") => {
                 if value.is_truthy() {
                     // abort-recursive-edit: throw 'exit t → signal quit
-                    Err(super::error::signal("quit", vec![]))
+                    Err(super::error::signal(LispCondition::Quit, vec![]))
                 } else {
                     Ok(Value::NIL)
                 }
@@ -6125,7 +6125,7 @@ impl Context {
                     // calls (kill-emacs -1), which exits with status 255.
                     self.request_shutdown(-1, false);
                     return Err(crate::emacs_core::error::signal_suppressed(
-                        "kill-emacs",
+                        LispCondition::KillEmacs,
                         vec![],
                     ));
                 }
@@ -7902,7 +7902,7 @@ impl Context {
             .map_or(false, |sym| sym == self.kill_emacs_symbol)
         {
             self.request_shutdown(0, false);
-            return Err(signal("quit", vec![]));
+            return Err(signal(LispCondition::Quit, vec![]));
         }
 
         if !throw_on_input.is_nil() && equal_value(&flag, &throw_on_input, 0) {
@@ -7921,7 +7921,7 @@ impl Context {
             });
         }
 
-        Err(signal("quit", vec![]))
+        Err(signal(LispCondition::Quit, vec![]))
     }
 
     /// GNU `maybe_quit`: do nothing when `quit-flag` is nil or
@@ -9386,7 +9386,7 @@ impl Context {
                                 }
                                 _ => {
                                     return Err(signal(
-                                        "void-function",
+                                        LispCondition::VoidFunction,
                                         vec![Value::from_sym_id(sym_id)],
                                     ));
                                 }
@@ -9395,7 +9395,12 @@ impl Context {
                             f
                         }
                     }
-                    _ => return Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+                    _ => {
+                        return Err(signal(
+                            LispCondition::VoidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ));
+                    }
                 }
             }
         } else {
@@ -9519,7 +9524,7 @@ impl Context {
                 };
                 if numargs < min || !max_ok {
                     return Err(signal(
-                        "wrong-number-of-arguments",
+                        LispCondition::WrongNumberOfArguments,
                         vec![original_fun, Value::fixnum(numargs as i64)],
                     ));
                 }
@@ -9544,9 +9549,9 @@ impl Context {
         // never emits the resolved fncell contents as signal data.
         if !self.function_value_is_callable(&func) {
             if func.is_nil() {
-                return Err(signal("void-function", vec![original_fun]));
+                return Err(signal(LispCondition::VoidFunction, vec![original_fun]));
             }
-            return Err(signal("invalid-function", vec![original_fun]));
+            return Err(signal(LispCondition::InvalidFunction, vec![original_fun]));
         }
 
         // Regular function call: evaluate args, promote the outer
@@ -9613,7 +9618,10 @@ impl Context {
                 let result = self.maybe_grow_eval_stack(|ctx| {
                     ctx.dispatch_subr_entry_from_backtrace_unchecked(entry, outer_bt_count)
                         .unwrap_or_else(|| {
-                            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+                            Err(signal(
+                                LispCondition::VoidFunction,
+                                vec![Value::from_sym_id(sym_id)],
+                            ))
                         })
                 });
                 return self.unbind_to_with_result(args_roots_base, result);
@@ -9629,7 +9637,10 @@ impl Context {
                 }
                 ctx.dispatch_subr_entry_unchecked(entry, args)
                     .unwrap_or_else(|| {
-                        Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+                        Err(signal(
+                            LispCondition::VoidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ))
                     })
             });
             return self.unbind_to_with_result(args_roots_base, result);
@@ -9877,7 +9888,7 @@ impl Context {
                         {
                             if value.is_unbound() {
                                 return Err(signal(
-                                    "void-variable",
+                                    LispCondition::VoidVariable,
                                     vec![value_from_symbol_id(sym_id)],
                                 ));
                             }
@@ -9903,9 +9914,12 @@ impl Context {
             && let Some(buf) = self.buffers.current_buffer()
             && let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved)
         {
-            return binding
-                .as_value()
-                .ok_or_else(|| signal("void-variable", vec![value_from_symbol_id(sym_id)]));
+            return binding.as_value().ok_or_else(|| {
+                signal(
+                    LispCondition::VoidVariable,
+                    vec![value_from_symbol_id(sym_id)],
+                )
+            });
         }
 
         // Obarray value cell. Use `find_symbol_value` (not the
@@ -9933,7 +9947,10 @@ impl Context {
             return Ok(Value::T);
         }
 
-        Err(signal("void-variable", vec![value_from_symbol_id(sym_id)]))
+        Err(signal(
+            LispCondition::VoidVariable,
+            vec![value_from_symbol_id(sym_id)],
+        ))
     }
 
     pub(crate) fn eval_symbol(&self, symbol: &str) -> EvalResult {
@@ -9962,11 +9979,17 @@ impl Context {
         }
 
         if self.obarray.is_function_unbound_id(sym_id) {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ));
         }
 
         let Some(function) = self.obarray.symbol_function_id(sym_id) else {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ));
         };
 
         // Handle autoloads for non-canonical symbols the same as canonical
@@ -9988,7 +10011,10 @@ impl Context {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "invalid-function" && !function_is_callable =>
             {
-                Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                Err(signal(
+                    LispCondition::InvalidFunction,
+                    vec![Value::from_sym_id(sym_id)],
+                ))
             }
             _ => result,
         }
@@ -10009,11 +10035,17 @@ impl Context {
         }
 
         if self.obarray.is_function_unbound_id(sym_id) {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ));
         }
 
         let Some(function) = self.obarray.symbol_function_id(sym_id) else {
-            return Err(signal("void-function", vec![Value::from_sym_id(sym_id)]));
+            return Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ));
         };
 
         if super::autoload::is_autoload_value(&function) {
@@ -10032,7 +10064,10 @@ impl Context {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "invalid-function" && !function_is_callable =>
             {
-                Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                Err(signal(
+                    LispCondition::InvalidFunction,
+                    vec![Value::from_sym_id(sym_id)],
+                ))
             }
             _ => result,
         }
@@ -10060,21 +10095,30 @@ impl Context {
                     Err(Flow::Signal(sig))
                         if sig.symbol_name() == "invalid-function" && !function_is_callable =>
                     {
-                        Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                        Err(signal(
+                            LispCondition::InvalidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ))
                     }
                     _ => result,
                 }
             }
             NamedCallTarget::Subr(func) => {
                 let Some((sym_id, entry)) = subr_entry_from_value(func) else {
-                    return Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]));
+                    return Err(signal(
+                        LispCondition::InvalidFunction,
+                        vec![Value::from_sym_id(sym_id)],
+                    ));
                 };
                 if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-                    return Err(signal("invalid-function", vec![func]));
+                    return Err(signal(LispCondition::InvalidFunction, vec![func]));
                 }
                 self.apply_subr_object_with_entry(sym_id, func, args, entry)
             }
-            NamedCallTarget::Void => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+            NamedCallTarget::Void => Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            )),
         }
     }
 
@@ -10360,7 +10404,10 @@ impl Context {
         while tail.is_cons() {
             tail = tail.cons_cdr();
         }
-        signal("wrong-type-argument", vec![Value::symbol("listp"), tail])
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), tail],
+        )
     }
 
     fn value_list_len_or_error(&self, list: Value) -> Result<usize, Flow> {
@@ -10372,7 +10419,7 @@ impl Context {
         if !cursor.is_cons() {
             return if cursor.is_nil() {
                 Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![Value::from_sym_id(name), Value::fixnum(0)],
                 ))
             } else {
@@ -10383,7 +10430,7 @@ impl Context {
         cursor = cursor.cons_cdr();
         if !cursor.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![
                     Value::from_sym_id(name),
                     Value::fixnum(self.value_list_len_or_error(tail)? as i64),
@@ -10427,7 +10474,7 @@ impl Context {
     fn sf_let_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10469,7 +10516,7 @@ impl Context {
                 // GNU takes `(car elt)` of a non-symbol binding, so a non-list
                 // element signals `(wrong-type-argument listp ELT)`.
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), binding],
                 ));
             }
@@ -10477,7 +10524,7 @@ impl Context {
             let Some(id) = head.as_symbol_id() else {
                 self.restore_specpdl_roots(specpdl_root_scope);
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), head],
                 ));
             };
@@ -10530,7 +10577,10 @@ impl Context {
         }
         if let Some(name) = constant_binding_error {
             self.restore_specpdl_roots(specpdl_root_scope);
-            return Err(signal("setting-constant", vec![Value::symbol(name)]));
+            return Err(signal(
+                LispCondition::SettingConstant,
+                vec![Value::symbol(name)],
+            ));
         }
 
         // CRITICAL: Restore specpdl roots (drop init-form GcRoot entries) BEFORE
@@ -10600,7 +10650,7 @@ impl Context {
     fn sf_let_star_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10633,7 +10683,7 @@ impl Context {
                     let head = self.unwrap_symbol(binding.cons_car());
                     let Some(id) = head.as_symbol_id() else {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("symbolp"), head],
                         ));
                     };
@@ -10661,14 +10711,17 @@ impl Context {
                     // GNU takes `(car elt)`, so a non-list element signals
                     // `(wrong-type-argument listp ELT)`.
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("listp"), binding],
                     ));
                 };
                 self.set_eval_temp_root_slot(val_temp_slot, value);
 
                 if let Some(name) = let_constant_error_name(&self.obarray, id) {
-                    return Err(signal("setting-constant", vec![Value::symbol(&name)]));
+                    return Err(signal(
+                        LispCondition::SettingConstant,
+                        vec![Value::symbol(&name)],
+                    ));
                 }
                 if use_lexical
                     && !self.obarray.is_special_id(id)
@@ -10719,7 +10772,7 @@ impl Context {
             nargs += 1;
             if cursor.is_nil() {
                 return Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
                 ));
             }
@@ -10732,7 +10785,7 @@ impl Context {
             let symbol = self.unwrap_symbol(symbol);
             let Some(sym_id) = symbol.as_symbol_id() else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), symbol],
                 ));
             };
@@ -10784,7 +10837,7 @@ impl Context {
     fn sf_if_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10795,7 +10848,7 @@ impl Context {
         let mut rest = tail.cons_cdr();
         if rest.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(1)],
             ));
         }
@@ -10852,7 +10905,7 @@ impl Context {
             }
             if !clause.is_cons() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), clause],
                 ));
             }
@@ -10880,7 +10933,7 @@ impl Context {
     fn sf_while_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10950,7 +11003,7 @@ impl Context {
     fn sf_prog1_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10976,7 +11029,7 @@ impl Context {
     fn sf_defvar_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -10987,7 +11040,7 @@ impl Context {
         let symbol = self.unwrap_symbol(tail.cons_car());
         let Some(sym_id) = symbol.as_symbol_id() else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), symbol],
             ));
         };
@@ -11056,7 +11109,7 @@ impl Context {
     fn sf_defconst_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -11066,14 +11119,14 @@ impl Context {
         let symbol = self.unwrap_symbol(tail.cons_car());
         let Some(sym_id) = symbol.as_symbol_id() else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), symbol],
             ));
         };
         let mut rest = tail.cons_cdr();
         if rest.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(1)],
             ));
         }
@@ -11120,7 +11173,7 @@ impl Context {
     fn sf_catch_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
@@ -11177,7 +11230,7 @@ impl Context {
         let nargs = self.value_list_len_or_error(tail)?;
         if nargs < 1 {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
             ));
         }
@@ -11217,14 +11270,14 @@ impl Context {
         let nargs = self.value_list_len_or_error(tail)?;
         if nargs < 2 {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
             ));
         }
         let var = self.unwrap_symbol(tail.cons_car());
         let Some(var_id) = var.as_symbol_id() else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), var],
             ));
         };
@@ -11414,7 +11467,7 @@ impl Context {
     ) -> EvalResult {
         let Some(var_id) = var.as_symbol_id() else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), var],
             ));
         };
@@ -11480,7 +11533,7 @@ impl Context {
                 if self.has_active_catch(tag) {
                     flow
                 } else {
-                    signal("no-catch", vec![*tag, *value])
+                    signal(LispCondition::NoCatch, vec![*tag, *value])
                 }
             }
             other => other,
@@ -11512,7 +11565,7 @@ impl Context {
         let vector = self.one_unevalled_arg(byte_code_literal_symbol(), tail)?;
         let Some(items) = vector.as_vector_data() else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("vectorp"), vector],
             ));
         };
@@ -11533,7 +11586,7 @@ impl Context {
         let args = list_to_vec(&tail).ok_or_else(|| self.listp_error(tail))?;
         if args.len() != 3 {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![Value::symbol("byte-code"), Value::fixnum(args.len() as i64)],
             ));
         }
@@ -12065,7 +12118,7 @@ impl Context {
         }
         if !tail.is_cons() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), value],
             ));
         }
@@ -12861,7 +12914,10 @@ impl Context {
             }
             ValueKind::Symbol(id) => self.apply_symbol_callable_untraced(id, args, true),
             ValueKind::T => self.apply_symbol_callable_untraced(intern("t"), args, true),
-            ValueKind::Nil => Err(signal("void-function", vec![Value::symbol("nil")])),
+            ValueKind::Nil => Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::symbol("nil")],
+            )),
             _ if function.is_symbol_with_pos() => {
                 // Transparently unwrap symbol-with-pos → bare symbol for funcall dispatch.
                 let bare = function.as_symbol_with_pos_sym().unwrap();
@@ -12870,16 +12926,16 @@ impl Context {
             ValueKind::Cons => {
                 if super::autoload::is_autoload_value(&function) {
                     Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("symbolp"), function],
                     ))
                 } else if cons_head_symbol_id(&function) == Some(lambda_symbol()) {
                     self.apply_lambda(function, args)
                 } else {
-                    Err(signal("invalid-function", vec![function]))
+                    Err(signal(LispCondition::InvalidFunction, vec![function]))
                 }
             }
-            _ => Err(signal("invalid-function", vec![function])),
+            _ => Err(signal(LispCondition::InvalidFunction, vec![function])),
         }
     }
 
@@ -12888,23 +12944,23 @@ impl Context {
     /// handles both forms.  Used by both the interpreter and the bytecode VM.
     pub(crate) fn instantiate_callable_cons_form(&mut self, function: Value) -> EvalResult {
         if !function.is_cons() {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         }
         if list_length(&function).is_none() {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         }
 
         // Unwrap symbol-with-pos on the car so (lambda ...) / (closure ...)
         // forms with position-wrapped heads are recognized.
         let head_val = self.unwrap_symbol(function.cons_car());
         let Some(head_id) = head_val.as_symbol_id() else {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         };
         let mut tail = function.cons_cdr();
 
         let (env_value, params_value, is_lambda) = if head_id == lambda_symbol() {
             if !tail.is_cons() {
-                return Err(signal("invalid-function", vec![function]));
+                return Err(signal(LispCondition::InvalidFunction, vec![function]));
             }
             let params_value = tail.cons_car();
             tail = tail.cons_cdr();
@@ -12921,18 +12977,18 @@ impl Context {
             (env_value, params_value, true)
         } else if head_id == closure_symbol() {
             if !tail.is_cons() {
-                return Err(signal("invalid-function", vec![function]));
+                return Err(signal(LispCondition::InvalidFunction, vec![function]));
             }
             let env_value = tail.cons_car();
             tail = tail.cons_cdr();
             if !tail.is_cons() {
-                return Err(signal("invalid-function", vec![function]));
+                return Err(signal(LispCondition::InvalidFunction, vec![function]));
             }
             let params_value = tail.cons_car();
             tail = tail.cons_cdr();
             (env_value, params_value, false)
         } else {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         };
 
         let specpdl_root_scope = self.save_specpdl_roots();
@@ -13047,7 +13103,7 @@ impl Context {
         let arity_bad = nargs < min || max.is_some_and(|m| nargs > m);
         if arity_bad {
             Some(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![function, Value::fixnum(nargs as i64)],
             ))
         } else {
@@ -13081,14 +13137,14 @@ impl Context {
         let nargs = args.len();
         if (nargs as u16) < entry.min_args {
             return Some(Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![wrong_arity_callee, Value::fixnum(nargs as i64)],
             )));
         }
         if let Some(max) = entry.max_args {
             if nargs as u16 > max {
                 return Some(Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![wrong_arity_callee, Value::fixnum(nargs as i64)],
                 )));
             }
@@ -13330,7 +13386,7 @@ impl Context {
         _rewrite_builtin_wrong_arity: bool,
     ) -> EvalResult {
         let Some((sym_id, entry)) = subr_entry_from_value(function) else {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         };
         self.apply_subr_object_with_entry(sym_id, function, args, entry)
     }
@@ -13344,7 +13400,7 @@ impl Context {
         entry: SubrEntry,
     ) -> EvalResult {
         if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-            return Err(signal("invalid-function", vec![function]));
+            return Err(signal(LispCondition::InvalidFunction, vec![function]));
         }
         if entry.dispatch_kind == SubrDispatchKind::ContextCallable {
             return self.apply_evaluator_callable_by_id(sym_id, args);
@@ -13352,7 +13408,10 @@ impl Context {
         if let Some(result) = self.dispatch_subr_entry_internal(entry, args, function) {
             result.map_err(|flow| self.validate_throw(flow))
         } else {
-            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+            Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ))
         }
     }
 
@@ -13504,7 +13563,10 @@ impl Context {
                     Err(Flow::Signal(sig))
                         if sig.symbol_name() == "invalid-function" && !function_is_callable =>
                     {
-                        Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                        Err(signal(
+                            LispCondition::InvalidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ))
                     }
                     other => other,
                 };
@@ -13512,14 +13574,17 @@ impl Context {
             }
             NamedCallTarget::Subr(func) => {
                 let Some((sym_id, entry)) = subr_entry_from_value(func) else {
-                    return Err(signal("invalid-function", vec![invalid_fn]));
+                    return Err(signal(LispCondition::InvalidFunction, vec![invalid_fn]));
                 };
                 if entry.dispatch_kind == SubrDispatchKind::SpecialForm {
-                    return Err(signal("invalid-function", vec![invalid_fn]));
+                    return Err(signal(LispCondition::InvalidFunction, vec![invalid_fn]));
                 }
                 self.apply_subr_object_with_entry(sym_id, func, args, entry)
             }
-            NamedCallTarget::Void => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+            NamedCallTarget::Void => Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            )),
         }
     }
 
@@ -13546,7 +13611,10 @@ impl Context {
                     Err(Flow::Signal(sig))
                         if sig.symbol_name() == "invalid-function" && !function_is_callable =>
                     {
-                        Err(signal("invalid-function", vec![Value::symbol(name)]))
+                        Err(signal(
+                            LispCondition::InvalidFunction,
+                            vec![Value::symbol(name)],
+                        ))
                     }
                     other => other,
                 };
@@ -13561,12 +13629,15 @@ impl Context {
                     .and_then(lookup_global_subr_entry)
                     .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::SpecialForm)
                 {
-                    Err(signal("invalid-function", vec![invalid_fn]))
+                    Err(signal(LispCondition::InvalidFunction, vec![invalid_fn]))
                 } else {
                     result
                 }
             }
-            NamedCallTarget::Void => Err(signal("void-function", vec![Value::symbol(name)])),
+            NamedCallTarget::Void => Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::symbol(name)],
+            )),
         }
     }
 
@@ -13618,7 +13689,10 @@ impl Context {
             Err(Flow::Signal(sig))
                 if sig.symbol_name() == "invalid-function" && !function_is_callable =>
             {
-                Err(signal("invalid-function", vec![Value::from_sym_id(sym_id)]))
+                Err(signal(
+                    LispCondition::InvalidFunction,
+                    vec![Value::from_sym_id(sym_id)],
+                ))
             }
             other => other,
         }
@@ -13635,7 +13709,7 @@ impl Context {
             "throw" => {
                 if args.len() != 2 {
                     return Err(signal(
-                        "wrong-number-of-arguments",
+                        LispCondition::WrongNumberOfArguments,
                         vec![wrong_arity_callee, Value::fixnum(args.len() as i64)],
                     ));
                 }
@@ -13644,10 +13718,13 @@ impl Context {
                 if self.has_active_catch(&tag) {
                     Err(Flow::Throw { tag, value })
                 } else {
-                    Err(signal("no-catch", vec![tag, value]))
+                    Err(signal(LispCondition::NoCatch, vec![tag, value]))
                 }
             }
-            _ => Err(signal("void-function", vec![Value::symbol(name)])),
+            _ => Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::symbol(name)],
+            )),
         }
     }
 
@@ -13655,7 +13732,7 @@ impl Context {
         if sym_id == throw_symbol() {
             if args.len() != 2 {
                 return Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![
                         Value::subr_from_sym_id(sym_id),
                         Value::fixnum(args.len() as i64),
@@ -13667,10 +13744,13 @@ impl Context {
             if self.has_active_catch(&tag) {
                 Err(Flow::Throw { tag, value })
             } else {
-                Err(signal("no-catch", vec![tag, value]))
+                Err(signal(LispCondition::NoCatch, vec![tag, value]))
             }
         } else {
-            Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+            Err(signal(
+                LispCondition::VoidFunction,
+                vec![Value::from_sym_id(sym_id)],
+            ))
         }
     }
 
@@ -13679,15 +13759,15 @@ impl Context {
         let (arglist, body, env) = if raw_cons_lambda {
             let tail = func_value.cons_cdr();
             if !tail.is_cons() {
-                return Err(signal("invalid-function", vec![func_value]));
+                return Err(signal(LispCondition::InvalidFunction, vec![func_value]));
             }
             (tail.cons_car(), tail.cons_cdr(), None)
         } else {
             let Some(arglist) = func_value.closure_slot(CLOSURE_ARGLIST) else {
-                return Err(signal("invalid-function", vec![func_value]));
+                return Err(signal(LispCondition::InvalidFunction, vec![func_value]));
             };
             let Some(body) = func_value.closure_body_value() else {
-                return Err(signal("invalid-function", vec![func_value]));
+                return Err(signal(LispCondition::InvalidFunction, vec![func_value]));
             };
             (arglist, body, func_value.closure_env().unwrap_or(None))
         };
@@ -14039,7 +14119,7 @@ impl Context {
                 // expander itself, not the full `(macro . fn)` function cell.
                 self.apply_macro_callable_for_macroexpand(definition, args)?
             } else {
-                return Err(signal("invalid-function", vec![definition]));
+                return Err(signal(LispCondition::InvalidFunction, vec![definition]));
             };
 
             let expand_elapsed = expand_start.elapsed();

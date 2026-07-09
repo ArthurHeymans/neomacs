@@ -8,6 +8,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind};
+use crate::emacs_core::error::LispCondition;
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -43,7 +44,7 @@ impl DbusBusName {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -63,7 +64,7 @@ fn expect_range_args(
     };
     if out_of_range {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -75,7 +76,7 @@ fn expect_symbolp(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
     }
@@ -85,14 +86,14 @@ fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *value],
         )),
     }
 }
 
 fn dbus_error(msg: &str, details: Value) -> Flow {
-    signal("dbus-error", vec![Value::string(msg), details])
+    signal(LispCondition::DbusError, vec![Value::string(msg), details])
 }
 
 fn recognized_bus_name(name: &str) -> Option<DbusBusName> {
@@ -158,12 +159,12 @@ pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>)
                 .expect("ValueKind::String must carry LispString payload");
             if !dest.contains(':') {
                 Err(signal(
-                    "dbus-error",
+                    LispCondition::DbusError,
                     vec![Value::string("Address does not contain a colon")],
                 ))
             } else if args.len() == 4 {
                 Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![Value::symbol("dbus-message-internal"), Value::fixnum(4)],
                 ))
             } else {
@@ -171,7 +172,7 @@ pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>)
             }
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         )),
     }

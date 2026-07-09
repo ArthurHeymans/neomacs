@@ -17,6 +17,7 @@
 //! `sleep-for` stays native because GNU's is C (`Fsleep_for`, dispnew.c): it
 //! parses SECONDS/MILLISECONDS and enters `wait_reading_process_output`.
 
+use crate::emacs_core::error::LispCondition;
 use std::time::Duration;
 
 use super::error::{EvalResult, Flow, signal};
@@ -28,7 +29,7 @@ use malachite::base::rounding_modes::RoundingMode;
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -44,7 +45,7 @@ fn expect_number(value: &Value) -> Result<f64, Flow> {
             Ok(f64::rounding_from(value.as_bignum().unwrap(), RoundingMode::Nearest).0)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *value],
         )),
     }
@@ -54,7 +55,7 @@ fn expect_fixnum_like(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }
@@ -81,7 +82,7 @@ pub(crate) fn builtin_sleep_for(eval: &mut super::eval::Context, args: Vec<Value
     expect_min_args("sleep-for", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("sleep-for"), Value::fixnum(args.len() as i64)],
         ));
     }

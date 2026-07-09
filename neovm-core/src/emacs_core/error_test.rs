@@ -1,4 +1,5 @@
 use super::{EvalError, PrintShorthandSymbol, format_flow_with_eval, quote_payload, signal};
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::{Context, Value, print_value_bytes_with_eval, print_value_with_eval};
 
 #[test]
@@ -55,7 +56,7 @@ fn diagnostic_flow_formatter_renders_signal_strings() {
     crate::test_utils::init_test_tracing();
     let eval = Context::new();
     let flow = signal(
-        "file-missing",
+        LispCondition::FileMissing,
         vec![
             Value::string("Cannot open load file"),
             Value::string("No such file or directory"),

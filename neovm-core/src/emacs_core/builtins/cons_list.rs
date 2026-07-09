@@ -78,7 +78,7 @@ where
             if let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
             {
-                return Err(signal("circular-list", vec![cycle_tail]));
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
     }
@@ -87,7 +87,7 @@ where
         Ok(Value::NIL)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), improper_error_object],
         ))
     }
@@ -109,7 +109,7 @@ pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
             if let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
             {
-                return Err(signal("circular-list", vec![cycle_tail]));
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
     }
@@ -118,7 +118,7 @@ pub(crate) fn proper_list_length_or_signal(list: Value) -> Result<usize, Flow> {
         Ok(len)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), tail],
         ))
     }
@@ -140,7 +140,7 @@ pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow>
             if let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
             {
-                return Err(signal("circular-list", vec![cycle_tail]));
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
     }
@@ -149,7 +149,7 @@ pub(crate) fn collect_proper_list_items(list: Value) -> Result<Vec<Value>, Flow>
         Ok(items)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), tail],
         ))
     }
@@ -405,7 +405,7 @@ fn car_value(value: &Value) -> Result<Value, Flow> {
                 tracing::error!("car called on t — likely closure env or alist issue");
             }
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), *value],
             ))
         }
@@ -431,7 +431,7 @@ fn cdr_value(value: &Value) -> Result<Value, Flow> {
                 tracing::error!("{bt}");
             }
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), *value],
             ))
         }
@@ -529,7 +529,7 @@ fn builtin_setcar_values(cons: Value, new_car: Value) -> EvalResult {
             Ok(new_car)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), cons],
         )),
     }
@@ -556,7 +556,7 @@ fn builtin_setcdr_values(cons: Value, new_cdr: Value) -> EvalResult {
             Ok(new_cdr)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), cons],
         )),
     }
@@ -599,7 +599,7 @@ fn builtin_length_value(sequence: Value) -> EvalResult {
             Ok(Value::fixnum(vector_sequence_length(&sequence)))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), sequence],
         )),
     }
@@ -644,7 +644,7 @@ fn list_length_internal_for_predicate(mut sequence: Value, mut len: i64) -> Resu
             if let Some(cycle_tail) =
                 for_each_tail_cycle_tail(sequence, &mut tortoise, &mut max, &mut n, &mut q)
             {
-                return Err(signal("circular-list", vec![cycle_tail]));
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
     }
@@ -671,7 +671,7 @@ fn sequence_length_less_than(sequence: &Value, target: i64) -> Result<bool, Flow
             Ok(remaining != -1)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *sequence],
         )),
     }
@@ -701,7 +701,7 @@ fn sequence_length_equal(sequence: &Value, target: i64) -> Result<bool, Flow> {
             Ok(remaining == 1)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *sequence],
         )),
     }
@@ -728,7 +728,7 @@ fn sequence_length_greater_than(sequence: &Value, target: i64) -> Result<bool, F
             Ok(remaining == -1)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *sequence],
         )),
     }
@@ -775,7 +775,7 @@ fn builtin_nth_values(n_value: Value, list: Value) -> EvalResult {
         ValueKind::Cons => Ok(tail.cons_car()),
         ValueKind::Nil => Ok(Value::NIL),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), tail],
         )),
     }
@@ -799,7 +799,7 @@ fn expect_nthcdr_count(value: Value) -> Result<NthcdrCount, Flow> {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), value],
         )),
     }
@@ -829,7 +829,7 @@ fn nthcdr_impl(n_value: Value, list: Value) -> EvalResult {
                     ValueKind::Nil => return Ok(Value::NIL),
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), list],
                         ));
                     }
@@ -884,7 +884,7 @@ fn nthcdr_large_or_bignum(count: NthcdrCount, mut tail: Value, list: Value) -> E
             Ok(Value::NIL)
         } else {
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), list],
             ))
         };
@@ -959,14 +959,14 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                 if let Some(cycle_tail) =
                     for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
                 {
-                    return Err(signal("circular-list", vec![cycle_tail]));
+                    return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
                 }
             }
         }
 
         if !tail.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), tail],
             ));
         }
@@ -1015,7 +1015,7 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                         let item = super::chartable::bool_vector_ref_value(arg, index).ok_or_else(
                             || {
                                 signal(
-                                    "wrong-type-argument",
+                                    LispCondition::WrongTypeArgument,
                                     vec![Value::symbol("bool-vector-p"), *arg],
                                 )
                             },
@@ -1026,7 +1026,7 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                 ValueKind::Veclike(VecLikeType::Vector) => {
                     if super::chartable::is_char_table(arg) {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("sequencep"), *arg],
                         ));
                     }
@@ -1044,7 +1044,7 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
                 }
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), *arg],
                     ));
                 }
@@ -1065,9 +1065,12 @@ fn builtin_append_slice_impl(args: &[Value]) -> EvalResult {
 
 pub(crate) fn builtin_reverse(args: Vec<Value>) -> EvalResult {
     fn reverse_string(value: Value) -> EvalResult {
-        let string = value
-            .as_lisp_string()
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))?;
+        let string = value.as_lisp_string().ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), value],
+            )
+        })?;
 
         if !string.is_multibyte() {
             let mut bytes = string.as_bytes().to_vec();
@@ -1094,7 +1097,7 @@ pub(crate) fn builtin_reverse(args: Vec<Value>) -> EvalResult {
     fn reverse_bool_vector(value: Value) -> EvalResult {
         let Some(mut data) = value.as_vector_data().map(|items| items.to_vec()) else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("sequencep"), value],
             ));
         };
@@ -1118,7 +1121,7 @@ pub(crate) fn builtin_reverse(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Vector) => {
             if super::chartable::is_char_table(&args[0]) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("sequencep"), args[0]],
                 ));
             }
@@ -1131,7 +1134,7 @@ pub(crate) fn builtin_reverse(args: Vec<Value>) -> EvalResult {
         }
         ValueKind::String => reverse_string(args[0]),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -1159,7 +1162,7 @@ fn nreverse_value(arg: Value) -> EvalResult {
                     ValueKind::Cons => {
                         let next = current.cons_cdr();
                         if eq_value(&next, &arg) {
-                            return Err(signal("circular-list", vec![arg]));
+                            return Err(signal(LispCondition::CircularList, vec![arg]));
                         }
                         current.set_cdr(prev);
                         prev = current;
@@ -1167,7 +1170,7 @@ fn nreverse_value(arg: Value) -> EvalResult {
                     }
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), arg],
                         ));
                     }
@@ -1177,7 +1180,7 @@ fn nreverse_value(arg: Value) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Vector) => {
             if super::chartable::is_char_table(&arg) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("arrayp"), arg],
                 ));
             }
@@ -1205,7 +1208,7 @@ fn nreverse_value(arg: Value) -> EvalResult {
         }
         ValueKind::String => builtin_reverse(vec![arg]),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), arg],
         )),
     }
@@ -1452,7 +1455,7 @@ fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) 
         if tail.is_cons() {
             distance = distance.saturating_add(1);
             if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
+                return Err(signal(LispCondition::CircularList, vec![tail]));
             }
             if distance == power {
                 tortoise = tail;
@@ -1466,7 +1469,7 @@ fn builtin_assq_values(key: Value, list: Value, symbols_with_pos_enabled: bool) 
         Ok(Value::NIL)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), list],
         ))
     }
@@ -1491,7 +1494,7 @@ fn builtin_assq_values_swp(key: Value, list: Value) -> EvalResult {
         if tail.is_cons() {
             distance = distance.saturating_add(1);
             if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
+                return Err(signal(LispCondition::CircularList, vec![tail]));
             }
             if distance == power {
                 tortoise = tail;
@@ -1505,7 +1508,7 @@ fn builtin_assq_values_swp(key: Value, list: Value) -> EvalResult {
         Ok(Value::NIL)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), list],
         ))
     }
@@ -1534,7 +1537,7 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
                     if let Some(cycle_tail) =
                         for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
                     {
-                        return Err(signal("circular-list", vec![cycle_tail]));
+                        return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
                     }
                 }
             }
@@ -1543,7 +1546,7 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
                 Ok(copy)
             } else {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), tail],
                 ))
             }
@@ -1579,7 +1582,7 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::CharTable) => {
             crate::emacs_core::chartable::copy_char_table(args[0]).ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("sequencep"), args[0]],
                 )
             })
@@ -1589,7 +1592,7 @@ pub(crate) fn builtin_copy_sequence(args: Vec<Value>) -> EvalResult {
             Ok(Value::make_record(items))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -1632,7 +1635,7 @@ where
             if let Some(cycle_tail) =
                 for_each_tail_cycle_tail(tail, &mut tortoise, &mut max, &mut n, &mut q)
             {
-                return Err(signal("circular-list", vec![cycle_tail]));
+                return Err(signal(LispCondition::CircularList, vec![cycle_tail]));
             }
         }
     }
@@ -1641,7 +1644,7 @@ where
         Ok(list)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), list],
         ))
     }
@@ -1709,7 +1712,7 @@ fn builtin_delete_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
             builtin_concat(vec![Value::list(kept)])
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[1]],
         )),
     }
@@ -1749,7 +1752,7 @@ fn builtin_delq_values(elt: Value, list: Value, symbols_with_pos_enabled: bool) 
             eq_value_swp(&elt, item, symbols_with_pos_enabled)
         }),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), list],
         )),
     }
@@ -1763,7 +1766,7 @@ pub(crate) fn builtin_elt(args: Vec<Value>) -> EvalResult {
         | ValueKind::Veclike(VecLikeType::CharTable)
         | ValueKind::String => builtin_aref(vec![args[0], args[1]]),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), args[0]],
         )),
     }
@@ -1780,7 +1783,7 @@ pub(crate) fn builtin_elt_2(
         | ValueKind::Veclike(VecLikeType::CharTable)
         | ValueKind::String => builtin_aref_2(eval, sequence, n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), sequence],
         )),
     }
@@ -1808,7 +1811,7 @@ pub(crate) fn builtin_nconc_slice_values(args: &[Value]) -> EvalResult {
             if tail.is_cons() {
                 distance = distance.saturating_add(1);
                 if tail.bits() == tortoise.bits() {
-                    return Err(signal("circular-list", vec![tail]));
+                    return Err(signal(LispCondition::CircularList, vec![tail]));
                 }
                 if distance == power {
                     tortoise = tail;
@@ -1853,7 +1856,7 @@ pub(crate) fn builtin_nconc_slice_values(args: &[Value]) -> EvalResult {
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("consp"), *arg],
                 ));
             }

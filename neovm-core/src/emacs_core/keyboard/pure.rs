@@ -1,3 +1,4 @@
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::{
     error::{Flow, signal},
     intern::resolve_sym,
@@ -324,12 +325,12 @@ pub(crate) fn key_sequence_values(value: &Value) -> Result<Vec<Value>, Flow> {
         }
         ValueKind::Cons => list_to_vec(value).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("sequencep"), *value],
             )
         }),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *value],
         )),
     }

@@ -175,7 +175,7 @@ fn posix_versioned_candidates(base: &str, suffix: &str) -> Vec<String> {
 fn parse_symbol_arg(name: &str, value: &Value) -> Result<SymId, Flow> {
     value.as_symbol_id().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value, Value::symbol(name)],
         )
     })
@@ -186,7 +186,7 @@ fn expect_symbol_or_nil(name: &str, value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), value, Value::symbol(name)],
         ))
     }
@@ -194,7 +194,7 @@ fn expect_symbol_or_nil(name: &str, value: Value) -> Result<Value, Flow> {
 
 fn parser_type_error(name: &str, value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![
             Value::symbol("treesit-parser-p"),
             value,
@@ -205,21 +205,21 @@ fn parser_type_error(name: &str, value: Value) -> Flow {
 
 fn node_type_error(name: &str, value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("treesit-node-p"), value, Value::symbol(name)],
     )
 }
 
 fn query_type_error(name: &str, value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("treesit-query-p"), value, Value::symbol(name)],
     )
 }
 
 fn compiled_query_type_error(name: &str, value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![
             Value::symbol("treesit-compiled-query-p"),
             value,
@@ -229,7 +229,7 @@ fn compiled_query_type_error(name: &str, value: Value) -> Flow {
 }
 
 fn parser_deleted_error(value: Value) -> Flow {
-    signal("treesit-parser-deleted", vec![value])
+    signal(LispCondition::TreesitParserDeleted, vec![value])
 }
 
 fn treesit_buffer_source(buffer: &crate::buffer::Buffer) -> LispString {
@@ -237,24 +237,27 @@ fn treesit_buffer_source(buffer: &crate::buffer::Buffer) -> LispString {
 }
 
 fn node_outdated_error(value: Value) -> Flow {
-    signal("treesit-node-outdated", vec![value])
+    signal(LispCondition::TreesitNodeOutdated, vec![value])
 }
 
 fn node_buffer_killed_error(value: Value) -> Flow {
-    signal("treesit-node-buffer-killed", vec![value])
+    signal(LispCondition::TreesitNodeBufferKilled, vec![value])
 }
 
 fn treesit_parse_error(value: Value) -> Flow {
-    signal("treesit-parse-error", vec![value])
+    signal(LispCondition::TreesitParseError, vec![value])
 }
 
 fn treesit_query_error(message: impl Into<String>) -> Flow {
-    signal("treesit-query-error", vec![Value::string(message.into())])
+    signal(
+        LispCondition::TreesitQueryError,
+        vec![Value::string(message.into())],
+    )
 }
 
 fn treesit_query_error_from_query(err: tree_sitter::QueryError) -> Flow {
     signal(
-        "treesit-query-error",
+        LispCondition::TreesitQueryError,
         vec![
             Value::string(err.message),
             Value::fixnum(err.offset as i64),
@@ -565,7 +568,7 @@ fn treesit_check_position(buf: &Buffer, value: Value) -> Result<i64, Flow> {
     let min = accessible_chars.start_lisp().as_i64();
     let max = accessible_chars.end_lisp().as_i64();
     if pos < min || pos > max {
-        return Err(signal("args-out-of-range", vec![value]));
+        return Err(signal(LispCondition::ArgsOutOfRange, vec![value]));
     }
     Ok(pos)
 }
@@ -595,7 +598,7 @@ fn expect_treesit_range_fixnum(value: Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), value],
         )),
     }
@@ -609,7 +612,7 @@ fn validate_treesit_included_range(
 ) -> Result<(i64, i64), Flow> {
     if !range.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), range],
         ));
     }
@@ -1062,7 +1065,7 @@ fn lookup_thing_definition(
 }
 
 fn treesit_predicate_not_found(predicate: Value) -> Flow {
-    signal("treesit-predicate-not-found", vec![predicate])
+    signal(LispCondition::TreesitPredicateNotFound, vec![predicate])
 }
 
 fn treesit_invalid_predicate(message: impl Into<String>, predicate: Value) -> Flow {
@@ -1563,7 +1566,7 @@ pub(crate) fn builtin_treesit_node_check(
     }
     let property_name = args[1].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::symbol("symbolp"),
                 args[1],
@@ -1633,7 +1636,8 @@ pub(crate) fn builtin_treesit_node_child(
     if idx < 0 {
         return Ok(Value::NIL);
     }
-    let idx = u32::try_from(idx).map_err(|_| signal("args-out-of-range", vec![args[1]]))?;
+    let idx =
+        u32::try_from(idx).map_err(|_| signal(LispCondition::ArgsOutOfRange, vec![args[1]]))?;
     let child = if named {
         node.named_child(idx)
     } else {
@@ -1772,7 +1776,8 @@ pub(crate) fn builtin_treesit_node_field_name_for_child(
     if idx < 0 {
         return Ok(Value::NIL);
     }
-    let idx = u32::try_from(idx).map_err(|_| signal("args-out-of-range", vec![args[1]]))?;
+    let idx =
+        u32::try_from(idx).map_err(|_| signal(LispCondition::ArgsOutOfRange, vec![args[1]]))?;
     Ok(node
         .field_name_for_child(idx)
         .map_or(Value::NIL, Value::string))
@@ -1968,7 +1973,7 @@ pub(crate) fn builtin_treesit_parser_add_notifier(
     let _ = expect_live_parser_id(eval, "treesit-parser-add-notifier", args[0])?;
     if args[1].as_symbol_name().is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         ));
     }
@@ -2012,7 +2017,7 @@ pub(crate) fn builtin_treesit_parser_create(
     )?;
     if tag.is_t() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::list(vec![Value::symbol("not"), Value::T]), Value::T],
         ));
     }
@@ -2157,7 +2162,7 @@ pub(crate) fn builtin_treesit_parser_remove_notifier(
     let _ = expect_live_parser_id(eval, "treesit-parser-remove-notifier", args[0])?;
     if args[1].as_symbol_name().is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         ));
     }
@@ -2241,8 +2246,12 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         Vec::new()
     } else {
         let mut last_point = buffer.accessible_char_region().start_lisp().as_i64();
-        let range_values = crate::emacs_core::value::list_to_vec(&args[1])
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), args[1]]))?;
+        let range_values = crate::emacs_core::value::list_to_vec(&args[1]).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), args[1]],
+            )
+        })?;
         let mut hint = runtime::LineColCache {
             line: 1,
             col: 1,

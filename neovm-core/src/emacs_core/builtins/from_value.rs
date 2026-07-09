@@ -44,7 +44,10 @@ pub(crate) trait FromValue: Sized {
 
 /// Build the canonical `(wrong-type-argument PREDICATE value)` signal.
 pub(crate) fn wrong_type(predicate: &str, value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol(predicate), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol(predicate), value],
+    )
 }
 
 /// Identity: accepts any value. Lets a typed signature keep raw `Value`

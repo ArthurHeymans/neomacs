@@ -488,7 +488,7 @@ pub(crate) fn builtin_user_error(eval: &mut super::eval::Context, args: Vec<Valu
     expect_min_args("user-error", &args, 1)?;
     let formatted = builtin_format_message(eval, args)?;
     Err(signal(
-        "user-error",
+        LispCondition::UserError,
         vec![if formatted.is_string() {
             formatted
         } else {
@@ -527,7 +527,7 @@ fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> E
             }),
         ),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), symbol],
         )),
     }

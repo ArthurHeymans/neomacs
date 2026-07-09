@@ -8,6 +8,7 @@
 //! - Regular expression search variants
 //! - Lazy highlight (deferred search matches)
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::VecDeque;
 
 use super::error::{EvalResult, Flow, signal};
@@ -24,7 +25,7 @@ use crate::heap_types::LispString;
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -102,8 +103,12 @@ fn append_runtime_fragment_to_lisp_string(value: &mut LispString, fragment: &str
 fn expect_string(val: &Value) -> Result<&'static LispString, Flow> {
     // Issue #131: keep the search/replace argument byte-faithful — hand the
     // caller the real LispString (Emacs bytes), not a PUA-sentinel storage form.
-    val.as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
+    val.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *val],
+        )
+    })
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -117,7 +122,7 @@ fn expect_integer_or_marker(
             super::marker::marker_position_as_int_with_buffers(buffers, val)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
     }
@@ -128,7 +133,7 @@ fn expect_sequence_string(val: &Value) -> Result<&'static LispString, Flow> {
     // Issue #131: byte-faithful — see `expect_string`.
     val.as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *val],
         )
     })
@@ -393,7 +398,7 @@ fn string_matches_regexp(
         &mut match_data,
     )
     .map(|matched| matched.is_some())
-    .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
+    .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -413,7 +418,7 @@ fn delete_line_operation_byte_range(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         if buffer_read_only_active(eval, buf) {
             return Err(signal(
-                "buffer-read-only",
+                LispCondition::BufferReadOnly,
                 vec![Value::make_buffer(current_id)],
             ));
         }
@@ -467,7 +472,7 @@ fn count_string_regexp_matches(
     case_fold: bool,
 ) -> Result<i64, Flow> {
     let iterated = super::regex::iterate_string_matches_with_case_fold(pattern, text, 0, case_fold)
-        .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+        .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
     Ok(iterated
         .matches
         .into_iter()
@@ -1786,7 +1791,7 @@ fn replace_string_eval_impl(
             return Ok(Value::NIL);
         }
         if read_only {
-            return Err(signal("buffer-read-only", vec![buffer_name]));
+            return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
         }
         // Issue #131: iterate the region's Emacs chars as (byte-start, byte-len)
         // pairs instead of the storage-unit scan; for Emacs bytes the char's byte
@@ -1888,7 +1893,7 @@ fn replace_string_eval_impl(
         let pattern_ls = LispString::from_emacs_bytes(pattern);
         let iterated =
             super::regex::iterate_string_matches_with_case_fold(&pattern_ls, source, 0, case_fold)
-                .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+                .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
             let Some(group) = groups.first().and_then(|group| *group) else {
@@ -1947,7 +1952,7 @@ fn replace_string_eval_impl(
         return Ok(Value::NIL);
     }
     if read_only {
-        return Err(signal("buffer-read-only", vec![buffer_name]));
+        return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
     }
 
     let current_id = eval
@@ -2082,7 +2087,7 @@ fn replace_regexp_eval_impl(
     let preserve_match_case = case_fold && case_replace_enabled(eval);
     let iterated =
         super::regex::iterate_string_matches_with_case_fold(from_ls, source, 0, case_fold)
-            .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))?;
+            .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
 
     let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut last = 0usize;
@@ -2154,7 +2159,7 @@ fn replace_regexp_eval_impl(
         return Ok(Value::NIL);
     }
     if read_only {
-        return Err(signal("buffer-read-only", vec![buffer_name]));
+        return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
     }
 
     let current_id = eval

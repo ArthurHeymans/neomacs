@@ -58,7 +58,7 @@ pub(crate) fn symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -
 fn expect_symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -> Result<SymId, Flow> {
     symbol_id_checked(value, symbols_with_pos_enabled).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )
     })
@@ -148,13 +148,16 @@ pub(crate) fn constant_set_outcome_in_obarray(
         return Some(Ok(new_value));
     }
 
-    Some(Err(signal("setting-constant", vec![symbol_arg])))
+    Some(Err(signal(
+        LispCondition::SettingConstant,
+        vec![symbol_arg],
+    )))
 }
 
 pub(crate) fn expect_symbol_id(value: &Value) -> Result<SymId, Flow> {
     symbol_id(value).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )
     })
@@ -179,7 +182,7 @@ pub(crate) fn resolve_variable_alias_id_in_obarray(
     // tortoise/hare.
     obarray.indirect_variable_id(symbol).ok_or_else(|| {
         signal(
-            "cyclic-variable-indirection",
+            LispCondition::CyclicVariableIndirection,
             vec![Value::from_sym_id(symbol)],
         )
     })
@@ -323,7 +326,7 @@ pub(crate) fn builtin_default_toplevel_value(
         None if is_canonical_symbol_id(resolved) && resolved_name.starts_with(':') => {
             Ok(Value::from_kw_id(resolved))
         }
-        None => Err(signal("void-variable", vec![args[0]])),
+        None => Err(signal(LispCondition::VoidVariable, vec![args[0]])),
     }
 }
 
@@ -467,7 +470,10 @@ pub(crate) fn defvaralias_impl(
         ));
     }
     if would_create_variable_alias_cycle_in_obarray(&ctx.obarray, new_symbol, old_symbol) {
-        return Err(signal("cyclic-variable-indirection", vec![args[1]]));
+        return Err(signal(
+            LispCondition::CyclicVariableIndirection,
+            vec![args[1]],
+        ));
     }
     let previous_target_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, new_symbol)?;
     if ctx.obarray.find_symbol_value(old_symbol).is_none()
@@ -568,7 +574,7 @@ pub(crate) fn builtin_symbol_value_1(
     let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
     match eval.visible_runtime_variable_value_by_id(symbol)? {
         Some(value) => Ok(value),
-        None => Err(signal("void-variable", vec![symbol_value])),
+        None => Err(signal(LispCondition::VoidVariable, vec![symbol_value])),
     }
 }
 
@@ -636,7 +642,10 @@ pub(crate) fn builtin_func_arity(eval: &mut super::eval::Context, args: Vec<Valu
             resolve_indirect_symbol_by_id_in_obarray(obarray, intern(name)).map(|(_, value)| value)
         {
             if function.is_nil() {
-                return Err(signal("void-function", vec![Value::symbol(name)]));
+                return Err(signal(
+                    LispCondition::VoidFunction,
+                    vec![Value::symbol(name)],
+                ));
             }
             if super::subr_info::subr_dispatch_kind_from_value(&function)
                 .is_some_and(|kind| kind == crate::tagged::header::SubrDispatchKind::SpecialForm)
@@ -650,7 +659,10 @@ pub(crate) fn builtin_func_arity(eval: &mut super::eval::Context, args: Vec<Valu
             }
             return super::subr_info::builtin_func_arity_ctx(eval, vec![function]);
         }
-        return Err(signal("void-function", vec![Value::symbol(name)]));
+        return Err(signal(
+            LispCondition::VoidFunction,
+            vec![Value::symbol(name)],
+        ));
     }
 
     super::subr_info::builtin_func_arity_ctx(eval, vec![args[0]])
@@ -715,14 +727,20 @@ pub(crate) fn builtin_fset_2(
 ) -> EvalResult {
     let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
     if symbol == intern("nil") && !def.is_nil() {
-        return Err(signal("setting-constant", vec![Value::symbol("nil")]));
+        return Err(signal(
+            LispCondition::SettingConstant,
+            vec![Value::symbol("nil")],
+        ));
     }
     let would_cycle = {
         let obarray = eval.obarray_mut();
         would_create_function_alias_cycle_in_obarray(obarray, symbol, &def)
     };
     if would_cycle {
-        return Err(signal("cyclic-function-indirection", vec![symbol_value]));
+        return Err(signal(
+            LispCondition::CyclicFunctionIndirection,
+            vec![symbol_value],
+        ));
     }
     eval.note_macro_expansion_mutation();
     eval.obarray_mut().set_symbol_function_id(symbol, def);
@@ -779,7 +797,7 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     if eval.obarray().is_constant_id(resolved) {
-        return Err(signal("setting-constant", vec![args[0]]));
+        return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
     eval.note_macro_expansion_mutation();
     eval.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
@@ -829,7 +847,7 @@ pub(crate) fn builtin_fmakunbound(eval: &mut super::eval::Context, args: Vec<Val
     expect_args("fmakunbound", &args, 1)?;
     let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     if symbol == intern("nil") || symbol == intern("t") {
-        return Err(signal("setting-constant", vec![args[0]]));
+        return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
     eval.note_macro_expansion_mutation();
     eval.obarray_mut().fmakunbound_id(symbol);
@@ -1139,7 +1157,7 @@ fn collect_proper_list_args(list: Value) -> Result<Vec<Value>, Flow> {
     }
     if !tail.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), tail],
         ));
     }
@@ -1167,7 +1185,7 @@ fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
         && !env.is_cons()
     {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *env],
         ));
     }
@@ -1606,7 +1624,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
         let vec_len = obarray_len(obarray_val).unwrap_or(0);
         if vec_len == 0 {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("obarrayp"), effective_obarray],
             ));
         }
@@ -1675,7 +1693,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
                     ))
                 } else {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("stringp"), args[0]],
                     ));
                 }
@@ -1684,7 +1702,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
         let vec_len = obarray_len(obarray_val).unwrap_or(0);
         if vec_len == 0 {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("obarrayp"), effective_obarray],
             ));
         }
@@ -1711,7 +1729,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
                 std::borrow::Cow::Borrowed(crate::emacs_core::intern::resolve_sym_lisp_string(id))
             } else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[0]],
                 ));
             }
@@ -1771,7 +1789,7 @@ pub(crate) fn check_obarray_value(value: Value) -> Result<Value, Flow> {
     }
 
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("obarrayp"), value],
     ))
 }
@@ -1913,7 +1931,7 @@ pub(crate) fn builtin_raise_frame(args: Vec<Value>) -> EvalResult {
     if let Some(frame) = args.first() {
         if !frame.is_nil() && !frame.is_frame() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *frame],
             ));
         }
@@ -2297,7 +2315,7 @@ pub(crate) fn builtin_vertical_motion(
                 ValueKind::Fixnum(n) => n,
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("fixnump"), cdr],
                     ));
                 }
@@ -2306,7 +2324,7 @@ pub(crate) fn builtin_vertical_motion(
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), args[0]],
             ));
         }
@@ -2315,7 +2333,7 @@ pub(crate) fn builtin_vertical_motion(
     if let Some(window) = args.get(1) {
         if !window.is_nil() && !window.is_window() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *window],
             ));
         }
@@ -2570,7 +2588,7 @@ pub(crate) fn builtin_map_charset_chars(
     expect_range_args("map-charset-chars", &args, 2, 5)?;
     let charset = args[1].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("charsetp"), args[1]],
         )
     })?;
@@ -2585,7 +2603,7 @@ pub(crate) fn builtin_map_charset_chars(
     let ranges = crate::emacs_core::charset::map_charset_char_ranges(&charset, from_code, to_code)
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), args[1]],
             )
         })?;
@@ -2605,7 +2623,7 @@ pub(crate) fn builtin_mapbacktrace(args: Vec<Value>) -> EvalResult {
     expect_range_args("mapbacktrace", &args, 1, 2)?;
     match args[0].kind() {
         ValueKind::Nil | ValueKind::T => {
-            return Err(signal("void-function", vec![args[0]]));
+            return Err(signal(LispCondition::VoidFunction, vec![args[0]]));
         }
         ValueKind::Symbol(_)
         | ValueKind::Subr(_)
@@ -2614,7 +2632,7 @@ pub(crate) fn builtin_mapbacktrace(args: Vec<Value>) -> EvalResult {
         | ValueKind::Veclike(VecLikeType::Macro)
         | ValueKind::Veclike(VecLikeType::ByteCode) => {}
         _ => {
-            return Err(signal("invalid-function", vec![args[0]]));
+            return Err(signal(LispCondition::InvalidFunction, vec![args[0]]));
         }
     }
     Ok(Value::NIL)
@@ -2635,7 +2653,7 @@ pub(crate) fn builtin_marker_last_position(args: Vec<Value>) -> EvalResult {
     expect_args("marker-last-position", &args, 1)?;
     if !super::marker::is_marker(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("markerp"), args[0]],
         ));
     }
@@ -2670,7 +2688,7 @@ pub(crate) fn builtin_newline_cache_check(args: Vec<Value>) -> EvalResult {
     if let Some(buffer) = args.first() {
         if !buffer.is_nil() && !buffer.is_buffer() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), *buffer],
             ));
         }
@@ -2944,7 +2962,7 @@ pub(crate) fn builtin_open_font(args: Vec<Value>) -> EvalResult {
     };
     if !is_font_entity {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font-entity"), args[0]],
         ));
     }
@@ -2976,7 +2994,7 @@ pub(crate) fn builtin_open_dribble_file(
     let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
     if let Err(err) = eval.command_loop.keyboard.kboard.open_dribble_file(&path) {
         return Err(signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string("Cannot open dribble file"),
                 Value::string(err.to_string()),
@@ -3040,7 +3058,7 @@ pub(crate) fn builtin_object_intervals(
     }
 
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("buffer-or-string-p"), args[0]],
     ))
 }
@@ -3128,7 +3146,7 @@ pub(crate) fn builtin_position_symbol(
         args[0].as_symbol_with_pos_sym().unwrap()
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::list(vec![
                     Value::symbol("symbolp"),
@@ -3144,7 +3162,7 @@ pub(crate) fn builtin_position_symbol(
         Value::fixnum(p)
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnum-or-symbol-with-pos-p"), args[1]],
         ));
     };
@@ -3154,7 +3172,7 @@ pub(crate) fn builtin_position_symbol(
 pub(crate) fn builtin_record(args: Vec<Value>) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("record"), Value::fixnum(0)],
         ));
     }
@@ -3238,7 +3256,12 @@ pub(crate) fn builtin_redirect_debugging_output(
         .append(append)
         .truncate(!append)
         .open(&path)
-        .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+        .map_err(|err| {
+            signal(
+                LispCondition::FileError,
+                vec![Value::string(err.to_string())],
+            )
+        })?;
     eval.debugging_output_file = Some(file);
     Ok(Value::NIL)
 }
@@ -3248,14 +3271,14 @@ pub(crate) fn builtin_redirect_frame_focus(args: Vec<Value>) -> EvalResult {
     expect_range_args("redirect-frame-focus", &args, 1, 2)?;
     if !args[0].is_nil() && !args[0].is_frame() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("framep"), args[0]],
         ));
     }
     if let Some(focus_frame) = args.get(1) {
         if !focus_frame.is_nil() && !focus_frame.is_frame() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *focus_frame],
             ));
         }
@@ -3279,7 +3302,7 @@ pub(crate) fn builtin_resize_mini_window_internal(
     expect_args("resize-mini-window-internal", &args, 1)?;
     let wid = args[0].as_window_id().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), args[0]],
         )
     })?;
@@ -3332,7 +3355,7 @@ pub(crate) fn builtin_set_charset_plist(args: Vec<Value>) -> EvalResult {
         ValueKind::Symbol(id) => id,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), args[0]],
             ));
         }
@@ -3381,7 +3404,7 @@ pub(crate) fn builtin_set_frame_window_state_change(args: Vec<Value>) -> EvalRes
     if let Some(frame) = args.first() {
         if !frame.is_nil() && !frame.is_frame() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *frame],
             ));
         }
@@ -3467,7 +3490,7 @@ pub(crate) fn builtin_set_minibuffer_window(
             vec![Value::string("Window is not a minibuffer window")],
         )),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), args[0]],
         )),
     }
@@ -3572,13 +3595,13 @@ pub(crate) fn builtin_string_distance(args: Vec<Value>) -> EvalResult {
     expect_range_args("string-distance", &args, 2, 3)?;
     let s1 = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
     let s2 = args[1].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[1]],
         )
     })?;
@@ -3684,7 +3707,7 @@ pub(crate) fn builtin_transpose_regions(
         ] {
             if start < point_min || start > point_max || end < point_min || end > point_max {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![Value::make_buffer(buf.id), start_arg, end_arg],
                 ));
             }
@@ -3730,7 +3753,7 @@ pub(crate) fn builtin_transpose_regions(
     });
     if read_only {
         return Err(signal(
-            "buffer-read-only",
+            LispCondition::BufferReadOnly,
             vec![Value::make_buffer(current_id)],
         ));
     }
@@ -3894,7 +3917,7 @@ fn compare_value_lt_inner(
 }
 
 fn signal_value_lt_type_mismatch(lhs: &Value, rhs: &Value) -> Flow {
-    signal("type-mismatch", vec![*lhs, *rhs])
+    signal(LispCondition::TypeMismatch, vec![*lhs, *rhs])
 }
 
 fn compare_value_sequences(
@@ -4353,7 +4376,7 @@ fn interactive_form_from_quoted_interactive_form(form: &Value) -> Result<Option<
             ])))
         }
         _tail => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), pair_cdr],
         )),
     }
@@ -4396,7 +4419,7 @@ fn interactive_form_from_quoted_lambda(value: &Value) -> Result<Option<Value>, F
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), body],
                 ));
             }
@@ -4773,20 +4796,20 @@ pub(crate) fn builtin_lossage_size(args: Vec<Value>) -> EvalResult {
                 ValueKind::Fixnum(n) => n,
                 _ => {
                     return Err(signal(
-                        "user-error",
+                        LispCondition::UserError,
                         vec![Value::string("Value must be a positive integer")],
                     ));
                 }
             };
             if n < 0 {
                 return Err(signal(
-                    "user-error",
+                    LispCondition::UserError,
                     vec![Value::string("Value must be a positive integer")],
                 ));
             }
             if n < 100 {
                 return Err(signal(
-                    "user-error",
+                    LispCondition::UserError,
                     vec![Value::string("Value must be >= 100")],
                 ));
             }
@@ -4892,7 +4915,7 @@ pub(crate) fn builtin_internal_complete_buffer(
     expect_args("internal-complete-buffer", &args, 3)?;
     let string = args[0].as_lisp_string().cloned().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -5104,7 +5127,7 @@ pub(crate) fn cache_event_symbol_properties_in_obarray(
     let symbol_value = Value::from_sym_id(symbol);
     let name = symbol_value.as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), symbol_value],
         )
     })?;
@@ -5546,7 +5569,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
     )?;
     if symbol_id(&args[0]).is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     }
@@ -5554,7 +5577,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
 
     let Some(attr_id) = symbol_id(&args[1]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         ));
     };
@@ -5833,7 +5856,7 @@ pub(crate) fn builtin_dump_emacs_portable(
 
     dump_result.map_err(|err| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string("dump-emacs-portable"),
                 Value::string(expanded_path),
@@ -5893,7 +5916,7 @@ pub(crate) fn builtin_find_operation_coding_system(
 ) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("find-operation-coding-system"),
                 Value::fixnum(args.len() as i64),
@@ -6042,7 +6065,7 @@ pub(crate) fn builtin_handler_bind_1(
 ) -> EvalResult {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("handler-bind-1"),
                 Value::fixnum(args.len() as i64),
@@ -6151,7 +6174,7 @@ pub(crate) fn builtin_kill_emacs(eval: &mut super::eval::Context, args: Vec<Valu
     let _ = eval.run_hook_if_bound("kill-emacs-hook");
     eval.request_shutdown(request.exit_code, request.restart);
     Err(crate::emacs_core::error::signal_suppressed(
-        "kill-emacs",
+        LispCondition::KillEmacs,
         vec![],
     ))
 }
@@ -6169,7 +6192,7 @@ pub(crate) fn builtin_lread_substitute_object_in_subtree(args: Vec<Value>) -> Ev
 pub(crate) fn builtin_make_byte_code(args: Vec<Value>) -> EvalResult {
     if args.len() < 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-byte-code"),
                 Value::fixnum(args.len() as i64),
@@ -6183,7 +6206,7 @@ pub(crate) fn builtin_make_byte_code(args: Vec<Value>) -> EvalResult {
 pub(crate) fn make_byte_code_from_slots(slots: &[Value]) -> EvalResult {
     if slots.len() < 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-byte-code"),
                 Value::fixnum(slots.len() as i64),
@@ -6214,7 +6237,7 @@ fn valid_bytecode_stack_depth(value: Value) -> bool {
 fn check_interpreted_closure_args(params_value: &Value) -> EvalResult {
     if !params_value.is_nil() && !params_value.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *params_value],
         ));
     }
@@ -6224,7 +6247,7 @@ fn check_interpreted_closure_args(params_value: &Value) -> EvalResult {
 fn check_interpreted_closure_body(body_value: &Value) -> EvalResult {
     if !body_value.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), *body_value],
         ));
     }
@@ -6240,7 +6263,7 @@ fn make_interpreted_closure_from_gnu_slots(slots: &[Value]) -> EvalResult {
 pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
     if !(3..=6).contains(&slots.len()) || !valid_closure_arglist(slots[0]) {
         return Err(signal(
-            "invalid-read-syntax",
+            LispCondition::InvalidReadSyntax,
             vec![Value::string("Invalid byte-code object")],
         ));
     }
@@ -6248,13 +6271,13 @@ pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
     if slots[1].is_string() {
         if slots.len() <= 3 || !slots[2].is_vector() || !valid_bytecode_stack_depth(slots[3]) {
             return Err(signal(
-                "invalid-read-syntax",
+                LispCondition::InvalidReadSyntax,
                 vec![Value::string("Invalid byte-code object")],
             ));
         }
         return make_byte_code_from_slots(slots).map_err(|_| {
             signal(
-                "invalid-read-syntax",
+                LispCondition::InvalidReadSyntax,
                 vec![Value::string("Invalid byte-code object")],
             )
         });
@@ -6263,14 +6286,14 @@ pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
     if slots[1].is_cons() && (slots[2].is_cons() || slots[2].is_nil()) {
         return make_interpreted_closure_from_gnu_slots(slots).map_err(|_| {
             signal(
-                "invalid-read-syntax",
+                LispCondition::InvalidReadSyntax,
                 vec![Value::string("Invalid byte-code object")],
             )
         });
     }
 
     Err(signal(
-        "invalid-read-syntax",
+        LispCondition::InvalidReadSyntax,
         vec![Value::string("Invalid byte-code object")],
     ))
 }
@@ -6441,7 +6464,7 @@ pub(crate) fn make_interpreted_closure_from_parts(
     check_interpreted_closure_body(body_value)?;
     if list_length(&iform).is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), iform],
         ));
     }
@@ -6618,14 +6641,14 @@ pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
     expect_range_args("make-char", &args, 1, 5)?;
     let Some(charset) = args[0].as_symbol_name() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("charsetp"), args[0]],
         ));
     };
     let code1 = match args.get(1) {
         Some(value) => value.as_fixnum().ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), *value],
             )
         })?,
@@ -6676,7 +6699,7 @@ pub(crate) fn builtin_make_closure(args: Vec<Value>) -> EvalResult {
     // (make-closure PROTOTYPE &rest CLOSURE-VARS)
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("make-closure"),
                 Value::fixnum(args.len() as i64),
@@ -6691,7 +6714,7 @@ pub(crate) fn builtin_make_closure(args: Vec<Value>) -> EvalResult {
         .get_bytecode_data()
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("byte-code-function-p"), args[0]],
             )
         })?

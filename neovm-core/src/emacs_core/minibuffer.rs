@@ -6,6 +6,7 @@
 //! - `CompletionStyle` — matching strategy (prefix, substring, flex, basic)
 //! - Builtin functions for Elisp: `read-from-minibuffer`, `completing-read`, `y-or-n-p`, etc.
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};
@@ -25,7 +26,7 @@ use super::value::{Value, ValueKind, VecLikeType};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -36,7 +37,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -47,7 +48,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -58,7 +59,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -69,7 +70,7 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     value.as_lisp_string().cloned().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )
     })
@@ -1392,7 +1393,7 @@ pub(crate) fn builtin_innermost_minibuffer_p_ctx(
 fn validate_minibufferp_args(args: &[Value]) -> Result<(), Flow> {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("minibufferp"),
                 Value::fixnum(args.len() as i64),
@@ -1404,7 +1405,7 @@ fn validate_minibufferp_args(args: &[Value]) -> Result<(), Flow> {
             ValueKind::Nil | ValueKind::String | ValueKind::Veclike(VecLikeType::Buffer) => {}
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("bufferp"), *bufferish],
                 ));
             }
@@ -1448,7 +1449,7 @@ pub(crate) fn builtin_exit_recursive_edit(
     // GNU Emacs checks: command_loop_level > 0 || minibuf_level > 0
     if eval.recursive_command_loop_depth() == 0 && eval.minibuffers.depth() == 0 {
         return Err(signal(
-            "user-error",
+            LispCondition::UserError,
             vec![Value::string("No recursive edit is in progress")],
         ));
     }
@@ -1531,7 +1532,7 @@ fn resolve_minibuffer_buffer_arg(
             .as_utf8_str()
             .and_then(|name| buffers.find_buffer_by_name(name))),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), *val],
         )),
     }
@@ -1553,7 +1554,7 @@ pub(crate) fn builtin_abort_recursive_edit(
     // GNU Emacs checks: command_loop_level > 0 || minibuf_level > 0
     if eval.recursive_command_loop_depth() == 0 && eval.minibuffers.depth() == 0 {
         return Err(signal(
-            "user-error",
+            LispCondition::UserError,
             vec![Value::string("No recursive edit is in progress")],
         ));
     }
@@ -2281,7 +2282,12 @@ fn completion_string_matches_regexps(
         ) {
             Ok(Some(_)) => {} // matched — continue checking remaining regexps
             Ok(None) => return Ok(false),
-            Err(message) => return Err(signal("invalid-regexp", vec![Value::string(message)])),
+            Err(message) => {
+                return Err(signal(
+                    LispCondition::InvalidRegexp,
+                    vec![Value::string(message)],
+                ));
+            }
         }
     }
     Ok(true)
@@ -2504,7 +2510,7 @@ pub(crate) fn builtin_flex_cost_gotoh(
 
 fn end_of_file_stdin_error() -> Flow {
     signal(
-        "end-of-file",
+        LispCondition::EndOfFile,
         vec![Value::string("Error reading from stdin")],
     )
 }

@@ -6,6 +6,7 @@ use super::casetab::{CaseMap, CaseTableOverride};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{EmacsBytePos, EmacsByteRange};
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -16,7 +17,7 @@ use crate::heap_types::LispString;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -27,7 +28,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -39,7 +40,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -539,14 +540,18 @@ fn noncontiguous_case_regions(
         .eval_symbol("region-extract-function")
         .unwrap_or(Value::symbol("buffer-substring"));
     let bounds = eval.funcall_general(extractor, vec![Value::symbol("bounds")])?;
-    let bounds_list = crate::emacs_core::value::list_to_vec(&bounds)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), bounds]))?;
+    let bounds_list = crate::emacs_core::value::list_to_vec(&bounds).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), bounds],
+        )
+    })?;
     bounds_list
         .into_iter()
         .map(|value| {
             if !value.is_cons() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("consp"), value],
                 ));
             }
@@ -626,7 +631,10 @@ fn casify_region_in_state(
                 continue;
             }
             if super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
-                return Err(signal("buffer-read-only", vec![buf.name_value()]));
+                return Err(signal(
+                    LispCondition::BufferReadOnly,
+                    vec![buf.name_value()],
+                ));
             }
             let buffer_id = eval
                 .buffers
@@ -713,7 +721,7 @@ fn casify_word_in_state(
     let changed = replacement != text;
     if changed {
         if read_only {
-            return Err(signal("buffer-read-only", vec![buffer_name]));
+            return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
         }
         replace_current_buffer_region_in_buffers(eval, byte_range, &replacement, false)?;
     }
@@ -762,7 +770,7 @@ fn capitalize_with_word_pred(
             Ok(Value::fixnum(upcase_char_override(code, casetab)))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
@@ -838,7 +846,7 @@ fn upcase_initials_with_word_pred(
             Ok(Value::fixnum(upcase_char_override(code, casetab)))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("char-or-string-p"), args[0]],
         )),
     }
@@ -1243,7 +1251,7 @@ pub(crate) fn builtin_char_resolve_modifiers(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(n) => n,
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), args[0]],
             ));
         }

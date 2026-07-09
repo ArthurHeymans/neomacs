@@ -76,7 +76,7 @@ fn expect_optional_live_frame_designator_in_state(
         }
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("frame-live-p"), *value],
     ))
 }
@@ -534,7 +534,7 @@ pub(super) fn expect_optional_live_window_designator(
         }
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("window-live-p"), *value],
     ))
 }
@@ -801,7 +801,7 @@ pub(crate) fn builtin_window_configuration_frame(args: Vec<Value>) -> EvalResult
     expect_args("window-configuration-frame", &args, 1)?;
     window_configuration_frame_from_value(&args[0]).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-configuration-p"), args[0]],
         )
     })
@@ -888,13 +888,13 @@ pub(crate) fn builtin_window_configuration_equal_p(args: Vec<Value>) -> EvalResu
     expect_args("window-configuration-equal-p", &args, 2)?;
     let Some((_, serial_a)) = window_configuration_parts_from_value(&args[0]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-configuration-p"), args[0]],
         ));
     };
     let Some((_, serial_b)) = window_configuration_parts_from_value(&args[1]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-configuration-p"), args[1]],
         ));
     };
@@ -997,7 +997,7 @@ pub(crate) fn builtin_set_window_configuration(
     expect_range_args("set-window-configuration", &args, 1, 3)?;
     let Some((_frame, serial)) = window_configuration_parts_from_value(&args[0]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-configuration-p"), args[0]],
         ));
     };
@@ -1153,7 +1153,7 @@ pub(super) fn builtin_internal_after_save_selected_window(
         save_selected_window_state_from_value(&args[0])
     else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::symbol("vectorp"),
                 args.first().cloned().unwrap_or(Value::NIL),
@@ -1266,7 +1266,7 @@ pub(crate) fn builtin_run_window_scroll_functions(
     let window_id = crate::window::WindowId(wid);
     let frame_id = eval.frames.find_window_frame_id(window_id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), window_arg],
         )
     })?;
@@ -1296,7 +1296,7 @@ pub(crate) fn builtin_featurep(eval: &mut super::eval::Context, args: Vec<Value>
     let feature = eval.unwrap_symbol(args[0]);
     let sym_id = feature.as_symbol_id().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;
@@ -1321,7 +1321,7 @@ pub(crate) fn builtin_featurep(eval: &mut super::eval::Context, args: Vec<Value>
         .unwrap_or(Value::NIL);
     let items = list_to_vec(&subfeatures).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), subfeatures],
         )
     })?;

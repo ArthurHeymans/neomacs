@@ -10,6 +10,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
@@ -59,7 +60,7 @@ impl TimeZoneSymbol {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -70,7 +71,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -435,11 +436,14 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
             let low_or_tail = val.cons_cdr();
             if !low_or_tail.is_cons() {
                 let ticks = high.as_int().ok_or_else(|| {
-                    signal("wrong-type-argument", vec![Value::symbol("integerp"), high])
+                    signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("integerp"), high],
+                    )
                 })?;
                 let hz = low_or_tail.as_int().ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("integerp"), low_or_tail],
                     )
                 })?;
@@ -451,23 +455,27 @@ fn parse_time_detailed(val: &Value) -> Result<ParsedTime, Flow> {
                 });
             }
 
-            let items = list_to_vec(val)
-                .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *val]))?;
+            let items = list_to_vec(val).ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), *val],
+                )
+            })?;
             if items.len() < 2 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), *val],
                 ));
             }
             let high = items[0].as_int().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), items[0]],
                 )
             })?;
             let low = items[1].as_int().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), items[1]],
                 )
             })?;
@@ -1499,7 +1507,7 @@ fn time_convert_default_hz(value: &Value) -> i64 {
 fn require_fixnum_component(value: &Value) -> Result<i64, Flow> {
     value.as_fixnum().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )
     })
@@ -1861,7 +1869,7 @@ fn check_cons(obj: &Value) -> Result<(Value, Value), Flow> {
         Ok((obj.cons_car(), obj.cons_cdr()))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), *obj],
         ))
     }
@@ -1927,7 +1935,7 @@ pub(crate) fn builtin_encode_time(args: Vec<Value>) -> EvalResult {
         )
     } else if args.len() < 6 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("encode-time"),
                 Value::fixnum(args.len() as i64),

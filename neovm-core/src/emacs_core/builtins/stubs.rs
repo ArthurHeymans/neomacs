@@ -66,7 +66,7 @@ fn tty_display_dimension(
 
     let Some(frame) = ctx.frames.get(frame_id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::symbol("framep"),
                 args.first().copied().unwrap_or(Value::NIL),
@@ -771,7 +771,7 @@ fn fillarray_character_code_from_value(value: &Value) -> Result<u32, Flow> {
             Ok(n as u32)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -861,7 +861,7 @@ pub(crate) fn builtin_fillarray(args: Vec<Value>) -> EvalResult {
             Ok(args[0])
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), args[0]],
         )),
     }
@@ -885,7 +885,7 @@ fn fringe_bits_rows(bits: &Value) -> Result<Vec<u32>, Flow> {
         return Ok(s.as_bytes().iter().map(|b| u32::from(*b)).collect());
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("arrayp"), *bits],
     ))
 }
@@ -933,7 +933,7 @@ pub(crate) fn builtin_define_fringe_bitmap(
     let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
     let Some(sym) = super::symbols::symbol_id_checked(&args[0], symbols_with_pos_enabled) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
@@ -942,7 +942,7 @@ pub(crate) fn builtin_define_fringe_bitmap(
         ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String
     ) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), args[1]],
         ));
     }
@@ -956,7 +956,7 @@ pub(crate) fn builtin_define_fringe_bitmap(
             let clamped = requested.clamp(1, 16);
             if clamped != requested {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![*width, Value::string("Width must be from 1 to 16")],
                 ));
             }
@@ -1038,7 +1038,7 @@ pub(crate) fn builtin_destroy_fringe_bitmap(
     let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
     let Some(sym) = super::symbols::symbol_id_checked(&args[0], symbols_with_pos_enabled) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
@@ -1100,13 +1100,23 @@ pub(crate) fn builtin_external_debugging_output(
         use std::io::Write;
         file.write_all(bytes)
             .and_then(|_| file.flush())
-            .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+            .map_err(|err| {
+                signal(
+                    LispCondition::FileError,
+                    vec![Value::string(err.to_string())],
+                )
+            })?;
     } else {
         use std::io::Write;
         std::io::stderr()
             .write_all(bytes)
             .and_then(|_| std::io::stderr().flush())
-            .map_err(|err| signal("file-error", vec![Value::string(err.to_string())]))?;
+            .map_err(|err| {
+                signal(
+                    LispCondition::FileError,
+                    vec![Value::string(err.to_string())],
+                )
+            })?;
     }
     Ok(args[0])
 }
@@ -1186,7 +1196,7 @@ pub(crate) fn builtin_handle_switch_frame(args: Vec<Value>) -> EvalResult {
                         ValueKind::Cons => cdr.cons_car(),
                         _ => {
                             return Err(signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("framep"), args[0]],
                             ));
                         }
@@ -1194,7 +1204,7 @@ pub(crate) fn builtin_handle_switch_frame(args: Vec<Value>) -> EvalResult {
                 }
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("framep"), args[0]],
                     ));
                 }
@@ -1202,14 +1212,14 @@ pub(crate) fn builtin_handle_switch_frame(args: Vec<Value>) -> EvalResult {
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("framep"), args[0]],
             ));
         }
     };
     if !frame.is_frame() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("framep"), frame],
         ));
     }
@@ -1249,7 +1259,7 @@ pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {
     expect_range_args("describe-buffer-bindings", &args, 1, 3)?;
     if !args[0].is_buffer() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), args[0]],
         ));
     }
@@ -1261,7 +1271,7 @@ pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {
                 || prefixes.is_nil())
         {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("sequencep"), *prefixes],
             ));
         }
@@ -1277,7 +1287,7 @@ pub(crate) fn builtin_describe_vector(
     let is_char_table = super::chartable::is_char_table(&args[0]);
     if !is_char_table && !matches!(args[0].kind(), ValueKind::Veclike(VecLikeType::Vector)) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vector-or-char-table-p"), args[0]],
         ));
     }
@@ -1502,11 +1512,11 @@ pub(crate) fn builtin_frame_or_buffer_changed_p(args: Vec<Value>) -> EvalResult 
     }
     if symbol.as_symbol_name().is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *symbol],
         ));
     }
-    Err(signal("void-variable", vec![*symbol]))
+    Err(signal(LispCondition::VoidVariable, vec![*symbol]))
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -1619,7 +1629,7 @@ pub(crate) fn builtin_fringe_bitmaps_at_pos(args: Vec<Value>) -> EvalResult {
     if let Some(window) = args.get(1) {
         if !window.is_nil() && !window.is_window() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *window],
             ));
         }
@@ -1674,13 +1684,13 @@ pub(crate) fn builtin_garbage_collect_maybe(
     expect_args("garbage-collect-maybe", &args, 1)?;
     let Some(factor) = args[0].as_fixnum() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), args[0]],
         ));
     };
     if factor < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), Value::fixnum(factor)],
         ));
     }
@@ -1704,7 +1714,7 @@ pub(crate) fn builtin_garbage_collect_heapsize(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_get_unicode_property_internal(args: Vec<Value>) -> EvalResult {
     expect_args("get-unicode-property-internal", &args, 2)?;
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("char-table-p"), args[0]],
     ))
 }
@@ -1726,12 +1736,12 @@ fn expect_characterp_from_int(value: &Value) -> Result<char, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if n >= 0 => char::from_u32(n as u32).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), *value],
             )
         }),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -1794,7 +1804,7 @@ fn expect_window_live_or_nil_in_state(frames: &FrameManager, value: &Value) -> R
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), *value],
         ))
     }
@@ -1804,7 +1814,7 @@ pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
     expect_range_args("font-get-glyphs", &args, 3, 4)?;
     if !is_font_object(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font-object"), args[0]],
         ));
     }
@@ -1817,7 +1827,7 @@ pub(crate) fn builtin_font_has_char_p(args: Vec<Value>) -> EvalResult {
     expect_range_args("font-has-char-p", &args, 2, 3)?;
     if !is_font_object(&args[0]) && !is_font_spec(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font"), args[0]],
         ));
     }
@@ -1829,13 +1839,13 @@ pub(crate) fn builtin_font_match_p(args: Vec<Value>) -> EvalResult {
     expect_args("font-match-p", &args, 2)?;
     if !is_font_spec(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font-spec"), args[0]],
         ));
     }
     if !is_font_spec(&args[1]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font-spec"), args[1]],
         ));
     }
@@ -1858,7 +1868,7 @@ pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
     expect_args("font-variation-glyphs", &args, 2)?;
     if !is_font_object(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("font-object"), args[0]],
         ));
     }
@@ -1896,7 +1906,7 @@ fn expect_window_live_or_nil(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), *value],
         ))
     }
@@ -1907,7 +1917,7 @@ pub(super) fn expect_window_valid_or_nil(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-valid-p"), *value],
         ))
     }
@@ -1918,7 +1928,7 @@ fn expect_frame_live_or_nil(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), *value],
         ))
     }
@@ -2097,7 +2107,7 @@ pub(crate) fn builtin_internal_decode_string_utf_8(args: Vec<Value>) -> EvalResu
     // GNU: CHECK_FIXNUM(count)
     if !args[6].is_fixnum() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), args[6]],
         ));
     }
@@ -2116,7 +2126,7 @@ pub(crate) fn builtin_internal_encode_string_utf_8(args: Vec<Value>) -> EvalResu
     }
     if !args[6].is_fixnum() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), args[6]],
         ));
     }
@@ -2197,7 +2207,7 @@ pub(crate) fn builtin_remember_mouse_glyph(
     expect_args("remember-mouse-glyph", &args, 3)?;
     if !args[0].is_nil() && !display::live_frame_designator_p(eval, &args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), args[0]],
         ));
     }

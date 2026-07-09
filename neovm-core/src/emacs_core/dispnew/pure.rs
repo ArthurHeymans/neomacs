@@ -5,6 +5,7 @@
 //! send-string-to-terminal, internal-show-cursor, force-window-update).
 
 use crate::emacs_core::display::live_frame_designator_p;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
 use crate::emacs_core::terminal::pure::expect_terminal_designator_eval;
 use crate::emacs_core::value::*;
@@ -24,7 +25,7 @@ pub(crate) fn reset_dispnew_thread_locals() {}
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -35,7 +36,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -46,7 +47,7 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -64,7 +65,7 @@ fn expect_window_designator(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), *value],
         ))
     }
@@ -92,7 +93,7 @@ fn expect_window_designator_eval(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), *value],
         ))
     }
@@ -120,7 +121,7 @@ fn expect_window_designator_in_state(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), *value],
         ))
     }
@@ -188,7 +189,7 @@ pub(crate) fn builtin_redraw_frame(
     if let Some(frame) = args.first() {
         if !frame.is_nil() && !live_frame_designator_p(eval, frame) {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *frame],
             ));
         }
@@ -235,7 +236,7 @@ pub(crate) fn builtin_send_string_to_terminal(
             Ok(Value::NIL)
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )),
     }

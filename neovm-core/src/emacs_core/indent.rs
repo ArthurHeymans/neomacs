@@ -13,6 +13,7 @@ use super::value::*;
 use crate::buffer::{
     Buffer, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
 };
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use std::cell::Cell;
@@ -77,7 +78,7 @@ fn cached_current_column(buffer_id: u64, point: EmacsBytePos, modiff: i64) -> Op
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -88,7 +89,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -99,7 +100,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -111,7 +112,7 @@ fn expect_fixnump(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *val],
         )),
     }
@@ -121,7 +122,7 @@ fn expect_wholenump(val: &Value) -> Result<usize, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n as usize),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *val],
         )),
     }
@@ -918,7 +919,10 @@ fn delete_horizontal_space_at_point(
     }
 
     if buffer_read_only_active(eval, buf) {
-        return Err(signal("buffer-read-only", vec![buf.name_value()]));
+        return Err(signal(
+            LispCondition::BufferReadOnly,
+            vec![buf.name_value()],
+        ));
     }
 
     let current_id = eval
@@ -1077,7 +1081,7 @@ pub(crate) fn builtin_move_to_column(
 
     if let Some((tab_byte, col_before_tab, col_after_tab)) = tab_split {
         if read_only {
-            return Err(signal("buffer-read-only", vec![buffer_name]));
+            return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
         }
         let _ = ctx.buffers.goto_buffer_emacs_byte_pos(current_id, tab_byte);
         let pad = spaces_to_column(col_before_tab, target);
@@ -1121,7 +1125,7 @@ pub(crate) fn builtin_move_to_column(
 
     if force_is_t && reached < target {
         if read_only {
-            return Err(signal("buffer-read-only", vec![buffer_name]));
+            return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
         }
         let use_tabs = indent_tabs_mode_in_state(&ctx.obarray, &[], ctx.buffers.get(current_id));
         let pad = indent_to_column_string(reached, target, tabw, use_tabs);
@@ -1184,7 +1188,10 @@ pub(crate) fn builtin_indent_to(
     }
 
     if super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
-        return Err(signal("buffer-read-only", vec![buf.name_value()]));
+        return Err(signal(
+            LispCondition::BufferReadOnly,
+            vec![buf.name_value()],
+        ));
     }
 
     let use_tabs = indent_tabs_mode_in_state(&ctx.obarray, &[], Some(buf));

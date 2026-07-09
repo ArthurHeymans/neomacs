@@ -8,6 +8,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -67,7 +68,7 @@ fn parse_sound_spec(sound: Value) -> Result<SoundSpec, Flow> {
     }
 
     if (elements.len() - 1) % 2 != 0 {
-        return Err(signal("malformed-keyword-arg-list", vec![]));
+        return Err(signal(LispCondition::MalformedKeywordArgList, vec![]));
     }
 
     let plist_val = if elements.len() > 1 {
@@ -249,7 +250,7 @@ fn open_output_stream(
         }
 
         return Err(signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string("Cannot open sound device"),
                 Value::string(device_name),
@@ -269,7 +270,7 @@ fn open_output_stream(
 fn play_sound_file(path: &str, volume: f32, device: Option<&str>) -> Result<(), Flow> {
     let file = std::fs::File::open(path).map_err(|e| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string(&format!("Cannot open sound file: {e}")),
                 Value::string(path),

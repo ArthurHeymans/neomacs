@@ -6,6 +6,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::tagged::header::store_value_atomic;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -171,7 +172,7 @@ impl Default for CaseTableManager {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -182,7 +183,10 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 /// Signal `wrong-type-argument` with a predicate name.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn wrong_type(pred: &str, got: &Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol(pred), *got])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol(pred), *got],
+    )
 }
 
 /// Extract a character from a Value (Int or Char), signal otherwise.
@@ -421,7 +425,7 @@ pub(crate) fn builtin_set_case_table(
     expect_args("set-case-table", &args, 1)?;
     if !is_case_table(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("case-table-p"), args[0]],
         ));
     }
@@ -440,7 +444,7 @@ pub(crate) fn builtin_set_standard_case_table(
     expect_args("set-standard-case-table", &args, 1)?;
     if !is_case_table(&args[0]) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("case-table-p"), args[0]],
         ));
     }
@@ -828,7 +832,7 @@ fn map_case_table(
 fn ensure_case_table_derived_slots(table: Value) -> Result<(), Flow> {
     if !is_case_table(&table) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("case-table-p"), table],
         ));
     }

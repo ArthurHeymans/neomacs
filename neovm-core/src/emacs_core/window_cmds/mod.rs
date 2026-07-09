@@ -12,6 +12,7 @@ use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use crate::window::{
     CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
     SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId,
@@ -51,7 +52,7 @@ pub(crate) use super::builtins::{
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -63,7 +64,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -75,7 +76,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -88,7 +89,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -100,7 +101,7 @@ fn expect_number(value: &Value) -> Result<f64, Flow> {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(value.xfloat()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *value],
         )),
     }
@@ -112,7 +113,7 @@ fn expect_buffer_name_string(value: &Value) -> Result<String, Flow> {
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), *value],
             )
         })
@@ -210,7 +211,7 @@ fn decode_all_frames_scope(
         let frame_id = FrameId(raw_id);
         if frames.get(frame_id).is_none() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), value],
             ));
         }
@@ -259,7 +260,7 @@ fn parse_integer_or_marker_arg(value: &Value) -> Result<IntegerOrMarkerArg, Flow
             })
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -282,7 +283,7 @@ fn expect_number_or_marker_count(value: &Value) -> Result<i64, Flow> {
             IntegerOrMarkerArg::Int(pos) => Ok(pos),
         },
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -318,7 +319,7 @@ fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }
@@ -331,7 +332,7 @@ fn expect_number_or_marker(value: &Value) -> Result<f64, Flow> {
         ValueKind::Fixnum(n) => Ok(n as f64),
         ValueKind::Float => Ok(value.xfloat()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -345,7 +346,7 @@ fn expect_margin_width(value: &Value) -> Result<usize, Flow> {
         ValueKind::Fixnum(n) => {
             if n < 0 || n > MAX_MARGIN {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![
                         Value::fixnum(n),
                         Value::fixnum(0),
@@ -356,7 +357,7 @@ fn expect_margin_width(value: &Value) -> Result<usize, Flow> {
             Ok(n as usize)
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -392,7 +393,7 @@ fn buffer_local_optional_dimension(
     } else {
         Ok(Some(i32::try_from(expect_int(&value)?).map_err(|_| {
             signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![value, Value::fixnum(0), Value::fixnum(i64::from(i32::MAX))],
             )
         })?))
@@ -458,7 +459,7 @@ fn resolve_window_id_with_pred_in_state(
     let val = arg.unwrap(); // None case handled above
     let Some(wid) = window_id_from_designator(val) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(pred), *val],
         ));
     };
@@ -466,7 +467,7 @@ fn resolve_window_id_with_pred_in_state(
         Ok((frame_id, wid))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(pred), *val],
         ))
     }
@@ -533,7 +534,7 @@ fn resolve_window_object_id_with_pred_in_state(
     let val = arg.unwrap();
     let Some(wid) = window_id_from_designator(val) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(pred), *val],
         ));
     };
@@ -541,7 +542,7 @@ fn resolve_window_object_id_with_pred_in_state(
         Ok(wid)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(pred), *val],
         ))
     }
@@ -571,7 +572,7 @@ fn resolve_window_id_or_error_in_state(
         // GNU window.c: CHECK_VALID_WINDOW signals wrong-type-argument
         // with window-valid-p (or windowp for non-window types).
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), *value],
         ));
     };
@@ -579,7 +580,7 @@ fn resolve_window_id_or_error_in_state(
         Ok((fid, wid))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-valid-p"), *value],
         ))
     }
@@ -683,7 +684,7 @@ pub(crate) fn resolve_frame_id_in_state(
                 Ok(fid)
             } else {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol(predicate), Value::fixnum(n)],
                 ))
             }
@@ -695,13 +696,13 @@ pub(crate) fn resolve_frame_id_in_state(
                 Ok(fid)
             } else {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol(predicate), Value::make_frame(raw_id)],
                 ))
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(predicate), *val],
         )),
     }
@@ -737,7 +738,7 @@ fn resolve_frame_or_window_frame_id_in_state(
                 Ok(fid)
             } else {
                 Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol(predicate), Value::make_frame(raw_id)],
                 ))
             }
@@ -752,7 +753,7 @@ fn resolve_frame_or_window_frame_id_in_state(
                 return Ok(fid);
             }
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol(predicate), Value::fixnum(n)],
             ))
         }
@@ -763,12 +764,12 @@ fn resolve_frame_or_window_frame_id_in_state(
                 return Ok(fid);
             }
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol(predicate), Value::make_window(raw_id)],
             ))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(predicate), *val],
         )),
     }
@@ -1072,7 +1073,7 @@ fn filtered_window_prev_buffers(
 ) -> Result<Vec<Value>, Flow> {
     let prev_entries = list_to_vec(&prev_raw).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), prev_raw],
         )
     })?;
@@ -1095,7 +1096,7 @@ fn filtered_window_next_buffers(
 ) -> Result<Vec<Value>, Flow> {
     let next_entries = list_to_vec(&next_raw).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), next_raw],
         )
     })?;
@@ -1600,7 +1601,7 @@ pub(crate) fn builtin_set_frame_selected_window(
         Some(wid) => {
             if eval.frames.find_window_frame_id(wid).is_none() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), args[1]],
                 ));
             }
@@ -1608,7 +1609,7 @@ pub(crate) fn builtin_set_frame_selected_window(
         }
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), args[1]],
             ));
         }
@@ -1771,7 +1772,7 @@ pub(crate) fn builtin_window_buffer(
     let val = args.first().unwrap();
     let Some(wid) = window_id_from_designator(val) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("windowp"), *val],
         ));
     };
@@ -1782,7 +1783,7 @@ pub(crate) fn builtin_window_buffer(
         return Ok(Value::NIL);
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("windowp"), *val],
     ))
 }
@@ -2459,7 +2460,7 @@ pub(crate) fn builtin_window_bump_use_time(
                 let wid = WindowId(raw_id);
                 if frames.find_window_frame_id(wid).is_none() {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("window-live-p"), Value::make_window(raw_id)],
                     ));
                 }
@@ -2467,7 +2468,7 @@ pub(crate) fn builtin_window_bump_use_time(
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), *val],
                 ));
             }
@@ -3007,7 +3008,7 @@ pub(crate) fn builtin_set_window_fringes(
     } else {
         Some(i32::try_from(expect_int(&args[1])?).map_err(|_| {
             signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![
                     args[1],
                     Value::fixnum(0),
@@ -3022,7 +3023,7 @@ pub(crate) fn builtin_set_window_fringes(
         } else {
             Some(i32::try_from(expect_int(arg)?).map_err(|_| {
                 signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![*arg, Value::fixnum(0), Value::fixnum(i64::from(i32::MAX))],
                 )
             })?)
@@ -3089,7 +3090,7 @@ pub(crate) fn builtin_set_window_scroll_bars(
         } else {
             Some(i32::try_from(expect_int(arg)?).map_err(|_| {
                 signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![*arg, Value::fixnum(0), Value::fixnum(i64::from(i32::MAX))],
                 )
             })?)
@@ -3110,7 +3111,7 @@ pub(crate) fn builtin_set_window_scroll_bars(
         } else {
             Some(i32::try_from(expect_int(arg)?).map_err(|_| {
                 signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![*arg, Value::fixnum(0), Value::fixnum(i64::from(i32::MAX))],
                 )
             })?)
@@ -3543,7 +3544,7 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
         let arg = args.get(2).unwrap();
         let Some(wid) = window_id_from_designator(arg) else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("windowp"), *arg],
             ));
         };
@@ -3551,12 +3552,12 @@ pub(crate) fn builtin_window_list(eval: &mut super::eval::Context, args: Vec<Val
             Some((wid, window_fid))
         } else if frames.is_window_object_id(wid) {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *arg],
             ));
         } else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("windowp"), *arg],
             ));
         }
@@ -3643,13 +3644,13 @@ pub(crate) fn builtin_window_list_1(
                 (fid, wid)
             } else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), args[0]],
                 ));
             }
         } else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *val],
             ));
         }
@@ -3738,7 +3739,7 @@ pub(crate) fn builtin_get_buffer_window(
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), value],
                 ));
             }
@@ -4293,7 +4294,7 @@ pub(crate) fn builtin_select_window(
         Some(wid) => wid,
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), args[0]],
             ));
         }
@@ -4303,7 +4304,7 @@ pub(crate) fn builtin_select_window(
     // *live* one, so selecting it signals `wrong-type-argument window-live-p'.
     if !eval.frames.is_live_window_id(wid) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), args[0]],
         ));
     }
@@ -4318,7 +4319,7 @@ pub(crate) fn builtin_select_window(
                 .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
             if !frame.select_window(wid) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), args[0]],
                 ));
             }
@@ -4485,14 +4486,14 @@ pub(crate) fn builtin_set_window_buffer(
                 Some(id) => id,
                 None => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("bufferp"), Value::NIL],
                     ));
                 }
             },
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[1]],
                 ));
             }
@@ -4757,7 +4758,7 @@ pub(crate) fn builtin_switch_to_buffer(
             ValueKind::String => find_or_create_buffer_by_name_arg(&mut eval.buffers, &args[0])?,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), args[0]],
                 ));
             }
@@ -4829,7 +4830,7 @@ pub(crate) fn builtin_display_buffer(
         },
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -5001,7 +5002,7 @@ pub(crate) fn builtin_pop_to_buffer(
         ValueKind::String => find_or_create_buffer_by_name_arg(&mut eval.buffers, &args[0])?,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -5176,7 +5177,7 @@ fn check_frame_pixels(value: &Value, pixelwise: bool, item_size: f32) -> Result<
     let size = expect_int(value)?;
     if size <= 0 {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*value, Value::fixnum(1), Value::fixnum(i64::from(i32::MAX))],
         ));
     }
@@ -5187,13 +5188,13 @@ fn check_frame_pixels(value: &Value, pixelwise: bool, item_size: f32) -> Result<
     };
     let pixels = size.checked_mul(unit).ok_or_else(|| {
         signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*value, Value::fixnum(1), Value::fixnum(i64::from(i32::MAX))],
         )
     })?;
     if pixels <= 0 || pixels > u32::MAX as i64 {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*value, Value::fixnum(1), Value::fixnum(i64::from(i32::MAX))],
         ));
     }
@@ -5659,11 +5660,11 @@ fn recenter_missing_display_error() -> Flow {
 }
 
 fn scroll_up_batch_error() -> Flow {
-    signal("end-of-buffer", vec![])
+    signal(LispCondition::EndOfBuffer, vec![])
 }
 
 fn scroll_down_batch_error() -> Flow {
-    signal("beginning-of-buffer", vec![])
+    signal(LispCondition::BeginningOfBuffer, vec![])
 }
 
 impl super::eval::Context {
@@ -6219,7 +6220,7 @@ pub(crate) fn builtin_make_frame_invisible(
         })
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![
                     Value::symbol("frame-live-p"),
                     args.first().copied().unwrap_or(Value::NIL),
@@ -6318,7 +6319,7 @@ pub(crate) fn builtin_select_frame(
             let fid = FrameId(n as u64);
             if frames.get(fid).is_none() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), Value::fixnum(n)],
                 ));
             }
@@ -6329,7 +6330,7 @@ pub(crate) fn builtin_select_frame(
             let fid = FrameId(raw_id);
             if frames.get(fid).is_none() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), Value::make_frame(raw_id)],
                 ));
             }
@@ -6337,7 +6338,7 @@ pub(crate) fn builtin_select_frame(
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), args[0]],
             ));
         }
@@ -6347,7 +6348,7 @@ pub(crate) fn builtin_select_frame(
     }
     if !frames.select_frame(fid) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), args[0]],
         ));
     }
@@ -6373,7 +6374,7 @@ pub(crate) fn builtin_select_frame_set_input_focus(
             let fid = FrameId(n as u64);
             if frames.get(fid).is_none() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), Value::fixnum(n)],
                 ));
             }
@@ -6384,7 +6385,7 @@ pub(crate) fn builtin_select_frame_set_input_focus(
             let fid = FrameId(raw_id);
             if frames.get(fid).is_none() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), Value::make_frame(raw_id)],
                 ));
             }
@@ -6392,7 +6393,7 @@ pub(crate) fn builtin_select_frame_set_input_focus(
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), args[0]],
             ));
         }
@@ -6402,7 +6403,7 @@ pub(crate) fn builtin_select_frame_set_input_focus(
     }
     if !frames.select_frame(fid) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), args[0]],
         ));
     }
@@ -6970,7 +6971,7 @@ pub(crate) fn builtin_set_frame_size_and_position_pixelwise(
         let gravity = expect_int(gravity)?;
         if !(0..=10).contains(&gravity) {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![
                     *args.get(5).expect("gravity"),
                     Value::fixnum(0),
@@ -7197,7 +7198,7 @@ pub(crate) fn builtin_make_terminal_frame(
     expect_args("make-terminal-frame", &args, 1)?;
     if !args[0].is_nil() && !args[0].is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), args[0]],
         ));
     }
@@ -8033,7 +8034,7 @@ pub(crate) fn builtin_set_frame_window_state_change(
     let state = args.get(1).copied().unwrap_or(Value::NIL).is_truthy();
     let frame = eval.frames.get_mut(fid).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::symbol("frame-live-p"),
                 args.first().copied().unwrap_or(Value::NIL),
@@ -8656,14 +8657,14 @@ pub(crate) fn builtin_frame_visible_p(
         ValueKind::Veclike(VecLikeType::Frame) => FrameId(val.as_frame_id().unwrap()),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("frame-live-p"), *val],
             ));
         }
     };
     let frame = frames.get(fid).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), args[0]],
         )
     })?;

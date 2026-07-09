@@ -4,6 +4,7 @@
 //! Mirrors GNU `plist-get` / `plist-put` / `plist-member` semantics
 //! (`fns.c`). Comparison uses `eq` (via `eq_value`) as GNU does.
 
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{Flow, signal};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
@@ -112,7 +113,7 @@ pub fn plist_put_swp(
     if !plist.is_cons() {
         if !plist.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("plistp"), plist],
             ));
         }
@@ -126,7 +127,7 @@ pub fn plist_put_swp(
             // End of walk. If it's nil, append. If not, malformed plist.
             if !tail.is_nil() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }
@@ -143,13 +144,13 @@ pub fn plist_put_swp(
             // Odd-length plist (non-cons tail after key). Signal as malformed.
             if !rest.is_nil() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("plistp"), plist],
                 ));
             }
             // rest is nil — odd-length plist. GNU treats as malformed too — signal.
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("plistp"), plist],
             ));
         }
@@ -179,14 +180,14 @@ pub fn plist_check(plist: Value) -> Result<(), Flow> {
         }
         if !tail.is_cons() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("plistp"), plist],
             ));
         }
         let rest = tail.cons_cdr();
         if !rest.is_cons() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("plistp"), plist],
             ));
         }

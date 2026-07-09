@@ -128,7 +128,7 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                     }
                     _other => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("arrayp"), *value],
                         ));
                     }
@@ -184,7 +184,7 @@ fn expect_key_description(value: &Value) -> Result<Vec<KeyEvent>, Flow> {
     match super::kbd::key_events_from_designator(value) {
         Ok(events) => Ok(events),
         Err(super::kbd::KeyDesignatorError::WrongType(other)) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("arrayp"), other],
         )),
         Err(super::kbd::KeyDesignatorError::Parse(msg)) => {
@@ -228,13 +228,13 @@ pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value])
                 ValueKind::Cons => {
                     // Lists are not valid as key sequences for prefix
                     return Err(super::error::signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("arrayp"), *prefix_arg],
                     ));
                 }
                 _ => {
                     return Err(super::error::signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), *prefix_arg],
                     ));
                 }
@@ -661,7 +661,7 @@ pub(super) fn builtin_describe_buffer_bindings(
     expect_range_args("describe-buffer-bindings", &args, 1, 3)?;
     if !args[0].is_buffer() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), args[0]],
         ));
     }
@@ -673,7 +673,7 @@ pub(super) fn builtin_describe_buffer_bindings(
                 || prefixes.is_nil())
         {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("sequencep"), *prefixes],
             ));
         }
@@ -689,7 +689,7 @@ pub(super) fn builtin_describe_buffer_bindings(
 
     let Some(buffer_id) = buffer.as_buffer_id() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), buffer],
         ));
     };
@@ -1054,14 +1054,14 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
         ValueKind::Fixnum(n) if (0..=KEY_CHAR_CODE_MASK).contains(&n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("characterp"), args[0]],
             ));
         }
     };
     if (code & !KEY_CHAR_CODE_MASK) != 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), args[0]],
         ));
     }
@@ -1095,7 +1095,7 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
                     encoded
                 } else {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("characterp"), args[0]],
                     ));
                 }

@@ -16,6 +16,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::regex::MatchGroup;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos};
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ use crate::emacs_core::value::ValueKind;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -37,7 +38,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -59,7 +60,7 @@ fn buffer_match_char_pos_to_byte_pos(
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -72,7 +73,7 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *val],
         )),
     }
@@ -82,7 +83,7 @@ fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *val],
         )),
     }
@@ -93,15 +94,19 @@ fn expect_integer_or_marker(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
     }
 }
 
 fn expect_lisp_string(val: &Value) -> Result<&'static crate::heap_types::LispString, Flow> {
-    val.as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
+    val.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *val],
+        )
+    })
 }
 
 fn cloned_lisp_string_value(string: &crate::heap_types::LispString) -> Value {
@@ -149,14 +154,14 @@ fn normalize_string_start_arg(string: &str, start: Option<&Value>) -> Result<usi
 
     let Some(start_idx) = normalized else {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::string(string), Value::fixnum(raw_start)],
         ));
     };
 
     if !(0..=len).contains(&start_idx) {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::string(string), Value::fixnum(raw_start)],
         ));
     }
@@ -193,13 +198,13 @@ pub(crate) fn normalize_lisp_string_start_arg(
         };
         let Some(start_idx) = normalized else {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![cloned_lisp_string_value(string), Value::fixnum(raw_start)],
             ));
         };
         if !(0..=len).contains(&start_idx) {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![cloned_lisp_string_value(string), Value::fixnum(raw_start)],
             ));
         }
@@ -214,13 +219,13 @@ pub(crate) fn normalize_lisp_string_start_arg(
     };
     let Some(start_idx) = normalized else {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![cloned_lisp_string_value(string), Value::fixnum(raw_start)],
         ));
     };
     if !(0..=len).contains(&start_idx) {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![cloned_lisp_string_value(string), Value::fixnum(raw_start)],
         ));
     }
@@ -288,7 +293,7 @@ fn parse_replace_regexp_subexp_start_lisp(
     };
     if subexp < 0 {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(subexp),
                 Value::fixnum(0),
@@ -339,7 +344,7 @@ fn replace_match_on_substring(
         && subexp >= md.groups.len()
     {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![
                 Value::fixnum(subexp as i64),
                 Value::fixnum(0),
@@ -836,7 +841,7 @@ where
             false,
             &mut match_data,
         )
-        .map_err(|msg| signal("invalid-regexp", vec![Value::string(msg)]))?;
+        .map_err(|msg| signal(LispCondition::InvalidRegexp, vec![Value::string(msg)]))?;
         if found.is_none() {
             break;
         }
@@ -960,7 +965,7 @@ pub(crate) fn builtin_replace_regexp_in_string(
             let func_result = eval.apply(func, vec![Value::heap_string(matched)])?;
             let replacement = func_result.as_lisp_string().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), func_result],
                 )
             })?;

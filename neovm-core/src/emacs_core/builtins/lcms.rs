@@ -392,7 +392,7 @@ pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
         let value = expect_number(&args[2])?;
         if value == 0.0 {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("numberp"), args[2]],
             ));
         }
@@ -404,7 +404,7 @@ pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
         let value = expect_number(&args[3])?;
         if value == 0.0 {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("numberp"), args[3]],
             ));
         }
@@ -417,7 +417,7 @@ pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
         let value = expect_number(&h)?;
         if value == 0.0 {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("numberp"), h],
             ));
         }

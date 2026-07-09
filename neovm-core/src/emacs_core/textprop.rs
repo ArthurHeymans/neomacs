@@ -6,6 +6,7 @@
 use super::builtins::builtin_copy_sequence;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{NIL_SYM_ID, T_SYM_ID};
+use crate::emacs_core::error::LispCondition;
 // storage imports removed — now using emacs_char directly
 use super::plist;
 use super::symbol::Obarray;
@@ -86,7 +87,7 @@ fn string_char_len(len: usize) -> CharLen {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -97,7 +98,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -108,7 +109,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -122,7 +123,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => Ok(n),
         _ if super::marker::is_marker(value) => super::marker::marker_position_as_int(value),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -136,7 +137,7 @@ fn expect_int_eval(eval: &super::eval::Context, value: &Value) -> Result<i64, Fl
             super::marker::marker_position_as_int_eval(eval, value)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -148,7 +149,7 @@ fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => Ok(n),
         _ if super::marker::is_marker(value) => super::marker::marker_position_as_int(value),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -454,15 +455,15 @@ fn elisp_range_to_byte_clipped_full(
 }
 
 fn args_out_of_range_point(pos: i64) -> Flow {
-    signal("args-out-of-range", vec![Value::fixnum(pos)])
+    signal(LispCondition::ArgsOutOfRange, vec![Value::fixnum(pos)])
 }
 
 fn args_out_of_range_point_pair(pos0: Value) -> Flow {
-    signal("args-out-of-range", vec![pos0, pos0])
+    signal(LispCondition::ArgsOutOfRange, vec![pos0, pos0])
 }
 
 fn args_out_of_range_range(begin0: Value, end0: Value) -> Flow {
-    signal("args-out-of-range", vec![begin0, end0])
+    signal(LispCondition::ArgsOutOfRange, vec![begin0, end0])
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -622,7 +623,7 @@ fn resolve_buffer_id_in_buffers(
             .as_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("Invalid buffer")])),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), *other],
         )),
     }
@@ -645,7 +646,7 @@ fn resolve_text_property_buffer_id_in_buffers(
             .as_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("Invalid buffer")])),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("buffer-or-string-p"), *other],
         )),
     }
@@ -672,27 +673,27 @@ fn resolve_char_property_target_in_state(
         Some(v) if v.is_window() => {
             let Some(frames) = frames else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("buffer-or-string-p"), *v],
                 ));
             };
             let wid = WindowId(v.as_window_id().expect("window value has an id"));
             let window = frames.lookup_window(wid).ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), *v],
                 )
             })?;
             let buffer_id = window.buffer_id().ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("window-live-p"), *v],
                 )
             })?;
             Ok((buffer_id, Some(wid)))
         }
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("buffer-or-string-p"), *other],
         )),
     }
@@ -721,7 +722,7 @@ fn current_buffer_id_in_buffers(buffers: &BufferManager) -> Result<BufferId, Flo
 fn expect_overlay(value: &Value) -> Result<Value, Flow> {
     if !value.is_overlay() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("overlayp"), *value],
         ));
     }
@@ -916,7 +917,7 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
         } else {
             vec![]
         };
-        Err(signal("text-read-only", args))
+        Err(signal(LispCondition::TextReadOnly, args))
     })?;
     Ok(())
 }
@@ -955,7 +956,7 @@ fn text_read_only_flow(read_only: Value) -> Flow {
     } else {
         vec![]
     };
-    signal("text-read-only", args)
+    signal(LispCondition::TextReadOnly, args)
 }
 
 /// GNU `verify_interval_modification` (textprop.c:2184), the `start == end`
@@ -1653,7 +1654,7 @@ fn merge_face_property(
                 return Ok(Value::list(items));
             }
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), improper_list_tail(existing_value)],
             ));
         }
@@ -1759,7 +1760,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
             .as_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("Invalid buffer")])),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("buffer-or-string-p"), *other],
         )),
     }?;

@@ -21,6 +21,7 @@
 //! present. Mozilla root certificates are used by the default rustls backend
 //! for verification.
 
+use crate::emacs_core::error::LispCondition;
 use num_enum::IntoPrimitive;
 use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
 use std::collections::HashMap;
@@ -1428,7 +1429,7 @@ struct ProcessExecLookup<'a> {
 
 fn process_lookup_error(program: &LispString) -> Flow {
     signal(
-        "file-missing",
+        LispCondition::FileMissing,
         vec![
             Value::string("Searching for program"),
             Value::string(crate::emacs_core::emacs_char::to_utf8_lossy(
@@ -1982,8 +1983,12 @@ fn parse_make_network_tls_parameters(
     if value.is_nil() {
         return Ok(None);
     }
-    let items = list_to_vec(&value)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), value]))?;
+    let items = list_to_vec(&value).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), value],
+        )
+    })?;
     let Some((&credential_type, rest)) = items.split_first() else {
         return Ok(None);
     };
@@ -2302,7 +2307,7 @@ fn validate_process_coding_component(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), value],
         ))
     }
@@ -2351,9 +2356,12 @@ fn serial_contact_value(contact: Value, current: Value, keyword: ProcessKeyword)
 }
 
 fn serial_expect_fixnum(value: Value) -> Result<i64, Flow> {
-    value
-        .as_fixnum()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("fixnump"), value]))
+    value.as_fixnum().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("fixnump"), value],
+        )
+    })
 }
 
 fn serial_value_eq_symbol(value: Value, symbol: &str) -> bool {
@@ -2883,7 +2891,7 @@ fn signal_network_option_io_error(
     err: std::io::Error,
 ) -> Flow {
     signal(
-        "file-error",
+        LispCondition::FileError,
         vec![
             Value::string("Cannot set network option"),
             keyword.value(),
@@ -3067,7 +3075,7 @@ fn tcp_socket_domain(addr: SocketAddr) -> Domain {
 
 fn network_socket_io_error(message: &str, err: std::io::Error) -> Flow {
     signal(
-        "file-error",
+        LispCondition::FileError,
         vec![Value::string(message), Value::string(err.to_string())],
     )
 }
@@ -3395,7 +3403,7 @@ fn bind_udp_socket_host(
     }
     Err(last_error.unwrap_or_else(|| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string("Cannot bind datagram socket")],
         )
     }))
@@ -3416,7 +3424,7 @@ fn connect_udp_socket_host(
     }
     Err(last_error.unwrap_or_else(|| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string("make datagram process failed")],
         )
     }))
@@ -3438,7 +3446,7 @@ fn bind_tcp_listener_host(
     }
     Err(last_error.unwrap_or_else(|| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string("Cannot bind server socket")],
         )
     }))
@@ -3459,7 +3467,7 @@ fn connect_tcp_stream_host(
     }
     Err(last_error.unwrap_or_else(|| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string("make client process failed")],
         )
     }))
@@ -5086,7 +5094,7 @@ impl ProcessManager {
             .ok_or_else(|| signal_wrong_type_processp(process))?;
         if proc.kind != ProcessKind::Pipe {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("pipe-process-p"), process],
             ));
         }
@@ -5102,7 +5110,7 @@ impl ProcessManager {
             let fd = unsafe { libc::dup(stdout.as_raw_fd()) };
             if fd == -1 {
                 return Err(signal(
-                    "file-error",
+                    LispCondition::FileError,
                     vec![Value::string("Cannot duplicate file descriptor")],
                 ));
             }
@@ -5111,7 +5119,7 @@ impl ProcessManager {
         #[cfg(not(unix))]
         {
             Err(signal(
-                "file-error",
+                LispCondition::FileError,
                 vec![Value::string(
                     "Cannot duplicate file descriptor on this platform",
                 )],
@@ -6955,7 +6963,7 @@ impl super::eval::Context {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -6966,7 +6974,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -6978,7 +6986,7 @@ fn check_keyword_arg_pairs(args: &[Value]) -> Result<(), Flow> {
     if args.len() % 2 == 0 {
         Ok(())
     } else {
-        Err(signal("malformed-keyword-arg-list", vec![]))
+        Err(signal(LispCondition::MalformedKeywordArgList, vec![]))
     }
 }
 
@@ -7004,7 +7012,7 @@ fn expect_list(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *value],
         ))
     }
@@ -7013,7 +7021,7 @@ fn expect_list(value: &Value) -> Result<(), Flow> {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_wrong_type_sequence(value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("sequencep"), value],
     )
 }
@@ -7021,7 +7029,7 @@ fn signal_wrong_type_sequence(value: Value) -> Flow {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_wrong_type_character(value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("characterp"), value],
     )
 }
@@ -7076,7 +7084,7 @@ pub(crate) fn char_sequence_to_lisp_string(value: &Value) -> Result<LispString, 
                     }
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), cursor],
                         ));
                     }
@@ -7094,7 +7102,7 @@ pub(crate) fn expect_int_or_marker(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => Ok(n),
         ValueKind::Veclike(VecLikeType::Marker) => super::marker::marker_position_as_int(value),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -7201,7 +7209,10 @@ pub(crate) fn signal_file_errno(string: &str, name: Value, errno: libc::c_int) -
 }
 
 fn signal_wrong_type_string(value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol("stringp"), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("stringp"), value],
+    )
 }
 
 pub(crate) fn expect_string_strict(value: &Value) -> Result<String, Flow> {
@@ -7270,7 +7281,7 @@ pub(crate) fn parse_lisp_string_args_strict(args: &[Value]) -> Result<Vec<LispSt
 
 fn signal_wrong_type_processp(value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("processp"), value],
     )
 }
@@ -7634,7 +7645,7 @@ fn resolve_live_process_or_wrong_type_in_manager(
 ) -> Result<ProcessId, Flow> {
     resolve_live_process_designator_in_manager(processes, value).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), *value],
         )
     })
@@ -7878,22 +7889,31 @@ fn process_connection_type_is_pty(obarray: &super::symbol::Obarray) -> bool {
 }
 
 fn signal_wrong_type_bufferp(value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol("bufferp"), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("bufferp"), value],
+    )
 }
 
 fn signal_wrong_type_threadp(value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol("threadp"), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("threadp"), value],
+    )
 }
 
 fn signal_wrong_type_integerp(value: Value) -> Flow {
     signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("integerp"), value],
     )
 }
 
 fn signal_wrong_type_numberp(value: Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol("numberp"), value])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("numberp"), value],
+    )
 }
 
 fn signal_process_attributes_pid_range_error() -> Flow {
@@ -8005,7 +8025,7 @@ fn parse_signal_number(value: &Value) -> Result<i32, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n as i32),
         ValueKind::String => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
         _ => {
@@ -8574,7 +8594,7 @@ fn parse_make_process_command(value: &Value) -> Result<Vec<LispString>, Flow> {
 
     let Some(items) = as_vec else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *value],
         ));
     };
@@ -8631,7 +8651,7 @@ fn expect_ushort_dimension(value: &Value) -> Result<u16, Flow> {
     let n = expect_integer(value)?;
     u16::try_from(n).map_err(|_| {
         signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![*value, Value::fixnum(0), Value::fixnum(i64::from(u16::MAX))],
         )
     })
@@ -9778,7 +9798,7 @@ pub(crate) fn builtin_clone_process(
     expect_min_args("clone-process", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("clone-process"),
                 Value::fixnum(args.len() as i64),
@@ -9804,7 +9824,7 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("internal-default-interrupt-process"),
                 Value::fixnum(args.len() as i64),
@@ -9839,7 +9859,7 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
     expect_min_args("internal-default-signal-process", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("internal-default-signal-process"),
                 Value::fixnum(args.len() as i64),
@@ -10287,7 +10307,7 @@ pub(crate) fn builtin_isearch_process_search_char(
     expect_min_args("isearch-process-search-char", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("isearch-process-search-char"),
                 Value::fixnum(args.len() as i64),
@@ -10448,7 +10468,7 @@ pub(crate) fn builtin_format_network_address_impl(args: Vec<Value>) -> EvalResul
     expect_min_args("format-network-address", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("format-network-address"),
                 Value::fixnum(args.len() as i64),
@@ -10498,7 +10518,7 @@ pub(crate) fn builtin_network_interface_list(
 pub(crate) fn builtin_network_interface_list_impl(args: Vec<Value>) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("network-interface-list"),
                 Value::fixnum(args.len() as i64),
@@ -10629,7 +10649,7 @@ pub(crate) fn builtin_network_lookup_address_info_impl(args: Vec<Value>) -> Eval
     expect_min_args("network-lookup-address-info", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("network-lookup-address-info"),
                 Value::fixnum(args.len() as i64),
@@ -10729,7 +10749,7 @@ pub(crate) fn builtin_num_processors(
 pub(crate) fn builtin_num_processors_impl(args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("num-processors"),
                 Value::fixnum(args.len() as i64),
@@ -10843,7 +10863,7 @@ pub(crate) fn builtin_list_processes(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("list-processes"),
                 Value::fixnum(args.len() as i64),
@@ -10925,7 +10945,7 @@ fn connect_network_process_at_explicit_address(
                     let socket = bind_udp_socket(addr, &effective_options)?;
                     let local_addr = socket.local_addr().map_err(|e| {
                         signal(
-                            "file-error",
+                            LispCondition::FileError,
                             vec![Value::string(format!("getsockname: {}", e))],
                         )
                     })?;
@@ -11097,7 +11117,7 @@ fn connect_network_process_at_explicit_address(
                 )?;
                 let local_addr = listener.local_addr().map_err(|e| {
                     signal(
-                        "file-error",
+                        LispCondition::FileError,
                         vec![Value::string(format!("getsockname: {}", e))],
                     )
                 })?;
@@ -11830,7 +11850,7 @@ fn connect_datagram_network_process(
         let socket = bind_udp_socket_host(host_str.as_str(), port, family, &effective_options)?;
         let local_addr = socket.local_addr().map_err(|e| {
             signal(
-                "file-error",
+                LispCondition::FileError,
                 vec![Value::string(format!("getsockname: {}", e))],
             )
         })?;
@@ -12001,7 +12021,7 @@ fn listen_stream_network_process(
     )?;
     let local_addr = listener.local_addr().map_err(|e| {
         signal(
-            "file-error",
+            LispCondition::FileError,
             vec![Value::string(format!("getsockname: {}", e))],
         )
     })?;
@@ -13210,7 +13230,7 @@ pub(crate) fn builtin_make_serial_process_impl(
             ProcessKeyword::Speed => {
                 if !value.is_nil() && !value.is_fixnum() {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("fixnump"), value],
                     ));
                 }
@@ -13348,7 +13368,7 @@ pub(crate) fn builtin_set_network_process_option_impl(
 ) -> EvalResult {
     if args.len() < 3 || args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-network-process-option"),
                 Value::fixnum(args.len() as i64),
@@ -13359,7 +13379,7 @@ pub(crate) fn builtin_set_network_process_option_impl(
     let id = resolve_live_process_or_wrong_type_in_manager(processes, &args[0])?;
     let proc = processes.get_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -13372,7 +13392,7 @@ pub(crate) fn builtin_set_network_process_option_impl(
 
     if args[1].as_symbol_name().is_none() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[1]],
         ));
     }
@@ -13612,7 +13632,7 @@ pub(crate) fn builtin_delete_process(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("delete-process"),
                 Value::fixnum(args.len() as i64),
@@ -13652,7 +13672,7 @@ pub(crate) fn builtin_delete_process_impl(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("delete-process"),
                 Value::fixnum(args.len() as i64),
@@ -13679,7 +13699,7 @@ pub(crate) fn builtin_continue_process(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("continue-process"),
                 Value::fixnum(args.len() as i64),
@@ -13709,7 +13729,7 @@ pub(crate) fn builtin_continue_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("continue-process"),
                 Value::fixnum(args.len() as i64),
@@ -13743,7 +13763,7 @@ pub(crate) fn builtin_interrupt_process(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("interrupt-process"),
                 Value::fixnum(args.len() as i64),
@@ -13768,7 +13788,7 @@ pub(crate) fn builtin_interrupt_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("interrupt-process"),
                 Value::fixnum(args.len() as i64),
@@ -13802,7 +13822,7 @@ pub(crate) fn builtin_kill_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("kill-process"),
                 Value::fixnum(args.len() as i64),
@@ -13828,7 +13848,7 @@ pub(crate) fn builtin_signal_process(
     expect_min_args("signal-process", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("signal-process"),
                 Value::fixnum(args.len() as i64),
@@ -13855,7 +13875,7 @@ pub(crate) fn builtin_signal_process_impl(
     expect_min_args("signal-process", &args, 2)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("signal-process"),
                 Value::fixnum(args.len() as i64),
@@ -13912,7 +13932,7 @@ pub(crate) fn builtin_stop_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("stop-process"),
                 Value::fixnum(args.len() as i64),
@@ -13950,7 +13970,7 @@ pub(crate) fn builtin_quit_process_impl(
 ) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("quit-process"),
                 Value::fixnum(args.len() as i64),
@@ -14345,7 +14365,7 @@ fn builtin_make_process_impl_with_environment(
     let command = command.unwrap_or_default();
     if !stop_val.is_nil() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("null"), stop_val],
         ));
     }
@@ -14464,7 +14484,7 @@ fn builtin_make_process_impl_with_environment(
             return Ok(Value::make_process(id));
         }
         return Err(signal(
-            "file-missing",
+            LispCondition::FileMissing,
             vec![Value::string("Doing vfork"), Value::string(e)],
         ));
     }
@@ -14519,7 +14539,7 @@ fn parse_accept_process_output_request(
 ) -> Result<Option<AcceptProcessOutputRequest>, Flow> {
     if args.len() > 4 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("accept-process-output"),
                 Value::fixnum(args.len() as i64),
@@ -14535,7 +14555,7 @@ fn parse_accept_process_output_request(
                 return Ok(None);
             }
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("processp"), *process],
             ));
         }
@@ -14545,26 +14565,26 @@ fn parse_accept_process_output_request(
         if let Some(milliseconds) = args.get(2) {
             if !milliseconds.is_nil() && !milliseconds.is_fixnum() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("fixnump"), *milliseconds],
                 ));
             }
             if milliseconds.is_nil() {
                 if !seconds.is_nil() && !seconds.is_number() {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("numberp"), *seconds],
                     ));
                 }
             } else if !seconds.is_nil() && !seconds.is_fixnum() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("fixnump"), *seconds],
                 ));
             }
         } else if !seconds.is_nil() && !seconds.is_number() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("numberp"), *seconds],
             ));
         }
@@ -14841,7 +14861,7 @@ pub(crate) fn builtin_process_coding_system_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -14869,7 +14889,7 @@ pub(crate) fn builtin_process_datagram_address_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let Some(proc) = processes.get_any(id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         ));
     };
@@ -14896,7 +14916,7 @@ pub(crate) fn builtin_process_inherit_coding_system_flag_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -14930,7 +14950,7 @@ pub(crate) fn builtin_set_process_buffer_impl(
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -14961,7 +14981,7 @@ pub(crate) fn builtin_set_process_coding_system_impl(
     expect_min_args("set-process-coding-system", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("set-process-coding-system"),
                 Value::fixnum(args.len() as i64),
@@ -14982,7 +15002,7 @@ pub(crate) fn builtin_set_process_coding_system_impl(
 
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15003,7 +15023,7 @@ pub(crate) fn builtin_set_buffer_process_coding_system(
     let id = resolve_optional_process_or_current_buffer(eval, None)?;
     let proc = eval.processes.get_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), Value::make_process(id)],
         )
     })?;
@@ -15035,7 +15055,7 @@ pub(crate) fn builtin_set_process_datagram_address_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let Some(proc) = processes.get_any_mut(id) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         ));
     };
@@ -15089,7 +15109,7 @@ pub(crate) fn builtin_set_process_inherit_coding_system_flag_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15121,7 +15141,7 @@ pub(crate) fn builtin_set_process_thread_impl(
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15148,7 +15168,7 @@ pub(crate) fn builtin_set_process_window_size_impl(
     let is_live = processes.get(id).is_some();
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15215,7 +15235,7 @@ pub(crate) fn builtin_process_menu_visit_buffer(
     expect_args("process-menu-visit-buffer", &args, 1)?;
     let _line = expect_int_or_marker(&args[0])?;
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("stringp"), Value::NIL],
     ))
 }
@@ -15235,7 +15255,7 @@ pub(crate) fn builtin_process_tty_name_impl(
     expect_min_args("process-tty-name", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("process-tty-name"),
                 Value::fixnum(args.len() as i64),
@@ -15245,7 +15265,7 @@ pub(crate) fn builtin_process_tty_name_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15299,7 +15319,7 @@ pub(crate) fn builtin_process_mark_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15323,7 +15343,7 @@ pub(crate) fn builtin_process_type_impl(
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15346,7 +15366,7 @@ pub(crate) fn builtin_process_thread_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15495,7 +15515,7 @@ pub(crate) fn builtin_process_send_eof_impl(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("process-send-eof"),
                 Value::fixnum(args.len() as i64),
@@ -15592,7 +15612,7 @@ pub(crate) fn builtin_process_running_child_p_impl(
 ) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("process-running-child-p"),
                 Value::fixnum(args.len() as i64),
@@ -15715,7 +15735,7 @@ pub(crate) fn builtin_process_live_p_impl(
     // perform a fresh no-wait child probe on its own.
     let proc = processes.get(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15763,7 +15783,7 @@ pub(crate) fn builtin_process_query_on_exit_flag_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15787,7 +15807,7 @@ pub(crate) fn builtin_set_process_query_on_exit_flag_impl(
     let flag = args[1].is_truthy();
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15811,7 +15831,7 @@ pub(crate) fn builtin_process_command_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15842,7 +15862,7 @@ pub(crate) fn builtin_process_contact_impl(
     expect_min_args("process-contact", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("process-contact"),
                 Value::fixnum(args.len() as i64),
@@ -15852,7 +15872,7 @@ pub(crate) fn builtin_process_contact_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15921,7 +15941,7 @@ pub(crate) fn builtin_process_filter_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15949,7 +15969,7 @@ pub(crate) fn builtin_set_process_filter_impl(
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -15977,7 +15997,7 @@ pub(crate) fn builtin_process_sentinel_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -16005,7 +16025,7 @@ pub(crate) fn builtin_set_process_sentinel_impl(
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -16033,7 +16053,7 @@ pub(crate) fn builtin_process_plist_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     let proc = processes.get_any(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -16056,13 +16076,13 @@ pub(crate) fn builtin_set_process_plist_impl(
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
     if !args[1].is_list() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), args[1]],
         ));
     }
     let proc = processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -16080,7 +16100,7 @@ pub(crate) fn builtin_process_put(eval: &mut super::eval::Context, args: Vec<Val
         .get_any(id)
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("processp"), args[0]],
             )
         })?
@@ -16088,7 +16108,7 @@ pub(crate) fn builtin_process_put(eval: &mut super::eval::Context, args: Vec<Val
     let new_plist = super::builtins::builtin_plist_put(vec![current_plist, args[1], args[2]])?;
     let proc = eval.processes.get_any_mut(id).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("processp"), args[0]],
         )
     })?;
@@ -16106,7 +16126,7 @@ pub(crate) fn builtin_process_get(eval: &mut super::eval::Context, args: Vec<Val
         .get_any(id)
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("processp"), args[0]],
             )
         })?
@@ -16143,14 +16163,14 @@ fn getenv_impl(name: &str, args: &[Value]) -> EvalResult {
     expect_min_args(name, args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ));
     }
     if let Some(frame) = args.get(1) {
         if !frame.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("framep"), *frame],
             ));
         }
@@ -16180,7 +16200,7 @@ pub(crate) fn builtin_getenv_internal(
     expect_min_args("getenv-internal", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("getenv-internal"),
                 Value::fixnum(args.len() as i64),
@@ -16296,7 +16316,7 @@ pub(crate) fn builtin_set_binary_mode(args: Vec<Value>) -> EvalResult {
     expect_args("set-binary-mode", &args, 2)?;
     let stream = args[0].as_symbol_name().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;

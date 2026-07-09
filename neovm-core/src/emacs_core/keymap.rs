@@ -6,6 +6,7 @@
 //! - Key description parsing (`kbd` style: "C-x C-f", "M-x", "RET", etc.)
 //! - Global and local (buffer) keymap support
 
+use crate::emacs_core::error::LispCondition;
 use std::collections::HashSet;
 
 use super::builtins::{builtin_get_pos_property_impl, expect_integer_or_marker_in_buffers};
@@ -528,7 +529,7 @@ pub(crate) fn get_keymap_in_obarray(
     if value.is_nil() {
         return if error_if_not_keymap {
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("keymapp"), *value],
             ))
         } else {
@@ -553,7 +554,7 @@ pub(crate) fn get_keymap_in_obarray(
 
     if error_if_not_keymap {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("keymapp"), *value],
         ))
     } else {
@@ -615,7 +616,7 @@ pub(crate) fn get_keymap_in_runtime(
 
     if error_if_not_keymap {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("keymapp"), original],
         ))
     } else {
@@ -2082,7 +2083,7 @@ fn active_map_position(
         let point_max = buffer.point_max_lisp_char_pos().as_i64();
         if char_pos < point_min || char_pos > point_max {
             return Err(signal(
-                "args-out-of-range",
+                LispCondition::ArgsOutOfRange,
                 vec![Value::make_buffer(buffer.id), *position],
             ));
         }
@@ -2126,7 +2127,7 @@ fn active_map_position(
             let point_max = target_buffer.point_max_lisp_char_pos().as_i64();
             if char_pos < point_min || char_pos > point_max {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![Value::make_buffer(buffer_id), *position],
                 ));
             }
@@ -2409,7 +2410,7 @@ fn lookup_minor_mode_binding_in_alist_in_obarray(
                     Some(value) if is_list_keymap(&value) => value,
                     _ => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("keymapp"), map_value],
                         ));
                     }
@@ -2417,7 +2418,7 @@ fn lookup_minor_mode_binding_in_alist_in_obarray(
             }
         } else {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("keymapp"), map_value],
             ));
         };

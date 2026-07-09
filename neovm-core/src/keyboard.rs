@@ -10,6 +10,7 @@
 //! - Pre/post-command hooks
 //! - Prefix argument handling
 
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
@@ -2985,7 +2986,10 @@ impl crate::emacs_core::eval::Context {
                     );
                 }
                 self.handle_display_terminal_disconnect();
-                Err(crate::emacs_core::error::signal("quit", vec![]))
+                Err(crate::emacs_core::error::signal(
+                    LispCondition::Quit,
+                    vec![],
+                ))
             }
         }
     }
@@ -3029,7 +3033,10 @@ impl crate::emacs_core::eval::Context {
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => Ok(false),
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => {
                 self.handle_display_terminal_disconnect();
-                Err(crate::emacs_core::error::signal("quit", vec![]))
+                Err(crate::emacs_core::error::signal(
+                    LispCondition::Quit,
+                    vec![],
+                ))
             }
         }
     }
@@ -3157,7 +3164,10 @@ impl crate::emacs_core::eval::Context {
             }
         }
         self.command_loop.running = false;
-        Err(crate::emacs_core::error::signal("quit", vec![]))
+        Err(crate::emacs_core::error::signal(
+            LispCondition::Quit,
+            vec![],
+        ))
     }
 
     /// Read a complete key sequence through keymaps.
@@ -4060,7 +4070,10 @@ impl crate::emacs_core::eval::Context {
                 continue;
             }
             if self.shutdown_request.is_some() {
-                return Err(crate::emacs_core::error::signal("quit", vec![]));
+                return Err(crate::emacs_core::error::signal(
+                    LispCondition::Quit,
+                    vec![],
+                ));
             }
 
             if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
@@ -4097,7 +4110,10 @@ impl crate::emacs_core::eval::Context {
                 continue;
             }
             if self.shutdown_request.is_some() {
-                return Err(crate::emacs_core::error::signal("quit", vec![]));
+                return Err(crate::emacs_core::error::signal(
+                    LispCondition::Quit,
+                    vec![],
+                ));
             }
 
             if self.input_rx.is_none() {

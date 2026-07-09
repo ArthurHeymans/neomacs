@@ -5,6 +5,7 @@
 #![allow(non_camel_case_types)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
+use crate::emacs_core::error::LispCondition;
 use malachite::integer::Integer;
 use std::collections::HashMap;
 use std::ffi::{CStr, c_void};
@@ -1917,14 +1918,14 @@ pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
 pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -> EvalResult {
     let mf = func
         .as_module_function()
-        .ok_or_else(|| signal("invalid-function", vec![func]))?;
+        .ok_or_else(|| signal(LispCondition::InvalidFunction, vec![func]))?;
 
     let nargs = args.len() as isize;
     if nargs < mf.min_arity {
-        return Err(signal("wrong-number-of-arguments", vec![func]));
+        return Err(signal(LispCondition::WrongNumberOfArguments, vec![func]));
     }
     if mf.max_arity >= 0 && nargs > mf.max_arity {
-        return Err(signal("wrong-number-of-arguments", vec![func]));
+        return Err(signal(LispCondition::WrongNumberOfArguments, vec![func]));
     }
 
     let subr_fn: emacs_function = unsafe { std::mem::transmute(mf.subr) };

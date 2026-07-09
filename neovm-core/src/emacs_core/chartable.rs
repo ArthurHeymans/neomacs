@@ -20,6 +20,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::{Context, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use crate::tagged::header::store_value_atomic;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -377,7 +378,7 @@ fn uniprop_table_uncompress(table: Value, idx: usize) -> Option<Value> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -389,7 +390,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -401,7 +402,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -411,7 +412,10 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 
 /// Signal `wrong-type-argument` with a predicate name.
 fn wrong_type(pred: &str, got: &Value) -> Flow {
-    signal("wrong-type-argument", vec![Value::symbol(pred), *got])
+    signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol(pred), *got],
+    )
 }
 
 /// Extract an integer (Int or Char), signal otherwise.
@@ -438,14 +442,14 @@ fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(n) => n,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("wholenump"), *value],
             ));
         }
     };
     if n < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *value],
         ));
     }
@@ -2805,7 +2809,10 @@ pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     if table.is_char_table() {
         let obj = table.as_char_table_obj().unwrap();
         if n < 0 || n as usize >= obj.extras.len() {
-            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], args[1]],
+            ));
         }
         return Ok(obj.extras[n as usize]);
     }
@@ -2816,7 +2823,10 @@ pub(crate) fn builtin_char_table_extra_slot(args: Vec<Value>) -> EvalResult {
     };
 
     if n < 0 || n >= extra_count {
-        return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![args[0], args[1]],
+        ));
     }
 
     Ok(v[CT_EXTRA_START + n as usize])
@@ -2835,7 +2845,10 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
     if table.is_char_table() {
         let extra_len = table.as_char_table_obj().unwrap().extras.len();
         if n < 0 || n as usize >= extra_len {
-            return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[0], args[1]],
+            ));
         }
         let _ = table.with_char_table_mut(|obj| obj.extras.ensure_owned()[n as usize] = *value);
         return Ok(*value);
@@ -2847,7 +2860,10 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
     };
 
     if n < 0 || n >= extra_count {
-        return Err(signal("args-out-of-range", vec![args[0], args[1]]));
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![args[0], args[1]],
+        ));
     }
 
     let slot_idx = CT_EXTRA_START + n as usize;
@@ -2945,7 +2961,7 @@ fn expect_character(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if (0..=MAX_CHAR).contains(&n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -3045,7 +3061,7 @@ fn encode_uniprop_value_run_length(table: Value, value: Value) -> Result<Value, 
     match found {
         Some(index) => Ok(Value::fixnum(index as i64)),
         None => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::string("Unicode property value"), value],
         )),
     }
@@ -3201,7 +3217,7 @@ pub(crate) fn builtin_bool_vector_intersection(args: Vec<Value>) -> EvalResult {
     let (bits_b, len_b) = extract_bv_bits(&args[1])?;
     if len_a != len_b {
         return Err(signal(
-            "wrong-length-argument",
+            LispCondition::WrongLengthArgument,
             vec![Value::fixnum(len_a), Value::fixnum(len_b)],
         ));
     }
@@ -3228,7 +3244,7 @@ pub(crate) fn builtin_bool_vector_union(args: Vec<Value>) -> EvalResult {
     let (bits_b, len_b) = extract_bv_bits(&args[1])?;
     if len_a != len_b {
         return Err(signal(
-            "wrong-length-argument",
+            LispCondition::WrongLengthArgument,
             vec![Value::fixnum(len_a), Value::fixnum(len_b)],
         ));
     }
@@ -3255,7 +3271,7 @@ pub(crate) fn builtin_bool_vector_exclusive_or(args: Vec<Value>) -> EvalResult {
     let (bits_b, len_b) = extract_bv_bits(&args[1])?;
     if len_a != len_b {
         return Err(signal(
-            "wrong-length-argument",
+            LispCondition::WrongLengthArgument,
             vec![Value::fixnum(len_a), Value::fixnum(len_b)],
         ));
     }
@@ -3299,7 +3315,7 @@ pub(crate) fn builtin_bool_vector_set_difference(args: Vec<Value>) -> EvalResult
     let (bits_b, len_b) = extract_bv_bits(&args[1])?;
     if len_a != len_b {
         return Err(signal(
-            "wrong-length-argument",
+            LispCondition::WrongLengthArgument,
             vec![Value::fixnum(len_a), Value::fixnum(len_b)],
         ));
     }
@@ -3326,7 +3342,7 @@ pub(crate) fn builtin_bool_vector_count_consecutive(args: Vec<Value>) -> EvalRes
     let start = expect_wholenump(&args[2])?;
     if start > len {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![args[0], Value::fixnum(start)],
         ));
     }
@@ -3348,7 +3364,7 @@ pub(crate) fn builtin_bool_vector_subsetp(args: Vec<Value>) -> EvalResult {
     let (bits_b, len_b) = extract_bv_bits(&args[1])?;
     if len_a != len_b {
         return Err(signal(
-            "wrong-length-argument",
+            LispCondition::WrongLengthArgument,
             vec![
                 Value::fixnum(len_a),
                 Value::fixnum(len_b),
@@ -3378,7 +3394,7 @@ fn store_bv_result_with_expected_lengths(
             .map(Value::fixnum)
             .collect();
         payload.push(Value::fixnum(len as i64));
-        return Err(signal("wrong-length-argument", payload));
+        return Err(signal(LispCondition::WrongLengthArgument, payload));
     }
     let mut slots = dest
         .as_vector_data()

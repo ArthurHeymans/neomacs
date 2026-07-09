@@ -14,7 +14,7 @@ pub(crate) fn gnu_mapconcat_unfilled_slot_value() -> Value {
 pub(crate) fn map_sequence_length(sequence: Value) -> Result<usize, Flow> {
     if super::chartable::is_char_table(&sequence) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), sequence],
         ));
     }
@@ -28,7 +28,7 @@ pub(crate) fn map_sequence_length(sequence: Value) -> Result<usize, Flow> {
                 .and_then(|len| usize::try_from(len).ok())
                 .ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), sequence],
                     )
                 })
@@ -37,7 +37,7 @@ pub(crate) fn map_sequence_length(sequence: Value) -> Result<usize, Flow> {
             if let Some(len) = super::chartable::bool_vector_length(&sequence) {
                 usize::try_from(len).map_err(|_| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), sequence],
                     )
                 })
@@ -46,7 +46,7 @@ pub(crate) fn map_sequence_length(sequence: Value) -> Result<usize, Flow> {
             }
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), sequence],
         )),
     }
@@ -67,7 +67,7 @@ pub(crate) fn map_sequence_element(sequence: Value, index: usize) -> Result<Valu
                 .copied()
                 .ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), sequence],
                     )
                 })
@@ -78,7 +78,7 @@ pub(crate) fn map_sequence_element(sequence: Value, index: usize) -> Result<Valu
                 .copied()
                 .ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), sequence],
                     )
                 })
@@ -89,13 +89,13 @@ pub(crate) fn map_sequence_element(sequence: Value, index: usize) -> Result<Valu
                 .map(|code| Value::fixnum(code as i64))
                 .ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("sequencep"), sequence],
                     )
                 })
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), sequence],
         )),
     }
@@ -179,7 +179,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
     // the arguments.
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("apply"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -198,7 +198,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), last],
                 ));
             }
@@ -209,7 +209,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
         }
         if !cursor.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), cursor],
             ));
         }
@@ -226,7 +226,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
                 }
                 _ => {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("listp"), cursor],
                     ));
                 }
@@ -306,7 +306,7 @@ where
                     }
                     _tail => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), cursor],
                         ));
                     }
@@ -340,7 +340,7 @@ where
             Ok(())
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *seq],
         )),
     }
@@ -350,7 +350,7 @@ where
 pub(crate) fn builtin_mapcar(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("mapcar"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -389,7 +389,7 @@ pub(crate) fn builtin_mapcar_2(
 pub(crate) fn builtin_mapc(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("mapc"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -471,7 +471,7 @@ pub(crate) fn builtin_mapconcat(eval: &mut super::eval::Context, args: Vec<Value
 pub(crate) fn builtin_mapcan(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("mapcan"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -558,7 +558,7 @@ impl SortRuntime for super::eval::Context {
 pub(crate) fn parse_sort_options(args: &[Value]) -> Result<SortOptions, Flow> {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("sort"), Value::fixnum(0)],
         ));
     }
@@ -679,7 +679,7 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
             }
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("list-or-vector-p"), args[0]],
         )),
     }

@@ -22,6 +22,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
 use crate::buffer::{EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent};
+use crate::emacs_core::error::LispCondition;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------
@@ -31,7 +32,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -150,7 +151,7 @@ fn parse_parse_kwargs(args: &[Value], start_index: usize) -> Result<ParseOpts, F
     let rest = &args[start_index..];
     if !rest.len().is_multiple_of(2) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("plistp"), Value::list(rest.to_vec())],
         ));
     }
@@ -213,7 +214,7 @@ fn parse_serialize_kwargs(args: &[Value], start_index: usize) -> Result<Serializ
     let rest = &args[start_index..];
     if !rest.len().is_multiple_of(2) {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("plistp"), Value::list(rest.to_vec())],
         ));
     }
@@ -315,14 +316,14 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
             let rendered = if string.is_multibyte() {
                 string.as_utf8_str().ok_or_else(|| {
                     signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("json-value-p"), *value],
                     )
                 })?
             } else {
                 if !string.as_bytes().iter().all(u8::is_ascii) {
                     return Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol("json-value-p"), *value],
                     ));
                 }
@@ -359,7 +360,7 @@ fn serialize_to_json(value: &Value, opts: &SerializeOpts, depth: usize) -> Resul
         ValueKind::Nil => Ok("{}".to_string()),
 
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("json-value-p"), *value],
         )),
     }
@@ -378,8 +379,12 @@ fn serialize_cons_object(
     opts: &SerializeOpts,
     depth: usize,
 ) -> Result<String, Flow> {
-    let items = list_to_vec(value)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *value]))?;
+    let items = list_to_vec(value).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), *value],
+        )
+    })?;
     let is_alist = matches!(items.first().map(|v| v.kind()), Some(ValueKind::Cons));
 
     let mut parts = Vec::with_capacity(items.len());
@@ -389,7 +394,7 @@ fn serialize_cons_object(
         for item in &items {
             if !matches!(item.kind(), ValueKind::Cons) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("consp"), *item],
                 ));
             }
@@ -409,7 +414,7 @@ fn serialize_cons_object(
             // A plist must supply a value for every key.
             let val = *items.get(i + 1).ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("consp"), Value::NIL],
                 )
             })?;
@@ -483,7 +488,7 @@ fn symbol_object_key(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
     }
@@ -1221,7 +1226,7 @@ pub(crate) fn builtin_json_parse_string(args: Vec<Value>) -> EvalResult {
             .expect("string object must carry LispString payload"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }

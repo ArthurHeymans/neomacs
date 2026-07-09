@@ -8,6 +8,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -19,7 +20,7 @@ use std::path::{Path, PathBuf};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -30,7 +31,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -245,7 +246,7 @@ fn resolve_documentation_function_value(
                 symbols_with_pos_enabled,
             )?;
             if func.is_nil() {
-                return Err(signal("void-function", vec![function]));
+                return Err(signal(LispCondition::VoidFunction, vec![function]));
             }
             func
         } else {
@@ -306,7 +307,7 @@ fn function_doc_or_error(func_val: Value) -> EvalResult {
                 .as_ref()
                 .map_or(Value::NIL, |doc| Value::heap_string(doc.clone())))
         }
-        _other => Err(signal("invalid-function", vec![func_val])),
+        _other => Err(signal(LispCondition::InvalidFunction, vec![func_val])),
     }
 }
 
@@ -324,7 +325,7 @@ fn quoted_lambda_documentation(function: &Value) -> Option<EvalResult> {
     let mut tail = pair_cdr;
 
     if !tail.is_cons() {
-        return Some(Err(signal("invalid-function", vec![*function])));
+        return Some(Err(signal(LispCondition::InvalidFunction, vec![*function])));
     };
     let _params_and_body_car = tail.cons_car();
     let params_and_body_cdr = tail.cons_cdr();
@@ -342,7 +343,7 @@ fn quoted_lambda_documentation(function: &Value) -> Option<EvalResult> {
             }
         }
         _other => Some(Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), tail],
         ))),
     }
@@ -361,7 +362,7 @@ fn quoted_macro_invalid_designator(function: &Value) -> Option<EvalResult> {
 
     let payload = pair_cdr;
     if payload.is_nil() {
-        return Some(Err(signal("void-function", vec![Value::NIL])));
+        return Some(Err(signal(LispCondition::VoidFunction, vec![Value::NIL])));
     }
 
     // GNU extracts the docstring from the function part of (macro . fn),
@@ -491,7 +492,7 @@ fn load_compiled_doc_string(lisp_directory: Option<&str>, file: &str, position: 
         }
         Err(err) => {
             return Err(signal(
-                "file-error",
+                LispCondition::FileError,
                 vec![
                     Value::string("Read error on documentation file"),
                     Value::string(format!("{}: {}", resolved.display(), err)),
@@ -517,7 +518,7 @@ fn load_compiled_doc_string(lisp_directory: Option<&str>, file: &str, position: 
     let end_index = loop {
         let read = handle.read(&mut chunk).map_err(|err| {
             signal(
-                "file-error",
+                LispCondition::FileError,
                 vec![
                     Value::string("Read error on documentation file"),
                     Value::string(format!("{}: {}", resolved.display(), err)),
@@ -8197,7 +8198,7 @@ pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
         Some(name) => name,
         None => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -8211,7 +8212,7 @@ pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
 
     if filename.starts_with("DOC/") {
         return Err(signal(
-            "file-error",
+            LispCondition::FileError,
             vec![
                 Value::string("Read error"),
                 Value::string(format!("/usr/share/emacs/etc/{filename}")),
@@ -8227,7 +8228,7 @@ pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
     }
 
     Err(signal(
-        "file-missing",
+        LispCondition::FileMissing,
         vec![
             Value::string("Opening doc string file"),
             Value::string("No such file or directory"),

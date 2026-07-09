@@ -3,6 +3,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
+use crate::emacs_core::error::LispCondition;
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;
@@ -18,7 +19,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -29,7 +30,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -40,7 +41,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -234,7 +235,7 @@ fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Fl
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -245,7 +246,7 @@ fn expect_number(value: &Value) -> Result<(), Flow> {
         return Ok(());
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("numberp"), *value],
     ))
 }
@@ -262,7 +263,7 @@ pub(crate) fn parse_optional_read_seconds_arg(
 
     let seconds = value.as_number_f64().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("numberp"), *value],
         )
     })?;
@@ -281,14 +282,14 @@ fn expect_initial_input_stringish(value: &Value) -> Result<(), Flow> {
             let _pair_cdr = value.cons_cdr();
             if !pair_car.is_string() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), pair_car],
                 ));
             }
             Ok(())
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -302,20 +303,20 @@ fn expect_completing_read_initial_input(value: &Value) -> Result<(), Flow> {
             let pair_cdr = value.cons_cdr();
             if !pair_car.is_string() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), pair_car],
                 ));
             }
             if !(pair_cdr.is_fixnum() || pair_cdr.as_char().is_some()) {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("number-or-marker-p"), pair_cdr],
                 ));
             }
             Ok(())
         }
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -570,7 +571,7 @@ fn signal_invalid_read_syntax_in_buffer(
     let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
     let column = prefix.rsplit('\n').next().unwrap_or("").chars().count() as i64;
     signal(
-        "invalid-read-syntax",
+        LispCondition::InvalidReadSyntax,
         vec![
             Value::string(message),
             Value::fixnum(line),
@@ -599,7 +600,7 @@ fn signal_invalid_read_syntax_in_lisp_string(
         (prefix.len() - line_start) as i64
     };
     signal(
-        "invalid-read-syntax",
+        LispCondition::InvalidReadSyntax,
         vec![
             Value::string(message),
             Value::fixnum(line),
@@ -630,7 +631,7 @@ fn signal_invalid_read_syntax_in_buffer_object(
         (prefix.len() - line_start) as i64
     };
     signal(
-        "invalid-read-syntax",
+        LispCondition::InvalidReadSyntax,
         vec![
             Value::string(message),
             Value::fixnum(line),
@@ -641,20 +642,21 @@ fn signal_invalid_read_syntax_in_buffer_object(
 
 fn end_of_file_during_parsing_error() -> Flow {
     signal(
-        "end-of-file",
+        LispCondition::EndOfFile,
         vec![Value::string("End of file during parsing")],
     )
 }
 
 fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => signal("end-of-file", vec![]),
+        super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
-        super::value_reader::ReadErrorKind::InvalidReadSyntax => {
-            signal("invalid-read-syntax", vec![Value::string(e.message)])
-        }
+        super::value_reader::ReadErrorKind::InvalidReadSyntax => signal(
+            LispCondition::InvalidReadSyntax,
+            vec![Value::string(e.message)],
+        ),
         super::value_reader::ReadErrorKind::Signal => {
             signal(e.signal_symbol.as_deref().unwrap_or("error"), e.signal_data)
         }
@@ -666,7 +668,7 @@ fn signal_reader_error_from_buffer(
     e: super::value_reader::ReadError,
 ) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => signal("end-of-file", vec![]),
+        super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
@@ -681,7 +683,7 @@ fn signal_reader_error_from_buffer(
 
 fn stdin_end_of_file_error() -> Flow {
     signal(
-        "end-of-file",
+        LispCondition::EndOfFile,
         vec![Value::string("Error reading from stdin")],
     )
 }
@@ -747,7 +749,7 @@ fn read_from_string_impl_inner(
     expect_min_args("read-from-string", &args, 1)?;
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("read-from-string"),
                 Value::fixnum(args.len() as i64),
@@ -778,14 +780,14 @@ fn read_from_string_impl_inner(
                 let idx = if n < 0 { (char_count as i64) + n } else { n };
                 if idx < 0 || idx > char_count as i64 {
                     return Err(signal(
-                        "args-out-of-range",
+                        LispCondition::ArgsOutOfRange,
                         vec![args[0], start_arg, end_arg],
                     ));
                 }
                 Ok(idx as usize)
             }
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integerp"), *value],
             )),
         }
@@ -803,7 +805,7 @@ fn read_from_string_impl_inner(
 
     if start_char > end_char {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![args[0], start_arg, end_arg],
         ));
     }
@@ -829,7 +831,7 @@ fn read_from_string_impl_inner(
 
     let (value, absolute_end_byte) = read_result
         .map_err(signal_reader_error_from_string)?
-        .ok_or_else(|| signal("end-of-file", vec![]))?;
+        .ok_or_else(|| signal(LispCondition::EndOfFile, vec![]))?;
 
     let absolute_end_char = if full_string.is_multibyte() {
         crate::emacs_core::emacs_char::byte_to_char_pos(full_string_bytes, absolute_end_byte)
@@ -876,7 +878,7 @@ pub fn builtin_read_impl(
     if stream.is_nil() {
         // In batch/non-interactive runs, stdin-backed read signals EOF.
         return Err(signal(
-            "end-of-file",
+            LispCondition::EndOfFile,
             vec![Value::string("End of file during parsing")],
         ));
     }
@@ -933,16 +935,16 @@ pub fn builtin_read_impl(
             Ok(value)
         }
         ValueKind::Symbol(id) => Err(signal(
-            "void-function",
+            LispCondition::VoidFunction,
             vec![Value::symbol(resolve_sym(id))],
         )),
         ValueKind::T => Err(signal(
-            "end-of-file",
+            LispCondition::EndOfFile,
             vec![Value::string("End of file during parsing")],
         )),
         _ => {
             // Unsupported stream source type for read-char function protocol.
-            Err(signal("invalid-function", vec![stream]))
+            Err(signal(LispCondition::InvalidFunction, vec![stream]))
         }
     }
 }
@@ -2076,7 +2078,7 @@ fn expect_optional_prompt_string(args: &[Value]) -> Result<(), Flow> {
         return Ok(());
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("stringp"), args[0]],
     ))
 }
@@ -2331,7 +2333,7 @@ pub(crate) fn builtin_insert_special_event(
     let event = args[0];
     if !event.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("consp"), event],
         ));
     }
@@ -2419,7 +2421,7 @@ pub(crate) fn builtin_read_char_in_runtime(
 ) -> Result<Option<Value>, Flow> {
     if args.len() > 3 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("read-char"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -2671,7 +2673,7 @@ fn validate_yes_or_no_p_args(args: &[Value]) -> Result<(), Flow> {
     expect_args("yes-or-no-p", args, 1)?;
     if !args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
@@ -2771,7 +2773,7 @@ pub(crate) fn finish_read_char_interactive_in_runtime(
 pub(crate) fn builtin_read_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("read-key"), Value::fixnum(args.len() as i64)],
         ));
     }

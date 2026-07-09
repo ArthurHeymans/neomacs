@@ -5,6 +5,7 @@
 //! Connection objects. For 'set mode queries, live prepared statements are
 //! kept in `RESULT_SETS`, mirroring GNU's PVEC_SQLITE statement objects.
 
+use crate::emacs_core::error::LispCondition;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -105,13 +106,13 @@ fn is_open_db(id: i64) -> bool {
 fn expect_db(value: &Value) -> Result<i64, Flow> {
     let id = sqlite_db_handle_id(value).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sqlitep"), *value],
         )
     })?;
     if !is_open_db(id) {
         return Err(signal(
-            "sqlite-error",
+            LispCondition::SqliteError,
             vec![Value::string("Database closed")],
         ));
     }
@@ -124,19 +125,19 @@ fn expect_stmt(value: &Value) -> Result<i64, Flow> {
     // but reject DB objects with "Invalid set object".
     if sqlite_db_handle_id(value).is_some() {
         return Err(signal(
-            "sqlite-error",
+            LispCondition::SqliteError,
             vec![Value::string("Invalid set object")],
         ));
     }
     let id = sqlite_stmt_handle_id(value).ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sqlitep"), *value],
         )
     })?;
     if !RESULT_SETS.with(|h| h.borrow().contains_key(&id)) {
         return Err(signal(
-            "sqlite-error",
+            LispCondition::SqliteError,
             vec![Value::string("Statement closed")],
         ));
     }
@@ -168,7 +169,7 @@ fn expect_strict_string(v: &Value) -> Result<String, Flow> {
             .unwrap_or_default()
             .to_string()),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *v],
         )),
     }
@@ -176,9 +177,12 @@ fn expect_strict_string(v: &Value) -> Result<String, Flow> {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_sql_cstring(v: &Value) -> Result<CString, Flow> {
-    let s = v
-        .as_lisp_string()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *v]))?;
+    let s = v.as_lisp_string().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), *v],
+        )
+    })?;
     CString::new(s.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))
 }
 
@@ -397,14 +401,18 @@ unsafe fn bind_raw_values(
         return Ok(());
     }
     let items: Vec<Value> = match values.kind() {
-        ValueKind::Cons => super::value::list_to_vec(values)
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *values]))?,
+        ValueKind::Cons => super::value::list_to_vec(values).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), *values],
+            )
+        })?,
         ValueKind::Veclike(crate::tagged::header::VecLikeType::Vector) => {
             values.as_vector_data().unwrap().to_vec()
         }
         _ => {
             return Err(signal(
-                "sqlite-error",
+                LispCondition::SqliteError,
                 vec![Value::string("VALUES must be a list or a vector")],
             ));
         }
@@ -463,8 +471,12 @@ fn bind_values(stmt: &mut rusqlite::Statement<'_>, values: &Value) -> Result<(),
     }
 
     let items: Vec<Value> = match values.kind() {
-        ValueKind::Cons => super::value::list_to_vec(values)
-            .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *values]))?,
+        ValueKind::Cons => super::value::list_to_vec(values).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), *values],
+            )
+        })?,
         ValueKind::Veclike(crate::tagged::header::VecLikeType::Vector) => {
             values.as_vector_data().unwrap().to_vec()
         }
@@ -480,7 +492,7 @@ fn bind_values(stmt: &mut rusqlite::Statement<'_>, values: &Value) -> Result<(),
 }
 
 fn sqlite_err(msg: &str) -> Flow {
-    signal("sqlite-error", vec![Value::string(msg)])
+    signal(LispCondition::SqliteError, vec![Value::string(msg)])
 }
 
 fn check_rusqlite(err: rusqlite::Error) -> Flow {
@@ -500,11 +512,11 @@ fn check_rusqlite(err: rusqlite::Error) -> Flow {
             _,
         ) => {
             let msg = err.to_string();
-            signal("sqlite-locked-error", vec![Value::string(&msg)])
+            signal(LispCondition::SqliteLockedError, vec![Value::string(&msg)])
         }
         _ => {
             let msg = err.to_string();
-            signal("sqlite-error", vec![Value::string(&msg)])
+            signal(LispCondition::SqliteError, vec![Value::string(&msg)])
         }
     }
 }
@@ -590,9 +602,12 @@ pub(crate) fn builtin_sqlite_execute(args: Vec<Value>) -> EvalResult {
 
     let result = DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
 
         let mut stmt = conn.prepare(&sql).map_err(check_rusqlite)?;
         bind_values(&mut stmt, &values)?;
@@ -640,9 +655,12 @@ pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
         // Keep a live SQLite statement and step it incrementally, like GNU.
         let stmt = DB_HANDLES.with(|h| {
             let mut handles = h.borrow_mut();
-            let conn = handles
-                .get_mut(&id)
-                .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+            let conn = handles.get_mut(&id).ok_or_else(|| {
+                signal(
+                    LispCondition::SqliteError,
+                    vec![Value::string("Database closed")],
+                )
+            })?;
 
             let sql_c =
                 CString::new(sql.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))?;
@@ -692,9 +710,12 @@ pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
     // Non-set mode: materialize and return immediately.
     let result = DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
 
         let mut stmt = conn.prepare(&sql).map_err(check_rusqlite)?;
         bind_values(&mut stmt, &values)?;
@@ -739,9 +760,12 @@ pub(crate) fn builtin_sqlite_next(args: Vec<Value>) -> EvalResult {
 
     RESULT_SETS.with(|h| {
         let mut handles = h.borrow_mut();
-        let rs = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Statement closed")]))?;
+        let rs = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Statement closed")],
+            )
+        })?;
         if rs.eof {
             return Ok(Value::NIL);
         }
@@ -778,9 +802,12 @@ pub(crate) fn builtin_sqlite_columns(args: Vec<Value>) -> EvalResult {
 
     RESULT_SETS.with(|h| {
         let handles = h.borrow();
-        let rs = handles
-            .get(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Statement closed")]))?;
+        let rs = handles.get(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Statement closed")],
+            )
+        })?;
         let count = unsafe { ffi::sqlite3_column_count(rs.stmt) };
         let mut columns = Vec::with_capacity(count as usize);
         for i in 0..count {
@@ -817,9 +844,12 @@ pub(crate) fn builtin_sqlite_execute_batch(
 
     DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
         conn.execute_batch(&statements).map_err(check_rusqlite)?;
         Ok(Value::T)
     })
@@ -831,9 +861,12 @@ pub(crate) fn builtin_sqlite_transaction(args: Vec<Value>) -> EvalResult {
     let id = expect_db(&args[0])?;
     DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
         conn.execute_batch("begin").map_err(check_rusqlite)?;
         Ok(Value::T)
     })
@@ -845,9 +878,12 @@ pub(crate) fn builtin_sqlite_commit(args: Vec<Value>) -> EvalResult {
     let id = expect_db(&args[0])?;
     DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
         conn.execute_batch("commit").map_err(check_rusqlite)?;
         Ok(Value::T)
     })
@@ -859,9 +895,12 @@ pub(crate) fn builtin_sqlite_rollback(args: Vec<Value>) -> EvalResult {
     let id = expect_db(&args[0])?;
     DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
         conn.execute_batch("rollback").map_err(check_rusqlite)?;
         Ok(Value::T)
     })
@@ -874,9 +913,12 @@ pub(crate) fn builtin_sqlite_pragma(args: Vec<Value>) -> EvalResult {
     let pragma = expect_strict_string(&args[1])?;
     DB_HANDLES.with(|h| {
         let mut handles = h.borrow_mut();
-        let conn = handles
-            .get_mut(&id)
-            .ok_or_else(|| signal("sqlite-error", vec![Value::string("Database closed")]))?;
+        let conn = handles.get_mut(&id).ok_or_else(|| {
+            signal(
+                LispCondition::SqliteError,
+                vec![Value::string("Database closed")],
+            )
+        })?;
         conn.execute_batch(&format!("PRAGMA {pragma}"))
             .map_err(check_rusqlite)?;
         Ok(Value::T)
@@ -933,7 +975,7 @@ pub(crate) fn builtin_sqlite_load_extension(
     });
     if !allowed {
         return Err(signal(
-            "sqlite-error",
+            LispCondition::SqliteError,
             vec![Value::string("Module name not on allowlist")],
         ));
     }
@@ -941,7 +983,7 @@ pub(crate) fn builtin_sqlite_load_extension(
     let expanded = super::fileio::builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
     let Some(expanded_ls) = expanded.as_lisp_string() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), expanded],
         ));
     };

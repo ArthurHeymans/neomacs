@@ -12,6 +12,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
 use crate::buffer::{EmacsBytePos, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
@@ -1293,7 +1294,7 @@ pub(crate) fn emacs_mule_leading_code_bytes(c: u8) -> Option<i32> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1304,7 +1305,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1315,7 +1316,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -1327,7 +1328,7 @@ fn expect_int_or_marker(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
         )),
     }
@@ -1354,7 +1355,7 @@ fn require_known_charset(value: &Value) -> Result<SymId, Flow> {
         ValueKind::Symbol(id) => id,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), *value],
             ));
         }
@@ -1364,7 +1365,7 @@ fn require_known_charset(value: &Value) -> Result<SymId, Flow> {
         Ok(name)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("charsetp"), Value::from_sym_id(name)],
         ))
     }
@@ -1399,7 +1400,7 @@ fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *value],
         )),
     }
@@ -1409,7 +1410,7 @@ fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *value],
         )),
     }
@@ -1419,7 +1420,7 @@ fn encode_char_input(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -1539,7 +1540,7 @@ pub(crate) fn builtin_set_charset_priority(args: Vec<Value>) -> EvalResult {
             ValueKind::Symbol(id) => id,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("charsetp"), *arg],
                 ));
             }
@@ -1547,7 +1548,7 @@ pub(crate) fn builtin_set_charset_priority(args: Vec<Value>) -> EvalResult {
         let known = CHARSET_REGISTRY.with(|slot| slot.borrow().contains_symbol(name));
         if !known {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), *arg],
             ));
         }
@@ -1673,7 +1674,7 @@ pub(crate) fn builtin_charset_plist(args: Vec<Value>) -> EvalResult {
             Ok(Value::list(elems))
         } else {
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), Value::from_sym_id(name)],
             ))
         }
@@ -1688,7 +1689,7 @@ pub(crate) fn builtin_charset_id_internal(args: Vec<Value>) -> EvalResult {
         ValueKind::Symbol(id) => id,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), arg],
             ));
         }
@@ -1700,7 +1701,7 @@ pub(crate) fn builtin_charset_id_internal(args: Vec<Value>) -> EvalResult {
             Ok(Value::fixnum(id))
         } else {
             Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), Value::from_sym_id(name)],
             ))
         }
@@ -1887,7 +1888,7 @@ fn expect_make_char_code_byte(value: &Value) -> Result<i64, Flow> {
     let code = expect_wholenump(value)?;
     if code >= 0x100 {
         Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(0xff), *value],
         ))
     } else {
@@ -1900,7 +1901,7 @@ fn expect_make_char_code_byte(value: &Value) -> Result<i64, Flow> {
 pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
     if args.is_empty() || args.len() > 5 {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("make-char"), Value::fixnum(args.len() as i64)],
         ));
     }
@@ -1910,7 +1911,7 @@ pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
         let reg = slot.borrow();
         let info = reg.charsets.get(&name).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("charsetp"), args[0]],
             )
         })?;
@@ -1938,7 +1939,7 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
         ValueKind::Symbol(id) => id,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), args[0]],
             ));
         }
@@ -1951,13 +1952,16 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Vector) => {
             let vec = args[1].as_vector_data().unwrap().clone();
             if vec.is_empty() {
-                return Err(signal("args-out-of-range", vec![args[1], Value::fixnum(0)]));
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![args[1], Value::fixnum(0)],
+                ));
             }
             int_or_zero(&vec[0])
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("arrayp"), args[1]],
             ));
         }
@@ -1969,7 +1973,7 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
             let vec = args[2].as_vector_data().unwrap().clone();
             if vec.len() < 2 {
                 return Err(signal(
-                    "args-out-of-range",
+                    LispCondition::ArgsOutOfRange,
                     vec![args[2], Value::fixnum(vec.len() as i64)],
                 ));
             }
@@ -1981,7 +1985,7 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
         }
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("arrayp"), args[2]],
             ));
         }
@@ -2035,14 +2039,14 @@ pub(crate) fn builtin_define_charset_internal(args: Vec<Value>) -> EvalResult {
     } else if !args[13].is_nil() {
         CharsetMethod::Subset(parse_subset_spec(&args[13]).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), args[13]],
             )
         })?)
     } else if !args[14].is_nil() {
         CharsetMethod::Superset(parse_superset_spec(&args[14]).ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("listp"), args[14]],
             )
         })?)
@@ -2226,13 +2230,13 @@ pub(crate) fn builtin_find_charset_string(args: Vec<Value>) -> EvalResult {
     expect_max_args("find-charset-string", &args, 2)?;
     if !args[0].is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     }
     let string = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;

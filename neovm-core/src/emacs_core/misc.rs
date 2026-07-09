@@ -8,6 +8,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::emacs_core::error::LispCondition;
 use strum::{EnumString, IntoStaticStr};
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -40,7 +41,7 @@ impl LocaleInfoItem {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -51,7 +52,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -62,7 +63,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -74,7 +75,7 @@ fn expect_wholenump(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), *val],
         )),
     }
@@ -84,7 +85,7 @@ fn expect_character_code(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *val],
         )),
     }
@@ -118,7 +119,7 @@ pub(crate) fn builtin_copy_alist(args: Vec<Value>) -> EvalResult {
     let alist = &args[0];
     if !alist.is_nil() && !alist.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *alist],
         ));
     }
@@ -170,7 +171,7 @@ fn builtin_rassoc_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
             }
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), *alist],
                 ));
             }
@@ -227,7 +228,7 @@ fn builtin_rassq_values(key: Value, alist: Value, symbols_with_pos_enabled: bool
         if tail.is_cons() {
             distance = distance.saturating_add(1);
             if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
+                return Err(signal(LispCondition::CircularList, vec![tail]));
             }
             if distance == power {
                 tortoise = tail;
@@ -241,7 +242,7 @@ fn builtin_rassq_values(key: Value, alist: Value, symbols_with_pos_enabled: bool
         Ok(Value::NIL)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), alist],
         ))
     }
@@ -266,7 +267,7 @@ fn builtin_rassq_values_swp(key: Value, alist: Value) -> EvalResult {
         if tail.is_cons() {
             distance = distance.saturating_add(1);
             if tail.bits() == tortoise.bits() {
-                return Err(signal("circular-list", vec![tail]));
+                return Err(signal(LispCondition::CircularList, vec![tail]));
             }
             if distance == power {
                 tortoise = tail;
@@ -280,7 +281,7 @@ fn builtin_rassq_values_swp(key: Value, alist: Value) -> EvalResult {
         Ok(Value::NIL)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), alist],
         ))
     }
@@ -301,7 +302,7 @@ pub(crate) fn builtin_string_repeat(args: Vec<Value>) -> EvalResult {
     expect_args("string-repeat", &args, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -369,7 +370,7 @@ pub(crate) fn builtin_subst_char_in_string(args: Vec<Value>) -> EvalResult {
     let to_code = expect_character_code(&args[1])? as u32;
     let src_ls = args[2].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[2]],
         )
     })?;
@@ -434,7 +435,7 @@ pub(crate) fn builtin_string_to_multibyte(args: Vec<Value>) -> EvalResult {
     expect_args("string-to-multibyte", &args, 1)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -453,7 +454,7 @@ pub(crate) fn builtin_string_to_unibyte(args: Vec<Value>) -> EvalResult {
     expect_args("string-to-unibyte", &args, 1)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -492,7 +493,7 @@ pub(crate) fn builtin_string_as_unibyte(args: Vec<Value>) -> EvalResult {
     expect_args("string-as-unibyte", &args, 1)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -524,7 +525,7 @@ pub(crate) fn builtin_string_as_multibyte(args: Vec<Value>) -> EvalResult {
     expect_args("string-as-multibyte", &args, 1)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
@@ -643,7 +644,7 @@ fn expect_threadp_in_state(
         return Ok(());
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("threadp"), *value],
     ))
 }
@@ -672,7 +673,7 @@ pub(crate) fn builtin_backtrace_locals(
     let nframes = expect_wholenump(&args[0])? as usize;
     if nframes == 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), Value::fixnum(-1)],
         ));
     }
@@ -793,7 +794,7 @@ fn runtime_backtrace_frame_indices_from_base(
         if let Some(raw_offset) = pair_car.as_fixnum() {
             if raw_offset < 0 {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("wholenump"), pair_car],
                 ));
             }

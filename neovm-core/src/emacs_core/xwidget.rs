@@ -13,6 +13,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::symbol::Obarray;
 use super::value::{Value, eq_value};
+use crate::emacs_core::error::LispCondition;
 use crate::heap_types::LispString;
 use std::collections::HashMap;
 use strum::IntoStaticStr;
@@ -141,7 +142,7 @@ fn expect_xwidget(value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("xwidgetp"), value],
         ))
     }
@@ -155,7 +156,7 @@ fn expect_live_xwidget(value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("xwidget-live-p"), value],
         ))
     }
@@ -176,7 +177,7 @@ fn expect_xwidget_view(value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("xwidget-view-p"), value],
         ))
     }
@@ -187,7 +188,7 @@ fn expect_buffer(value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("bufferp"), value],
         ))
     }
@@ -198,24 +199,26 @@ fn expect_symbol(value: Value) -> Result<Value, Flow> {
         Ok(value)
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), value],
         ))
     }
 }
 
 fn expect_string(value: Value) -> Result<LispString, Flow> {
-    value
-        .as_lisp_string()
-        .cloned()
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), value]))
+    value.as_lisp_string().cloned().ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), value],
+        )
+    })
 }
 
 fn expect_i32_wholenump(value: Value) -> Result<i32, Flow> {
     let n = expect_wholenump(&value)?;
     i32::try_from(n).map_err(|_| {
         signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![value, Value::fixnum(0), Value::fixnum(i32::MAX as i64)],
         )
     })

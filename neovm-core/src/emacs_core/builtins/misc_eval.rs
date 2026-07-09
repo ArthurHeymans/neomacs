@@ -209,7 +209,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")])),
         Some(v) if v.is_buffer() => Ok(v.as_buffer_id().unwrap()),
         Some(other) => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("buffer-or-string-p"), *other],
         )),
     }?;
@@ -603,11 +603,17 @@ pub(crate) fn plan_defalias_in_obarray(
     // bare symbols, nil, t, and symbol-with-pos objects.
     let symbol = super::symbols::expect_symbol_id(&args[0])?;
     if symbol == intern("nil") {
-        return Err(signal("setting-constant", vec![Value::symbol("nil")]));
+        return Err(signal(
+            LispCondition::SettingConstant,
+            vec![Value::symbol("nil")],
+        ));
     }
     let definition = args[1];
     if super::symbols::would_create_function_alias_cycle_in_obarray(obarray, symbol, &definition) {
-        return Err(signal("cyclic-function-indirection", vec![args[0]]));
+        return Err(signal(
+            LispCondition::CyclicFunctionIndirection,
+            vec![args[0]],
+        ));
     }
     let result = match args[0].kind() {
         ValueKind::Nil => Value::NIL,
@@ -1140,7 +1146,7 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
     let pos = position.unwrap_or_else(|| buf.point_lisp_char_pos().as_i64());
     if pos < point_min {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(pos), Value::fixnum(pos)],
         ));
     }
@@ -1151,7 +1157,10 @@ pub(crate) fn builtin_barf_if_buffer_read_only_impl(
     {
         return Ok(Value::NIL);
     }
-    Err(signal("buffer-read-only", vec![Value::make_buffer(buf.id)]))
+    Err(signal(
+        LispCondition::BufferReadOnly,
+        vec![Value::make_buffer(buf.id)],
+    ))
 }
 
 pub(crate) fn builtin_bury_buffer_internal(
@@ -1909,7 +1918,7 @@ fn apply_print_overrides(
     while !overrides.is_nil() {
         if !overrides.is_cons() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("consp"), overrides],
             ));
         }
@@ -1920,7 +1929,7 @@ fn apply_print_overrides(
         } else {
             if !setting.is_cons() {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("consp"), setting],
                 ));
             }
@@ -1940,7 +1949,7 @@ fn apply_print_override_setting(
 ) -> Result<(), Flow> {
     let ValueKind::Symbol(id) = key.kind() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), key],
         ));
     };
@@ -1996,7 +2005,7 @@ fn apply_print_override_setting(
         | "integers-as-characters" => {}
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("symbolp"), key],
             ));
         }
@@ -2361,7 +2370,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
         ValueKind::String => args[0].as_lisp_string().expect("propertize string arg"),
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[0]],
             ));
         }
@@ -2370,7 +2379,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
     // `propertize` requires an odd argument count: 1 string + plist pairs.
     if args.len().is_multiple_of(2) {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![
                 Value::symbol("propertize"),
                 Value::fixnum(args.len() as i64),

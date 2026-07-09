@@ -6,6 +6,7 @@ use super::intern::{intern, resolve_sym};
 use super::keymap::is_list_keymap;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use super::value_reader::ReadSymbolShorthands;
+use crate::emacs_core::error::LispCondition;
 use crate::heap_types::LispString;
 use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
@@ -29,7 +30,7 @@ fn load_display_string(value: &LispString) -> String {
 
 pub(crate) fn cannot_open_load_file_signal(file: &LispString) -> Flow {
     signal(
-        "file-missing",
+        LispCondition::FileMissing,
         vec![
             Value::string("Cannot open load file"),
             Value::string("No such file or directory"),
@@ -854,7 +855,7 @@ pub(crate) fn plan_load_in_state(
         ValueKind::String => file.as_lisp_string().expect("checked string").clone(),
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), file],
             ));
         }
@@ -911,7 +912,7 @@ pub(crate) fn builtin_load_in_vm_runtime(
 ) -> Result<Value, Flow> {
     if args.is_empty() {
         return Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol("load"), Value::fixnum(0)],
         ));
     }

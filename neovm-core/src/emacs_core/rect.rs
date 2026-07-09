@@ -14,6 +14,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::EmacsByteRange;
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 
@@ -25,7 +26,7 @@ use crate::heap_types::LispString;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -37,7 +38,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -49,7 +50,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -62,7 +63,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
         )),
     }
@@ -75,7 +76,7 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         )),
     }
@@ -99,8 +100,12 @@ fn rectangle_strings_to_value(rectangle: &[LispString]) -> Value {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn rectangle_strings_from_value(value: &Value) -> Result<Vec<LispString>, Flow> {
-    let items = list_to_vec(value)
-        .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *value]))?;
+    let items = list_to_vec(value).ok_or_else(|| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), *value],
+        )
+    })?;
     let mut out = Vec::with_capacity(items.len());
     for item in items {
         match item.kind() {
@@ -111,7 +116,7 @@ fn rectangle_strings_from_value(value: &Value) -> Result<Vec<LispString>, Flow> 
             ),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("buffer-or-string-p"), item],
                 ));
             }
@@ -406,7 +411,7 @@ pub(crate) fn builtin_extract_rectangle_line(args: Vec<Value>) -> EvalResult {
     let end_col = expect_int(&args[1])?;
     if start_col < 0 || end_col < 0 {
         return Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(start_col), Value::fixnum(end_col)],
         ));
     }

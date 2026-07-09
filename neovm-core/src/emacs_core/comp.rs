@@ -5,6 +5,7 @@
 //! these implementations provide compatible arity/type/error behavior for
 //! startup code.
 
+use crate::emacs_core::error::LispCondition;
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,7 @@ use crate::tagged::header::VecLikeType;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -26,7 +27,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -42,7 +43,7 @@ fn expect_string(value: &Value) -> Result<String, Flow> {
             .expect("ValueKind::String must carry LispString payload"))
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *value],
         ))
     }
@@ -52,7 +53,7 @@ fn expect_subr(value: &Value) -> Result<(), Flow> {
     match value.kind() {
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => Ok(()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("subrp"), *value],
         )),
     }
@@ -75,7 +76,7 @@ fn ensure_existing_file(path: &str) -> Result<PathBuf, Flow> {
         Ok(abs)
     } else {
         Err(signal(
-            "file-missing",
+            LispCondition::FileMissing,
             vec![Value::string(abs.display().to_string())],
         ))
     }

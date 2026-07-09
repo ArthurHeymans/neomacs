@@ -3,6 +3,7 @@
 //! Provides the terminal runtime owner, terminal parameter storage,
 //! and all terminal/tty query builtins.
 
+use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
@@ -514,7 +515,7 @@ pub(crate) fn expect_terminal_designator(value: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), *value],
         ))
     }
@@ -528,7 +529,7 @@ pub(crate) fn expect_terminal_designator_eval(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), *value],
         ))
     }
@@ -543,7 +544,7 @@ pub(crate) fn expect_terminal_designator_in_state(
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), *value],
         ))
     }
@@ -604,7 +605,7 @@ fn expect_symbol_key(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
         ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => Ok(*value),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), *value],
         )),
     }
@@ -732,7 +733,7 @@ pub(crate) fn make_alist(pairs: Vec<(Value, Value)>) -> Value {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -743,7 +744,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -754,7 +755,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -777,7 +778,7 @@ pub(crate) fn builtin_terminal_name(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -831,7 +832,7 @@ pub(crate) fn builtin_frame_terminal(
     let Some(terminal_id) = terminal_id else {
         let bad = args.first().copied().unwrap_or(Value::NIL);
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("frame-live-p"), bad],
         ));
     };
@@ -889,7 +890,7 @@ pub(crate) fn builtin_terminal_parameter(
     expect_args("terminal-parameter", &args, 2)?;
     let Some(terminal_id) = decode_terminal_id_eval(eval, &args[0]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), args[0]],
         ));
     };
@@ -911,7 +912,7 @@ pub(crate) fn builtin_terminal_parameters(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -929,7 +930,7 @@ pub(crate) fn builtin_set_terminal_parameter(
     expect_args("set-terminal-parameter", &args, 3)?;
     let Some(terminal_id) = decode_terminal_id_eval(eval, &args[0]) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), args[0]],
         ));
     };
@@ -953,7 +954,7 @@ pub(crate) fn builtin_tty_type(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -972,7 +973,7 @@ pub(crate) fn builtin_tty_top_frame(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -1003,7 +1004,7 @@ pub(crate) fn builtin_tty_display_color_p(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -1021,7 +1022,7 @@ pub(crate) fn builtin_tty_display_color_cells(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -1040,7 +1041,7 @@ pub(crate) fn builtin_tty_no_underline(
         && decode_terminal_id_eval(eval, terminal).is_none()
     {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), *terminal],
         ));
     }
@@ -1056,7 +1057,7 @@ pub(crate) fn builtin_controlling_tty_p(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -1074,7 +1075,7 @@ pub(crate) fn builtin_suspend_tty(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };
@@ -1115,7 +1116,7 @@ pub(crate) fn builtin_resume_tty(
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("terminal-live-p"), designator],
         ));
     };

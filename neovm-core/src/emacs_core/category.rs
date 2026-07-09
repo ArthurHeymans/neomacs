@@ -8,6 +8,7 @@
 //! NeoVM now mirrors that ownership model instead of routing semantics
 //! through a parallel Rust-side manager.
 
+use crate::emacs_core::error::LispCondition;
 use std::cell::RefCell;
 
 use super::error::{EvalResult, Flow, signal};
@@ -50,7 +51,7 @@ const CATEGORY_MAX: i64 = 0x7e;
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -61,7 +62,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -72,7 +73,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -91,7 +92,7 @@ fn check_category(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) if (CATEGORY_MIN..=CATEGORY_MAX).contains(&c) => Ok(c),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("categoryp"), *value],
         )),
     }
@@ -101,7 +102,7 @@ fn extract_char_opt(value: &Value, _fn_name: &str) -> Result<Option<char>, Flow>
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(super::builtins::character_code_to_rust_char(c)),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -123,7 +124,7 @@ fn extract_char_code(value: &Value, _fn_name: &str) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(c as i64),
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("characterp"), *value],
         )),
     }
@@ -139,7 +140,7 @@ fn clone_vector_value(value: &Value) -> EvalResult {
             Ok(Value::vector(value.as_vector_data().unwrap().clone()))
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), *value],
         )),
     }
@@ -167,7 +168,7 @@ fn intern_category_set(table: Value, category_set: Value) -> EvalResult {
     let hash = category_set_hash(table)?;
     let Some(hash_ref) = hash.as_hash_table() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), hash],
         ));
     };
@@ -210,7 +211,7 @@ fn intern_category_set_bits(table: Value, bits: u128) -> EvalResult {
     let hash = category_set_hash(table)?;
     let Some(hash_ref) = hash.as_hash_table() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("hash-table-p"), hash],
         ));
     };
@@ -290,7 +291,7 @@ pub(crate) fn ensure_standard_category_table_object() -> EvalResult {
 fn deep_copy_category_table(source: &Value) -> EvalResult {
     if !is_category_table_value(source)? {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("category-table-p"), *source],
         ));
     }
@@ -354,7 +355,7 @@ fn category_docstring_in_table(table: Value, category: char) -> Result<Value, Fl
     let docs = category_docstrings(table)?;
     if !docs.is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), docs],
         ));
     };
@@ -373,7 +374,7 @@ fn set_category_docstring_in_table(
     let docs = category_docstrings(table)?;
     if !docs.is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("vectorp"), docs],
         ));
     };
@@ -420,7 +421,7 @@ fn check_category_table_in_buffers(
         Some(table) => {
             if !is_category_table_value(&table)? {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("category-table-p"), table],
                 ));
             }
@@ -459,7 +460,7 @@ fn set_current_buffer_category_table_in_buffers(
 fn category_set_contains(category_set: &Value, category: char) -> Result<bool, Flow> {
     if !category_set.is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("categorysetp"), *category_set],
         ));
     };
@@ -499,7 +500,7 @@ fn set_category_set_member(
 ) -> Result<(), Flow> {
     if !category_set.is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("categorysetp"), *category_set],
         ));
     };
@@ -532,7 +533,7 @@ pub(crate) fn builtin_copy_category_table(args: Vec<Value>) -> EvalResult {
         Some(table) => {
             if !is_category_table_value(table)? {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("category-table-p"), *table],
                 ));
             }
@@ -548,7 +549,7 @@ pub(crate) fn builtin_make_category_set(args: Vec<Value>) -> EvalResult {
 
     let Some(string) = args[0].as_lisp_string() else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         ));
     };
@@ -580,7 +581,7 @@ pub(crate) fn builtin_category_set_mnemonics(args: Vec<Value>) -> EvalResult {
 
     if !&args[0].is_vector() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("categorysetp"), args[0]],
         ));
     };
@@ -590,7 +591,7 @@ pub(crate) fn builtin_category_set_mnemonics(args: Vec<Value>) -> EvalResult {
         bits.len() >= 130 && bits[0].is_symbol_named("--bool-vector--") && bits[1].is_fixnum();
     if !valid_shape {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("categorysetp"), args[0]],
         ));
     }
@@ -702,7 +703,7 @@ pub(crate) fn builtin_define_category(
         ValueKind::String => args[1],
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), args[1]],
             ));
         }

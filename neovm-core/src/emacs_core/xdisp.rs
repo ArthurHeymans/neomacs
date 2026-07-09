@@ -24,6 +24,7 @@ use crate::buffer::{
     Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
     TextPropertyTable,
 };
+use crate::emacs_core::error::LispCondition;
 use crate::window::{
     DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
     WindowId,
@@ -37,7 +38,7 @@ use strum::{EnumString, IntoStaticStr};
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -48,7 +49,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_args_range(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -63,7 +64,7 @@ fn expect_integer_or_marker(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) | ValueKind::Veclike(VecLikeType::Bignum) => Ok(()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *arg],
         )),
     }
@@ -80,7 +81,7 @@ fn expect_fixnum_arg(name: &str, arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol(name), *arg],
         )),
     }
@@ -892,7 +893,7 @@ pub(crate) fn builtin_format_mode_line(args: Vec<Value>) -> EvalResult {
     if let Some(window) = args.get(2) {
         if !window.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("windowp"), *window],
             ));
         }
@@ -900,7 +901,7 @@ pub(crate) fn builtin_format_mode_line(args: Vec<Value>) -> EvalResult {
     if let Some(buffer) = args.get(3) {
         if !buffer.is_nil() && !buffer.is_buffer() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), *buffer],
             ));
         }
@@ -3478,7 +3479,7 @@ pub(crate) fn builtin_window_text_pixel_size(args: Vec<Value>) -> EvalResult {
     if let Some(window) = args.first() {
         if !window.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *window],
             ));
         }
@@ -3654,7 +3655,7 @@ fn resolve_live_window_for_text_pixel_size(
     let wid = value.as_window_id().map(WindowId);
     let Some(wid) = wid else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), *value],
         ));
     };
@@ -3663,7 +3664,7 @@ fn resolve_live_window_for_text_pixel_size(
         .map(|fid| (fid, wid))
         .ok_or_else(|| {
             signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *value],
             )
         })
@@ -3679,7 +3680,7 @@ pub(crate) fn builtin_pos_visible_in_window_p(args: Vec<Value>) -> EvalResult {
     if let Some(window) = args.get(1) {
         if !window.is_nil() {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("window-live-p"), *window],
             ));
         }
@@ -3798,7 +3799,7 @@ fn window_line_height_impl(
                         ValueKind::Fixnum(n) => n,
                         _other => {
                             return Err(signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("integerp"), line_spec],
                             ));
                         }
@@ -3841,7 +3842,7 @@ fn window_line_height_impl(
             ValueKind::Fixnum(n) => n,
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), line_spec],
                 ));
             }
@@ -3877,11 +3878,11 @@ pub(crate) fn builtin_move_point_visually(args: Vec<Value>) -> EvalResult {
     expect_args("move-point-visually", &args, 1)?;
     match args[0].kind() {
         ValueKind::Fixnum(v) => Err(signal(
-            "args-out-of-range",
+            LispCondition::ArgsOutOfRange,
             vec![Value::fixnum(v), Value::fixnum(v)],
         )),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), args[0]],
         )),
     }
@@ -4017,7 +4018,7 @@ pub(crate) fn builtin_current_bidi_paragraph_direction(
         },
         Some(b) if !b.is_nil() => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("bufferp"), *b],
             ));
         }
@@ -4137,7 +4138,7 @@ pub(crate) fn builtin_bidi_find_overridden_directionality(args: Vec<Value>) -> E
     }
     if !third.is_string() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), *third],
         ));
     }
@@ -4215,7 +4216,7 @@ pub(crate) fn builtin_move_to_window_line(
             ValueKind::Fixnum(v) => v,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("integerp"), args[0]],
                 ));
             }
@@ -4516,7 +4517,7 @@ fn validate_optional_frame_designator_in_state(
         }
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("framep"), *frameish],
     ))
 }
@@ -4557,7 +4558,7 @@ fn validate_optional_window_designator_in_state(
         }
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol(predicate), *windowish],
     ))
 }
@@ -4585,7 +4586,7 @@ fn validate_optional_buffer_designator_in_state(
         }
     }
     Err(signal(
-        "wrong-type-argument",
+        LispCondition::WrongTypeArgument,
         vec![Value::symbol("bufferp"), *bufferish],
     ))
 }
@@ -4906,7 +4907,7 @@ fn resolve_live_window_identity(
         WindowId(id as u64)
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("window-live-p"), *windowish],
         ));
     };
@@ -5187,14 +5188,14 @@ fn validate_posn_pixel_coordinate(value: Value) -> Result<i64, Flow> {
         ValueKind::Fixnum(v) => v,
         _ => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("fixnump"), value],
             ));
         }
     };
     if coordinate != -1 && coordinate < 0 {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("wholenump"), value],
         ));
     }
@@ -5397,7 +5398,7 @@ fn resolve_posn_at_xy_window(
         FrameId(id as u64)
     } else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("framep"), *frameish],
         ));
     };
@@ -5795,7 +5796,7 @@ fn snapshot_request_from_args(
             };
             let Some(id) = id else {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("framep"), *value],
                 ));
             };
@@ -5876,7 +5877,7 @@ pub(crate) fn builtin_neomacs_write_frame_snapshot(
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     else {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::symbol("stringp"),
                 args.first().copied().unwrap_or(Value::NIL),

@@ -701,7 +701,7 @@ impl<'a> Vm<'a> {
             self.ctx.bc_buf.truncate(frame_base);
             self.ctx.bc_frames.pop();
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![arity, Value::fixnum(nargs as i64)],
             ));
         }
@@ -1460,7 +1460,7 @@ impl<'a> Vm<'a> {
                             handlers,
                             bind_stack,
                             signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("hash-table-p"), jump_table],
                             ),
                         )?;
@@ -1478,7 +1478,7 @@ impl<'a> Vm<'a> {
                             }
                             _ => {
                                 vm_try!(Err(signal(
-                                    "wrong-type-argument",
+                                    LispCondition::WrongTypeArgument,
                                     vec![Value::symbol("integerp"), target_val],
                                 )));
                             }
@@ -1921,7 +1921,7 @@ impl<'a> Vm<'a> {
                         let val = *top;
                         stk!().pop();
                         vm_try!(Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), val]
                         )));
                     }
@@ -1935,7 +1935,7 @@ impl<'a> Vm<'a> {
                         let val = *top;
                         stk!().pop();
                         vm_try!(Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), val]
                         )));
                     }
@@ -2679,9 +2679,12 @@ impl<'a> Vm<'a> {
     /// read the value cell directly without full symbolic resolution.
     fn fast_path_var_ref(&mut self, name_id: SymId) -> EvalResult {
         let ob = &self.ctx.obarray;
-        let sym = ob
-            .get_by_id(name_id)
-            .ok_or_else(|| signal("void-variable", vec![Value::from_sym_id(name_id)]))?;
+        let sym = ob.get_by_id(name_id).ok_or_else(|| {
+            signal(
+                LispCondition::VoidVariable,
+                vec![Value::from_sym_id(name_id)],
+            )
+        })?;
         if sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval {
             // SAFETY: redirect() already confirmed Plainval, so val.plain is active
             let val = unsafe { sym.val.plain };
@@ -2767,7 +2770,10 @@ impl<'a> Vm<'a> {
                 // signals when `find_symbol_value` returns
                 // `Qunbound`.
                 if val.is_unbound() {
-                    return Err(signal("void-variable", vec![Value::from_sym_id(name_id)]));
+                    return Err(signal(
+                        LispCondition::VoidVariable,
+                        vec![Value::from_sym_id(name_id)],
+                    ));
                 }
                 return Ok(val);
             }
@@ -2803,7 +2809,10 @@ impl<'a> Vm<'a> {
             }
         }
 
-        Err(signal("void-variable", vec![Value::from_sym_id(name_id)]))
+        Err(signal(
+            LispCondition::VoidVariable,
+            vec![Value::from_sym_id(name_id)],
+        ))
     }
 
     /// GNU bytecode `Bvarset` by SymId.
@@ -2818,7 +2827,7 @@ impl<'a> Vm<'a> {
 
         if self.ctx.obarray.is_constant_id(resolved) {
             return Err(signal(
-                "setting-constant",
+                LispCondition::SettingConstant,
                 vec![Value::from_sym_id(name_id)],
             ));
         }
@@ -2998,7 +3007,10 @@ impl<'a> Vm<'a> {
             return Ok(val);
         }
 
-        Err(signal("void-variable", vec![Value::symbol(name)]))
+        Err(signal(
+            LispCondition::VoidVariable,
+            vec![Value::symbol(name)],
+        ))
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -3023,7 +3035,10 @@ impl<'a> Vm<'a> {
         // is no longer needed — fall through to obarray write.
 
         if self.ctx.obarray.is_constant_id(resolved) {
-            return Err(signal("setting-constant", vec![Value::symbol(name)]));
+            return Err(signal(
+                LispCondition::SettingConstant,
+                vec![Value::symbol(name)],
+            ));
         }
 
         let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);
@@ -3205,7 +3220,7 @@ impl<'a> Vm<'a> {
 
         if args.len() != 2 {
             return Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![
                     Value::symbol("set-default"),
                     Value::fixnum(args.len() as i64),
@@ -3218,7 +3233,7 @@ impl<'a> Vm<'a> {
             ValueKind::Symbol(id) => id,
             _ => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("symbolp"), args[0]],
                 ));
             }
@@ -3363,7 +3378,7 @@ impl<'a> Vm<'a> {
             symbol,
         )?;
         if self.ctx.obarray.is_constant_id(resolved) {
-            return Err(signal("setting-constant", vec![args[0]]));
+            return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
         }
         self.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
         crate::emacs_core::eval::makunbound_runtime_binding_in_state(
@@ -3430,7 +3445,7 @@ impl<'a> Vm<'a> {
                     Ok(fid)
                 } else {
                     Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol(predicate), Value::fixnum(n)],
                     ))
                 }
@@ -3442,13 +3457,13 @@ impl<'a> Vm<'a> {
                     Ok(fid)
                 } else {
                     Err(signal(
-                        "wrong-type-argument",
+                        LispCondition::WrongTypeArgument,
                         vec![Value::symbol(predicate), *val],
                     ))
                 }
             }
             _ => Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol(predicate), *val],
             )),
         }
@@ -3660,7 +3675,7 @@ impl<'a> Vm<'a> {
                             }
                             _tail => {
                                 return Err(signal(
-                                    "wrong-type-argument",
+                                    LispCondition::WrongTypeArgument,
                                     vec![Value::symbol("listp"), cursor],
                                 ));
                             }
@@ -3710,7 +3725,7 @@ impl<'a> Vm<'a> {
                     }
                 }
                 _other => Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("list-or-vector-p"), sequence],
                 )),
             }
@@ -4814,17 +4829,18 @@ impl<'a> Vm<'a> {
                 || entry.max_args.is_some_and(|max| nargs > max as usize)
             {
                 Err(signal(
-                    "wrong-number-of-arguments",
+                    LispCondition::WrongNumberOfArguments,
                     vec![subr_value, Value::fixnum(nargs as i64)],
                 ))
             } else {
                 match entry.function {
-                    Some(function) => vm
-                        .dispatch_builtin_subr_from_stack_args_unchecked(
+                    Some(function) => {
+                        vm.dispatch_builtin_subr_from_stack_args_unchecked(
                             function, args_start, nargs,
                         )
-                        .unwrap_or_else(|| Err(signal("void-function", vec![func_val]))),
-                    None => Err(signal("void-function", vec![func_val])),
+                        .unwrap_or_else(|| Err(signal(LispCondition::VoidFunction, vec![func_val])))
+                    }
+                    None => Err(signal(LispCondition::VoidFunction, vec![func_val])),
                 }
             };
             let result = vm.ctx.dispatch_signal_result_if_needed(result);
@@ -5012,7 +5028,7 @@ impl<'a> Vm<'a> {
             || entry.max_args.is_some_and(|max| nargs > max as usize)
         {
             Err(signal(
-                "wrong-number-of-arguments",
+                LispCondition::WrongNumberOfArguments,
                 vec![callee.wrong_arity_value(), Value::fixnum(nargs as i64)],
             ))
         } else {
@@ -5026,9 +5042,15 @@ impl<'a> Vm<'a> {
                 Some(function) => self
                     .dispatch_builtin_subr_from_stack_args_unchecked(function, args_start, nargs)
                     .unwrap_or_else(|| {
-                        Err(signal("void-function", vec![Value::from_sym_id(sym_id)]))
+                        Err(signal(
+                            LispCondition::VoidFunction,
+                            vec![Value::from_sym_id(sym_id)],
+                        ))
                     }),
-                None => Err(signal("void-function", vec![Value::from_sym_id(sym_id)])),
+                None => Err(signal(
+                    LispCondition::VoidFunction,
+                    vec![Value::from_sym_id(sym_id)],
+                )),
             }
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
@@ -5462,7 +5484,7 @@ impl<'a> Vm<'a> {
                     handler_stack_len = handlers.len(),
                     "vm resume_nonlocal: no matching catch for throw"
                 );
-                Err(signal("no-catch", vec![tag, value]))
+                Err(signal(LispCondition::NoCatch, vec![tag, value]))
             }
             Flow::Signal(sig) => {
                 if sig.symbol == intern("kill-emacs") {
@@ -5720,7 +5742,7 @@ impl<'a> Vm<'a> {
                         }
                         _ => {
                             return Err(signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("listp"), list],
                             ));
                         }
@@ -5774,7 +5796,7 @@ impl<'a> Vm<'a> {
                                 }
                                 _ => {
                                     return Err(signal(
-                                        "wrong-type-argument",
+                                        LispCondition::WrongTypeArgument,
                                         vec![Value::symbol("plistp"), plist],
                                     ));
                                 }
@@ -5783,7 +5805,7 @@ impl<'a> Vm<'a> {
                         ValueKind::Nil => return Ok(Value::NIL),
                         _ => {
                             return Err(signal(
-                                "wrong-type-argument",
+                                LispCondition::WrongTypeArgument,
                                 vec![Value::symbol("plistp"), plist],
                             ));
                         }
@@ -5809,7 +5831,7 @@ impl<'a> Vm<'a> {
         self.builtin_run_hooks_shared(&[Value::symbol("kill-emacs-hook")])?;
         self.ctx
             .request_shutdown(request.exit_code, request.restart);
-        Err(signal_suppressed("kill-emacs", vec![]))
+        Err(signal_suppressed(LispCondition::KillEmacs, vec![]))
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

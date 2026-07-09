@@ -43,6 +43,7 @@
 //! code: it flows as its `usize` bit pattern (`i64` in CLIF), exactly as the
 //! interpreter stores it.
 
+use crate::emacs_core::error::LispCondition;
 use cranelift_codegen::ir::Value as ClifValue;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
@@ -1187,7 +1188,7 @@ pub extern "C" fn neovm_jit_call_subr_spec(
 /// GC-FREE INVARIANT (load-bearing): the generated code does NOT root its
 /// residual operand stack around this call, so no path here may allocate on
 /// the lisp heap or run lisp code. That holds: `maybe_quit`'s quit/throw Flow
-/// construction is pure Rust-heap (`signal("quit", vec![])` — no lisp
+/// construction is pure Rust-heap (`signal(LispCondition::Quit, vec![])` — no lisp
 /// allocation), `subr_spec_armed` only reads, and the armed test is a tag
 /// check on an immediate/heap header. The skipped backtrace frame is
 /// unobservable: the armed path cannot signal, GC, or run lisp between frame
@@ -1808,7 +1809,7 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                     for _ in 0..ours {
                         ctx.pop_condition_frame();
                     }
-                    stash_pending_flow(signal("no-catch", vec![tag, value]));
+                    stash_pending_flow(signal(LispCondition::NoCatch, vec![tag, value]));
                     return -1;
                 };
                 for m in 0..ours {

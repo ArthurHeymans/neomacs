@@ -16,6 +16,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType, LispCharPos1};
+use crate::emacs_core::error::LispCondition;
 
 // ---------------------------------------------------------------------------
 // Marker struct (for documentation / internal helpers)
@@ -35,7 +36,7 @@ pub(crate) struct Marker {
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -46,7 +47,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -230,7 +231,7 @@ fn expect_marker(_name: &str, v: &Value) -> Result<(), Flow> {
         Ok(())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("markerp"), *v],
         ))
     }
@@ -492,7 +493,7 @@ pub(crate) fn builtin_copy_marker_in_buffers(
         }
         ValueKind::Nil => Ok(make_marker_value(None, None, insertion_type)),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), args[0]],
         )),
     }
@@ -527,7 +528,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
                 .and_then(|id| buffers.get(id).map(|_| id)),
             _other => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("bufferp"), args[2]],
                 ));
             }
@@ -548,7 +549,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
         }
         _other => {
             return Err(signal(
-                "wrong-type-argument",
+                LispCondition::WrongTypeArgument,
                 vec![Value::symbol("integer-or-marker-p"), args[1]],
             ));
         }

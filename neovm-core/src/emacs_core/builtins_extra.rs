@@ -11,6 +11,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
+use crate::emacs_core::error::LispCondition;
 // storage imports removed — now using emacs_char + LispString directly
 use super::value::{Value, ValueKind, VecLikeType};
 use malachite::base::num::conversion::traits::RoundingFrom;
@@ -26,7 +27,7 @@ use std::fs;
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -37,7 +38,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -48,7 +49,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
-            "wrong-number-of-arguments",
+            LispCondition::WrongNumberOfArguments,
             vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
         ))
     } else {
@@ -60,7 +61,7 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *val],
         )),
     }
@@ -70,7 +71,7 @@ fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("fixnump"), *val],
         )),
     }
@@ -97,7 +98,7 @@ fn expect_number_or_marker_f64(value: &Value) -> Result<f64, Flow> {
             Ok(super::marker::marker_position_as_int(value)? as f64)
         }
         _ => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("number-or-marker-p"), *value],
         )),
     }
@@ -108,7 +109,7 @@ fn list_car_or_signal(value: &Value) -> Result<Value, Flow> {
         ValueKind::Cons => Ok(value.cons_car()),
         ValueKind::Nil => Ok(Value::NIL),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *value],
         )),
     }
@@ -124,7 +125,7 @@ fn assoc_string_key_name(value: &Value) -> Result<crate::heap_types::LispString,
             .map(crate::heap_types::LispString::from_utf8)
             .ok_or_else(|| {
                 signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("stringp"), *value],
                 )
             }),
@@ -227,7 +228,7 @@ fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
                     }
                     _tail => {
                         return Err(signal(
-                            "wrong-type-argument",
+                            LispCondition::WrongTypeArgument,
                             vec![Value::symbol("listp"), cursor],
                         ));
                     }
@@ -244,7 +245,7 @@ fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
         .map(|code| Value::fixnum(code as i64))
         .collect()),
         _other => Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *val],
         )),
     }
@@ -289,7 +290,7 @@ pub(crate) fn builtin_take(args: Vec<Value>) -> EvalResult {
     let list = &args[1];
     if !list.is_nil() && !list.is_cons() {
         return Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("listp"), *list],
         ));
     }
@@ -307,7 +308,7 @@ pub(crate) fn builtin_take(args: Vec<Value>) -> EvalResult {
             }
             _tail => {
                 return Err(signal(
-                    "wrong-type-argument",
+                    LispCondition::WrongTypeArgument,
                     vec![Value::symbol("listp"), cursor],
                 ));
             }
@@ -329,13 +330,13 @@ pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
     expect_max_args("string-search", &args, 3)?;
     let needle_ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
     let haystack_ls = args[1].as_lisp_string().ok_or_else(|| {
         signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[1]],
         )
     })?;
@@ -343,7 +344,7 @@ pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
     let start_char = if args.len() > 2 {
         let n = expect_fixnum(&args[2])?;
         if n < 0 || n as usize > char_len {
-            return Err(signal("args-out-of-range", vec![args[2]]));
+            return Err(signal(LispCondition::ArgsOutOfRange, vec![args[2]]));
         }
         n as usize
     } else {
@@ -467,7 +468,7 @@ fn bare_symbol_value(arg: Value) -> EvalResult {
         Ok(arg.as_symbol_with_pos_sym().unwrap())
     } else {
         Err(signal(
-            "wrong-type-argument",
+            LispCondition::WrongTypeArgument,
             vec![
                 Value::list(vec![
                     Value::symbol("symbolp"),
