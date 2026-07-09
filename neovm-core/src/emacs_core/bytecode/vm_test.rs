@@ -2709,7 +2709,7 @@ fn vm_frame_parameter_and_resize_builtins_use_shared_runtime_state() {
                        (frame-position f)
                        (set-frame-position f 3 4)))"#
         ),
-        "OK (\"vm-frame\" \"vm-title\" nil 7 7 100 36 (0 . 0) t)"
+        "OK (\"vm-frame\" \"vm-title\" t 7 7 80 25 (0 . 0) t)"
     );
 }
 
