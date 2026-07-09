@@ -250,12 +250,6 @@ pub(crate) fn signal_with_data(symbol: impl IntoConditionSym, data: Value) -> Fl
     signal_with_data_internal(symbol, data, false)
 }
 
-/// Create a signal with raw cdr payload without running `signal-hook-function`.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn signal_with_data_suppressed(symbol: impl IntoConditionSym, data: Value) -> Flow {
-    signal_with_data_internal(symbol, data, true)
-}
-
 fn signal_with_data_internal(
     symbol: impl IntoConditionSym,
     data: Value,

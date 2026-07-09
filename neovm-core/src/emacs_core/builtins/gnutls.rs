@@ -256,14 +256,6 @@ pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
     gnutls_symmetric_cipher(args, GnutlsCipherOperation::Encrypt)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn gnutls_crypto_unavailable() -> EvalResult {
-    Err(signal(
-        "error",
-        vec![Value::string("GnuTLS crypto capability is not available")],
-    ))
-}
-
 #[derive(Clone, Copy)]
 struct GnutlsDigestAlgorithm {
     name: &'static str,

@@ -1278,17 +1278,6 @@ pub(crate) fn builtin_skip_chars_backward(
 // Mark and region
 // ===========================================================================
 
-/// (mark &optional FORCE) -> integer or signal
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_mark_nav(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    let _force = args.first().is_some_and(|v| v.is_truthy());
-    let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;
-    match buf.mark_emacs_byte_pos() {
-        Some(byte_pos) => Ok(Value::fixnum(byte_to_char_pos(buf, byte_pos))),
-        None => Ok(Value::NIL),
-    }
-}
-
 /// (region-beginning) -> integer
 pub(crate) fn builtin_region_beginning(
     eval: &mut super::eval::Context,

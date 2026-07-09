@@ -524,23 +524,6 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>)
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_commandp_impl(
-    obarray: &Obarray,
-    interactive: &InteractiveRegistry,
-    args: &[Value],
-) -> EvalResult {
-    expect_min_args("commandp", &args, 1)?;
-    expect_max_args("commandp", &args, 2)?;
-    let is_command = command_designator_p_in_state(
-        obarray,
-        interactive,
-        &args[0],
-        args.get(1).is_some_and(|value| !value.is_nil()),
-    );
-    Ok(Value::bool_val(is_command))
-}
-
 fn command_modes_from_value_body(body: &[Value]) -> Option<Value> {
     let body_index = value_body_metadata_end(body);
     for form in &body[body_index..] {
@@ -1280,11 +1263,6 @@ struct InteractiveInvocationContext {
 }
 
 impl InteractiveInvocationContext {
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn from_keys_arg(eval: &Context, keys: Option<&Value>) -> Self {
-        Self::from_keys_arg_in_state(eval.read_command_keys(), keys)
-    }
-
     fn from_keys_arg_in_state(read_command_keys: &[Value], keys: Option<&Value>) -> Self {
         let mut context = Self::default();
         if let Some(keys_val) = keys {
@@ -1551,14 +1529,6 @@ fn interactive_current_buffer_default(buffers: &crate::buffer::BufferManager) ->
 fn interactive_other_buffer_default(buffers: &mut crate::buffer::BufferManager) -> Value {
     let avoid = interactive_current_buffer_default(buffers);
     super::builtins::other_buffer_impl(buffers, vec![avoid]).unwrap_or(Value::NIL)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn interactive_string_code_returns_no_args_without_eval(
-    code: &crate::heap_types::LispString,
-) -> bool {
-    let parsed = parse_interactive_code_entries(code);
-    parsed.prefix_flags.is_empty() && parsed.entries.is_empty()
 }
 
 fn interactive_last_input_event_with_parameters_in_state(
@@ -2108,11 +2078,6 @@ fn interactive_use_region_p_in_vm_runtime(shared: &mut super::eval::Context) -> 
         .map(|value| value.is_truthy())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn interactive_buffer_read_only_active(eval: &Context, buf: &crate::buffer::Buffer) -> bool {
-    interactive_buffer_read_only_active_in_state(&eval.obarray, &[], buf)
-}
-
 fn interactive_buffer_read_only_active_in_state(
     obarray: &Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2123,11 +2088,6 @@ fn interactive_buffer_read_only_active_in_state(
     }
     dynamic_buffer_or_global_symbol_value_in_state(obarray, dynamic, buf, "buffer-read-only")
         .is_some_and(|v| v.is_truthy())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn interactive_require_writable_current_buffer(eval: &Context) -> Result<(), Flow> {
-    interactive_require_writable_current_buffer_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
 fn interactive_require_writable_current_buffer_in_state(
@@ -2411,14 +2371,6 @@ fn parse_interactive_spec_from_value(spec: &Value) -> Option<ParsedInteractiveSp
             Some(ParsedInteractiveSpec::Form(*spec))
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn parsed_interactive_spec_from_lambda(lambda: &LambdaData) -> Option<ParsedInteractiveSpec> {
-    lambda
-        .body
-        .get(value_body_metadata_end(&lambda.body))
-        .and_then(parse_interactive_spec_from_form_value)
 }
 
 fn parsed_interactive_spec_from_body_values(body: &[Value]) -> Option<ParsedInteractiveSpec> {
@@ -4012,11 +3964,6 @@ fn single_command_key_vector_in_state(read_command_keys: &[Value]) -> Value {
         return Value::vector(read_command_keys.to_vec());
     }
     Value::vector(Vec::<Value>::new())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn single_command_key_vector(eval: &Context) -> Value {
-    single_command_key_vector_in_state(eval.read_command_keys())
 }
 
 pub(crate) fn builtin_this_single_command_keys_impl(

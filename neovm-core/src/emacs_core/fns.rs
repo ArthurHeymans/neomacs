@@ -642,15 +642,6 @@ fn checked_buffer_hash_lisp_region(
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn normalize_current_buffer_region_bounds(
-    eval: &super::eval::Context,
-    start_arg: &Value,
-    end_arg: &Value,
-) -> Result<(crate::buffer::BufferId, EmacsByteRange), Flow> {
-    normalize_current_buffer_region_bounds_in_manager(&eval.buffers, start_arg, end_arg)
-}
-
 pub(crate) fn read_buffer_region_bytes_in_manager(
     buffers: &BufferManager,
     buffer_id: crate::buffer::BufferId,

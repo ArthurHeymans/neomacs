@@ -845,11 +845,6 @@ impl BufferText {
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(in crate::buffer) fn dump_snapshot(&self) -> BufferTextBytesSnapshot {
-        self.storage.borrow().backend.snapshot()
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
         Self::from_backend(TextBackend::from_snapshot(
             snapshot,

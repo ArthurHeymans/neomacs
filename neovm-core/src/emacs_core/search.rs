@@ -239,31 +239,6 @@ pub(crate) fn normalize_lisp_string_start_arg(
     ))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn flatten_match_data(md: &super::regex::MatchData) -> Value {
-    let mut trailing = md.groups.len();
-    while trailing > 0 && md.groups[trailing - 1].is_none() {
-        trailing -= 1;
-    }
-
-    let mut flat: Vec<Value> = Vec::with_capacity(trailing * 2);
-    for grp in md.groups.iter().take(trailing) {
-        match grp {
-            Some(group) => {
-                // For string searches, positions are already character positions.
-                // For buffer searches, positions are byte positions (returned as-is).
-                flat.push(Value::fixnum(group.start() as i64));
-                flat.push(Value::fixnum(group.end() as i64));
-            }
-            None => {
-                flat.push(Value::NIL);
-                flat.push(Value::NIL);
-            }
-        }
-    }
-    Value::list(flat)
-}
-
 // ---------------------------------------------------------------------------
 // Pure builtins
 // ---------------------------------------------------------------------------

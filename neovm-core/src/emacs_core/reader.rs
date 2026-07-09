@@ -561,26 +561,6 @@ fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinib
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn signal_invalid_read_syntax_in_buffer(
-    buffer_text: &str,
-    absolute_error_pos: usize,
-    message: String,
-) -> Flow {
-    let clamped_pos = absolute_error_pos.min(buffer_text.len());
-    let prefix = &buffer_text[..clamped_pos];
-    let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
-    let column = prefix.rsplit('\n').next().unwrap_or("").chars().count() as i64;
-    signal(
-        LispCondition::InvalidReadSyntax,
-        vec![
-            Value::string(message),
-            Value::fixnum(line),
-            Value::fixnum(column),
-        ],
-    )
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_invalid_read_syntax_in_lisp_string(
     buffer_text: &crate::heap_types::LispString,
     absolute_error_pos: usize,
@@ -1405,17 +1385,6 @@ pub(crate) fn finish_read_string_with_minibuffer(
     read_from_minibuffer(&minibuffer_args)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_read_string_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_string_in_runtime(shared, args)?;
-    finish_read_string_with_minibuffer(args, |minibuffer_args| {
-        finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
-    })
-}
-
 // ---------------------------------------------------------------------------
 // 7. read-number
 // ---------------------------------------------------------------------------
@@ -1588,73 +1557,6 @@ pub(crate) fn completing_read_function_value(eval: &super::eval::Context) -> Opt
     eval.eval_symbol("completing-read-function")
         .ok()
         .filter(|function| !function.is_nil())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_completing_read_in_state_with_minibuffer(
-    obarray: &mut Obarray,
-    _dynamic: &mut [OrderedRuntimeBindingMap],
-    buffers: &mut crate::buffer::BufferManager,
-    custom: &crate::emacs_core::custom::CustomManager,
-    specpdl: &[crate::emacs_core::eval::SpecBinding],
-    args: &[Value],
-    mut read_from_minibuffer: impl FnMut(&[Value]) -> EvalResult,
-) -> EvalResult {
-    let minibuffer_args = completing_read_minibuffer_args(obarray, args);
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-table"),
-        args[1],
-    );
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-predicate"),
-        args.get(2).copied().unwrap_or(Value::NIL),
-    );
-    let require_match = args.get(3).copied().unwrap_or(Value::NIL);
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-confirm"),
-        completion_confirm_from_require_match(require_match),
-    );
-
-    let result = read_from_minibuffer(&minibuffer_args);
-
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-table"),
-        Value::NIL,
-    );
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-predicate"),
-        Value::NIL,
-    );
-    let _ = crate::emacs_core::eval::set_runtime_binding(
-        obarray,
-        buffers,
-        custom,
-        specpdl,
-        intern("minibuffer-completion-confirm"),
-        Value::NIL,
-    );
-
-    result
 }
 
 pub(crate) fn finish_read_from_minibuffer_in_vm_runtime(
@@ -2621,26 +2523,6 @@ pub(crate) fn finish_yes_or_no_p_with_minibuffer(
             }
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_yes_or_no_p_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    validate_yes_or_no_p_args(args)?;
-    if let Some(result) = yes_or_no_p_dialog_result(shared, args)? {
-        return Ok(result);
-    }
-    if yes_or_no_p_use_short_answers(shared) {
-        return shared.apply(Value::symbol("y-or-n-p"), args.to_vec());
-    }
-    if let Some(result) = builtin_yes_or_no_p_in_runtime(shared, args)? {
-        return Ok(result);
-    }
-    finish_yes_or_no_p_with_minibuffer(args, |minibuffer_args| {
-        finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
-    })
 }
 
 pub(crate) fn builtin_yes_or_no_p_in_runtime(

@@ -63,11 +63,6 @@ fn load_path_buf(value: &LispString) -> PathBuf {
     super::fileio::lisp_file_name_to_path_buf(value)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn load_path_value(path: &Path) -> Value {
-    Value::heap_string(load_path_lisp_string(path))
-}
-
 fn load_found_effective(found: &LispString) -> LispString {
     // GNU's compute_found_effective only diverges from FOUND for native-elisp
     // loads. NeoVM doesn't model that path yet, so keep the split in the API
@@ -500,11 +495,6 @@ fn clear_transient_runtime_features(eval: &mut super::eval::Context) {
     for feature in TRANSIENT_RUNTIME_FEATURES {
         eval.remove_feature(feature);
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn is_generated_loaddefs_source(source: &str) -> bool {
-    source.contains(GENERATED_LOADDEFS_MARKER)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -1234,18 +1224,6 @@ fn source_read_symbol_shorthands_text(source: &str) -> Option<String> {
     } else {
         Some(value)
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn source_read_symbol_shorthands(
-    source: &str,
-    source_multibyte: bool,
-    obarray: &super::symbol::Obarray,
-) -> Result<Option<ReadSymbolShorthands>, EvalError> {
-    let Some(text) = source_read_symbol_shorthands_text(source) else {
-        return Ok(None);
-    };
-    read_symbol_shorthands_value_text(&text, source_multibyte, obarray)
 }
 
 fn read_symbol_shorthands_value_text(
@@ -2015,27 +1993,6 @@ fn load_file_body(
     }
 
     result
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn eval_decoded_source_file_in_context(
-    eval: &mut super::eval::Context,
-    path: &Path,
-    content: &str,
-    source_multibyte: bool,
-) -> Result<Value, EvalError> {
-    // Use the streaming Value-reader path (no Expr intermediate).
-    let macroexpand_fn = get_eager_macroexpand_fn(eval);
-    let found = load_path_lisp_string(path);
-    streaming_readevalloop(
-        eval,
-        path,
-        &found,
-        content,
-        source_multibyte,
-        None,
-        macroexpand_fn,
-    )
 }
 
 pub(crate) fn eval_lisp_source_file_in_context(
@@ -4334,19 +4291,6 @@ fn lisp_directory_name_from_host_path(path: &Path) -> String {
     name
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn runtime_bootstrap_load_path() -> Vec<String> {
-    let lisp_dir = runtime_project_root().join("lisp");
-    bootstrap_load_path_entries(&lisp_dir)
-        .into_iter()
-        .filter_map(|value| {
-            value
-                .is_string()
-                .then(|| load_string_text(&value).expect("checked string"))
-        })
-        .collect()
-}
-
 fn eval_startup_forms(eval: &mut super::eval::Context, forms_src: &str) -> Result<(), EvalError> {
     eval.eval_str(forms_src)?;
     Ok(())
@@ -4764,14 +4708,6 @@ pub fn create_runtime_startup_evaluator_with_features(
 
 pub fn create_runtime_startup_evaluator_cached() -> Result<super::eval::Context, EvalError> {
     create_runtime_startup_evaluator()
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn create_runtime_startup_evaluator_cached_at_path(
-    extra_features: &[&str],
-    dump_path: &Path,
-) -> Result<super::eval::Context, EvalError> {
-    create_runtime_startup_evaluator_at_path(extra_features, dump_path)
 }
 
 pub fn create_runtime_startup_evaluator_cached_with_features(

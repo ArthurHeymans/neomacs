@@ -794,16 +794,6 @@ pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Val
     ))
 }
 
-/// Find a marker Value by id in a buffer's chain.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn find_marker_value_in_chain(
-    buffers: &BufferManager,
-    buffer_id: BufferId,
-    marker_id: u64,
-) -> Option<Value> {
-    buffers.marker_value(buffer_id, marker_id)
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

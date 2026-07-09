@@ -833,30 +833,6 @@ pub(crate) fn builtin_abbrev_table_get(
     Ok(get_table_property(eval, vec_val, prop).unwrap_or(Value::NIL))
 }
 
-/// (abbrev-table-put TABLE PROP VAL) -> VAL
-///
-/// Set property PROP to VAL on the header symbol of TABLE.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_abbrev_table_put(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("abbrev-table-put", &args, 3)?;
-    let vec_val = expect_abbrev_table(eval, &args[0])?;
-    let prop = args[1].as_symbol_name().ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("symbolp"), args[1]],
-        )
-    })?;
-    let Some(header_id) = table_header_symbol(vec_val).and_then(symbol_id) else {
-        return Ok(Value::NIL);
-    };
-    eval.obarray_mut()
-        .put_property_id(header_id, intern(prop), args[2])?;
-    Ok(args[2])
-}
-
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn get_table_property(eval: &super::eval::Context, vec_val: Value, prop: &str) -> Option<Value> {
     table_header_symbol(vec_val)

@@ -13,7 +13,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use crate::emacs_core::error::LispCondition;
 // storage imports removed — now using emacs_char + LispString directly
-use super::value::{Value, ValueKind, VecLikeType};
+use super::value::{Value, ValueKind};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::base::rounding_modes::RoundingMode;
@@ -208,47 +208,6 @@ fn assoc_string_downcase(codes: &[u32]) -> Vec<u32> {
             None => vec![code],
         })
         .collect()
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
-    match val.kind() {
-        ValueKind::Nil => Ok(Vec::new()),
-        ValueKind::Cons => {
-            let mut result = Vec::new();
-            let mut cursor = *val;
-            loop {
-                match cursor.kind() {
-                    ValueKind::Nil => return Ok(result),
-                    ValueKind::Cons => {
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        result.push(pair_car);
-                        cursor = pair_cdr;
-                    }
-                    _tail => {
-                        return Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("listp"), cursor],
-                        ));
-                    }
-                }
-            }
-        }
-        ValueKind::Veclike(VecLikeType::Vector) | ValueKind::Veclike(VecLikeType::Record) => {
-            Ok(val.as_vector_data().unwrap().clone())
-        }
-        ValueKind::String => Ok(super::builtins::lisp_string_char_codes(
-            val.as_lisp_string().expect("string"),
-        )
-        .into_iter()
-        .map(|code| Value::fixnum(code as i64))
-        .collect()),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("sequencep"), *val],
-        )),
-    }
 }
 
 // ---------------------------------------------------------------------------

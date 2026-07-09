@@ -105,12 +105,6 @@ fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData 
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn storage_rel_to_emacs_byte(text: &str, base_emacs_byte: usize, storage_pos: usize) -> usize {
-    base_emacs_byte
-        + crate::emacs_core::string_escape::storage_byte_to_logical_byte(text, storage_pos)
-}
-
 fn buffer_match_data_from_registers(regs: &MatchRegisters, base_emacs_byte: usize) -> MatchData {
     let num_groups = regs.num_regs();
     let mut groups = Vec::with_capacity(gnu_search_regs_capacity(num_groups));
@@ -1495,49 +1489,6 @@ fn literal_find(text: &str, literal: &str, case_fold: bool) -> Option<MatchGroup
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn literal_find_lisp_string(
-    text: &crate::heap_types::LispString,
-    literal: &str,
-    start: usize,
-    case_fold: bool,
-) -> Option<MatchGroup> {
-    crate::emacs_core::perf_trace::time_op(
-        crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
-        || {
-            if start > text.byte_len() {
-                return None;
-            }
-
-            if !text.is_multibyte() {
-                let haystack = &text.as_bytes()[start..];
-                let needle = literal.as_bytes();
-                if needle.is_empty() {
-                    return Some(MatchGroup::new(start, start));
-                }
-                if needle.len() > haystack.len() {
-                    return None;
-                }
-                let match_start = haystack.windows(needle.len()).position(|window| {
-                    if case_fold {
-                        window
-                            .iter()
-                            .zip(needle.iter())
-                            .all(|(lhs, rhs)| lhs.eq_ignore_ascii_case(rhs))
-                    } else {
-                        window == needle
-                    }
-                })?;
-                let match_end = match_start + needle.len();
-                return Some(MatchGroup::new(start + match_start, start + match_end));
-            }
-
-            let text = text.as_utf8_str()?;
-            literal_find(&text[start..], literal, case_fold).map(|matched| matched.shift(start))
-        },
-    )
-}
-
 fn literal_rfind(text: &str, literal: &str, case_fold: bool) -> Option<MatchGroup> {
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexLiteralFind,
@@ -2667,26 +2618,6 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     } else {
         Ok(None)
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn string_match_full_with_case_fold_source(
-    pattern: &str,
-    string: &str,
-    searched_string: SearchedString,
-    start: usize,
-    case_fold: bool,
-    match_data: &mut Option<MatchData>,
-) -> Result<Option<usize>, String> {
-    string_match_full_with_case_fold_source_posix(
-        pattern,
-        string,
-        searched_string,
-        start,
-        case_fold,
-        false,
-        match_data,
-    )
 }
 
 pub(crate) fn string_match_full_with_case_fold_source_posix(

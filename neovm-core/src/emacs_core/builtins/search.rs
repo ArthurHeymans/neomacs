@@ -697,60 +697,6 @@ pub(crate) fn builtin_posix_search_backward(
     re_search_backward_with_state_posix(case_fold, true, &mut eval.buffers, md_slot, &args)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_search_forward_regexp(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
-        .map(|v| !v.is_nil())
-        .unwrap_or(true);
-    builtin_search_forward_regexp_with_state(
-        case_fold,
-        &mut eval.buffers,
-        &mut eval.match_data,
-        &args,
-    )
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_search_forward_regexp_with_state(
-    case_fold: bool,
-    buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
-    args: &[Value],
-) -> EvalResult {
-    expect_range_args("search-forward-regexp", args, 1, 4)?;
-    builtin_re_search_forward_with_state(case_fold, buffers, match_data, args)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_search_backward_regexp(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
-        .map(|v| !v.is_nil())
-        .unwrap_or(true);
-    builtin_search_backward_regexp_with_state(
-        case_fold,
-        &mut eval.buffers,
-        &mut eval.match_data,
-        &args,
-    )
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_search_backward_regexp_with_state(
-    case_fold: bool,
-    buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
-    args: &[Value],
-) -> EvalResult {
-    expect_range_args("search-backward-regexp", args, 1, 4)?;
-    builtin_re_search_backward_with_state(case_fold, buffers, match_data, args)
-}
-
 pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
@@ -1808,16 +1754,6 @@ fn update_match_data_after_buffer_replace(
         }
         *match_group = MatchGroup::new(start, end);
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_replace_match_with_state(
-    obarray: &crate::emacs_core::symbol::Obarray,
-    buffers: &mut crate::buffer::BufferManager,
-    match_data: &mut Option<super::regex::MatchData>,
-    args: &[Value],
-) -> EvalResult {
-    builtin_replace_match_with_state_and_flags(obarray, buffers, match_data, args, false)
 }
 
 /// Variant that also carries the current value of

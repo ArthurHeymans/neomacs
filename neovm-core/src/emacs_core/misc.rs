@@ -186,14 +186,6 @@ pub(crate) fn builtin_rassq(args: Vec<Value>) -> EvalResult {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_rassq_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_rassq_with_symbols(args, eval.symbols_with_pos_enabled)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn builtin_rassq_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
     expect_args("rassq", &args, 2)?;
     builtin_rassq_values(args[0], args[1], symbols_with_pos_enabled)
@@ -630,11 +622,6 @@ pub(crate) fn builtin_display_line_numbers_update_width(args: Vec<Value>) -> Eva
 // synthetic canned frames was removed because it never made it to the
 // defsubr registry (subr.el's defun wins at runtime) and its fixed
 // output did not match GNU semantics.
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_threadp(eval: &super::eval::Context, value: &Value) -> Result<(), Flow> {
-    expect_threadp_in_state(&eval.threads, value)
-}
 
 fn expect_threadp_in_state(
     threads: &crate::emacs_core::threads::ThreadManager,

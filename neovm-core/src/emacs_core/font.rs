@@ -211,19 +211,6 @@ pub fn alternative_font_families(family: &str) -> Vec<String> {
         .unwrap_or_else(|| vec![lookup.to_string()])
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn ascii_downcase_lisp_string(text: &LispString) -> LispString {
-    let mut data = text.as_bytes().to_vec();
-    for byte in &mut data {
-        *byte = byte.to_ascii_lowercase();
-    }
-    if text.is_multibyte() {
-        LispString::from_emacs_bytes(data)
-    } else {
-        LispString::from_unibyte(data)
-    }
-}
-
 pub fn alternative_font_registries(registry: &str) -> Vec<String> {
     let lookup = registry.trim();
     if lookup.is_empty() {
@@ -674,11 +661,6 @@ fn frame_device_designator_p(value: &Value) -> bool {
         ValueKind::Veclike(VecLikeType::Frame) => value.as_frame_id().unwrap() >= FRAME_ID_BASE,
         _ => false,
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn optional_selected_frame_designator_p(value: &Value) -> bool {
-    value.is_nil() || frame_device_designator_p(value)
 }
 
 fn live_frame_id_for_face_update(
@@ -2332,11 +2314,6 @@ fn face_remapping_for_current_buffer(eval: &super::eval::Context) -> FaceRemappi
             FaceRemapping::from_lisp(&value)
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn apply_face_layers(face_table: &crate::face::FaceTable, layers: &[FaceLayer]) -> RuntimeFace {
-    apply_face_layers_with_remapping(face_table, layers, &FaceRemapping::new())
 }
 
 fn apply_face_layers_with_remapping(
@@ -3997,49 +3974,6 @@ pub(crate) fn clear_created_lisp_face(name: &str) {
     });
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn copy_defaults_overrides(src: &str, dst: &str) {
-    let src_face = face_symbol_id(src);
-    let dst_face = face_symbol_id(dst);
-    FACE_ATTR_STATE.with(|slot| {
-        let mut state = slot.borrow_mut();
-        // Copy defaults first; fall back to selected overrides so that
-        // faces whose attributes were only set on the selected frame
-        // (e.g. via defface → face-spec-recalc) still transfer to the
-        // target.  This mirrors GNU's `vcopy(lface, …)` which copies the
-        // full face vector regardless of frame domain.
-        let copied = state
-            .defaults_overrides
-            .get(&src_face)
-            .or_else(|| state.selected_overrides.get(&src_face))
-            .cloned();
-        if let Some(attrs) = copied {
-            state.defaults_overrides.insert(dst_face, attrs);
-        } else {
-            state.defaults_overrides.remove(&dst_face);
-        }
-    });
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn copy_selected_overrides(src: &str, dst: &str) {
-    let src_face = face_symbol_id(src);
-    let dst_face = face_symbol_id(dst);
-    FACE_ATTR_STATE.with(|slot| {
-        let mut state = slot.borrow_mut();
-        let copied = state
-            .selected_overrides
-            .get(&src_face)
-            .or_else(|| state.defaults_overrides.get(&src_face))
-            .cloned();
-        if let Some(attrs) = copied {
-            state.selected_overrides.insert(dst_face, attrs);
-        } else {
-            state.selected_overrides.remove(&dst_face);
-        }
-    });
-}
-
 fn merge_defaults_overrides_into_selected(face_name: &str) {
     let face = face_symbol_id(face_name);
     FACE_ATTR_STATE.with(|slot| {
@@ -4598,27 +4532,6 @@ fn apply_lisp_face_vector_update_for_frame_arg(
     Ok(())
 }
 
-/// Build a face vector that merges both selected and defaults-domain
-/// overrides.  This matches GNU Emacs' behaviour where the face vector in
-/// `Vface_new_frame_defaults` reflects the full face definition regardless
-/// of which frame domains the attributes were set on.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn make_lisp_face_vector_merged(face_name: &str) -> Value {
-    let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
-    values.push(Value::symbol("face"));
-    values.extend(LFACE_ATTRS.iter().map(|attr| {
-        // Prefer selected override, then defaults override, then base
-        if let Some(v) = get_face_override(face_name, *attr, false) {
-            return v;
-        }
-        if let Some(v) = get_face_override(face_name, *attr, true) {
-            return v;
-        }
-        lisp_face_attribute_base_value(face_name, *attr, false)
-    }));
-    Value::vector(values)
-}
-
 fn normalize_face_attribute_name(attr: &Value) -> Result<LFaceAttr, Flow> {
     let name = match attr.kind() {
         ValueKind::Symbol(id) => resolve_sym(id),
@@ -4810,17 +4723,6 @@ fn lisp_face_attribute_value(face: &str, attr: LFaceAttr, defaults_frame: bool) 
         return value;
     }
     lisp_face_attribute_base_value(face, attr, defaults_frame)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn lisp_face_attribute_value_merged(face: &str, attr: LFaceAttr) -> Value {
-    if let Some(v) = get_face_override(face, attr, false) {
-        return v;
-    }
-    if let Some(v) = get_face_override(face, attr, true) {
-        return v;
-    }
-    lisp_face_attribute_base_value(face, attr, false)
 }
 
 fn resolve_known_face_name_for_compare(face: &Value, defaults_frame: bool) -> Result<String, Flow> {
@@ -5868,18 +5770,6 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) 
             .map(Value::bool)
             .unwrap_or_else(|| Value::symbol("unspecified")),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn runtime_face_to_lisp_vector(face: &RuntimeFace) -> Value {
-    let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
-    values.push(Value::symbol("face"));
-    values.extend(
-        LFACE_ATTRS
-            .iter()
-            .map(|attr| runtime_face_attribute_value(face, *attr)),
-    );
-    Value::vector(values)
 }
 
 pub(crate) fn builtin_internal_get_lisp_face_attribute(

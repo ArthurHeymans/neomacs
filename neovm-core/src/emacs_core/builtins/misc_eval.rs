@@ -1546,23 +1546,6 @@ pub(crate) fn dispatch_print_callback_emacs_chars(
     Ok(())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn write_print_output(
-    eval: &mut super::eval::Context,
-    printcharfun: Option<&Value>,
-    text: &str,
-) -> Result<(), Flow> {
-    let target = resolve_print_target(eval, printcharfun);
-    // GNU print.c: in batch mode, printcharfun=t writes to stdout
-    if eval.noninteractive() && (target.is_t() || target.is_nil()) {
-        use std::io::Write;
-        let _ = std::io::stdout().write_all(text.as_bytes());
-        let _ = std::io::stdout().flush();
-        return Ok(());
-    }
-    write_print_output_to_target(eval, target, text)
-}
-
 fn write_print_output_from_ctx(
     ctx: &mut crate::emacs_core::eval::Context,
     printcharfun: Option<&Value>,
@@ -1642,11 +1625,6 @@ fn write_terpri_output(eval: &mut super::eval::Context, target: Value) -> Result
             Ok(())
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(super) fn print_value_eval(eval: &super::eval::Context, value: &Value) -> String {
-    super::error::print_value_with_eval(eval, value)
 }
 
 /// Issue #131: render the `princ` form of `value` as canonical Emacs
@@ -1863,21 +1841,6 @@ fn print_value_princ_bytes_list_shorthand(
     Some(out)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn prin1_to_string_value(value: &Value, noescape: bool) -> String {
-    if noescape {
-        match value.kind() {
-            ValueKind::String => {
-                let ls = value.as_lisp_string().unwrap();
-                crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())
-            }
-            _other => super::print::print_value(value),
-        }
-    } else {
-        String::from_utf8_lossy(&super::print::print_value_bytes(value)).into_owned()
-    }
-}
-
 fn print_options_from_overrides(
     ctx: &super::eval::Context,
     overrides: Option<&Value>,
@@ -1999,35 +1962,6 @@ fn apply_print_override_setting(
     }
 
     Ok(())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn prin1_to_string_value_eval(
-    eval: &super::eval::Context,
-    value: &Value,
-    noescape: bool,
-) -> String {
-    prin1_to_string_value_in_state(eval, value, noescape)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn prin1_to_lisp_string_value_in_state(
-    ctx: &crate::emacs_core::eval::Context,
-    value: &Value,
-    noescape: bool,
-) -> crate::heap_types::LispString {
-    prin1_to_lisp_string_value_in_state_with_overrides(ctx, value, noescape, None)
-        .expect("nil print overrides cannot fail")
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn prin1_to_string_value_in_state(
-    ctx: &crate::emacs_core::eval::Context,
-    value: &Value,
-    noescape: bool,
-) -> String {
-    let printed = prin1_to_lisp_string_value_in_state(ctx, value, noescape);
-    crate::emacs_core::emacs_char::to_utf8_lossy(printed.as_bytes())
 }
 
 fn prin1_to_lisp_string_value_in_state_with_overrides(

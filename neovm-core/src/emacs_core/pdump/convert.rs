@@ -16,7 +16,7 @@ use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
 use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
-use crate::buffer::{CharPos0, CharRange, EmacsBytePos, LispCharPos1, TextPositionAnchor};
+use crate::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAnchor};
 // Undo state is now stored directly as a Lisp Value in buffer-local properties.
 use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
@@ -51,8 +51,8 @@ use crate::emacs_core::rect::RectangleState;
 use crate::emacs_core::register::{RegisterContent, RegisterManager};
 use crate::emacs_core::symbol::{LispSymbol, Obarray, SymbolTrappedWrite};
 use crate::emacs_core::value::{
-    HashKey, HashTableTest, HashTableWeakness, LambdaParams, LispHashTable,
-    OrderedRuntimeBindingMap, RuntimeBindingValue, StringTextPropertyRun, Value,
+    HashKey, HashTableTest, HashTableWeakness, LambdaParams, LispHashTable, RuntimeBindingValue,
+    StringTextPropertyRun, Value,
 };
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::value::{
@@ -352,16 +352,6 @@ impl<'a> TaggedLoadState<'a> {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn from_tagged_heap(
-        heap: DumpTaggedHeap,
-        mapped_heap: Option<MappedHeapView>,
-        value_fixups: Vec<RawValueFixup>,
-    ) -> Self {
-        let spans = LoadedSpans::from_heap(&heap);
-        Self::from_objects_and_spans(heap.objects, spans, mapped_heap, value_fixups)
-    }
-
     fn from_objects_and_spans(
         objects: Vec<DumpHeapObject>,
         spans: LoadedSpans<'a>,
@@ -415,17 +405,6 @@ impl LoadDecoder<'_> {
 }
 
 impl<'a> LoadDecoder<'a> {
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn from_tagged_heap_with_mapped_heap_and_fixups(
-        heap: DumpTaggedHeap,
-        mapped_heap: Option<MappedHeapView>,
-        value_fixups: Vec<RawValueFixup>,
-    ) -> Self {
-        Self {
-            state: TaggedLoadState::from_tagged_heap(heap, mapped_heap, value_fixups),
-        }
-    }
-
     pub(crate) fn from_objects_and_spans_with_mapped_heap_and_fixups(
         objects: Vec<DumpHeapObject>,
         spans: LoadedSpans<'a>,
@@ -1132,41 +1111,6 @@ impl<'a> LoadDecoder<'a> {
             (*ptr).data = data;
         }
         Ok(())
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn mapped_raw_word_available(&self, value: &DumpValue) -> bool {
-        match value {
-            DumpValue::Nil | DumpValue::True | DumpValue::Int(_) | DumpValue::Unbound => true,
-            DumpValue::Cons(id) => self.state.spans.cons(id.index as usize).is_some(),
-            DumpValue::Float(id) => self.state.spans.float(id.index as usize).is_some(),
-            DumpValue::Str(id) => self.state.spans.string(id.index as usize).is_some(),
-            DumpValue::Vector(id)
-            | DumpValue::CharTable(id)
-            | DumpValue::SubCharTable(id)
-            | DumpValue::Record(id)
-            | DumpValue::Lambda(id)
-            | DumpValue::Macro(id)
-            | DumpValue::Marker(id)
-            | DumpValue::Overlay(id) => self.state.spans.vectorlike(id.index as usize).is_some(),
-            DumpValue::Symbol(_)
-            | DumpValue::Subr(_)
-            | DumpValue::HashTable(_)
-            | DumpValue::Obarray(_)
-            | DumpValue::ByteCode(_)
-            | DumpValue::Buffer(_)
-            | DumpValue::Window(_)
-            | DumpValue::Frame(_)
-            | DumpValue::Timer(_)
-            | DumpValue::Bignum(_) => false,
-        }
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn mapped_raw_words_available(&self, values: &[DumpValue]) -> bool {
-        values
-            .iter()
-            .all(|value| self.mapped_raw_word_available(value))
     }
 
     fn mapped_cons_has_raw_words(
@@ -2753,19 +2697,6 @@ fn load_runtime_binding_value(
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn dump_ordered_sym_map(
-    encoder: &mut DumpEncoder,
-    m: &OrderedRuntimeBindingMap,
-) -> DumpOrderedSymMap {
-    DumpOrderedSymMap {
-        entries: m
-            .iter()
-            .map(|(k, v)| (dump_sym_id(*k), dump_runtime_binding_value(encoder, v)))
-            .collect(),
-    }
-}
-
 // --- Buffer types ---
 
 // `dump_insertion_type` / `load_insertion_type` were retired in v26: chain
@@ -3746,44 +3677,6 @@ pub(crate) fn dump_watcher_list(
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn dump_string_text_prop_run(
-    encoder: &mut DumpEncoder,
-    r: &StringTextPropertyRun,
-) -> DumpStringTextPropertyRun {
-    DumpStringTextPropertyRun {
-        start: r.start,
-        end: r.end,
-        plist: encoder.dump_value(&r.plist),
-    }
-}
-
-/// Convert a TextPropertyTable to a list of DumpPropertyInterval entries (for string props).
-/// Does NOT allocate heap objects — serializes property values directly.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn dump_string_text_property_table(
-    encoder: &mut DumpEncoder,
-    table: &TextPropertyTable,
-) -> Vec<DumpPropertyInterval> {
-    let mut intervals = Vec::new();
-    for iv in table.dump_intervals() {
-        if iv.properties.is_empty() {
-            continue;
-        }
-        let properties: Vec<(DumpValue, DumpValue)> = iv
-            .properties
-            .iter()
-            .map(|(key, val)| (encoder.dump_value(key), encoder.dump_value(val)))
-            .collect();
-        intervals.push(DumpPropertyInterval {
-            start: iv.start,
-            end: iv.end,
-            properties,
-        });
-    }
-    intervals
-}
-
 // --- Top-level dump ---
 
 pub(crate) fn dump_evaluator(eval: &Context) -> DumpContextState {
@@ -3975,15 +3868,6 @@ pub(crate) fn load_op(op: &DumpOp) -> Result<Op, DumpError> {
 
 // --- Lambda / ByteCode ---
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_lambda_params(p: &DumpLambdaParams) -> LambdaParams {
-    LambdaParams {
-        required: p.required.iter().map(|s| load_sym_id(s)).collect(),
-        optional: p.optional.iter().map(|s| load_sym_id(s)).collect(),
-        rest: p.rest.map(|s| load_sym_id(&s)),
-    }
-}
-
 fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
     LambdaParams {
         required: p.required.into_iter().map(|s| load_sym_id(&s)).collect(),
@@ -4004,48 +3888,6 @@ where
         .collect();
     pairs.sort_unstable_by_key(|entry| entry.byte_offset);
     pairs
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_bytecode(
-    decoder: &mut LoadDecoder,
-    bc: &DumpByteCodeFunction,
-) -> Result<ByteCodeFunction, DumpError> {
-    let params = load_lambda_params(&bc.params);
-    let arglist = bc
-        .arglist
-        .as_ref()
-        .map(|value| decoder.load_value(value))
-        .unwrap_or_else(|| crate::emacs_core::builtins::lambda_params_to_value(&params));
-    Ok(ByteCodeFunction {
-        ops: bc.ops.iter().map(load_op).collect::<Result<Vec<_>, _>>()?,
-        constants: bc
-            .constants
-            .iter()
-            .map(|value| decoder.load_value(value))
-            .collect(),
-        max_stack: bc.max_stack,
-        params,
-        arglist,
-        lexical: bc.lexical,
-        env: decoder.load_opt_value(&bc.env),
-        gnu_byte_offset_map: bc
-            .gnu_byte_offset_map
-            .as_ref()
-            .map(|pairs| load_byte_offset_map(pairs.iter().copied())),
-        gnu_bytecode_bytes: bc.gnu_bytecode_bytes.clone(),
-        docstring: bc.docstring.as_ref().map(load_lisp_string),
-        doc_form: decoder.load_opt_value(&bc.doc_form),
-        interactive: decoder.load_opt_value(&bc.interactive),
-        closure_slot_count: bc.closure_slot_count,
-        extra_slots: bc
-            .extra_slots
-            .iter()
-            .map(|value| decoder.load_value(value))
-            .collect(),
-        #[cfg(feature = "jit")]
-        runtime: crate::emacs_core::jit::Runtime::new(),
-    })
 }
 
 fn load_bytecode_owned(
@@ -6022,36 +5864,4 @@ pub(crate) fn load_watcher_list(
         })
         .collect();
     VariableWatcherList::from_dump(watchers)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_string_text_prop_run(
-    decoder: &mut LoadDecoder,
-    r: &DumpStringTextPropertyRun,
-) -> StringTextPropertyRun {
-    StringTextPropertyRun {
-        start: r.start,
-        end: r.end,
-        plist: decoder.load_value(&r.plist),
-    }
-}
-
-/// Convert a list of DumpPropertyInterval entries back to a TextPropertyTable.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn load_text_property_table(
-    decoder: &mut LoadDecoder,
-    intervals: &[DumpPropertyInterval],
-) -> TextPropertyTable {
-    let mut table = TextPropertyTable::new();
-    for iv in intervals {
-        for (name, dump_val) in &iv.properties {
-            let val = decoder.load_value(dump_val);
-            table.put_property_in_char_range(
-                CharRange::new(CharPos0::new(iv.start), CharPos0::new(iv.end)),
-                decoder.load_value(name),
-                val,
-            );
-        }
-    }
-    table
 }

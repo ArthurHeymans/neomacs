@@ -372,22 +372,6 @@ impl TlsStream {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn write_all_process_input(&mut self, bytes: &[u8]) -> std::io::Result<()> {
-        self.set_nonblocking(false)?;
-        let write_result = match self {
-            Self::Rustls(stream) => {
-                if let Err(err) = stream.inner.write_all(bytes) {
-                    Err(err)
-                } else {
-                    stream.inner.flush()
-                }
-            }
-        };
-        let restore_result = self.set_nonblocking(true);
-        write_result.and(restore_result)
-    }
-
     pub(crate) fn write_process_input_once(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.set_nonblocking(true)?;
         match self {
@@ -452,11 +436,6 @@ fn rustls_read_process_output(
             Err(err) => return Err(err),
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn rustls_record_error_to_io(err: rustls::Error) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::InvalidData, err)
 }
 
 fn rustls_complete_io_result(

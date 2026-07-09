@@ -267,67 +267,6 @@ pub(crate) fn builtin_funcall_with_delayed_message(
 // Higher-order
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn for_each_sequence_element<F>(seq: &Value, mut f: F) -> Result<(), Flow>
-where
-    F: FnMut(Value) -> Result<(), Flow>,
-{
-    match seq.kind() {
-        ValueKind::Nil => Ok(()),
-        ValueKind::Cons => {
-            let mut cursor = *seq;
-            loop {
-                match cursor.kind() {
-                    ValueKind::Nil => break,
-                    ValueKind::Cons => {
-                        let pair_car = cursor.cons_car();
-                        let pair_cdr = cursor.cons_cdr();
-                        let item = pair_car;
-                        cursor = pair_cdr;
-                        f(item)?;
-                    }
-                    _tail => {
-                        return Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("listp"), cursor],
-                        ));
-                    }
-                }
-            }
-            Ok(())
-        }
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            for item in seq.as_vector_data().unwrap().clone().into_iter() {
-                f(item)?;
-            }
-            Ok(())
-        }
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            for item in super::cons_list::lambda_to_closure_vector(seq).into_iter() {
-                f(item)?;
-            }
-            Ok(())
-        }
-        ValueKind::Veclike(VecLikeType::ByteCode) => {
-            for item in super::cons_list::bytecode_to_closure_vector(seq).into_iter() {
-                f(item)?;
-            }
-            Ok(())
-        }
-        ValueKind::String => {
-            let string = seq.as_lisp_string().expect("string");
-            for cp in super::lisp_string_char_codes(string) {
-                f(Value::fixnum(cp as i64))?;
-            }
-            Ok(())
-        }
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("sequencep"), *seq],
-        )),
-    }
-}
-
 pub(crate) fn builtin_mapcar_2(
     eval: &mut super::eval::Context,
     func: Value,

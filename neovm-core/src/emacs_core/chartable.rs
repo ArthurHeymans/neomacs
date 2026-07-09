@@ -544,12 +544,6 @@ pub(crate) fn char_table_ascii_cache_range(vec: &[Value]) -> Option<std::ops::Ra
     ct_ascii_cache_range(vec)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn append_ascii_cache(vec: &mut Vec<Value>, initial_value: Value) {
-    vec.push(Value::fixnum(CT_ASCII_CACHE_MAGIC));
-    vec.resize(vec.len() + CT_ASCII_CACHE_LEN, initial_value);
-}
-
 fn ct_update_ascii_cache(vec: &mut [Value], min: i64, max: i64, value: Value) {
     if min > max || max < 0 || min >= CT_ASCII_CACHE_LEN as i64 {
         return;
@@ -943,25 +937,6 @@ fn flatten_sub_char_table(
     let span = GNU_CHARTAB_CHARS[depth];
     for (idx, value) in contents.iter().copied().enumerate() {
         flatten_char_table_slot(vec, value, min_char + idx as i64 * span, span, is_uniprop);
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn maybe_optimize_loaded_char_table_storage(vec: &mut Vec<Value>) {
-    let data_start = ct_data_start(vec);
-    let old_slots = vec.len().saturating_sub(data_start);
-    if old_slots < 128 {
-        return;
-    }
-
-    let runs = ct_optimized_local_runs(vec, OptimizeCharTableTest::Eq);
-    let new_slots = if runs.is_empty() {
-        0
-    } else {
-        2 + runs.len() * 2
-    };
-    if new_slots < old_slots {
-        ct_replace_local_entries_with_runs(vec, runs);
     }
 }
 

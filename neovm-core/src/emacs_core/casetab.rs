@@ -387,18 +387,6 @@ fn make_case_table_value() -> Value {
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn ensure_standard_case_table_object() -> EvalResult {
-    STANDARD_CASE_TABLE_OBJECT.with(|slot| {
-        if let Some(value) = slot.borrow().as_ref() {
-            return Ok(*value);
-        }
-        let table = make_standard_case_table_value();
-        *slot.borrow_mut() = Some(table);
-        Ok(table)
-    })
-}
-
 /// `(current-case-table)` -- evaluator-backed current buffer case table object.
 pub(crate) fn builtin_current_case_table(
     ctx: &mut crate::emacs_core::eval::Context,

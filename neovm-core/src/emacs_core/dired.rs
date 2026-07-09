@@ -1121,63 +1121,6 @@ fn filter_completion_candidates(
         .collect()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn filter_completions_by_symbol_predicate(
-    eval: &mut Context,
-    predicate: Option<&Value>,
-    directory: &LispString,
-    completions: Vec<LispString>,
-) -> Result<Vec<LispString>, Flow> {
-    let Some(predicate) = predicate else {
-        return Ok(completions);
-    };
-    if predicate.is_nil() {
-        return Ok(completions);
-    }
-    let Some(symbol) = predicate_callable_name(predicate) else {
-        // Cannot evaluate lambda/object predicates via dispatch_subr.
-        return Ok(completions);
-    };
-
-    let mut filtered = Vec::new();
-    for candidate in completions {
-        if symbol_predicate_matches_candidate(eval, symbol, directory, &candidate)? {
-            filtered.push(candidate);
-        }
-    }
-    Ok(filtered)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn symbol_predicate_matches_candidate(
-    eval: &mut Context,
-    symbol: &str,
-    directory: &LispString,
-    candidate: &LispString,
-) -> Result<bool, Flow> {
-    if let Some(result) = eval.dispatch_subr(symbol, vec![Value::heap_string(candidate.clone())]) {
-        let result = result?;
-        if result.is_truthy() || !is_builtin_path_predicate(symbol) {
-            return Ok(result.is_truthy());
-        }
-
-        let absolute = join_dir_candidate_lisp(directory, candidate);
-        if let Some(result) = eval.dispatch_subr(symbol, vec![file_name_value(absolute)]) {
-            return Ok(result?.is_truthy());
-        }
-        return Ok(false);
-    }
-
-    // Fallback: try absolute path to make path predicates useful.
-    let absolute = join_dir_candidate_lisp(directory, candidate);
-    if let Some(result) = eval.dispatch_subr(symbol, vec![file_name_value(absolute)]) {
-        return Ok(result?.is_truthy());
-    }
-
-    // Preserve current behavior for unknown/non-callable predicates.
-    Ok(true)
-}
-
 /// Join a directory file-name with a candidate entry, preserving raw file-name
 /// bytes. Mirrors `Path::join`: an absolute candidate replaces the directory; a
 /// separator is inserted between the two components otherwise.

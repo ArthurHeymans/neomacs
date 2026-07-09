@@ -841,20 +841,6 @@ pub(crate) fn prepare_make_thread(
     Ok((thread_id, function))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_make_thread_in_eval(
-    eval: &mut super::eval::Context,
-    thread_id: u64,
-    function: Value,
-) -> EvalResult {
-    eval.threads
-        .set_thread_current_buffer(thread_id, eval.buffers.current_buffer_id());
-    let runtime_state = enter_thread_runtime(eval, thread_id)?;
-    let result = eval.apply(function, vec![]);
-    exit_thread_runtime(eval, thread_id, runtime_state);
-    finish_make_thread_result(&mut eval.threads, thread_id, result)
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct ThreadRuntimeState {
     previous_thread_id: u64,

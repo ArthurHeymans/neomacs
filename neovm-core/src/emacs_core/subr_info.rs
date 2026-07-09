@@ -146,16 +146,6 @@ pub(crate) fn is_special_form(name: &str) -> bool {
     is_public_special_form_name(name)
 }
 
-/// Returns true for evaluator special forms that should NOT be expanded
-/// by `macroexpand`.
-///
-/// After removing the Rust sf_ forms that duplicated Elisp macros,
-/// there are no longer any forms that need this skip.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn is_evaluator_sf_skip_macroexpand(_name: &str) -> bool {
-    false
-}
-
 pub(crate) fn is_evaluator_callable_name(name: &str) -> bool {
     // `throw` is an evaluator-dispatched entry that still behaves as a normal
     // callable symbol in introspection (`fboundp`/`functionp`/`symbol-function`).

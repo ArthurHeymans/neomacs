@@ -466,14 +466,6 @@ fn args_out_of_range_range(begin0: Value, end0: Value) -> Flow {
     signal(LispCondition::ArgsOutOfRange, vec![begin0, end0])
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn validate_string_point(
-    s: &crate::heap_types::LispString,
-    pos: i64,
-) -> Result<usize, Flow> {
-    validate_string_point_raw(s, pos, Value::fixnum(pos))
-}
-
 pub(crate) fn validate_string_point_raw(
     s: &crate::heap_types::LispString,
     pos: i64,
@@ -594,16 +586,6 @@ pub(crate) fn byte_to_elisp_pos(
     byte_pos: EmacsBytePos,
 ) -> i64 {
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
-}
-
-/// Resolve the optional OBJECT argument to a buffer id.
-/// If nil or absent, uses the current buffer.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_buffer_id(
-    eval: &super::eval::Context,
-    object: Option<&Value>,
-) -> Result<BufferId, Flow> {
-    resolve_buffer_id_in_buffers(&eval.buffers, object)
 }
 
 fn resolve_buffer_id_in_buffers(
@@ -826,18 +808,6 @@ fn list_names_for_remove(list: Value) -> Vec<Value> {
         tail = tail.cons_cdr();
     }
     names
-}
-
-/// Convert ordered property pairs to an Elisp plist.
-/// Preserves the order from the property interval (matching GNU Emacs behavior).
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn ordered_pairs_to_plist(pairs: &[(Value, Value)]) -> Value {
-    let mut items = Vec::new();
-    for (key, val) in pairs {
-        items.push(*key);
-        items.push(*val);
-    }
-    Value::list(items)
 }
 
 // ===========================================================================
@@ -2979,21 +2949,6 @@ pub(crate) fn builtin_overlay_get(eval: &mut super::eval::Context, args: Vec<Val
         overlay,
         args[1],
     ))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_overlay_get_in_buffers(
-    _buffers: &BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("overlay-get", &args, 2)?;
-    let overlay = expect_overlay(&args[0])?;
-    if let Some(data) = overlay.as_overlay_data() {
-        if let Some(val) = plist::plist_get(data.plist, &args[1]) {
-            return Ok(val);
-        }
-    }
-    Ok(Value::NIL)
 }
 
 /// (overlayp OBJ)

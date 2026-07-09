@@ -879,17 +879,6 @@ pub(crate) fn empty_buffer_manager() -> DumpBufferManager {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn buffer_manager_is_empty(manager: &DumpBufferManager) -> bool {
-    manager.buffers.is_empty()
-        && manager.buffer_order.is_empty()
-        && manager.current.is_none()
-        && manager.next_id == 0
-        && manager.next_marker_id == 0
-        && manager.buffer_defaults.is_empty()
-        && manager.default_text_backend_kind == DumpBufferTextBackendKind::GapBuffer
-}
-
 #[cfg(test)]
 mod tests {
     use crate::buffer::BufferTextBackendKind;

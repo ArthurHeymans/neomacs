@@ -14,12 +14,6 @@ use std::sync::{
 /// Activated after window-setup-hook completes during startup.
 static TRACE_ALL_BUILTINS: AtomicBool = AtomicBool::new(false);
 
-/// Check if post-startup tracing is active.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn is_post_startup_tracing() -> bool {
-    TRACE_ALL_BUILTINS.load(Ordering::Relaxed)
-}
-
 pub(super) use super::error::{EvalResult, Flow, LispCondition, signal};
 pub(super) use super::intern::{SymId, intern, resolve_sym};
 pub(super) use super::keyboard::pure::{
@@ -414,16 +408,6 @@ pub(super) fn has_float(args: &[Value]) -> bool {
     args.iter().any(|v| v.is_float())
 }
 
-/// True if any arg is a bignum (triggers GMP arithmetic).
-///
-/// Mirrors GNU `arith_driver` (`src/data.c:3215`), which switches to
-/// `bignum_arith_driver` whenever a non-fixnum integer appears in the
-/// argument stream.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(super) fn has_bignum(args: &[Value]) -> bool {
-    args.iter().any(|v| v.is_bignum())
-}
-
 pub(super) fn normalize_string_start_arg(
     string: &str,
     start: Option<&Value>,
@@ -467,11 +451,6 @@ pub(super) fn normalize_string_start_arg(
         .nth(start_char_idx)
         .map(|(byte_idx, _)| byte_idx)
         .unwrap_or(string.len()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(super) fn string_byte_to_char_index(s: &str, byte_idx: usize) -> Option<usize> {
-    s.get(..byte_idx).map(|prefix| prefix.chars().count())
 }
 
 // Re-export sibling modules so submodules can use `super::eval`, `super::marker`, etc.

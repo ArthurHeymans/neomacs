@@ -140,11 +140,6 @@ pub(crate) fn ensure_current_buffer_writable_in_state(
     Ok(())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flow> {
-    ensure_current_buffer_writable_in_state(&eval.obarray, &[], &eval.buffers)
-}
-
 pub(crate) fn buffer_edit_range_for_byte_range_in_manager(
     buffers: &BufferManager,
     buffer_id: crate::buffer::BufferId,

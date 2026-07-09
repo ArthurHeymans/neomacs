@@ -43,6 +43,7 @@ pub(super) struct FileWatch {
 pub(super) trait FileNotifyBackend {
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn allocated_p(&self) -> bool;
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn watch_list(&self) -> Vec<FileWatch>;
     fn add_watch(&mut self, path: &std::path::Path) -> Result<FileNotifyWatchDescriptor, Flow>;
     fn remove_watch(&mut self, descriptor: &FileNotifyWatchDescriptor) -> Result<bool, Flow>;
@@ -167,21 +168,6 @@ fn extract_valid_watch_descriptor(value: Value) -> Option<FileNotifyWatchDescrip
 
 pub(crate) fn reset_file_notify_thread_locals() {
     FILE_NOTIFY_STATE.with(|slot| *slot.borrow_mut() = FileNotifyState::default());
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_inotify_watch_list(args: Vec<Value>) -> EvalResult {
-    expect_args("inotify-watch-list", &args, 0)?;
-    FILE_NOTIFY_STATE.with(|slot| {
-        let state = slot.borrow();
-        let list: Vec<Value> = state
-            .backend
-            .watch_list()
-            .into_iter()
-            .map(|w| Value::cons(Value::fixnum(w.id), Value::string(&w.path)))
-            .collect();
-        Ok(Value::list(list))
-    })
 }
 
 pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {

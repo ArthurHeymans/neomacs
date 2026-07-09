@@ -424,11 +424,6 @@ impl WaitRequest {
         self.deadline
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn deadline_is_poll(self) -> bool {
-        matches!(self.deadline, WaitDeadline::Poll)
-    }
-
     fn deadline_is_finite(self) -> bool {
         matches!(self.deadline, WaitDeadline::Until { .. })
     }
@@ -872,16 +867,6 @@ impl super::eval::Context {
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn service_wait_request_once_has_target_process_activity(
-        &mut self,
-        request: &WaitRequest,
-    ) -> Result<bool, Flow> {
-        Ok(self
-            .service_wait_request_once_outcome(request)?
-            .has_target_process_activity())
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn service_wait_request_source_events_outcome(
         &mut self,
         request: &WaitRequest,
@@ -892,36 +877,6 @@ impl super::eval::Context {
             WaitBlockActivity::from_source_events(events),
             true,
         )
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn service_wait_request_source_events_have_target_process_activity(
-        &mut self,
-        request: &WaitRequest,
-        events: ProcessWaitEvents,
-    ) -> Result<bool, Flow> {
-        Ok(self
-            .service_wait_request_source_events_outcome(request, events)?
-            .has_target_process_activity())
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn service_process_output_wait_once_has_target_process_activity(
-        &mut self,
-        request: ProcessOutputWaitRequest,
-    ) -> Result<bool, Flow> {
-        let wait = WaitRequest::accept_process_output_request(request);
-        self.service_wait_request_once_has_target_process_activity(&wait)
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn service_process_output_wait_source_events_have_target_process_activity(
-        &mut self,
-        request: ProcessOutputWaitRequest,
-        events: ProcessWaitEvents,
-    ) -> Result<bool, Flow> {
-        let wait = WaitRequest::accept_process_output_request(request);
-        self.service_wait_request_source_events_have_target_process_activity(&wait, events)
     }
 
     fn service_wait_request_block_activity(

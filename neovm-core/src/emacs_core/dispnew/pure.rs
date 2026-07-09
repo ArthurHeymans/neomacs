@@ -59,18 +59,6 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 // Window designator helpers
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_window_designator(value: &Value) -> Result<(), Flow> {
-    if value.is_nil() {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("windowp"), *value],
-        ))
-    }
-}
-
 fn live_window_designator_p(eval: &mut crate::emacs_core::eval::Context, value: &Value) -> bool {
     match value.kind() {
         ValueKind::Veclike(VecLikeType::Window) => eval
@@ -99,34 +87,6 @@ fn expect_window_designator_eval(
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn live_window_designator_p_in_state(frames: &crate::window::FrameManager, value: &Value) -> bool {
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Window) => frames
-            .find_window_frame_id(WindowId(value.as_window_id().unwrap()))
-            .is_some(),
-        ValueKind::Fixnum(id) if id >= 0 => {
-            frames.find_window_frame_id(WindowId(id as u64)).is_some()
-        }
-        _ => false,
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_window_designator_in_state(
-    frames: &crate::window::FrameManager,
-    value: &Value,
-) -> Result<(), Flow> {
-    if value.is_nil() || live_window_designator_p_in_state(frames, value) {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("windowp"), *value],
-        ))
-    }
-}
-
 fn window_id_from_window_designator(value: &Value) -> Option<WindowId> {
     match value.kind() {
         ValueKind::Veclike(VecLikeType::Window) => Some(WindowId(value.as_window_id().unwrap())),
@@ -140,35 +100,12 @@ fn selected_window_id(eval: &mut crate::emacs_core::eval::Context) -> Option<Win
     eval.frames.get(frame_id).map(|frame| frame.selected_window)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn selected_window_id_in_state(
-    frames: &mut crate::window::FrameManager,
-    buffers: &mut crate::buffer::BufferManager,
-) -> Option<WindowId> {
-    let frame_id =
-        crate::emacs_core::window_cmds::ensure_selected_frame_id_in_state(frames, buffers);
-    frames.get(frame_id).map(|frame| frame.selected_window)
-}
-
 fn resolve_internal_show_cursor_window_id(
     eval: &mut crate::emacs_core::eval::Context,
     value: &Value,
 ) -> Option<WindowId> {
     if value.is_nil() {
         selected_window_id(eval)
-    } else {
-        window_id_from_window_designator(value)
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_internal_show_cursor_window_id_in_state(
-    frames: &mut crate::window::FrameManager,
-    buffers: &mut crate::buffer::BufferManager,
-    value: &Value,
-) -> Option<WindowId> {
-    if value.is_nil() {
-        selected_window_id_in_state(frames, buffers)
     } else {
         window_id_from_window_designator(value)
     }

@@ -815,15 +815,6 @@ fn decode_lisp_string_units(text: &LispString) -> Vec<DecodedUnit> {
     out
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn column_for_prefix(prefix: &str, tab_width: usize) -> usize {
-    let mut column = 0usize;
-    for ch in prefix.chars() {
-        column = next_column(column, ch, tab_width);
-    }
-    column
-}
-
 fn column_for_lisp_string(prefix: &LispString, tab_width: usize) -> usize {
     let mut column = 0usize;
     for unit in decode_lisp_string_units(prefix) {
@@ -861,86 +852,6 @@ fn indent_to_column_string(
     }
 
     out
-}
-
-#[inline]
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn is_horizontal_space(ch: char) -> bool {
-    ch == ' ' || ch == '\t'
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn delete_horizontal_space_at_point(
-    eval: &mut super::eval::Context,
-    backward_only: bool,
-) -> Result<(), Flow> {
-    let buf = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-
-    let accessible = buf.accessible_emacs_byte_region();
-    let pmin = accessible.start();
-    let pmax = accessible.end();
-    let pt = buf.point_emacs_byte_pos();
-
-    let mut left = pt;
-    while left > pmin {
-        let Some(ch) = buf.char_before_emacs_byte_pos(left) else {
-            break;
-        };
-        if !is_horizontal_space(ch) {
-            break;
-        }
-        let Some(char_len) = buf.char_before_emacs_byte_len(left) else {
-            break;
-        };
-        left = left.saturating_sub_len(char_len.max(EmacsByteLen::new(1)));
-    }
-
-    let mut right = pt;
-    if !backward_only {
-        while right < pmax {
-            let Some(ch) = buf.char_after_emacs_byte_pos(right) else {
-                break;
-            };
-            if !is_horizontal_space(ch) {
-                break;
-            }
-            let Some(char_len) = buf.char_after_emacs_byte_len(right) else {
-                break;
-            };
-            right = right.add_len(char_len.max(EmacsByteLen::new(1)));
-        }
-    }
-
-    if left == right {
-        return Ok(());
-    }
-
-    if buffer_read_only_active(eval, buf) {
-        return Err(signal(
-            LispCondition::BufferReadOnly,
-            vec![buf.name_value()],
-        ));
-    }
-
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
-        &eval.buffers,
-        current_id,
-        EmacsByteRange::new(left, right),
-    )?;
-    let change = crate::buffer::TextChange::deletion(delete_range);
-    super::editfns::signal_before_text_change(eval, change)?;
-    let _ = eval
-        .buffers
-        .delete_buffer_measured_region(current_id, delete_range);
-    super::editfns::signal_after_text_change(eval, change)?;
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

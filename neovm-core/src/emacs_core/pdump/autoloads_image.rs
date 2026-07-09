@@ -410,19 +410,6 @@ pub(crate) fn empty_autoloads() -> DumpAutoloadManager {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn autoloads_is_empty(autoloads: &DumpAutoloadManager) -> bool {
-    autoloads.entries_syms.is_empty()
-        && autoloads.entries.is_empty()
-        && autoloads.after_load_lisp.is_empty()
-        && autoloads.after_load.is_empty()
-        && autoloads.loaded_files.is_empty()
-        && autoloads.obsolete_functions_syms.is_empty()
-        && autoloads.obsolete_functions.is_empty()
-        && autoloads.obsolete_variables_syms.is_empty()
-        && autoloads.obsolete_variables.is_empty()
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::types::{DumpHeapRef, DumpNameId};

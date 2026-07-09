@@ -175,17 +175,6 @@ fn expect_strict_string(v: &Value) -> Result<String, Flow> {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_sql_cstring(v: &Value) -> Result<CString, Flow> {
-    let s = v.as_lisp_string().ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("stringp"), *v],
-        )
-    })?;
-    CString::new(s.as_bytes()).map_err(|_| sqlite_err("embedded null byte"))
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum SqliteReturnType {
@@ -312,18 +301,6 @@ unsafe fn sqlite_errmsg_for_db(db: *mut ffi::sqlite3) -> String {
     let msg = unsafe { ffi::sqlite3_errmsg(db) };
     if msg.is_null() {
         "sqlite error".to_string()
-    } else {
-        unsafe { std::ffi::CStr::from_ptr(msg) }
-            .to_string_lossy()
-            .into_owned()
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-unsafe fn sqlite_errstr(code: i32) -> String {
-    let msg = unsafe { ffi::sqlite3_errstr(code) };
-    if msg.is_null() {
-        format!("sqlite error {code}")
     } else {
         unsafe { std::ffi::CStr::from_ptr(msg) }
             .to_string_lossy()

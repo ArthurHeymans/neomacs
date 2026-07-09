@@ -806,16 +806,6 @@ fn keymap_binding_spine(keymap: &Value) -> Option<Value> {
     Some(*keymap)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
-    lookup_in_keymap_level_impl(keymap, event, t_ok, true)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn lookup_in_keymap_level_unresolved(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
-    lookup_in_keymap_level_impl(keymap, event, t_ok, false)
-}
-
 fn maybe_resolve_keyelt(binding: Value, resolve_keyelt: bool) -> Value {
     if resolve_keyelt {
         get_keyelt(binding)
@@ -1627,15 +1617,6 @@ fn dynamic_or_global_symbol_value_in_state(
     obarray.symbol_value(name).cloned()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn dynamic_or_global_symbol_value_by_sym_id_in_state(
-    obarray: &Obarray,
-    _dynamic: &[OrderedRuntimeBindingMap],
-    sym_id: SymId,
-) -> Option<Value> {
-    obarray.symbol_value_id(sym_id).copied()
-}
-
 fn dynamic_buffer_or_global_symbol_value_in_state(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
@@ -1683,31 +1664,6 @@ pub(crate) fn minor_mode_map_entry(entry: &Value) -> Option<(SymId, Value)> {
         return None;
     }
     Some((mode_name, cdr))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn key_binding_lookup_in_keymap_in_obarray(
-    obarray: &Obarray,
-    keymap: &Value,
-    events: &[Value],
-) -> Option<Value> {
-    if !is_list_keymap(keymap) || events.is_empty() {
-        return None;
-    }
-
-    let mut current_map = *keymap;
-    for (index, event) in events.iter().enumerate() {
-        let binding = list_keymap_lookup_one(&current_map, event);
-        if binding.is_nil() {
-            return None;
-        }
-        if index == events.len() - 1 {
-            return Some(binding);
-        }
-        current_map = resolve_prefix_keymap_binding_in_obarray(obarray, &binding)?;
-    }
-
-    None
 }
 
 fn collect_maps_from_alist_in_state(

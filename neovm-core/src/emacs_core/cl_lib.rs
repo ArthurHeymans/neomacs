@@ -1136,55 +1136,6 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
     }
 }
 
-/// `(seq-contains-p SEQ ELT &optional TESTFN)` — membership test for sequence.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_contains_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    if !(2..=3).contains(&args.len()) {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("seq-contains-p"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    let seq = &args[0];
-    let target = args[1];
-    let test_fn = if args.len() == 3 && !args[2].is_nil() {
-        Some(args[2])
-    } else {
-        None
-    };
-    let elements = seq_position_elements(seq)?;
-
-    let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(target);
-    if let Some(tf) = &test_fn {
-        eval.push_specpdl_root(*tf);
-    }
-    for e in &elements {
-        eval.push_specpdl_root(*e);
-    }
-    let result = (|| {
-        for element in elements {
-            let matches = if let Some(test) = &test_fn {
-                eval.apply2(*test, element, target)?.is_truthy()
-            } else {
-                seq_default_match(&element, &target)
-            };
-            if matches {
-                return Ok(Value::T);
-            }
-        }
-        Ok(Value::NIL)
-    })();
-    eval.restore_specpdl_roots(roots);
-    result
-}
-
 /// `(seq-mapn FN &rest SEQS)` — map over multiple sequences.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -1211,27 +1162,6 @@ pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>
             results.push(val);
         }
         Ok(Value::list(results))
-    })();
-    eval.restore_specpdl_roots(roots);
-    result
-}
-
-/// `(seq-do FN SEQ)` — apply fn for side effects, return nil.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_do(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("seq-do", &args, 2)?;
-    let func = args[0];
-    let elems = collect_sequence(&args[1]);
-    let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(func);
-    for e in &elems {
-        eval.push_specpdl_root(*e);
-    }
-    let result = (|| {
-        for e in elems {
-            eval.apply1(func, e)?;
-        }
-        Ok(Value::NIL)
     })();
     eval.restore_specpdl_roots(roots);
     result
@@ -1329,38 +1259,6 @@ pub(crate) fn builtin_seq_every_p(eval: &mut super::eval::Context, args: Vec<Val
             }
         }
         Ok(Value::T)
-    })();
-    eval.restore_specpdl_roots(roots);
-    result
-}
-
-/// `(seq-sort PRED SEQ)` — sort with predicate.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_sort(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("seq-sort", &args, 2)?;
-    let pred = args[0];
-    let mut items = collect_sequence(&args[1]);
-
-    let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(pred);
-    for e in &items {
-        eval.push_specpdl_root(*e);
-    }
-    let result = (|| {
-        // Insertion sort (stable, supports fallible predicates)
-        for i in 1..items.len() {
-            let mut j = i;
-            while j > 0 {
-                let r = eval.apply2(pred, items[j], items[j - 1])?;
-                if r.is_truthy() {
-                    items.swap(j, j - 1);
-                    j -= 1;
-                } else {
-                    break;
-                }
-            }
-        }
-        Ok(Value::list(items))
     })();
     eval.restore_specpdl_roots(roots);
     result

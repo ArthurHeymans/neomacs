@@ -275,18 +275,6 @@ pub(crate) fn expect_frame_designator(value: &Value) -> Result<(), Flow> {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_display_designator(value: &Value) -> Result<(), Flow> {
-    if value.is_nil() || terminal_designator_p(value) {
-        return Ok(());
-    }
-    if value.is_string() {
-        let display = display_string_text(value).expect("checked string");
-        return Err(display_does_not_exist_error(&display));
-    }
-    Err(invalid_get_device_terminal_error(value))
-}
-
 pub(crate) fn expect_display_designator_in_state(
     frames: &crate::window::FrameManager,
     value: &Value,
@@ -332,18 +320,6 @@ fn expect_optional_display_designator_eval(
         expect_display_designator_eval(eval, display)?;
     }
     Ok(())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn frame_not_live_error(value: &Value) -> Flow {
-    let printable = match value.kind() {
-        ValueKind::String => display_string_text(value).expect("checked string"),
-        _ => super::print::print_value(value),
-    };
-    signal(
-        "error",
-        vec![Value::string(format!("{printable} is not a live frame"))],
-    )
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -545,44 +521,8 @@ fn gui_x_query_target_eval(
     })
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn gui_x_query_target_in_state(
-    frames: &crate::window::FrameManager,
-    obarray: &crate::emacs_core::symbol::Obarray,
-    dynamic: &[crate::emacs_core::value::OrderedRuntimeBindingMap],
-    name: &str,
-    args: &[Value],
-) -> Result<bool, Flow> {
-    expect_max_args(name, args, 1)?;
-    if !display_window_system_symbol_in_state(frames, obarray, dynamic, args.first())?
-        .is_some_and(gui_window_system_active_value)
-    {
-        return Ok(false);
-    }
-    Ok(match args.first() {
-        None => true,
-        Some(v) if v.is_nil() => true,
-        Some(display) => live_frame_designator_p_in_state(frames, display),
-    })
-}
-
 fn expect_optional_window_system_frame_arg(value: &Value) -> Result<(), Flow> {
     if value.is_nil() || value.is_frame() {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("frame-live-p"), *value],
-        ))
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_optional_window_system_frame_arg_in_state(
-    frames: &crate::window::FrameManager,
-    value: &Value,
-) -> Result<(), Flow> {
-    if value.is_nil() || value.is_frame() || live_frame_designator_p_in_state(frames, value) {
         Ok(())
     } else {
         Err(signal(
@@ -687,24 +627,6 @@ fn parse_x_geometry(spec: &str) -> Option<Value> {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn display_optional_capability_p(name: &str, args: &[Value]) -> EvalResult {
-    expect_max_args(name, args, 1)?;
-    match args.first() {
-        None => Ok(Value::NIL),
-        Some(v) if v.is_nil() => Ok(Value::NIL),
-        Some(display) if is_terminal_handle(display) => Ok(Value::NIL),
-        Some(v) if v.is_string() => {
-            let display = display_string_text(v).expect("checked string");
-            Err(signal(
-                "error",
-                vec![Value::string(format!("Display {display} does not exist"))],
-            ))
-        }
-        Some(other) => Err(invalid_get_device_terminal_error(other)),
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn display_optional_capability_p_eval(
     eval: &mut super::eval::Context,
     name: &str,
@@ -761,21 +683,6 @@ fn x_optional_display_query_error_eval(
     expect_max_args(name, &args, 1)?;
     if let Some(display) = args.first() {
         if live_frame_designator_p(eval, display) {
-            return Err(x_window_system_frame_error());
-        }
-    }
-    x_optional_display_query_error(name, &args)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn x_optional_display_query_error_in_state(
-    frames: &crate::window::FrameManager,
-    name: &str,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_max_args(name, &args, 1)?;
-    if let Some(display) = args.first() {
-        if live_frame_designator_p_in_state(frames, display) {
             return Err(x_window_system_frame_error());
         }
     }

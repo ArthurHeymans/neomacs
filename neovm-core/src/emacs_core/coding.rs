@@ -1072,15 +1072,6 @@ impl CodingSystemManager {
     pub(crate) fn terminal_coding_sym(&self) -> SymId {
         self.terminal_coding
     }
-    // pdump accessors
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn dump_keyboard_coding(&self) -> &str {
-        resolve_sym(self.keyboard_coding)
-    }
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn dump_terminal_coding(&self) -> &str {
-        resolve_sym(self.terminal_coding)
-    }
     pub(crate) fn dump_keyboard_coding_sym(&self) -> SymId {
         self.keyboard_coding
     }
@@ -4523,39 +4514,6 @@ fn runtime_bucket_name(mgr: &CodingSystemManager, resolved_name: &str) -> Option
         Some(bucket_name)
     } else {
         None
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn alias_sort_rank(canonical: &str, alias: &str) -> usize {
-    match canonical {
-        "utf-8" => match alias {
-            "mule-utf-8" => 0,
-            "cp65001" => 1,
-            _ => 2,
-        },
-        "iso-latin-1" => match alias {
-            "iso-8859-1" => 0,
-            "latin-1" => 1,
-            _ => 2,
-        },
-        "iso-latin-5" => match alias {
-            "iso-8859-9" => 0,
-            "latin-5" => 1,
-            _ => 2,
-        },
-        "iso-latin-9" => match alias {
-            "iso-8859-15" => 0,
-            "latin-9" => 1,
-            "latin-0" => 2,
-            _ => 3,
-        },
-        "us-ascii" => match alias {
-            "iso-safe" => 0,
-            "ascii" => 1,
-            _ => 2,
-        },
-        _ => 0,
     }
 }
 

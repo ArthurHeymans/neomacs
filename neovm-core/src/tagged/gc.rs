@@ -1209,12 +1209,6 @@ impl ConsBlock {
         }
     }
 
-    #[inline]
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn owns_ptr(&self, ptr: *const ConsCell) -> bool {
-        Self::block_base_for_ptr(ptr) == self.base_addr() && Self::ptr_is_cell_aligned(ptr)
-    }
-
     /// View a mark-bitmap word as an atomic. The cons mark bits are accessed
     /// atomically (relaxed) so a future concurrent GC thread can set them while
     /// the mutator allocate-blacks / reads them without a data race; on x86 a

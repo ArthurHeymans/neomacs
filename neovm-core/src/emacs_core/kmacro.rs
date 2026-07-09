@@ -243,27 +243,6 @@ fn start_kbd_macro_impl(
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn plan_call_last_kbd_macro(
-    last_kbd_macro: Option<&[Value]>,
-    args: &[Value],
-) -> Result<(Vec<Value>, i64, Value), Flow> {
-    expect_max_args("call-last-kbd-macro", args, 2)?;
-    let repeat = args.first().map_or(1i64, prefix_numeric_value);
-    let loopfunc = args.get(1).copied().unwrap_or(Value::NIL);
-
-    let macro_keys = last_kbd_macro
-        .map(|events| events.to_vec())
-        .ok_or_else(|| {
-            signal(
-                "error",
-                vec![Value::string("No keyboard macro has been defined")],
-            )
-        })?;
-
-    Ok((macro_keys, repeat, loopfunc))
-}
-
 pub(crate) fn plan_execute_kbd_macro(
     eval: &super::eval::Context,
     args: &[Value],

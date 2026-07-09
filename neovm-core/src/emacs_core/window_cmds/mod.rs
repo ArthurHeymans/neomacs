@@ -266,29 +266,6 @@ fn parse_integer_or_marker_arg(value: &Value) -> Result<IntegerOrMarkerArg, Flow
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_number_or_marker_count(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        ValueKind::Float => Ok(value.xfloat().floor() as i64),
-        _ if value.is_marker() => match parse_integer_or_marker_arg(value)? {
-            IntegerOrMarkerArg::Marker {
-                position: Some(pos),
-                ..
-            } => Ok(pos),
-            IntegerOrMarkerArg::Marker { position: None, .. } => Err(signal(
-                "error",
-                vec![Value::string("Marker does not point anywhere")],
-            )),
-            IntegerOrMarkerArg::Int(pos) => Ok(pos),
-        },
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("number-or-marker-p"), *value],
-        )),
-    }
-}
-
 fn clamped_window_position_in_state(
     frames: &FrameManager,
     buffers: &BufferManager,
@@ -508,19 +485,6 @@ fn window_is_bottommost(frame: &crate::window::Frame, window_id: WindowId) -> bo
     })
 }
 
-/// Resolve an optional window designator that may be stale (window object).
-///
-/// - nil/omitted => selected live window
-/// - non-nil invalid designator => `(wrong-type-argument PRED VALUE)`
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_window_object_id_with_pred(
-    eval: &mut super::eval::Context,
-    arg: Option<&Value>,
-    pred: &str,
-) -> Result<WindowId, Flow> {
-    resolve_window_object_id_with_pred_in_state(&mut eval.frames, &mut eval.buffers, arg, pred)
-}
-
 fn resolve_window_object_id_with_pred_in_state(
     frames: &mut FrameManager,
     buffers: &mut BufferManager,
@@ -584,25 +548,6 @@ fn resolve_window_id_or_error_in_state(
             vec![Value::symbol("window-valid-p"), *value],
         ))
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn format_window_designator_for_error(eval: &super::eval::Context, value: &Value) -> String {
-    if let Some(wid) = window_id_from_designator(value) {
-        if eval.frames.is_window_object_id(wid) || value.is_window() {
-            return format!("#<window {}>", wid.0);
-        }
-    }
-    super::print::print_value(value)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_window_id_or_window_error(
-    eval: &mut super::eval::Context,
-    arg: Option<&Value>,
-    live_only: bool,
-) -> Result<(FrameId, WindowId), Flow> {
-    resolve_window_id_or_window_error_in_state(&mut eval.frames, &mut eval.buffers, arg, live_only)
 }
 
 fn format_window_designator_for_error_in_state(frames: &FrameManager, value: &Value) -> String {
@@ -706,18 +651,6 @@ pub(crate) fn resolve_frame_id_in_state(
             vec![Value::symbol(predicate), *val],
         )),
     }
-}
-
-/// Resolve a frame designator that may also be a live window designator.
-///
-/// `frame-first-window` accepts either a frame or window object in GNU Emacs.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_frame_or_window_frame_id(
-    eval: &mut super::eval::Context,
-    arg: Option<&Value>,
-    predicate: &str,
-) -> Result<FrameId, Flow> {
-    resolve_frame_or_window_frame_id_in_state(&mut eval.frames, &mut eval.buffers, arg, predicate)
 }
 
 fn resolve_frame_or_window_frame_id_in_state(
@@ -2082,30 +2015,6 @@ pub(crate) fn builtin_window_start(
         _ => Ok(Value::fixnum(0)),
     }
 }
-/// `(window-group-start &optional WINDOW)` -> integer position.
-///
-/// Batch GNU Emacs exposes group-start as point-min (`1`) in startup flows.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_group_start(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
-    expect_max_args("window-group-start", &args, 1)?;
-    let (fid, wid) =
-        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if frames
-        .get(fid)
-        .is_some_and(|frame| frame.minibuffer_window == Some(wid))
-    {
-        return Ok(Value::fixnum(1));
-    }
-    let w = get_leaf(frames, fid, wid)?;
-    match w {
-        Window::Leaf { window_start, .. } => Ok(Value::fixnum(window_start.as_i64())),
-        _ => Ok(Value::fixnum(1)),
-    }
-}
 fn estimated_window_end_from_body_lines(
     frames: &FrameManager,
     buffers: &BufferManager,
@@ -2278,63 +2187,6 @@ pub(crate) fn builtin_set_window_start(
         }
     };
     Ok(result)
-}
-/// `(set-window-group-start WINDOW POS &optional NOFORCE)` -> POS.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_set_window_group_start(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
-    expect_min_args("set-window-group-start", &args, 2)?;
-    expect_max_args("set-window-group-start", &args, 3)?;
-    let (fid, wid) =
-        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    let pos = parse_integer_or_marker_arg(&args[1])?;
-    let is_minibuffer = frames
-        .get(fid)
-        .is_some_and(|frame| frame.minibuffer_window == Some(wid));
-    match pos {
-        IntegerOrMarkerArg::Int(pos) => {
-            if !is_minibuffer {
-                if let Some(clamped) =
-                    clamped_window_position_in_state(frames, buffers, fid, wid, pos)
-                {
-                    if let Some(window) = frames
-                        .get_mut(fid)
-                        .and_then(|frame| frame.find_window_mut(wid))
-                    {
-                        crate::window::window_markers::set_window_start_with_marker(
-                            buffers, window, clamped,
-                        );
-                    }
-                }
-            }
-            Ok(Value::fixnum(pos))
-        }
-        IntegerOrMarkerArg::Marker { raw, position } => {
-            if !is_minibuffer {
-                if let Some(pos) = position {
-                    if let Some(clamped) =
-                        clamped_window_position_in_state(frames, buffers, fid, wid, pos)
-                    {
-                        if let Some(window) = frames
-                            .get_mut(fid)
-                            .and_then(|frame| frame.find_window_mut(wid))
-                        {
-                            crate::window::window_markers::set_window_start_with_marker(
-                                buffers, window, clamped,
-                            );
-                            crate::window::window_markers::set_window_point_with_marker(
-                                buffers, window, clamped,
-                            );
-                        }
-                    }
-                }
-            }
-            Ok(raw)
-        }
-    }
 }
 /// `(set-window-point WINDOW POS)` -> POS.
 pub(crate) fn builtin_set_window_point(
@@ -2761,11 +2613,6 @@ pub(crate) fn builtin_set_window_hscroll(
 
 fn scroll_prefix_value(value: &Value) -> i64 {
     crate::emacs_core::prefix::prefix_numeric_value(value)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn default_scroll_columns(eval: &super::eval::Context, fid: FrameId, wid: WindowId) -> i64 {
-    default_scroll_columns_in_state(&eval.frames, fid, wid)
 }
 
 fn default_scroll_columns_in_state(frames: &FrameManager, fid: FrameId, wid: WindowId) -> i64 {
@@ -3892,16 +3739,6 @@ pub(crate) fn builtin_window_at(eval: &mut super::eval::Context, args: Vec<Value
 // Window manipulation
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn split_window_internal_impl(
-    eval: &mut super::eval::Context,
-    window: Value,
-    size: Value,
-    side: Value,
-) -> EvalResult {
-    split_window_internal_impl_in_state(&mut eval.frames, &mut eval.buffers, window, size, side)
-}
-
 pub(crate) fn split_window_internal_impl_in_state(
     frames: &mut FrameManager,
     buffers: &mut BufferManager,
@@ -4351,54 +4188,6 @@ pub(crate) fn builtin_select_window(
         super::builtins::run_buffer_list_update_hook(eval)?;
     }
     Ok(window_value(wid))
-}
-/// `(other-window COUNT &optional ALL-FRAMES)` -> nil.
-///
-/// Select another window in cyclic order.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_other_window(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("other-window", &args, 1)?;
-    expect_max_args("other-window", &args, 3)?;
-    let count = expect_number_or_marker_count(&args[0])?;
-    let run_buffer_list_hook = {
-        let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
-        let _ = ensure_selected_frame_id_in_state(frames, buffers);
-        let Some(fid) = frames.selected_frame().map(|f| f.id) else {
-            return Ok(Value::NIL);
-        };
-        let Some(frame) = frames.get(fid) else {
-            return Ok(Value::NIL);
-        };
-        let list = frame.window_list();
-        if list.is_empty() {
-            return Ok(Value::NIL);
-        }
-        let cur = frame.selected_window;
-        let cur_idx = list.iter().position(|w| *w == cur).unwrap_or(0);
-        let len = list.len() as i64;
-        let new_idx = ((cur_idx as i64 + count) % len + len) % len;
-        let new_wid = list[new_idx as usize];
-        remember_selected_window_point_in_state(frames, buffers, fid);
-        let switched = if let Some(frame) = frames.get_mut(fid) {
-            frame.select_window(new_wid)
-        } else {
-            false
-        };
-        if switched {
-            let _ = frames.note_window_selected(new_wid);
-        };
-        sync_selected_window_buffer_in_state(frames, buffers, fid);
-        note_selected_window_buffer_in_state(frames, buffers, fid);
-        selected_window_buffer_state_in_frame(frames, fid)
-            .is_some_and(|(_, buffer_id)| !buffers.buffer_hooks_inhibited(buffer_id))
-    };
-    if run_buffer_list_hook {
-        super::builtins::run_buffer_list_update_hook(eval)?;
-    }
-    Ok(Value::NIL)
 }
 /// `(other-window-for-scrolling)` -> window object used for scrolling.
 pub(crate) fn builtin_other_window_for_scrolling(
@@ -5649,16 +5438,6 @@ fn flush_pending_live_gui_resize(
 // Scroll / frame visibility command shims
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn recenter_missing_display_error() -> Flow {
-    signal(
-        "error",
-        vec![Value::string(
-            "‘recenter’ing a window that does not display current-buffer.",
-        )],
-    )
-}
-
 fn scroll_up_batch_error() -> Flow {
     signal(LispCondition::EndOfBuffer, vec![])
 }
@@ -5738,39 +5517,6 @@ mod pixel_scroll_apply_tests {
     }
 }
 
-/// `(scroll-up-command &optional ARG)` — delegates to scroll-up.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_scroll_up_command(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_max_args("scroll-up-command", &args, 1)?;
-    builtin_scroll_up(eval, args)
-}
-
-/// `(scroll-down-command &optional ARG)` — delegates to scroll-down.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_scroll_down_command(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_max_args("scroll-down-command", &args, 1)?;
-    builtin_scroll_down(eval, args)
-}
-
-/// Compute scroll distance: if ARG is nil, use window height minus
-/// next-screen-context-lines; otherwise use ARG as line count.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn scroll_lines(eval: &mut super::eval::Context, arg: Option<&Value>, direction: i64) -> i64 {
-    scroll_lines_in_state(
-        &eval.obarray,
-        &mut eval.frames,
-        &mut eval.buffers,
-        arg,
-        direction,
-    )
-}
-
 fn scroll_lines_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     frames: &mut FrameManager,
@@ -5845,13 +5591,6 @@ pub(crate) fn builtin_scroll_down(eval: &mut super::eval::Context, args: Vec<Val
     let result = scroll_by_lines_in_state(&mut eval.frames, &mut eval.buffers, lines);
     eval.invalidate_redisplay();
     result
-}
-
-/// Move point by `lines` newlines (positive=forward, negative=backward).
-/// Signals end-of-buffer or beginning-of-buffer on boundary.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn scroll_by_lines(eval: &mut super::eval::Context, lines: i64) -> EvalResult {
-    scroll_by_lines_in_state(&mut eval.frames, &mut eval.buffers, lines)
 }
 
 fn line_motion_bytes(bytes: &[u8], begv: usize, zv: usize, start: usize, lines: i64) -> usize {
@@ -5979,15 +5718,6 @@ fn scroll_by_lines_in_state(
     Ok(Value::NIL)
 }
 
-/// `(recenter-top-bottom &optional ARG)` — delegates to recenter.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_recenter_top_bottom(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_max_args("recenter-top-bottom", &args, 1)?;
-    builtin_recenter(eval, args)
-}
 /// `(recenter &optional ARG REDISPLAY)` — center point in window.
 ///
 /// Mirror GNU Emacs Frecenter (window.c): adjust window-start so that
@@ -7534,11 +7264,6 @@ fn parsed_effective_internal_border_width(
         .internal_border_width
         .map(|width| width.max(0) as u32)
         .unwrap_or(0)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn current_gui_frame_metrics(eval: &super::eval::Context) -> GuiFrameMetrics {
-    current_gui_frame_metrics_in_state(&eval.frames)
 }
 
 fn current_gui_frame_metrics_in_state(frames: &FrameManager) -> GuiFrameMetrics {

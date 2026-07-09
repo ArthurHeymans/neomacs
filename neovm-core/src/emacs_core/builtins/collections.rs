@@ -13,11 +13,6 @@ pub(crate) fn builtin_make_vector(args: Vec<Value>) -> EvalResult {
     Ok(Value::vector(vec![args[1]; len]))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_vector(args: Vec<Value>) -> EvalResult {
-    Ok(Value::vector(args))
-}
-
 pub(crate) fn builtin_vector_slice(_eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     Ok(Value::vector(args.to_vec()))
 }

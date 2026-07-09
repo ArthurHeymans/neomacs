@@ -164,61 +164,6 @@ fn documentation_plan(
     Ok((plan, lisp_directory))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_documentation_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let raw = args.get(1).is_some_and(|v| v.is_truthy());
-    let args_roots = args.clone();
-    let (plan, lisp_directory) = documentation_plan(shared, args)?;
-    finish_documentation_result(
-        execute_documentation_plan(
-            plan,
-            |execution| {
-                let roots = shared.save_specpdl_roots();
-                for root in &args_roots {
-                    shared.push_specpdl_root(*root);
-                }
-                let result = match execution {
-                    DocumentationExecution::Eval(value) => {
-                        shared.push_specpdl_root(value);
-                        shared.eval_value(&value)
-                    }
-                    DocumentationExecution::FunctionDoc(function) => {
-                        shared.push_specpdl_root(function);
-                        shared.apply(Value::symbol("function-documentation"), vec![function])
-                    }
-                };
-                shared.restore_specpdl_roots(roots);
-                result
-            },
-            lisp_directory.as_deref(),
-        )?,
-        raw,
-        |value| {
-            if shared
-                .obarray()
-                .symbol_function_id(intern("substitute-command-keys"))
-                .is_none()
-            {
-                return Ok(value);
-            }
-
-            let call = Value::list(vec![Value::symbol("substitute-command-keys"), value]);
-            let roots = shared.save_specpdl_roots();
-            for root in &args_roots {
-                shared.push_specpdl_root(*root);
-            }
-            shared.push_specpdl_root(value);
-            shared.push_specpdl_root(call);
-            let result = shared.eval_value(&call);
-            shared.restore_specpdl_roots(roots);
-            result
-        },
-    )
-}
-
 fn documentation_result_from_raw_doc(lisp_directory: Option<&str>, value: Value) -> EvalResult {
     if value == Value::fixnum(0) {
         return Ok(Value::NIL);
@@ -8114,56 +8059,6 @@ fn documentation_property_plan(
         }
         _ => Ok(DocumentationPlan::Final(Value::NIL)),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_documentation_property_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let raw = args.get(2).is_some_and(|v| v.is_truthy());
-    let args_roots = args.clone();
-    let plan = documentation_property_plan(shared, args)?;
-    finish_documentation_result(
-        execute_documentation_plan(
-            plan,
-            |execution| {
-                let DocumentationExecution::Eval(value) = execution else {
-                    unreachable!()
-                };
-                let roots = shared.save_specpdl_roots();
-                for root in &args_roots {
-                    shared.push_specpdl_root(*root);
-                }
-                shared.push_specpdl_root(value);
-                let result = shared.eval_value(&value);
-                shared.restore_specpdl_roots(roots);
-                result
-            },
-            None,
-        )?,
-        raw,
-        |value| {
-            if shared
-                .obarray()
-                .symbol_function_id(intern("substitute-command-keys"))
-                .is_none()
-            {
-                return Ok(value);
-            }
-
-            let call = Value::list(vec![Value::symbol("substitute-command-keys"), value]);
-            let roots = shared.save_specpdl_roots();
-            for root in &args_roots {
-                shared.push_specpdl_root(*root);
-            }
-            shared.push_specpdl_root(value);
-            shared.push_specpdl_root(call);
-            let result = shared.eval_value(&call);
-            shared.restore_specpdl_roots(roots);
-            result
-        },
-    )
 }
 
 // ---------------------------------------------------------------------------

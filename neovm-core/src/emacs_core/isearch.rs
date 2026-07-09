@@ -1455,16 +1455,6 @@ fn resolve_case_fold(override_val: Option<bool>, search_string: &LispString) -> 
 // Helper: build regex pattern with optional case-insensitive flag
 // ---------------------------------------------------------------------------
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn build_regex_pattern(pattern: &str, case_fold: bool) -> String {
-    let translated = super::regex::translate_emacs_regex(pattern);
-    if case_fold {
-        format!("(?i){}", translated)
-    } else {
-        translated
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Helper: find_match — general-purpose substring/regex search
 // ---------------------------------------------------------------------------
@@ -2222,39 +2212,6 @@ pub(crate) fn builtin_replace_regexp(
     args: Vec<Value>,
 ) -> EvalResult {
     replace_regexp_eval_impl(eval, args, false)
-}
-
-/// `(query-replace FROM TO &optional DELIMITED START END BACKWARD REGION-NONCONTIGUOUS-P)` —
-/// evaluator-backed batch-safe subset.
-///
-/// Current subset behavior performs unconditional replacement across the target
-/// region, matching batch automation use-cases.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_query_replace(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_max_args("query-replace", &args, 2, 7)?;
-    replace_string_eval_impl(eval, args, true)
-}
-
-/// `(query-replace-regexp FROM TO &optional DELIMITED START END BACKWARD REGION-NONCONTIGUOUS-P)` —
-/// evaluator-backed batch-safe subset.
-///
-/// Current subset behavior performs unconditional regexp replacement across the
-/// target region, matching batch automation use-cases.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_query_replace_regexp(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_max_args("query-replace-regexp", &args, 2, 7)?;
-    match replace_regexp_eval_impl(eval, args, true) {
-        // Batch `query-replace-regexp` does not signal invalid regexp payloads;
-        // it reports and returns nil in non-interactive compatibility mode.
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "invalid-regexp" => Ok(Value::NIL),
-        other => other,
-    }
 }
 
 /// `(keep-lines REGEXP &optional RSTART REND INTERACTIVE)` —

@@ -881,43 +881,6 @@ fn resolve_buffer_designator_allow_nil_current(
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn buffer_slice_for_char_region(
-    eval: &super::eval::Context,
-    buffer_id: Option<BufferId>,
-    start: LispCharPos1,
-    end: LispCharPos1,
-) -> String {
-    let Some(buffer_id) = buffer_id else {
-        return String::new();
-    };
-    let Some(buf) = eval.buffers.get(buffer_id) else {
-        return String::new();
-    };
-
-    let (from, to) = if start <= end {
-        (start, end)
-    } else {
-        (end, start)
-    };
-    let from_byte = char_pos_to_buffer_emacs_byte_pos(
-        buf,
-        clamped_lisp_char_pos_to_char_pos(from, buf.total_char_len()),
-    );
-    let to_byte = char_pos_to_buffer_emacs_byte_pos(
-        buf,
-        clamped_lisp_char_pos_to_char_pos(to, buf.total_char_len()),
-    );
-    let byte_range = EmacsByteRange::new(from_byte, to_byte);
-    // Issue #131: drop the buggy storage-string producer. A lossy UTF-8
-    // rendering preserves real Unicode (incl. PUA) for this `String`-typed
-    // helper and avoids the sentinel scheme.
-    crate::emacs_core::emacs_char::to_utf8_lossy(
-        buf.buffer_substring_lisp_string_range(byte_range)
-            .as_bytes(),
-    )
-}
-
 fn accessible_lisp_range_to_byte_range(
     buf: &Buffer,
     start: LispCharPos1,
@@ -996,32 +959,6 @@ fn resolve_lisp_range_with_buffer_defaults(
         expect_integer_or_marker_in_buffers(buffers, end_arg)?
     };
     Ok((LispCharPos1::new(start), LispCharPos1::new(end)))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn checked_buffer_slice_for_char_region(
-    eval: &super::eval::Context,
-    buffer_id: Option<BufferId>,
-    start: LispCharPos1,
-    end: LispCharPos1,
-    start_arg: Value,
-    end_arg: Value,
-) -> Result<String, Flow> {
-    let Some(buffer_id) = buffer_id else {
-        return Ok(String::new());
-    };
-    let Some(buf) = eval.buffers.get(buffer_id) else {
-        return Ok(String::new());
-    };
-
-    validate_accessible_lisp_range(buf, start, end, vec![start_arg, end_arg])?;
-
-    let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
-    // Issue #131: drop the buggy storage-string producer (see above).
-    Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
-        buf.buffer_substring_lisp_string_range(byte_range)
-            .as_bytes(),
-    ))
 }
 
 pub(crate) fn resolve_buffer_designator_allow_nil_current_in_manager(
@@ -3116,12 +3053,6 @@ pub(crate) fn builtin_point_0(eval: &mut super::eval::Context) -> EvalResult {
     Ok(Value::fixnum(buf.point_lisp_char_pos().as_i64()))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_point_min(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("point-min", &args, 0)?;
-    builtin_point_min_0(eval)
-}
-
 pub(crate) fn builtin_point_min_0(eval: &mut super::eval::Context) -> EvalResult {
     let buf = eval
         .buffers
@@ -4730,18 +4661,6 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
         Some(code) => Ok(Value::fixnum(code as i64)),
         None => Ok(Value::NIL),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn is_unibyte_storage_string(s: &str) -> bool {
-    // A unibyte storage string has only ASCII chars (0x00..=0x7F) and
-    // sentinel chars (0xE300..=0xE3FF) for bytes 0x80..=0xFF.
-    // No other Unicode codepoints should appear.
-    !s.is_empty()
-        && s.chars().all(|ch| {
-            let cp = ch as u32;
-            cp <= 0x7F || (0xE300..=0xE3FF).contains(&cp)
-        })
 }
 
 fn get_byte_from_multibyte_char_code(code: u32) -> EvalResult {

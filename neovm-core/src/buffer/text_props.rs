@@ -1461,11 +1461,6 @@ fn plists_equal_values_equal(left: &[(Value, Value)], right: &[(Value, Value)]) 
     })
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn plist_is_empty(plist: &[(Value, Value)]) -> bool {
-    plist.is_empty()
-}
-
 // ---------------------------------------------------------------------------
 // TextPropertyTable
 // ---------------------------------------------------------------------------
@@ -1504,13 +1499,6 @@ impl TextPropertyTable {
     /// Find the interval containing `pos`, returning its (start, node) pair.
     fn find_interval(&self, pos: CharPos0) -> Option<(CharPos0, &IntervalNode)> {
         self.intervals.find(pos)
-    }
-
-    /// Find the interval containing `pos`, returning mutable (start, node).
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn find_interval_mut(&mut self, pos: CharPos0) -> Option<(CharPos0, &mut IntervalNode)> {
-        let (start, id) = self.intervals.find_id(pos)?;
-        Some((start, &mut self.intervals.nodes[id.0]))
     }
 
     /// Find the first stored interval that overlaps `[start, end)`.
@@ -1611,11 +1599,6 @@ impl TextPropertyTable {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn replace_runs(&mut self, runs: Vec<IntervalRun>) {
-        self.intervals = IntervalTree::from_runs(runs);
-    }
-
     fn replace_runs_preserving_shape(&mut self, runs: Vec<IntervalRun>) {
         self.intervals = IntervalTree::from_runs_preserving_shape(runs);
     }
@@ -1648,18 +1631,6 @@ impl TextPropertyTable {
                 end,
             )));
         }
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn splice_interval_run(runs: &mut Vec<IntervalRun>, run: IntervalRun) {
-        if run.start() >= run.end() {
-            return;
-        }
-        Self::ensure_runs_cover(runs, run.end());
-        Self::split_runs_at(runs, run.start());
-        Self::split_runs_at(runs, run.end());
-        runs.retain(|existing| !(existing.start() < run.end() && existing.end() > run.start()));
-        runs.push(run);
     }
 
     // -- Public API ----------------------------------------------------------

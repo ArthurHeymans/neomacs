@@ -604,11 +604,6 @@ pub(crate) fn empty_face_table() -> DumpFaceTable {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn face_table_is_empty(table: &DumpFaceTable) -> bool {
-    table.face_ids.is_empty() && table.faces.is_empty()
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::types::DumpHeapRef;

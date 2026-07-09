@@ -469,34 +469,6 @@ pub(crate) fn builtin_invocation_name(args: Vec<Value>) -> EvalResult {
     Ok(Value::string(name))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_error(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("error", &args, 1)?;
-    let formatted = builtin_format_message(eval, args)?;
-    Err(signal(
-        "error",
-        vec![if formatted.is_string() {
-            formatted
-        } else {
-            Value::string("error")
-        }],
-    ))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_user_error(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("user-error", &args, 1)?;
-    let formatted = builtin_format_message(eval, args)?;
-    Err(signal(
-        LispCondition::UserError,
-        vec![if formatted.is_string() {
-            formatted
-        } else {
-            Value::string("user-error")
-        }],
-    ))
-}
-
 pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {
     expect_args("secure-hash-algorithms", &args, 0)?;
     Ok(Value::list(vec![

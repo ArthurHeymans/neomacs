@@ -1,10 +1,9 @@
 use super::builtins;
-use super::error::{EvalResult, Flow, signal};
+use super::error::{EvalResult, Flow};
 use super::eval::Context;
 use super::intern::{SymId, intern};
 use super::symbol::Obarray;
 use super::value::*;
-use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 
 pub(crate) trait HookRuntime {
@@ -328,22 +327,6 @@ pub(crate) fn run_hook_value_wrapped<R: HookRuntime>(
         }
         Ok(Value::NIL)
     })
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn run_hook_query_error_with_timeout<R: HookRuntime>(
-    runtime: &mut R,
-    hook_sym: SymId,
-    hook_value: Value,
-) -> EvalResult {
-    match run_hook_value(runtime, hook_sym, hook_value, &[], true) {
-        Ok(value) => Ok(value),
-        Err(Flow::Signal(_)) => Err(signal(
-            LispCondition::EndOfFile,
-            vec![Value::string("Error reading from stdin")],
-        )),
-        Err(flow) => Err(flow),
-    }
 }
 
 pub(crate) fn run_named_hook<R: HookRuntime>(

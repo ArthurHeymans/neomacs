@@ -5120,19 +5120,6 @@ impl BufferManager {
         Some(())
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn clear_inserted_plain_text_properties_in_emacs_byte_range(
-        &mut self,
-        id: BufferId,
-        byte_range: EmacsByteRange,
-    ) -> Option<()> {
-        self.buffers
-            .get_mut(&id)?
-            .text
-            .text_props_set_properties_in_emacs_byte_range(byte_range, Vec::new());
-        Some(())
-    }
-
     /// Char-range variant: the caller already knows the inserted char range, so
     /// this skips the byte->char conversion done by the byte-range version.
     pub(crate) fn clear_inserted_plain_text_properties_in_char_range(

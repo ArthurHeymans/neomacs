@@ -176,13 +176,6 @@ impl TerminalManager {
             .find(|terminal| eq_value(&terminal.handle, value))
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn find_by_handle_mut(&mut self, value: &Value) -> Option<&mut TerminalRecord> {
-        self.terminals
-            .iter_mut()
-            .find(|terminal| eq_value(&terminal.handle, value))
-    }
-
     fn live_terminals(&self) -> impl Iterator<Item = &TerminalRecord> {
         self.terminals.iter().filter(|terminal| terminal.is_live())
     }
@@ -320,48 +313,12 @@ fn terminal_runtime() -> TerminalRuntime {
     })
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn terminal_runtime_active() -> bool {
-    terminal_runtime().active
-}
-
 pub(crate) fn terminal_runtime_color_cells() -> i64 {
     terminal_runtime().color_cells
 }
 
 pub(crate) fn terminal_runtime_supports_color() -> bool {
     terminal_runtime().supports_color()
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn terminal_runtime_suspended() -> bool {
-    terminal_runtime().suspended
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn set_terminal_runtime_suspended(suspended: bool) {
-    TERMINAL_MANAGER.with(|slot| {
-        slot.borrow_mut()
-            .ensure_initial_terminal()
-            .runtime
-            .suspended = suspended;
-    });
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn with_terminal_host<R>(
-    f: impl FnOnce(&mut dyn TerminalHost) -> Result<R, String>,
-) -> Result<R, Flow> {
-    TERMINAL_MANAGER.with(|slot| {
-        let mut manager = slot.borrow_mut();
-        let Some(host) = manager.ensure_initial_terminal().host.as_deref_mut() else {
-            return Err(signal(
-                "error",
-                vec![Value::string("TTY terminal host unavailable")],
-            ));
-        };
-        f(host).map_err(|message| signal("error", vec![Value::string(message)]))
-    })
 }
 
 /// Clear cached terminal thread-locals (called from `reset_display_thread_locals`).
@@ -485,62 +442,11 @@ pub(crate) fn terminal_designator_eval_p(
     decode_terminal_id_eval(eval, value).is_some()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn terminal_designator_in_state_p(
-    frames: &crate::window::FrameManager,
-    value: &Value,
-) -> bool {
-    if value.is_nil() {
-        return frames.selected_frame().is_some()
-            || terminal_handle_value_for_id(TERMINAL_ID).is_some();
-    }
-    if let Some(id) = terminal_handle_id(value) {
-        return TERMINAL_MANAGER.with(|slot| {
-            slot.borrow()
-                .get(id)
-                .is_some_and(|terminal| terminal.is_live())
-        });
-    }
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Frame) => frames
-            .get(crate::window::FrameId(value.as_frame_id().unwrap()))
-            .is_some(),
-        _ => false,
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn expect_terminal_designator(value: &Value) -> Result<(), Flow> {
-    if terminal_designator_p(value) {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("terminal-live-p"), *value],
-        ))
-    }
-}
-
 pub(crate) fn expect_terminal_designator_eval(
     eval: &mut crate::emacs_core::eval::Context,
     value: &Value,
 ) -> Result<(), Flow> {
     if terminal_designator_eval_p(eval, value) {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("terminal-live-p"), *value],
-        ))
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn expect_terminal_designator_in_state(
-    frames: &crate::window::FrameManager,
-    value: &Value,
-) -> Result<(), Flow> {
-    if terminal_designator_in_state_p(frames, value) {
         Ok(())
     } else {
         Err(signal(

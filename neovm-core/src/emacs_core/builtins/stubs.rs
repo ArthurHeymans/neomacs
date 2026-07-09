@@ -3,7 +3,6 @@ use crate::buffer::{BufferManager, LispCharPos1};
 use crate::emacs_core::display;
 use crate::emacs_core::fontset;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
-use crate::window::{FrameManager, WindowId};
 
 // =========================================================================
 // fontset.c gap-fill stubs
@@ -1787,29 +1786,6 @@ pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult 
     Ok(unspecified_face_attributes_vector())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_window_live_or_nil_in_state(frames: &FrameManager, value: &Value) -> Result<(), Flow> {
-    if value.is_nil() {
-        return Ok(());
-    }
-    let live = if let Some(wid) = value.as_window_id() {
-        frames.is_live_window_id(WindowId(wid))
-    } else {
-        match value.kind() {
-            ValueKind::Fixnum(id) if id >= 0 => frames.is_live_window_id(WindowId(id as u64)),
-            _ => false,
-        }
-    };
-    if live {
-        Ok(())
-    } else {
-        Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("window-live-p"), *value],
-        ))
-    }
-}
-
 pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
     expect_range_args("font-get-glyphs", &args, 3, 4)?;
     if !is_font_object(&args[0]) {
@@ -2091,47 +2067,6 @@ pub(crate) fn builtin_debugger_trap(args: Vec<Value>) -> EvalResult {
 // =========================================================================
 // coding.c gap-fill stubs
 // =========================================================================
-
-/// GNU coding.c:10362 — internal-decode-string-utf-8.
-///
-/// These are test/benchmark functions (inside ENABLE_UTF_8_CONVERTER_TEST
-/// in GNU).  NeoVM stores all strings as UTF-8 natively, so decode is a
-/// pass-through.  We validate arguments per GNU to return nil on bad input.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_internal_decode_string_utf_8(args: Vec<Value>) -> EvalResult {
-    expect_args("internal-decode-string-utf-8", &args, 7)?;
-    // GNU returns nil if STRING is not a string.
-    if args[0].as_utf8_str().is_none() {
-        return Ok(Value::NIL);
-    }
-    // GNU: CHECK_FIXNUM(count)
-    if !args[6].is_fixnum() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), args[6]],
-        ));
-    }
-    // NeoVM is UTF-8 natively; return the input string unchanged.
-    Ok(args[0])
-}
-
-/// GNU coding.c:10306 — internal-encode-string-utf-8.
-///
-/// Same rationale as decode: NeoVM strings are already UTF-8.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_internal_encode_string_utf_8(args: Vec<Value>) -> EvalResult {
-    expect_args("internal-encode-string-utf-8", &args, 7)?;
-    if args[0].as_utf8_str().is_none() {
-        return Ok(Value::NIL);
-    }
-    if !args[6].is_fixnum() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), args[6]],
-        ));
-    }
-    Ok(args[0])
-}
 
 // =========================================================================
 // buffer.c gap-fill stubs

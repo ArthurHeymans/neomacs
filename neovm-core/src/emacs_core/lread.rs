@@ -113,90 +113,12 @@ fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flo
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn eval_forms_from_source(
-    eval: &mut super::eval::Context,
-    source: &str,
-    source_multibyte: bool,
-) -> EvalResult {
-    // Use eager macro expansion matching GNU Emacs's eval-buffer which calls
-    // readevalloop → readevalloop_eager_expand_eval. Without this, macros
-    // inside defun bodies won't be expanded when files are loaded through
-    // load-source-file-function (load-with-code-conversion).
-    //
-    // Uses the Value-native reader (no Expr intermediate) with streaming
-    // read-eval, matching the approach used for file loading.
-    let macroexpand_fn = super::load::get_eager_macroexpand_fn(eval);
-    eval_forms_from_source_streaming(eval, source, source_multibyte, macroexpand_fn)
-}
-
 pub(crate) fn eval_forms_from_lisp_source(
     eval: &mut super::eval::Context,
     source: &crate::heap_types::LispString,
 ) -> EvalResult {
     let macroexpand_fn = super::load::get_eager_macroexpand_fn(eval);
     eval_forms_from_lisp_source_streaming(eval, source, macroexpand_fn)
-}
-
-/// Streaming read-eval loop for source strings, using the Value reader.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn eval_forms_from_source_streaming(
-    eval: &mut super::eval::Context,
-    source: &str,
-    source_multibyte: bool,
-    macroexpand_fn: Option<Value>,
-) -> EvalResult {
-    let (source, shebang_only_line) = strip_reader_prefix(source);
-    if shebang_only_line {
-        return Err(signal(LispCondition::EndOfFile, vec![]));
-    }
-    if source.is_empty() {
-        return Ok(Value::NIL);
-    }
-
-    let mut pos = 0;
-    loop {
-        let read_result = super::value_reader::read_one_with_source_multibyte(
-            source,
-            source_multibyte,
-            pos,
-            &eval.obarray,
-        )
-        .map_err(signal_reader_error_for_eval_source)?;
-        let Some((form, next_pos)) = read_result else {
-            break;
-        };
-        pos = next_pos;
-
-        let eval_roots = eval.save_specpdl_roots();
-        eval.push_specpdl_root(form);
-        let eval_result = if let Some(mexp_fn) = macroexpand_fn {
-            eval.push_specpdl_root(mexp_fn);
-            super::load::eager_expand_eval(eval, form, mexp_fn).map_err(|e| match e {
-                super::error::EvalError::Signal {
-                    symbol,
-                    data,
-                    raw_data,
-                } => super::error::Flow::Signal(Box::new(super::error::SignalData {
-                    symbol,
-                    data,
-                    raw_data,
-                    suppress_signal_hook: false,
-                    selected_resume: None,
-                    search_complete: false,
-                })),
-                super::error::EvalError::UncaughtThrow { tag, value } => {
-                    super::error::Flow::Throw { tag, value }
-                }
-            })
-        } else {
-            eval.eval_sub(form)
-        };
-        eval.restore_specpdl_roots(eval_roots);
-        eval_result?;
-    }
-
-    Ok(Value::NIL)
 }
 
 fn eval_forms_from_lisp_source_streaming(
@@ -537,76 +459,6 @@ pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Val
         return Ok(Value::NIL);
     }
     eval_forms_from_lisp_source(eval, &source)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_eval_buffer_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    let source = eval_buffer_source_text_in_state(&shared.buffers, args.first())?;
-    let specpdl_count = shared.specpdl.len();
-    record_eval_buffer_save_excursion(shared);
-    let result = eval_forms_from_source_in_vm_runtime_streaming(shared, args, &source);
-    shared.unbind_to(specpdl_count);
-    result
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_eval_region_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    let source = eval_region_source_text_in_state(&shared.buffers, args)?;
-    if source.as_bytes().is_empty() {
-        return Ok(Value::NIL);
-    }
-    eval_forms_from_source_in_vm_runtime_streaming(shared, args, &source)
-}
-
-/// Streaming read-eval for VM runtime callers rooted at the VM call boundary.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn eval_forms_from_source_in_vm_runtime_streaming(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-    source: &crate::heap_types::LispString,
-) -> EvalResult {
-    let (start_pos, shebang_only_line) = strip_reader_prefix_lisp_string(source);
-    if shebang_only_line {
-        return Err(signal(LispCondition::EndOfFile, vec![]));
-    }
-    if source.as_bytes().is_empty() {
-        return Ok(Value::NIL);
-    }
-
-    let root_scope = shared.save_specpdl_roots();
-    for root in args {
-        shared.push_specpdl_root(*root);
-    }
-
-    let result = (|| -> EvalResult {
-        let read_source = super::value_reader::LispReadSource::new(source);
-        let mut pos = start_pos;
-        loop {
-            let read_result = read_source
-                .read_one(pos, &shared.obarray)
-                .map_err(signal_reader_error_for_eval_source)?;
-            let Some((form, next_pos)) = read_result else {
-                break;
-            };
-            pos = next_pos;
-
-            let eval_roots = shared.save_specpdl_roots();
-            shared.push_specpdl_root(form);
-            let eval_result = shared.eval_sub(form);
-            shared.restore_specpdl_roots(eval_roots);
-            eval_result?;
-        }
-
-        Ok(Value::NIL)
-    })();
-    shared.restore_specpdl_roots(root_scope);
-    result
 }
 
 fn event_to_int(event: &Value) -> Option<i64> {

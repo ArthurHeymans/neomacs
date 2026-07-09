@@ -120,12 +120,6 @@ pub(crate) fn restore_syntax_code_objects(objects: Value) {
     SYNTAX_CODE_OBJECTS.with(|slot| *slot.borrow_mut() = Some(objects));
 }
 
-/// Snapshot the current thread's canonical standard syntax-table object.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn snapshot_standard_syntax_table_object() -> Option<Value> {
-    STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| *slot.borrow())
-}
-
 /// Snapshot GNU's canonical vector of bare syntax descriptor objects.
 pub(crate) fn snapshot_syntax_code_objects() -> Option<Value> {
     SYNTAX_CODE_OBJECTS.with(|slot| *slot.borrow())
@@ -646,12 +640,6 @@ impl SyntaxTable {
     /// `builtin_make_syntax_table`.
     pub fn make_syntax_table() -> Self {
         Self::new_standard()
-    }
-
-    /// Build a `SyntaxTable` that reads from the given chartable `Value`.
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn from_chartable(chartable: Value) -> Self {
-        Self { chartable }
     }
 
     /// Build a `SyntaxTable` that reads directly from `buf`'s
@@ -2329,11 +2317,6 @@ fn current_buffer_syntax_table_object_in_buffers(
     Ok(fallback)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn current_buffer_syntax_table_object(eval: &mut super::eval::Context) -> Result<Value, Flow> {
-    current_buffer_syntax_table_object_in_buffers(&mut eval.buffers)
-}
-
 pub(crate) fn sync_current_buffer_syntax_table_state(
     ctx: &mut super::eval::Context,
 ) -> Result<(), Flow> {
@@ -2364,14 +2347,6 @@ fn set_current_buffer_syntax_table_object_in_buffers(
     buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()] = table;
     buf.set_slot_local_flag(BUFFER_SLOT_SYNTAX_TABLE, true);
     Ok(())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn set_current_buffer_syntax_table_object(
-    eval: &mut super::eval::Context,
-    table: Value,
-) -> Result<(), Flow> {
-    set_current_buffer_syntax_table_object_in_buffers(&mut eval.buffers, table)
 }
 
 /// Read the `SyntaxEntry` for character `c` from the chartable `table`.
@@ -2458,18 +2433,6 @@ fn syntax_entry_from_chartable_entry(entry: &Value) -> Option<SyntaxEntry> {
         }),
         _ => None,
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn syntax_table_from_chartable(table: Value) -> Result<SyntaxTable, Flow> {
-    if builtin_syntax_table_p(vec![table])?.is_nil() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("syntax-table-p"), table],
-        ));
-    }
-    // GNU parity: the chartable IS the runtime form. Just wrap it.
-    Ok(SyntaxTable::from_chartable(table))
 }
 
 fn syntax_entry_from_syntax_property(prop: Value, ch: char) -> Option<SyntaxEntry> {
@@ -2967,34 +2930,6 @@ pub(crate) fn builtin_char_syntax_in_buffers(
         SyntaxTable::for_buffer(buf).char_syntax_code(code)
     };
     Ok(Value::char(class.to_char()))
-}
-
-/// Extra word-constituent predicate for case operations, honoring
-/// `case-symbols-as-words` (GNU `casefiddle.c` `case_ch_is_word`): when that
-/// variable is non-nil, symbol-constituent characters (`Ssymbol`, e.g. `_` and
-/// `-` in prog modes) also count as word constituents for word-boundary
-/// detection. The returned closure is `true` only for symbol-constituent
-/// characters and only while the variable is set; callers OR it with their base
-/// (`Sword`/alphanumeric) word check. Uses the current buffer's syntax table,
-/// matching GNU's `SETUP_BUFFER_SYNTAX_TABLE`.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn case_symbols_as_words_predicate(
-    eval: &super::eval::Context,
-) -> impl Fn(u32) -> bool + Copy + 'static {
-    let chartable = eval
-        .eval_symbol("case-symbols-as-words")
-        .unwrap_or(Value::NIL)
-        .is_truthy()
-        .then(|| {
-            eval.buffers
-                .current_buffer()
-                .map(|buf| SyntaxTable::for_buffer(buf).chartable)
-        })
-        .flatten();
-    move |code: u32| {
-        chartable
-            .is_some_and(|table| syntax_class_at_char_code(&table, code) == SyntaxClass::Symbol)
-    }
 }
 
 /// Word-boundary predicate for the casing operations (capitalize /
@@ -3978,76 +3913,6 @@ pub(crate) fn builtin_forward_word(
     } else {
         Value::NIL
     })
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_forward_word_in_buffers(
-    buffers: &mut BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    let count = if args.is_empty() || args[0].is_nil() {
-        1
-    } else {
-        match args[0].kind() {
-            ValueKind::Fixnum(n) => n,
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), args[0]],
-                ));
-            }
-        }
-    };
-
-    // We need to read the syntax table first, then call forward_word, then write point.
-    // To satisfy the borrow checker, clone the syntax table.
-    let buf = buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let table = SyntaxTable::for_buffer(buf);
-    let new_pos = forward_word(buf, &table, count);
-
-    let current_id = buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
-    Ok(Value::NIL)
-}
-
-/// `(backward-word &optional COUNT)` — move point backward COUNT words.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_backward_word(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let count = if args.is_empty() || args[0].is_nil() {
-        1
-    } else {
-        match args[0].kind() {
-            ValueKind::Fixnum(n) => n,
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("integerp"), args[0]],
-                ));
-            }
-        }
-    };
-
-    let buf = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let table = SyntaxTable::for_buffer(buf);
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    let new_pos = backward_word_with_options(buf, &table, count, honor_properties).0;
-
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, new_pos);
-    Ok(Value::NIL)
 }
 
 /// `(forward-sexp &optional COUNT)` — move point forward over COUNT balanced
@@ -5060,22 +4925,6 @@ fn parse_state_from_range_with_options(
     finish_atom(&mut state, &mut atom_start);
 
     (state.into_value(), char_pos_to_lisp_i64(from_char + idx))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn parse_state_from_range(buf: &Buffer, table: &SyntaxTable, from: i64, to: i64) -> Value {
-    parse_state_from_range_with_options(
-        buf,
-        table,
-        from,
-        to,
-        None,
-        false,
-        None,
-        CommentStopMode::None,
-        false,
-    )
-    .0
 }
 
 /// `(parse-partial-sexp FROM TO &optional TARGETDEPTH STOPBEFORE STATE COMMENTSTOP)`

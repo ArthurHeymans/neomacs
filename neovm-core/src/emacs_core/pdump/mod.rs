@@ -38,7 +38,7 @@ use std::sync::OnceLock;
 use self::convert::*;
 use self::mmap_image::{DumpSectionKind, ImageSection};
 use self::runtime::*;
-use self::types::{DumpContextState, DumpHeapObject, DumpTaggedHeap};
+use self::types::{DumpContextState, DumpHeapObject};
 use crate::emacs_core::charset::{
     CharsetRegistrySnapshot, restore_charset_registry, snapshot_charset_registry,
 };
@@ -634,25 +634,6 @@ fn reconstruct_evaluator_after_symbol_table(
         value_fixups.to_vec(),
     );
     reconstruct_evaluator_after_symbol_table_with_decoder(state, decoder)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn reconstruct_evaluator_after_symbol_table_with_tagged_heap(
-    state: &DumpContextState,
-    tagged_heap_state: DumpTaggedHeap,
-    mapped_heap: Option<mapped_heap::MappedHeapView>,
-    value_fixups_section: Option<&[u8]>,
-) -> Result<Context, DumpError> {
-    let decoder = LoadDecoder::from_tagged_heap_with_mapped_heap_and_fixups(
-        tagged_heap_state,
-        mapped_heap,
-        Vec::new(),
-    );
-    reconstruct_evaluator_after_symbol_table_with_decoder_and_value_fixups(
-        state,
-        decoder,
-        value_fixups_section,
-    )
 }
 
 fn reconstruct_evaluator_after_symbol_table_with_tagged_heap_parts(

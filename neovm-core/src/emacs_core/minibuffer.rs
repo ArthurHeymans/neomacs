@@ -1150,17 +1150,6 @@ pub(crate) fn finish_read_command_with_minibuffer(
     finish_symbol_reader_with_minibuffer(args, read_from_minibuffer)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_read_command_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_command_in_runtime(shared, args)?;
-    finish_read_command_with_minibuffer(args, |minibuffer_args| {
-        super::reader::builtin_read_from_minibuffer(shared, minibuffer_args.to_vec())
-    })
-}
-
 /// `(read-variable PROMPT &optional DEFAULT)`
 ///
 /// Read a variable name from the minibuffer.
@@ -1200,17 +1189,6 @@ pub(crate) fn finish_read_variable_with_minibuffer(
     read_from_minibuffer: impl FnMut(&[Value]) -> EvalResult,
 ) -> EvalResult {
     finish_symbol_reader_with_minibuffer(args, read_from_minibuffer)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn finish_read_variable_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_variable_in_runtime(shared, args)?;
-    finish_read_variable_with_minibuffer(args, |minibuffer_args| {
-        super::reader::builtin_read_from_minibuffer(shared, minibuffer_args.to_vec())
-    })
 }
 
 /// `(minibuffer-prompt)` — returns the current minibuffer prompt or nil.
@@ -1722,24 +1700,6 @@ fn completion_candidates_from_list_value(collection: &Value) -> Vec<CompletionCa
         .collect()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn completion_candidates_from_vector_value(collection: &Value) -> Vec<CompletionCandidate> {
-    let Some(items) = collection.as_vector_data() else {
-        return Vec::new();
-    };
-    let items = items.clone();
-    items
-        .into_iter()
-        .filter_map(|item| {
-            completion_text_from_value(&item).map(|completion| CompletionCandidate {
-                completion,
-                predicate_arg: item,
-                predicate_extra_arg: None,
-            })
-        })
-        .collect()
-}
-
 fn completion_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
     super::builtins::lisp_string_char_codes(string)
 }
@@ -2192,24 +2152,6 @@ fn completion_ignore_case(obarray: &Obarray) -> bool {
     obarray
         .symbol_value("completion-ignore-case")
         .is_some_and(|v| v.is_truthy())
-}
-
-/// Read `completion-regexp-list` from the obarray and return the list of
-/// regex pattern strings.  Returns an empty vec when the variable is nil
-/// or unset.
-///
-/// Public alias for use from the bytecode VM.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn completion_regexp_list_from_obarray(obarray: &Obarray) -> Vec<String> {
-    completion_regexp_lisp_list_from_obarray(obarray)
-        .into_iter()
-        .map(|regexp| {
-            regexp
-                .as_utf8_str()
-                .map(|text| text.to_owned())
-                .unwrap_or_else(|| crate::emacs_core::emacs_char::to_utf8_lossy(regexp.as_bytes()))
-        })
-        .collect()
 }
 
 pub(crate) fn completion_regexp_lisp_list_from_obarray(

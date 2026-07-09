@@ -1600,24 +1600,6 @@ pub fn file_attributes(filename: &str) -> Option<FileAttributes> {
     })
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn file_modes(filename: &str) -> Option<u32> {
-    let meta = fs::symlink_metadata(filename).ok()?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        Some(meta.permissions().mode() & 0o7777)
-    }
-    #[cfg(not(unix))]
-    {
-        Some(if meta.permissions().readonly() {
-            0o444
-        } else {
-            0o644
-        })
-    }
-}
-
 // ===========================================================================
 // Builtin wrappers — pure (no evaluator needed)
 // ===========================================================================
@@ -2857,37 +2839,6 @@ fn default_directory_lisp_for_eval(eval: &Context) -> Option<crate::heap_types::
     default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn implicit_default_directory_lisp_for_eval(
-    eval: &Context,
-) -> Result<crate::heap_types::LispString, Flow> {
-    if let Some(buf) = eval.buffers.current_buffer() {
-        if let Some(value) = buf.get_buffer_local("default-directory") {
-            if value.is_nil() {
-                return Ok(fallback_root_default_directory());
-            }
-            return value.as_lisp_string().cloned().ok_or_else(|| {
-                signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("stringp"), value],
-                )
-            });
-        }
-    }
-    if let Some(value) = eval.obarray.symbol_value("default-directory") {
-        if value.is_nil() {
-            return Ok(fallback_root_default_directory());
-        }
-        return value.as_lisp_string().cloned().ok_or_else(|| {
-            signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), *value],
-            )
-        });
-    }
-    Ok(fallback_root_default_directory())
-}
-
 fn raw_default_directory_value_for_eval(eval: &Context) -> Option<Value> {
     if let Some(buf) = eval.buffers.current_buffer()
         && let Some(value) = buf.get_buffer_local("default-directory")
@@ -3034,11 +2985,6 @@ fn signal_file_io_path(err: std::io::Error, action: &str, path: &str) -> Flow {
     signal_file_io_error(err, format!("{action} {path}"))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn signal_file_io_paths(err: std::io::Error, action: &str, from: &str, to: &str) -> Flow {
-    signal_file_io_error(err, format!("{action} {from} to {to}"))
-}
-
 fn signal_directory_files_error(
     err: DirectoryFilesError,
     dir: &crate::heap_types::LispString,
@@ -3053,11 +2999,6 @@ fn signal_directory_files_error(
             signal(LispCondition::InvalidRegexp, vec![Value::string(msg)])
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn signal_file_action_error(err: std::io::Error, action: &str, path: &str) -> Flow {
-    get_file_errno_data(&err, action, vec![Value::string(path)])
 }
 
 fn signal_file_action_error_value(err: std::io::Error, action: &str, path: Value) -> Flow {
@@ -3427,88 +3368,6 @@ fn set_file_modes_path(path: &Path, mode: i64, nofollow: bool) -> std::io::Resul
         perms.set_readonly(!writable);
         fs::set_permissions(path, perms)
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn set_file_times_compat(
-    filename: &str,
-    timestamp: Option<(i64, i64)>,
-    nofollow: bool,
-) -> Result<(), Flow> {
-    let path = Path::new(filename);
-
-    if nofollow {
-        #[cfg(unix)]
-        {
-            let c_path = CString::new(filename.as_bytes()).map_err(|_| {
-                signal(
-                    LispCondition::FileError,
-                    vec![
-                        Value::string("Setting file times"),
-                        Value::string("embedded NUL in file name"),
-                        Value::string(filename),
-                    ],
-                )
-            })?;
-
-            let mut ts = [
-                libc::timespec {
-                    tv_sec: 0,
-                    tv_nsec: 0,
-                },
-                libc::timespec {
-                    tv_sec: 0,
-                    tv_nsec: 0,
-                },
-            ];
-            if let Some((secs, nanos)) = timestamp {
-                ts[0].tv_sec = secs as libc::time_t;
-                ts[1].tv_sec = secs as libc::time_t;
-                ts[0].tv_nsec = nanos as libc::c_long;
-                ts[1].tv_nsec = nanos as libc::c_long;
-            } else {
-                ts[0].tv_nsec = libc::UTIME_NOW as libc::c_long;
-                ts[1].tv_nsec = libc::UTIME_NOW as libc::c_long;
-            }
-            let result = unsafe {
-                libc::utimensat(
-                    libc::AT_FDCWD,
-                    c_path.as_ptr(),
-                    ts.as_ptr(),
-                    libc::AT_SYMLINK_NOFOLLOW,
-                )
-            };
-            if result != 0 {
-                return Err(signal_file_action_error(
-                    std::io::Error::last_os_error(),
-                    "Setting file times",
-                    filename,
-                ));
-            }
-            return Ok(());
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = timestamp;
-            return Err(signal(
-                LispCondition::FileError,
-                vec![
-                    Value::string("Setting file times"),
-                    Value::string("nofollow is unsupported on this platform"),
-                    Value::string(filename),
-                ],
-            ));
-        }
-    }
-
-    let file = fs::OpenOptions::new()
-        .write(true)
-        .open(path)
-        .map_err(|e| signal_file_action_error(e, "Setting file times", filename))?;
-
-    let times = build_file_times(timestamp);
-    file.set_times(times)
-        .map_err(|e| signal_file_action_error(e, "Setting file times", filename))
 }
 
 fn build_file_times(timestamp: Option<(i64, i64)>) -> std::fs::FileTimes {
@@ -4851,42 +4710,6 @@ fn dispatch_file_handler_expanding(
         call.push(Value::NIL);
     }
     dispatch_file_handler(eval, operation_name, &call)
-}
-
-/// Two-argument variant for builtins like `copy-file` and `rename-file`.
-/// Mirrors GNU's pattern of consulting the handler for the source
-/// first and falling back to the destination.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn dispatch_file_handler_two_arg(
-    eval: &mut Context,
-    operation_name: &str,
-    args: &[Value],
-) -> Result<Option<Value>, super::error::Flow> {
-    if args.len() < 2 {
-        return Ok(None);
-    }
-    let operation_sym = Value::symbol(operation_name);
-    // Source file first.
-    if let Some(src) = args[0].as_lisp_string() {
-        let handler = find_file_name_handler_lisp_for_eval(eval, src, operation_sym);
-        if !handler.is_nil() {
-            let mut call_args = Vec::with_capacity(args.len() + 1);
-            call_args.push(operation_sym);
-            call_args.extend_from_slice(args);
-            return Ok(Some(eval.funcall_general(handler, call_args)?));
-        }
-    }
-    // Destination file second.
-    if let Some(dst) = args[1].as_lisp_string() {
-        let handler = find_file_name_handler_lisp_for_eval(eval, dst, operation_sym);
-        if !handler.is_nil() {
-            let mut call_args = Vec::with_capacity(args.len() + 1);
-            call_args.push(operation_sym);
-            call_args.extend_from_slice(args);
-            return Ok(Some(eval.funcall_general(handler, call_args)?));
-        }
-    }
-    Ok(None)
 }
 
 /// `(directory-files DIRECTORY &optional FULL MATCH NOSORT COUNT)`

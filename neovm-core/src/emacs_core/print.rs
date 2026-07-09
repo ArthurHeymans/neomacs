@@ -1221,18 +1221,6 @@ fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut 
     });
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn format_bytecode_literal(value: &Value, options: PrintOptions) -> String {
-    with_bytecode_literal_slots(value, |slots| {
-        let parts: Vec<String> = slots
-            .iter()
-            .map(|item| print_value_with_options(item, options))
-            .collect();
-        format!("#[{}]", parts.join(" "))
-    })
-    .unwrap_or_else(|| "#<bytecode>".to_string())
-}
-
 fn write_closure_body_forms_stateful(body: Value, out: &mut String, state: &mut PrintState) {
     let Some(forms) = list_to_vec(&body) else {
         write_value_stateful(&body, out, state);
@@ -1310,13 +1298,6 @@ fn symbol_id_is(id: SymId, name: &str) -> bool {
 #[inline]
 fn value_is_symbol_named(value: &Value, name: &str) -> bool {
     matches!(value.kind(), ValueKind::Symbol(id) if symbol_id_is(id, name))
-}
-
-/// GNU prints a window-configuration as the opaque pseudovector
-/// `#<window-configuration>`; detect it by its distinct type tag.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn is_window_configuration_value(value: &Value) -> bool {
-    value.is_window_configuration()
 }
 
 #[derive(Clone, Copy)]
@@ -1748,94 +1729,6 @@ pub fn print_value_with_buffers_and_options(
     print_value_stateful_with_buffers(value, Some(buffers), options)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn print_list_shorthand_with_buffers(
-    value: &Value,
-    buffers: &crate::buffer::BufferManager,
-    options: PrintOptions,
-) -> Option<String> {
-    let items = list_to_vec(value)?;
-    if items.len() != 2 {
-        return None;
-    }
-    let head = match items[0].kind() {
-        ValueKind::Symbol(id) => id,
-        _ => return None,
-    };
-    if symbol_id_is(head, "make-hash-table-from-literal") {
-        if let Some(payload) = quote_payload(&items[1]) {
-            return Some(format!(
-                "#s{}",
-                print_value_with_buffers_and_options(&payload, buffers, options)
-            ));
-        }
-        return None;
-    }
-    let shorthand = symbol_shorthand(head)?;
-    if !options.print_quoted {
-        return None;
-    }
-
-    let (prefix, nested_options) = match shorthand {
-        SymbolShorthand::Quote => ("'", options),
-        SymbolShorthand::Function => ("#'", options),
-        SymbolShorthand::Backquote => ("`", options.enter_backquote()),
-        SymbolShorthand::Comma => {
-            if !options.allow_unquote_shorthand() {
-                return None;
-            }
-            (",", options.exit_backquote())
-        }
-        SymbolShorthand::CommaAt => {
-            if !options.allow_unquote_shorthand() {
-                return None;
-            }
-            (",@", options.exit_backquote())
-        }
-    };
-    Some(format!(
-        "{prefix}{}",
-        print_value_with_buffers_and_options(&items[1], buffers, nested_options)
-    ))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn print_cons_with_buffers(
-    value: &Value,
-    out: &mut String,
-    buffers: &crate::buffer::BufferManager,
-    options: PrintOptions,
-) {
-    let mut cursor = *value;
-    let mut first = true;
-    loop {
-        match cursor.kind() {
-            ValueKind::Cons => {
-                if !first {
-                    out.push(' ');
-                }
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                out.push_str(&print_value_with_buffers_and_options(
-                    &pair_car, buffers, options,
-                ));
-                cursor = pair_cdr;
-                first = false;
-            }
-            ValueKind::Nil => return,
-            _ => {
-                if !first {
-                    out.push_str(" . ");
-                }
-                out.push_str(&print_value_with_buffers_and_options(
-                    &cursor, buffers, options,
-                ));
-                return;
-            }
-        }
-    }
-}
-
 /// Print a `Value` as a Lisp string.
 pub fn print_value(value: &Value) -> String {
     // GNU renders a value to a String via `prin1-to-string`, which prints into a
@@ -2184,29 +2077,6 @@ fn append_symbol_bytes(id: super::intern::SymId, out: &mut Vec<u8>, options: Pri
     out.extend_from_slice(&symbol_bytes(id, options));
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn format_symbol_name(name: &str) -> String {
-    if name.is_empty() {
-        return "##".to_string();
-    }
-    let mut out = String::with_capacity(name.len());
-    let mut confusing = symbol_name_confusing(name.as_bytes());
-    for ch in name.chars() {
-        let needs_escape = matches!(
-            ch,
-            '(' | ')' | '[' | ']' | '"' | '\\' | ';' | '#' | '\'' | '`' | ','
-        ) || ch <= ' '
-            || ch == '\u{a0}'
-            || confusing;
-        if needs_escape {
-            out.push('\\');
-            confusing = false;
-        }
-        out.push(ch);
-    }
-    out
-}
-
 fn write_symbol_with_pos_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
     let Some(swp) = value.as_symbol_with_pos() else {
         out.push_str("#<symbol-with-pos>");
@@ -2274,11 +2144,6 @@ fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {
         append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
     }
     out
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn append_symbol_name_bytes(name: &crate::heap_types::LispString, out: &mut Vec<u8>) {
-    append_symbol_name_bytes_with_escape(name, out, true);
 }
 
 fn append_symbol_name_bytes_with_escape(
@@ -2678,49 +2543,6 @@ fn format_interpreted_closure(value: &Value, options: PrintOptions) -> String {
         .unwrap_or_else(|| "#[]".to_string())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn print_list_shorthand(value: &Value, options: PrintOptions) -> Option<String> {
-    let items = list_to_vec(value)?;
-    if items.len() != 2 {
-        return None;
-    }
-
-    let head = match items[0].kind() {
-        ValueKind::Symbol(id) => id,
-        _ => return None,
-    };
-
-    if symbol_id_is(head, "make-hash-table-from-literal") {
-        if let Some(payload) = quote_payload(&items[1]) {
-            return Some(format!("#s{}", print_value_with_options(&payload, options)));
-        }
-        return None;
-    }
-
-    let (prefix, nested_options) = match symbol_shorthand(head)? {
-        SymbolShorthand::Quote => ("'", options),
-        SymbolShorthand::Function => ("#'", options),
-        SymbolShorthand::Backquote => ("`", options.enter_backquote()),
-        SymbolShorthand::Comma => {
-            if !options.allow_unquote_shorthand() {
-                return None;
-            }
-            (",", options.exit_backquote())
-        }
-        SymbolShorthand::CommaAt => {
-            if !options.allow_unquote_shorthand() {
-                return None;
-            }
-            (",@", options.exit_backquote())
-        }
-    };
-
-    Some(format!(
-        "{prefix}{}",
-        print_value_with_options(&items[1], nested_options)
-    ))
-}
-
 fn print_list_shorthand_bytes(value: &Value, options: PrintOptions) -> Option<Vec<u8>> {
     let items = list_to_vec(value)?;
     if items.len() != 2 {
@@ -2775,34 +2597,6 @@ fn quote_payload(value: &Value) -> Option<Value> {
         return None;
     }
     value_is_symbol_named(&items[0], "quote").then_some(items[1])
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn print_cons(value: &Value, out: &mut String, options: PrintOptions) {
-    let mut cursor = *value;
-    let mut first = true;
-    loop {
-        match cursor.kind() {
-            ValueKind::Cons => {
-                if !first {
-                    out.push(' ');
-                }
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                out.push_str(&print_value_with_options(&pair_car, options));
-                cursor = pair_cdr;
-                first = false;
-            }
-            ValueKind::Nil => return,
-            _ => {
-                if !first {
-                    out.push_str(" . ");
-                }
-                out.push_str(&print_value_with_options(&cursor, options));
-                return;
-            }
-        }
-    }
 }
 
 fn print_cons_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptions) {
@@ -2900,42 +2694,6 @@ fn append_bool_vector_bytes(value: &Value, nbits: usize, out: &mut Vec<u8>) {
 }
 
 // -- Hash-table printing ----------------------------------------------------
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn format_hash_table(value: &Value, options: PrintOptions) -> String {
-    let table = value.as_hash_table().unwrap().clone();
-    let mut out = String::from("#s(hash-table");
-
-    append_hash_table_test_string(&table, &mut out);
-
-    // GNU Emacs omits weakness when there is none.
-    if let Some(ref weakness) = table.weakness {
-        out.push_str(" weakness ");
-        out.push_str(weakness.name());
-    }
-
-    // GNU Emacs omits data when the table is empty.
-    if !table.data.is_empty() {
-        out.push_str(" data (");
-        let mut first = true;
-        for key in table.live_hash_keys_in_slot_order() {
-            if let Some(val) = table.data.get(key) {
-                if !first {
-                    out.push(' ');
-                }
-                let key_val = super::hashtab::hash_key_to_visible_value(&table, key);
-                out.push_str(&print_value_with_options(&key_val, options));
-                out.push(' ');
-                out.push_str(&print_value_with_options(val, options));
-                first = false;
-            }
-        }
-        out.push(')');
-    }
-
-    out.push(')');
-    out
-}
 
 fn append_hash_table_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptions) {
     let table = value.as_hash_table().unwrap().clone();

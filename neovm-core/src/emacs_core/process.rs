@@ -302,27 +302,6 @@ impl NetworkSocket {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn write_stream_input(&mut self, bytes: &[u8]) -> Option<std::io::Result<()>> {
-        match self {
-            Self::TcpStream(stream) => Some(stream.write_all(bytes).and_then(|_| stream.flush())),
-            Self::TcpListener(_) => None,
-            Self::UdpSocket(_) => None,
-            #[cfg(unix)]
-            Self::SeqpacketStream(socket) => {
-                Some(socket.write_all(bytes).and_then(|_| socket.flush()))
-            }
-            #[cfg(unix)]
-            Self::SeqpacketListener(_) => None,
-            #[cfg(unix)]
-            Self::UnixStream(stream) => Some(stream.write_all(bytes).and_then(|_| stream.flush())),
-            #[cfg(unix)]
-            Self::UnixListener(_) => None,
-            #[cfg(unix)]
-            Self::UnixDatagram(_) => None,
-        }
-    }
-
     fn write_input_once(
         &mut self,
         bytes: &[u8],
@@ -426,9 +405,7 @@ impl NetworkSocket {
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::threads::ThreadManager;
-use super::value::{
-    StringTextPropertyRun, Value, ValueKind, VecLikeType, equal_value, list_to_vec,
-};
+use super::value::{Value, ValueKind, VecLikeType, equal_value, list_to_vec};
 use crate::buffer::{
     BufferId, BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
@@ -747,18 +724,8 @@ impl ProcessWaitEvents {
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn has_writable_process(&self, process: ProcessId) -> bool {
-        self.writable_processes.contains(&process)
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn is_empty(&self) -> bool {
         !self.input_wakeup && self.ready_processes.is_empty() && self.writable_processes.is_empty()
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn into_ready_processes(self) -> Vec<ProcessId> {
-        self.ready_processes
     }
 
     pub(crate) fn ready_processes_ref(&self) -> &[ProcessId] {
@@ -6998,15 +6965,6 @@ fn process_owned_runtime_string(value: Value) -> String {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_sequence(value: &Value) -> Result<(), Flow> {
-    if value.is_nil() || value.is_cons() || value.is_vector() || value.is_string() {
-        Ok(())
-    } else {
-        Err(signal_wrong_type_sequence(*value))
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_list(value: &Value) -> Result<(), Flow> {
     if value.is_list() {
         Ok(())
@@ -7264,11 +7222,6 @@ fn keyword_name(value: &Value) -> Option<&str> {
         _ => None,
     }
 }
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn parse_string_args_strict(args: &[Value]) -> Result<Vec<String>, Flow> {
-    args.iter().map(expect_string_strict).collect()
-}
-
 pub(crate) fn parse_lisp_string_args_strict(args: &[Value]) -> Result<Vec<LispString>, Flow> {
     args.iter()
         .map(|arg| {
@@ -7304,11 +7257,6 @@ fn signal_buffer_has_no_process(buffers: &BufferManager, buffer_id: BufferId) ->
                 .unwrap_or_else(|| "<deleted buffer>".to_string())
         ))],
     )
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn signal_process_not_active(eval: &super::eval::Context, id: ProcessId) -> Flow {
-    signal_process_not_active_in_manager(&eval.processes, id)
 }
 
 fn signal_process_not_active_in_manager(processes: &ProcessManager, id: ProcessId) -> Flow {
@@ -7350,11 +7298,6 @@ fn process_not_running_reason(proc: &Process) -> String {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn signal_process_not_running(eval: &super::eval::Context, id: ProcessId) -> Flow {
-    signal_process_not_running_in_manager(&eval.processes, id)
-}
-
 fn signal_process_not_running_in_manager(processes: &ProcessManager, id: ProcessId) -> Flow {
     let (name, reason) = processes
         .get_any(id)
@@ -7386,37 +7329,6 @@ pub(crate) fn process_value_to_id(value: &Value) -> Option<ProcessId> {
     value.as_process_id()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_wrong_type(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    if let Some(id) = process_value_to_id(value) {
-        return if eval.processes.get(id).is_some() {
-            Ok(id)
-        } else {
-            Err(signal_wrong_type_processp(*value))
-        };
-    }
-    match value.kind() {
-        ValueKind::String => {
-            let name = process_owned_runtime_string(*value);
-            eval.processes
-                .find_by_name(&name)
-                .ok_or_else(|| signal_wrong_type_processp(*value))
-        }
-        _ => Err(signal_wrong_type_processp(*value)),
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_wrong_type_any(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    resolve_process_or_wrong_type_any_in_manager(&eval.processes, value)
-}
-
 fn resolve_process_or_wrong_type_any_in_manager(
     processes: &ProcessManager,
     value: &Value,
@@ -7446,54 +7358,6 @@ fn resolve_process_object_or_wrong_type_any_in_manager(
     process_value_to_id(value)
         .filter(|id| processes.get_any(*id).is_some())
         .ok_or_else(|| signal_wrong_type_processp(*value))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_missing_error(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    resolve_process_or_missing_error_in_manager(&eval.processes, value)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_missing_error_in_manager(
-    processes: &ProcessManager,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    match value.kind() {
-        ValueKind::String => {
-            let name = process_owned_runtime_string(*value);
-            processes
-                .find_by_name(&name)
-                .ok_or_else(|| signal_process_does_not_exist(&name))
-        }
-        _ => resolve_process_or_wrong_type_any_in_manager(processes, value),
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_missing_error_any(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    resolve_process_or_missing_error_any_in_manager(&eval.processes, value)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_process_or_missing_error_any_in_manager(
-    processes: &ProcessManager,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    match value.kind() {
-        ValueKind::String => {
-            let name = process_owned_runtime_string(*value);
-            processes
-                .find_by_name(&name)
-                .ok_or_else(|| signal_process_does_not_exist(&name))
-        }
-        _ => resolve_process_or_wrong_type_any_in_manager(processes, value),
-    }
 }
 
 fn resolve_process_for_status_in_state(
@@ -7611,32 +7475,12 @@ fn resolve_buffer_for_process_lookup_in_state(
     }
 }
 
-/// Resolve a live process designator for compatibility builtins.
-///
-/// NeoVM currently models process handles as integer ids.  These helpers treat
-/// a live process id as a process designator for runtime parity surfaces.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_live_process_designator(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Option<ProcessId> {
-    resolve_live_process_designator_in_manager(&eval.processes, value)
-}
-
 fn resolve_live_process_designator_in_manager(
     processes: &ProcessManager,
     value: &Value,
 ) -> Option<ProcessId> {
     let id = process_value_to_id(value)?;
     processes.get(id).map(|_| id)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_live_process_or_wrong_type(
-    eval: &super::eval::Context,
-    value: &Value,
-) -> Result<ProcessId, Flow> {
-    resolve_live_process_or_wrong_type_in_manager(&eval.processes, value)
 }
 
 fn resolve_live_process_or_wrong_type_in_manager(
@@ -7657,11 +7501,6 @@ fn current_thread_handle(threads: &ThreadManager) -> Value {
         .unwrap_or(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn is_stale_process_id_designator(eval: &super::eval::Context, value: &Value) -> bool {
-    is_stale_process_id_designator_in_manager(&eval.processes, value)
-}
-
 fn is_stale_process_id_designator_in_manager(processes: &ProcessManager, value: &Value) -> bool {
     match process_value_to_id(value) {
         Some(id) if id > 0 => {
@@ -7670,14 +7509,6 @@ fn is_stale_process_id_designator_in_manager(processes: &ProcessManager, value: 
         }
         _ => false,
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_optional_process_or_current_buffer(
-    eval: &super::eval::Context,
-    value: Option<&Value>,
-) -> Result<ProcessId, Flow> {
-    resolve_optional_process_or_current_buffer_in_state(&eval.processes, &eval.buffers, value)
 }
 
 fn resolve_optional_process_or_current_buffer_in_state(
@@ -7932,14 +7763,6 @@ fn signal_undefined_signal_name(name: &str) -> Flow {
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_optional_process_with_explicit_return(
-    eval: &super::eval::Context,
-    value: Option<&Value>,
-) -> Result<(ProcessId, Value), Flow> {
-    resolve_optional_process_with_explicit_return_in_state(&eval.processes, &eval.buffers, value)
-}
-
 fn resolve_optional_process_with_explicit_return_in_state(
     processes: &ProcessManager,
     buffers: &BufferManager,
@@ -7966,14 +7789,6 @@ enum SignalProcessTarget {
     Process(ProcessId),
     MissingNamedProcess,
     Pid(i64),
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_signal_process_target(
-    eval: &super::eval::Context,
-    value: Option<&Value>,
-) -> Result<SignalProcessTarget, Flow> {
-    resolve_signal_process_target_in_state(&eval.processes, &eval.buffers, value)
 }
 
 fn resolve_signal_process_target_in_state(
@@ -9101,16 +8916,6 @@ fn validate_network_socket_type(value: &Value) -> Result<(), Flow> {
     parse_network_socket_type(value).map(|_| ())
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn network_socket_type_uses_stream_connect(socket_type: NetworkSocketType) -> bool {
-    match socket_type {
-        NetworkSocketType::Stream => true,
-        NetworkSocketType::Datagram => false,
-        #[cfg(unix)]
-        NetworkSocketType::Seqpacket => true,
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum ProcessConnectionType {
@@ -9789,26 +9594,6 @@ fn format_ipv6_network_address(items: &[i64], omit_port: bool) -> Option<String>
 // Builtins (eval-dependent)
 // ---------------------------------------------------------------------------
 
-/// (clone-process PROCESS &optional NAME) -> process
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_clone_process(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("clone-process", &args, 1)?;
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("clone-process"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
-    Ok(Value::make_process(id))
-}
-
 /// (internal-default-interrupt-process &optional PROCESS CURRENT-GROUP) -> process-or-nil
 pub(crate) fn builtin_internal_default_interrupt_process(
     eval: &mut super::eval::Context,
@@ -10298,25 +10083,6 @@ fn signal_neomacs_tls_error(err: TlsBackendError) -> Flow {
     signal("error", vec![Value::string(err.to_string())])
 }
 
-/// (isearch-process-search-char CHAR &optional COUNT) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_isearch_process_search_char(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("isearch-process-search-char", &args, 1)?;
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("isearch-process-search-char"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
 /// (isearch-process-search-string STRING MESSAGE) -> nil
 /// (minibuffer--sort-preprocess-history HISTORY) -> nil
 /// (print--preprocess OBJECT) -> nil
@@ -10777,57 +10543,6 @@ fn all_processors_count() -> u64 {
     } else {
         count
     }
-}
-
-/// (list-processes &optional QUERY-ONLY BUFFER) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_list_processes(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("list-processes"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
-/// (list-processes--refresh) -> row-spec
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_list_processes_refresh(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("list-processes--refresh", &args, 0)?;
-    let spacer = Value::string_with_text_properties(
-        " ",
-        vec![StringTextPropertyRun {
-            start: 0,
-            end: 1,
-            plist: Value::list(vec![
-                Value::symbol("display"),
-                Value::list(vec![
-                    Value::symbol("space"),
-                    Value::keyword(":align-to"),
-                    Value::list(vec![
-                        Value::symbol("+"),
-                        Value::symbol("header-line-indent-width"),
-                        Value::fixnum(0),
-                    ]),
-                ]),
-            ]),
-        }],
-    );
-    Ok(Value::list(vec![
-        Value::string(""),
-        Value::symbol("header-line-indent"),
-        spacer,
-    ]))
 }
 
 /// (make-network-process &rest ARGS) -> process-or-nil
@@ -13704,33 +13419,6 @@ pub(crate) fn builtin_interrupt_process(
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_interrupt_process_impl(
-    processes: &mut ProcessManager,
-    buffers: &BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("interrupt-process"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    let (id, ret) =
-        resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
-    if let Some(proc) = processes.get_mut(id) {
-        if proc.kind != ProcessKind::Real {
-            return Err(signal_process_not_subprocess(proc));
-        }
-        #[cfg(unix)]
-        let _ = signal_process_or_unbacked_success(proc, libc::SIGINT);
-    }
-    Ok(ret)
-}
-
 /// (kill-process &optional PROCESS CURRENT-GROUP) -> process-or-nil
 pub(crate) fn builtin_kill_process(
     eval: &mut super::eval::Context,
@@ -14937,27 +14625,6 @@ pub(crate) fn builtin_set_process_coding_system_impl(
     Ok(Value::NIL)
 }
 
-/// (set-buffer-process-coding-system DECODING ENCODING) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_set_buffer_process_coding_system(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("set-buffer-process-coding-system", &args, 2)?;
-    let id = resolve_optional_process_or_current_buffer(eval, None)?;
-    let proc = eval.processes.get_mut(id).ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("processp"), Value::make_process(id)],
-        )
-    })?;
-    proc.coding_decode = args[0];
-    proc.decoding_carryover.clear();
-    proc.coding_encode = args[1];
-    proc.coding_explicitly_set = true;
-    Ok(Value::NIL)
-}
-
 /// (set-process-datagram-address PROCESS ADDRESS) -> nil
 pub(crate) fn builtin_set_process_datagram_address(
     eval: &mut super::eval::Context,
@@ -15113,34 +14780,6 @@ pub(crate) fn builtin_set_process_window_size_impl(
     if proc.kind == ProcessKind::Real && !process_has_subprocess_backing(proc) {
         return Ok(Value::T);
     }
-    Ok(Value::NIL)
-}
-
-/// (process-kill-buffer-query-function) -> bool
-/// (process-menu-delete-process) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_menu_delete_process(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("process-menu-delete-process", &args, 0)?;
-    let current_buffer_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    if eval
-        .processes
-        .find_by_buffer_id(current_buffer_id)
-        .is_some()
-    {
-        return Err(signal(
-            "error",
-            vec![Value::string(
-                "Buffer does not seem to be associated with any file",
-            )],
-        ));
-    }
-    let _ = resolve_optional_process_or_current_buffer(eval, None)?;
     Ok(Value::NIL)
 }
 
@@ -15616,15 +15255,6 @@ pub(crate) fn builtin_processp_impl(_processes: &ProcessManager, args: Vec<Value
     Ok(Value::bool_val(args[0].is_process()))
 }
 
-/// (process-live-p PROCESS) -> list-or-nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_live_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_process_live_p_impl(&mut eval.processes, args)
-}
-
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_live_p_impl(
     processes: &mut ProcessManager,
@@ -15995,103 +15625,9 @@ pub(crate) fn builtin_set_process_plist_impl(
     Ok(proc.plist)
 }
 
-/// (process-put PROCESS PROP VALUE) -> plist
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_put(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("process-put", &args, 3)?;
-    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
-    let current_plist = eval
-        .processes
-        .get_any(id)
-        .ok_or_else(|| {
-            signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("processp"), args[0]],
-            )
-        })?
-        .plist;
-    let new_plist = super::builtins::builtin_plist_put(vec![current_plist, args[1], args[2]])?;
-    let proc = eval.processes.get_any_mut(id).ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("processp"), args[0]],
-        )
-    })?;
-    proc.plist = new_plist;
-    Ok(new_plist)
-}
-
-/// (process-get PROCESS PROP) -> value
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_get(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("process-get", &args, 2)?;
-    let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
-    let plist = eval
-        .processes
-        .get_any(id)
-        .ok_or_else(|| {
-            signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("processp"), args[0]],
-            )
-        })?
-        .plist;
-    super::builtins::builtin_plist_get(vec![plist, args[1]])
-}
-
 // ---------------------------------------------------------------------------
 // Builtins (pure — no evaluator needed)
 // ---------------------------------------------------------------------------
-
-/// (shell-command-to-string COMMAND) -> string
-///
-/// Runs COMMAND via the system shell and returns captured stdout.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_shell_command_to_string(args: Vec<Value>) -> EvalResult {
-    expect_args("shell-command-to-string", &args, 1)?;
-    let command = lisp_string_to_os_string(super::builtins::expect_lisp_string(&args[0])?);
-
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-
-    let output = crate::emacs_core::callproc::new_child_command(&shell)
-        .arg("-c")
-        .arg(&command)
-        .output()
-        .map_err(|e| signal_process_io("Shell command failed", Some(&shell), e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    Ok(Value::string(stdout))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn getenv_impl(name: &str, args: &[Value]) -> EvalResult {
-    expect_min_args(name, args, 1)?;
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ));
-    }
-    if let Some(frame) = args.get(1) {
-        if !frame.is_nil() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("framep"), *frame],
-            ));
-        }
-    }
-    let name = super::builtins::expect_lisp_string(&args[0])?;
-    match std::env::var_os(lisp_string_to_os_string(name)) {
-        Some(val) => Ok(Value::heap_string(os_str_to_lisp_string(val.as_os_str()))),
-        None => Ok(Value::NIL),
-    }
-}
-
-/// (getenv VARIABLE) -> string or nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_getenv(args: Vec<Value>) -> EvalResult {
-    getenv_impl("getenv", &args)
-}
 
 /// (getenv-internal VARIABLE &optional ENV) -> string or nil
 ///

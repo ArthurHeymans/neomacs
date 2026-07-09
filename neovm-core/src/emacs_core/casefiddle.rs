@@ -250,11 +250,6 @@ fn push_multibyte_chars(out: &mut Vec<u8>, chars: impl IntoIterator<Item = char>
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn ascii_word_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte >= 0x80
-}
-
 /// Word-boundary predicate over the *standard* syntax table, for the pure/test
 /// casing forms that run without a current buffer. Mirrors GNU's `Sword` test
 /// against the standard syntax table.
@@ -467,38 +462,6 @@ fn upcase_initials_lisp_string(
         }
     }
     LispString::from_emacs_bytes(out)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn downcase_case_string_emacs_compat(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for ch in text.chars() {
-        let code = ch as i64;
-        if ch == '\u{212A}' || preserve_downcase_case_string_payload(code) {
-            out.push(ch);
-            continue;
-        }
-        for low in ch.to_lowercase() {
-            out.push(low);
-        }
-    }
-    out
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn upcase_case_string_emacs_compat(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for ch in text.chars() {
-        let code = ch as i64;
-        if ch == '\u{0131}' || preserve_upcase_case_string_payload(code) {
-            out.push(ch);
-            continue;
-        }
-        for up in ch.to_uppercase() {
-            out.push(up);
-        }
-    }
-    out
 }
 
 fn preserve_downcase_case_string_payload(code: i64) -> bool {
@@ -792,32 +755,6 @@ pub(crate) fn builtin_capitalize_in_state(
     let is_word = crate::emacs_core::syntax::casing_word_predicate(eval);
     let casetab = CaseTableOverride::for_current_buffer(eval)?;
     capitalize_with_word_pred(args, is_word, &casetab)
-}
-
-/// Capitalize a string: uppercase the first letter of each word,
-/// lowercase the rest.  A "word" starts after any non-alphanumeric character.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn capitalize_string(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut new_word = true;
-    for c in s.chars() {
-        if c.is_alphanumeric() {
-            if new_word {
-                for u in titlecase_word_initial(c).chars() {
-                    result.push(u);
-                }
-                new_word = false;
-            } else {
-                for l in c.to_lowercase() {
-                    result.push(l);
-                }
-            }
-        } else {
-            result.push(c);
-            new_word = true;
-        }
-    }
-    result
 }
 
 /// `(upcase-initials OBJ)` -- uppercase the first letter of each word in

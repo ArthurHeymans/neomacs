@@ -11,9 +11,10 @@
 //! vm-compat batches. Remaining edge drift is tracked and locked by
 //! oracle corpora.
 
-use super::error::{EvalResult, Flow, signal};
+#[cfg(test)]
+use super::error::EvalResult;
+use super::error::{Flow, signal};
 use super::value::*;
-use crate::buffer::EmacsByteRange;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -91,38 +92,6 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn rectangle_strings_to_value(rectangle: &[LispString]) -> Value {
-    Value::list(rectangle.iter().cloned().map(Value::heap_string).collect())
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn rectangle_strings_from_value(value: &Value) -> Result<Vec<LispString>, Flow> {
-    let items = list_to_vec(value).ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("listp"), *value],
-        )
-    })?;
-    let mut out = Vec::with_capacity(items.len());
-    for item in items {
-        match item.kind() {
-            ValueKind::String => out.push(
-                item.as_lisp_string()
-                    .expect("ValueKind::String must carry LispString payload")
-                    .clone(),
-            ),
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("buffer-or-string-p"), item],
-                ));
-            }
-        }
-    }
-    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -215,27 +184,6 @@ struct LineColumn {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn line_col_for_char_index(text: &LispString, target: usize) -> LineColumn {
-    let mut line = 0usize;
-    let mut col = 0usize;
-    for (idx, ch) in super::builtins::lisp_string_char_codes(text)
-        .into_iter()
-        .enumerate()
-    {
-        if idx == target {
-            return LineColumn { line, column: col };
-        }
-        if ch == b'\n' as u32 {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-    LineColumn { line, column: col }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn extract_line_columns(line: &LispString, start_col: usize, end_col: usize) -> LispString {
     if start_col >= end_col {
         return empty_lisp_string(line.is_multibyte());
@@ -260,41 +208,6 @@ fn rectangle_lines_for_extract(start_line: usize, end_line: usize) -> Vec<usize>
     } else {
         vec![start_line]
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn line_col_to_char_index(text: &LispString, line: usize, col: usize) -> usize {
-    let lines = split_lisp_string_lines(text);
-    let mut pos = 0usize;
-    for idx in 0..line {
-        pos += lines.get(idx).map(LispString::schars).unwrap_or(0);
-        pos += 1; // newline separator
-    }
-    let line_len = lines.get(line).map(LispString::schars).unwrap_or(0);
-    pos + col.min(line_len)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn extract_rectangle_from_text(
-    text: &LispString,
-    start_line: usize,
-    end_line: usize,
-    left_col: usize,
-    right_col: usize,
-) -> Vec<LispString> {
-    let lines = split_lisp_string_lines(text);
-    let mut out = Vec::new();
-    for line_index in rectangle_lines_for_extract(start_line, end_line) {
-        if let Some(line) = lines.get(line_index) {
-            out.push(extract_line_columns(line, left_col, right_col));
-        } else {
-            out.push(space_lisp_string(
-                right_col.saturating_sub(left_col),
-                text.is_multibyte(),
-            ));
-        }
-    }
-    out
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -346,53 +259,6 @@ fn delete_extract_rectangle_from_text(
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn clamped_rect_inputs(
-    eval: &super::eval::Context,
-    start: i64,
-    end: i64,
-) -> Option<(
-    LispString,
-    EmacsByteRange,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-    usize,
-)> {
-    let buf = eval.buffers.current_buffer()?;
-    let accessible = buf.accessible_emacs_byte_region();
-    let full_range = accessible.range();
-    let pmin = accessible.start();
-    let pmax = accessible.end();
-    let point_min_char = super::textprop::byte_to_elisp_pos(buf, pmin);
-    let point_max_char = super::textprop::byte_to_elisp_pos(buf, pmax);
-    let clamped_start = start.clamp(point_min_char, point_max_char);
-    let clamped_end = end.clamp(point_min_char, point_max_char);
-    let text = buf.buffer_substring_lisp_string_range(full_range);
-
-    let rel_start = (clamped_start - point_min_char).max(0) as usize;
-    let rel_end = (clamped_end - point_min_char).max(0) as usize;
-    let start_position = line_col_for_char_index(&text, rel_start);
-    let end_position = line_col_for_char_index(&text, rel_end);
-    let (left_col, right_col) = if start_position.column <= end_position.column {
-        (start_position.column, end_position.column)
-    } else {
-        (end_position.column, start_position.column)
-    };
-    Some((
-        text,
-        full_range,
-        start_position.line,
-        start_position.column,
-        end_position.line,
-        end_position.column,
-        left_col,
-        right_col,
-    ))
-}
-
 // ---------------------------------------------------------------------------
 // Eval-dependent builtins
 // ---------------------------------------------------------------------------
@@ -430,59 +296,6 @@ pub(crate) fn builtin_extract_rectangle_line(args: Vec<Value>) -> EvalResult {
         return Ok(Value::heap_string(slice_lisp_string_chars(&line, lo, hi)));
     }
     Ok(Value::string(""))
-}
-
-/// `(clear-rectangle START END &optional FILL)` -- replace the rectangle
-/// contents with spaces (or FILL character if given).
-///
-/// Compatibility behavior:
-/// - fills rectangle width with spaces, then trims trailing spaces in affected
-///   lines
-/// `(delete-extract-rectangle START END)` -- delete the rectangle and
-/// return its contents as a list of strings.
-///
-/// Compatibility behavior:
-/// - extracts rectangle text using the same START/END column/line model as
-///   `extract-rectangle`
-/// - deletes extracted text from each affected line
-/// - when rectangle starts past EOL, returns width spaces and leaves line
-///   unchanged
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn delete_extract_rectangle_eval(
-    eval: &mut super::eval::Context,
-    start: i64,
-    end: i64,
-) -> EvalResult {
-    let Some((text, full_range, start_line, _start_col, end_line, _end_col, left_col, right_col)) =
-        clamped_rect_inputs(eval, start, end)
-    else {
-        return Ok(Value::list(Vec::new()));
-    };
-
-    let (extracted, rewritten) =
-        delete_extract_rectangle_from_text(&text, start_line, end_line, left_col, right_col);
-
-    if let Some(current_id) = eval.buffers.current_buffer_id() {
-        let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
-            &eval.buffers,
-            current_id,
-            full_range,
-            &rewritten,
-        )?;
-        super::editfns::signal_before_text_change(eval, change)?;
-        let _ = eval
-            .buffers
-            .delete_buffer_measured_region(current_id, change.old_range());
-        let _ = eval
-            .buffers
-            .goto_buffer_emacs_byte_pos(current_id, full_range.start());
-        let _ = eval
-            .buffers
-            .insert_lisp_string_into_buffer(current_id, &rewritten);
-        super::editfns::signal_after_text_change(eval, change)?;
-    }
-
-    Ok(rectangle_strings_to_value(&extracted))
 }
 
 // ---------------------------------------------------------------------------

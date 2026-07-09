@@ -541,22 +541,6 @@ pub(crate) fn empty_coding_system_manager() -> DumpCodingSystemManager {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn coding_system_manager_is_empty(manager: &DumpCodingSystemManager) -> bool {
-    manager.systems_syms.is_empty()
-        && manager.systems.is_empty()
-        && manager.aliases_syms.is_empty()
-        && manager.aliases.is_empty()
-        && manager.alias_order_syms.is_empty()
-        && manager.alias_order.is_empty()
-        && manager.priority_syms.is_empty()
-        && manager.priority.is_empty()
-        && manager.keyboard_coding_sym.is_none()
-        && manager.keyboard_coding.is_none()
-        && manager.terminal_coding_sym.is_none()
-        && manager.terminal_coding.is_none()
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::types::DumpHeapRef;

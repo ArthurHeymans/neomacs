@@ -1130,30 +1130,12 @@ fn arithcompare_chain_or_fast_fixnum_pair(
     arithcompare_chain(eval, args, op)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_num_eq(
-    eval: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("=", &args, 1)?;
-    arithcompare_chain(eval, &args, NumCmp::Eq)
-}
-
 pub(crate) fn builtin_num_eq_slice(
     eval: &mut super::super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
     expect_min_args("=", args, 1)?;
     arithcompare_chain(eval, args, NumCmp::Eq)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_num_lt(
-    eval: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("<", &args, 1)?;
-    arithcompare_chain_or_fast_fixnum_pair(eval, &args, NumCmp::Lt)
 }
 
 pub(crate) fn builtin_num_lt_slice(
@@ -1164,15 +1146,6 @@ pub(crate) fn builtin_num_lt_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Lt)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_num_le(
-    eval: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("<=", &args, 1)?;
-    arithcompare_chain_or_fast_fixnum_pair(eval, &args, NumCmp::Le)
-}
-
 pub(crate) fn builtin_num_le_slice(
     eval: &mut super::super::eval::Context,
     args: &[Value],
@@ -1181,30 +1154,12 @@ pub(crate) fn builtin_num_le_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Le)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_num_gt(
-    eval: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args(">", &args, 1)?;
-    arithcompare_chain_or_fast_fixnum_pair(eval, &args, NumCmp::Gt)
-}
-
 pub(crate) fn builtin_num_gt_slice(
     eval: &mut super::super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
     expect_min_args(">", args, 1)?;
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Gt)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_num_ge(
-    eval: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args(">=", &args, 1)?;
-    arithcompare_chain_or_fast_fixnum_pair(eval, &args, NumCmp::Ge)
 }
 
 pub(crate) fn builtin_num_ge_slice(

@@ -11,9 +11,8 @@ use super::keymap::{
     get_keymap_in_obarray, get_keymap_in_runtime, is_list_keymap, key_event_to_emacs_event,
     list_keymap_accessible, list_keymap_copy, list_keymap_define_seq_in_obarray,
     list_keymap_define_seq_in_obarray_ex, list_keymap_inherits_from, list_keymap_parent,
-    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray,
-    lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap, make_sparse_list_keymap,
-    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap,
+    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -358,71 +357,6 @@ pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Valu
     lookup_key_with_menu_compat_runtime(eval, &keymaps, &events, t_ok)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_lookup_key_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
-    expect_min_args("lookup-key", &args, 2)?;
-    expect_max_args("lookup-key", &args, 3)?;
-    // 3rd arg ACCEPT-DEFAULTS: when non-nil, accept (t . COMMAND) default bindings.
-    // GNU keymap.c:1248: bool t_ok = !NILP (accept_default);
-    let t_ok = args.get(2).is_some_and(|v| v.is_truthy());
-
-    let events = expect_key_events(&args[1])?;
-
-    let keymaps = resolve_lookup_keymaps_in_obarray(obarray, &args[0])?;
-
-    if events.is_empty() {
-        return Ok(keymaps.first().copied().unwrap_or(Value::NIL));
-    }
-
-    Ok(lookup_key_with_menu_compat(
-        obarray, &keymaps, &events, t_ok,
-    ))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn lookup_key_with_menu_compat(
-    obarray: &Obarray,
-    keymaps: &[Value],
-    events: &[Value],
-    t_ok: bool,
-) -> Value {
-    let found = lookup_key_in_keymaps_in_obarray(obarray, keymaps, events, t_ok);
-    if is_defined_lookup_result(&found) || !is_menu_bar_key(events) {
-        return found;
-    }
-
-    let lower_events: Vec<Value> = events
-        .iter()
-        .map(|event| {
-            event
-                .as_symbol_name()
-                .map(|name| Value::symbol(name.to_lowercase()))
-                .unwrap_or(*event)
-        })
-        .collect();
-    let lower_found = lookup_key_in_keymaps_in_obarray(obarray, keymaps, &lower_events, t_ok);
-    if is_defined_lookup_result(&lower_found) {
-        return lower_found;
-    }
-
-    let dash_events: Vec<Value> = lower_events
-        .iter()
-        .map(|event| {
-            event
-                .as_symbol_name()
-                .filter(|name| name.contains(' '))
-                .map(|name| Value::symbol(name.replace(' ', "-")))
-                .unwrap_or(*event)
-        })
-        .collect();
-    let dash_found = lookup_key_in_keymaps_in_obarray(obarray, keymaps, &dash_events, t_ok);
-    if is_defined_lookup_result(&dash_found) {
-        return dash_found;
-    }
-
-    found
-}
-
 fn lookup_key_with_menu_compat_runtime(
     eval: &mut super::eval::Context,
     keymaps: &[Value],
@@ -518,45 +452,6 @@ fn resolve_lookup_keymaps_in_runtime(
     Ok(vec![get_keymap_in_runtime(eval, value, true, true)?])
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_lookup_keymaps_in_obarray(obarray: &Obarray, value: &Value) -> Result<Vec<Value>, Flow> {
-    if is_list_keymap(value) {
-        return Ok(vec![*value]);
-    }
-    if value.is_nil() {
-        return Ok(vec![Value::NIL]);
-    }
-    if value.is_cons()
-        && maybe_keymap_in_obarray(obarray, &value.cons_car())
-            .is_some_and(|keymap| is_list_keymap(&keymap))
-        && let Some(items) = list_to_vec(value)
-    {
-        if items.is_empty() {
-            return Ok(vec![Value::NIL]);
-        }
-        let mut resolved = Vec::with_capacity(items.len());
-        for item in &items {
-            if item.is_nil() {
-                resolved.push(Value::NIL);
-                continue;
-            }
-            let Some(keymap) = maybe_keymap_in_obarray(obarray, item) else {
-                resolved.clear();
-                break;
-            };
-            resolved.push(keymap);
-        }
-        if !resolved.is_empty() {
-            return Ok(resolved);
-        }
-    }
-    if value.is_cons() {
-        return Ok(vec![*value]);
-    }
-
-    Ok(vec![expect_keymap_in_obarray(obarray, value)?])
-}
-
 /// (global-set-key KEY COMMAND)
 pub(super) fn builtin_global_set_key(
     eval: &mut super::eval::Context,
@@ -618,14 +513,6 @@ pub(super) fn builtin_use_global_map(
     expect_args("use-global-map", &args, 1)?;
     let keymap = get_keymap_in_runtime(eval, &args[0], true, true)?;
     eval.obarray.set_symbol_value("global-map", keymap);
-    Ok(Value::NIL)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_use_global_map_impl(obarray: &mut Obarray, args: &[Value]) -> EvalResult {
-    expect_args("use-global-map", args, 1)?;
-    let keymap = expect_keymap_in_obarray(obarray, &args[0])?;
-    obarray.set_symbol_value("global-map", keymap);
     Ok(Value::NIL)
 }
 
@@ -969,13 +856,6 @@ pub(super) fn builtin_keymap_parent(
     Ok(list_keymap_parent(&keymap))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_keymap_parent_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
-    expect_args("keymap-parent", &args, 1)?;
-    let keymap = get_keymap_in_obarray(obarray, &args[0], true)?;
-    Ok(list_keymap_parent(&keymap))
-}
-
 /// (set-keymap-parent KEYMAP PARENT) -> PARENT
 pub(super) fn builtin_set_keymap_parent(
     eval: &mut super::eval::Context,
@@ -996,30 +876,6 @@ pub(super) fn builtin_set_keymap_parent(
     }
     list_keymap_set_parent(keymap, parent);
     Ok(parent)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_set_keymap_parent_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
-    expect_args("set-keymap-parent", &args, 2)?;
-    let keymap = get_keymap_in_obarray(obarray, &args[0], true)?;
-    let parent = if args[1].is_nil() {
-        Value::NIL
-    } else {
-        get_keymap_in_obarray(obarray, &args[1], true)?
-    };
-    if !parent.is_nil() && list_keymap_inherits_from(&parent, &keymap) {
-        return Err(signal(
-            "error",
-            vec![Value::string("Cyclic keymap inheritance")],
-        ));
-    }
-    list_keymap_set_parent(keymap, parent);
-    Ok(parent)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(super) fn is_lisp_keymap_object(value: &Value) -> bool {
-    is_list_keymap(value)
 }
 
 /// (keymapp OBJ) -> t or nil
@@ -1103,45 +959,6 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
         },
     };
     Ok(Value::string(rendered))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(super) fn parse_event_symbol_prefixes(mut name: &str) -> (Vec<Value>, &str) {
-    let mut mods = Vec::new();
-    loop {
-        if let Some(rest) = name.strip_prefix("C-") {
-            mods.push(Value::symbol("control"));
-            name = rest;
-            continue;
-        }
-        if let Some(rest) = name.strip_prefix("M-") {
-            mods.push(Value::symbol("meta"));
-            name = rest;
-            continue;
-        }
-        if let Some(rest) = name.strip_prefix("S-") {
-            mods.push(Value::symbol("shift"));
-            name = rest;
-            continue;
-        }
-        if let Some(rest) = name.strip_prefix("s-") {
-            mods.push(Value::symbol("super"));
-            name = rest;
-            continue;
-        }
-        if let Some(rest) = name.strip_prefix("H-") {
-            mods.push(Value::symbol("hyper"));
-            name = rest;
-            continue;
-        }
-        if let Some(rest) = name.strip_prefix("A-") {
-            mods.push(Value::symbol("alt"));
-            name = rest;
-            continue;
-        }
-        break;
-    }
-    (mods, name)
 }
 
 /// `(single-key-description KEY &optional NO-ANGLES)` -> string

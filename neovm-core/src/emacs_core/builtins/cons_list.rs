@@ -520,11 +520,6 @@ fn builtin_setcdr_values(cons: Value, new_cdr: Value) -> EvalResult {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_list(args: Vec<Value>) -> EvalResult {
-    Ok(Value::list(args))
-}
-
 pub(crate) fn builtin_list_slice(_eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     Ok(Value::list_from_slice(args))
 }
@@ -881,11 +876,6 @@ fn builtin_nthcdr_values(n_value: Value, list: Value) -> EvalResult {
     nthcdr_impl(n_value, list)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_append(args: Vec<Value>) -> EvalResult {
-    builtin_append_slice_impl(&args)
-}
-
 pub(crate) fn builtin_append_slice(_eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     builtin_append_slice_impl(args)
 }
@@ -1178,14 +1168,6 @@ pub(crate) fn builtin_member(args: Vec<Value>) -> EvalResult {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_member_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_member_with_symbols(args, eval.symbols_with_pos_enabled)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn builtin_member_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
     expect_args("member", &args, 2)?;
     builtin_member_values(args[0], args[1], symbols_with_pos_enabled)
@@ -1215,25 +1197,6 @@ fn builtin_member_values(target: Value, list: Value, symbols_with_pos_enabled: b
             Ok(None)
         }
     })
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_memq(args: Vec<Value>) -> EvalResult {
-    builtin_memq_with_symbols(args, false)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_memq_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_memq_with_symbols(args, eval.symbols_with_pos_enabled)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn builtin_memq_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
-    expect_args("memq", &args, 2)?;
-    builtin_memq_values(args[0], args[1], symbols_with_pos_enabled)
 }
 
 pub(crate) fn builtin_memq_2(
@@ -1269,25 +1232,6 @@ fn builtin_memq_values_swp(target: Value, list: Value) -> EvalResult {
             Ok(None)
         }
     })
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_memql(args: Vec<Value>) -> EvalResult {
-    builtin_memql_with_symbols(args, false)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_memql_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_memql_with_symbols(args, eval.symbols_with_pos_enabled)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn builtin_memql_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
-    expect_args("memql", &args, 2)?;
-    builtin_memql_values(args[0], args[1], symbols_with_pos_enabled)
 }
 
 pub(crate) fn builtin_memql_2(
@@ -1360,25 +1304,6 @@ pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value
         eval.restore_specpdl_roots(roots);
         assoc_result
     })
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_assq(args: Vec<Value>) -> EvalResult {
-    builtin_assq_with_symbols(args, false)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_assq_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_assq_with_symbols(args, eval.symbols_with_pos_enabled)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn builtin_assq_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
-    expect_args("assq", &args, 2)?;
-    builtin_assq_values(args[0], args[1], symbols_with_pos_enabled)
 }
 
 pub(crate) fn builtin_assq_2(
@@ -1615,11 +1540,6 @@ where
     delete_from_list_in_place_result(seq, |value| Ok(should_delete(value)))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_delete(args: Vec<Value>) -> EvalResult {
-    builtin_delete_with_symbols(args, false)
-}
-
 pub(crate) fn builtin_delete_with_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1679,14 +1599,6 @@ fn builtin_delete_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_delq(args: Vec<Value>) -> EvalResult {
     builtin_delq_with_symbols(args, false)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_delq_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_delq_with_symbols(args, eval.symbols_with_pos_enabled)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

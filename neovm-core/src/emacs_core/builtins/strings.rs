@@ -683,12 +683,6 @@ pub(crate) fn builtin_number_to_string(
     }
 }
 
-/// Pure form (tests + internal callers); uses the standard case table only.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
-    upcase_with_override(args, super::super::casetab::CaseTableOverride::none())
-}
-
 /// Dispatched form: honors the current buffer's case table (`set-case-table`).
 pub(crate) fn builtin_upcase_in_state(
     eval: &mut crate::emacs_core::eval::Context,
@@ -891,22 +885,6 @@ fn transform_string_case(
     } else {
         crate::heap_types::LispString::from_unibyte(out)
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn upcase_string_emacs_compat(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        let code = ch as i64;
-        if ch == '\u{0131}' || preserve_emacs_upcase_string_payload(code) {
-            out.push(ch);
-            continue;
-        }
-        for up in ch.to_uppercase() {
-            out.push(up);
-        }
-    }
-    out
 }
 
 pub(crate) fn upcase_char_code_emacs_compat(code: i64) -> i64 {
@@ -1745,39 +1723,6 @@ fn push_format_literal_code(
     }
 }
 
-/// Issue #131: does printing `v` (via princ/prin1, recursively) yield only
-/// real Unicode characters — i.e. nothing that the storage-string encoder turns
-/// into an in-Unicode Private-Use sentinel?
-///
-/// A genuine sentinel is produced only for codes that are NOT valid Rust
-/// `char`s: eight-bit raw bytes (0x3FFF80..) and non-Unicode codes (>0x10FFFF)
-/// and surrogates. Those live exclusively inside `LispString`s, whose
-/// Emacs-bytes then fail UTF-8 validation. So a value renders "pure" iff every
-/// string it reaches is valid UTF-8. When pure, the format result can be taken
-/// as real Emacs bytes verbatim (real PUA glyphs survive); when impure, that
-/// span must go through the sentinel-decoding `storage_string_to_buffer_bytes`.
-///
-/// Defaults to `true` for value kinds whose printed form cannot carry a raw
-/// sentinel (numbers, symbols — symbol names are already valid `&str`), and is
-/// conservative (`false`) past a depth bound to stay cycle-safe.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn value_render_pure_unicode(v: Value, depth: u32) -> bool {
-    if depth > 64 {
-        return false;
-    }
-    match v.kind() {
-        ValueKind::String => v
-            .as_lisp_string()
-            .map(|ls| std::str::from_utf8(ls.as_bytes()).is_ok())
-            .unwrap_or(true),
-        ValueKind::Cons => {
-            value_render_pure_unicode(v.cons_car(), depth + 1)
-                && value_render_pure_unicode(v.cons_cdr(), depth + 1)
-        }
-        _ => true,
-    }
-}
-
 /// Issue #131: `do_format` builds its result directly as canonical Emacs
 /// internal-encoding bytes (no storage-string round-trip), so these helpers walk
 /// and measure Emacs bytes the way `display_width_emacs`/`decode_units_emacs` do.
@@ -2103,14 +2048,6 @@ fn build_format_result(
     apply_format_prop_spans(result, args, spans);
 
     result
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_format_wrapper_strict(
-    ctx: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_format_wrapper_strict_slice(ctx, &args)
 }
 
 pub(crate) fn builtin_format_wrapper_strict_slice(

@@ -3423,28 +3423,6 @@ fn lower_fixnum_unop(
     retag_fixnum(fb, res)
 }
 
-/// Lower a fixnum numeric comparison (`=`/`<`/`>`/`<=`/`>=`) with exact
-/// interpreter parity (`vm.rs` `Op::Lss` &c.): require both operands be fixnums
-/// else deopt, then select `t`/`nil` from the comparison — no branch needed.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn lower_fixnum_compare(
-    fb: &mut FunctionBuilder,
-    deopt: Block,
-    cc: IntCC,
-    a: ClifValue,
-    b: ClifValue,
-    known: &HashSet<ClifValue>,
-) -> ClifValue {
-    guard_fixnum(fb, deopt, a, known);
-    guard_fixnum(fb, deopt, b, known);
-    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
-    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
-    let cond = fb.ins().icmp(cc, av, bv);
-    let t = fb.ins().iconst(types::I64, Value::T.bits() as i64);
-    let nil = fb.ins().iconst(types::I64, Value::NIL.bits() as i64);
-    fb.ins().select(cond, t, nil)
-}
-
 /// Lower a fixnum multiply with exact interpreter parity (`vm.rs` `Op::Mul`):
 /// both operands fixnums and the exact product in fixnum range, else deopt.
 ///

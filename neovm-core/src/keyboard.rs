@@ -2249,12 +2249,6 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn make_lispy_switch_frame_event(&self, emacs_frame_id: u64) -> Option<Value> {
-        let frame = self.lispy_frame_event_target(emacs_frame_id)?;
-        Some(Value::list(vec![Value::symbol("switch-frame"), frame]))
-    }
-
     fn make_lispy_focus_event(&self, focused: bool, emacs_frame_id: u64) -> Option<Value> {
         let frame = self.lispy_frame_event_target(emacs_frame_id)?;
         Some(Value::list(vec![
@@ -5208,43 +5202,6 @@ impl crate::emacs_core::eval::Context {
         if self.command_loop.idle_start_time.is_none() {
             self.command_loop.idle_start_time = self.command_loop.last_idle_start_time;
         }
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn due_gnu_timers_snapshot(&self) -> Vec<Value> {
-        let timers = self
-            .obarray
-            .symbol_value("timer-list")
-            .and_then(crate::emacs_core::value::list_to_vec)
-            .unwrap_or_default();
-        let now = crate::emacs_core::eval::GnuTimerTimestamp::now();
-
-        timers
-            .into_iter()
-            .filter_map(pending_gnu_timer_in_keyboard_runtime)
-            .filter(|timer| timer.when <= now)
-            .map(|timer| timer.timer)
-            .collect()
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn due_gnu_idle_timers_snapshot(&self) -> Vec<Value> {
-        let Some(idle_duration) = self.current_idle_duration() else {
-            return Vec::new();
-        };
-        let idle_timers = self
-            .obarray
-            .symbol_value("timer-idle-list")
-            .and_then(crate::emacs_core::value::list_to_vec)
-            .unwrap_or_default();
-        let now = crate::emacs_core::eval::GnuTimerTimestamp::from_duration(idle_duration);
-
-        idle_timers
-            .into_iter()
-            .filter_map(pending_gnu_idle_timer_in_keyboard_runtime)
-            .filter(|timer| timer.when <= now)
-            .map(|timer| timer.timer)
-            .collect()
     }
 
     pub(crate) fn next_due_gnu_timer_snapshot(&self) -> Option<Value> {

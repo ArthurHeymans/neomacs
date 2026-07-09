@@ -48,17 +48,6 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_integerp(arg: &Value) -> Result<(), Flow> {
-    match arg.kind() {
-        ValueKind::Fixnum(_) => Ok(()),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("integerp"), *arg],
-        )),
-    }
-}
-
 fn expect_integer_or_marker_p(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
@@ -287,12 +276,6 @@ fn composition_lookup_relative(id: i64) -> bool {
             .copied()
             .unwrap_or(true)
     })
-}
-
-/// A registered (Form-B) composition property `(ID LENGTH COMPONENTS-VEC . MOD)`.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn composition_registered_p(prop: Value) -> bool {
-    prop.is_cons() && prop.cons_car().is_fixnum()
 }
 
 /// Decode either composition form into `(length, components-or-vec, mod-func,

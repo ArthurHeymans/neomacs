@@ -136,17 +136,6 @@ impl LoadedMmapImage {
         Some(&self.mmap[section.offset as usize..section.offset as usize + section.len as usize])
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn section_mut(&mut self, kind: DumpSectionKind) -> Option<&mut [u8]> {
-        let section = self
-            .sections
-            .iter()
-            .find(|section| section.kind == kind as u32)?;
-        let start = section.offset as usize;
-        let end = start + section.len as usize;
-        Some(&mut self.mmap[start..end])
-    }
-
     pub(crate) fn section_mut_ptr(&self, kind: DumpSectionKind) -> Option<(*mut u8, usize)> {
         let section = self
             .sections

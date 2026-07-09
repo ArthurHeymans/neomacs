@@ -584,46 +584,6 @@ fn register_simple(obarray: &mut Obarray, name: &str, message: &str, parents: &[
     put_error_properties(obarray, name, message, cond_refs);
 }
 
-/// Extract parent symbol(s) from the PARENT argument of `define-error`.
-/// Accepts either a single symbol or a list of symbols.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn extract_parent_symbols(value: &Value) -> Result<Vec<String>, Flow> {
-    match value.kind() {
-        ValueKind::Symbol(id) => Ok(vec![resolve_sym(id).to_owned()]),
-        ValueKind::Nil => Ok(vec!["error".to_string()]),
-        ValueKind::T => Ok(vec!["t".to_string()]),
-        ValueKind::Cons => {
-            let items = list_to_vec(value).ok_or_else(|| {
-                signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("listp"), *value],
-                )
-            })?;
-            let mut parents = Vec::with_capacity(items.len());
-            for item in &items {
-                match item.as_symbol_name() {
-                    Some(name) => parents.push(name.to_string()),
-                    None => {
-                        return Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("symbolp"), *item],
-                        ));
-                    }
-                }
-            }
-            if parents.is_empty() {
-                Ok(vec!["error".to_string()])
-            } else {
-                Ok(parents)
-            }
-        }
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("symbolp"), *value],
-        )),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Builtins: signal wrapper and error-message-string
 // ---------------------------------------------------------------------------
