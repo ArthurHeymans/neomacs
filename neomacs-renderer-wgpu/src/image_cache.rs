@@ -6,6 +6,7 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -78,6 +79,9 @@ pub struct CachedImage {
     pub height: u32,
     /// Memory size in bytes
     pub memory_size: usize,
+    /// Monotonic access stamp for LRU eviction; refreshed by `get` (a `Cell`
+    /// so draw-path lookups stay `&self`).
+    last_access: Cell<u64>,
 }
 
 /// Decoded image data waiting for GPU upload
@@ -115,6 +119,16 @@ pub struct ImageCache {
     sampler: wgpu::Sampler,
     /// Total cached memory
     total_memory: usize,
+    /// Monotonic clock stamping `CachedImage::last_access` (LRU order).
+    access_clock: Cell<u64>,
+}
+
+/// Pick the least-recently-used entry: the id with the smallest access stamp
+/// (ties broken by smaller id for determinism).
+fn lru_victim(entries: impl Iterator<Item = (u32, u64)>) -> Option<u32> {
+    entries
+        .min_by_key(|&(id, stamp)| (stamp, id))
+        .map(|(id, _)| id)
 }
 
 /// Request to decode an image
@@ -215,7 +229,15 @@ impl ImageCache {
             bind_group_layout,
             sampler,
             total_memory: 0,
+            access_clock: Cell::new(0),
         }
+    }
+
+    /// Advance the access clock and return a fresh stamp.
+    fn next_access_stamp(&self) -> u64 {
+        let stamp = self.access_clock.get() + 1;
+        self.access_clock.set(stamp);
+        stamp
     }
 
     /// Background decoder thread (pooled version)
@@ -964,6 +986,7 @@ impl ImageCache {
                     width,
                     height,
                     memory_size,
+                    last_access: Cell::new(self.next_access_stamp()),
                 },
             );
             self.states.insert(id, ImageState::Ready);
@@ -1098,6 +1121,7 @@ impl ImageCache {
                 width: decoded.width,
                 height: decoded.height,
                 memory_size,
+                last_access: Cell::new(self.next_access_stamp()),
             },
         );
 
@@ -1113,12 +1137,15 @@ impl ImageCache {
         );
     }
 
-    /// Evict old textures if over memory limit
+    /// Evict least-recently-used textures until under the memory limit.
     fn evict_if_needed(&mut self) {
-        // Simple strategy: remove oldest entries until under limit
         while self.total_memory > MAX_CACHE_MEMORY && !self.textures.is_empty() {
-            // Find smallest ID (oldest)
-            if let Some(&id) = self.textures.keys().min() {
+            let victim = lru_victim(
+                self.textures
+                    .iter()
+                    .map(|(&id, cached)| (id, cached.last_access.get())),
+            );
+            if let Some(id) = victim {
                 if let Some(cached) = self.textures.remove(&id) {
                     self.total_memory -= cached.memory_size;
                     self.states.remove(&id);
@@ -1132,9 +1159,11 @@ impl ImageCache {
         }
     }
 
-    /// Get cached image if ready
+    /// Get cached image if ready. Refreshes the entry's LRU access stamp.
     pub fn get(&self, id: u32) -> Option<&CachedImage> {
-        self.textures.get(&id)
+        let cached = self.textures.get(&id)?;
+        cached.last_access.set(self.next_access_stamp());
+        Some(cached)
     }
 
     /// Get image dimensions (pending or loaded)

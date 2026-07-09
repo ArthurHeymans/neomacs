@@ -204,3 +204,30 @@ fn test_convert_rgb24_single_pixel() {
     assert_eq!(h, 1);
     assert_eq!(rgba, vec![128, 64, 32, 255]); // R=128, G=64, B=32, A=255
 }
+
+#[test]
+fn lru_victim_prefers_least_recent_stamp_over_smallest_id() {
+    // Insert order 1, 2, 3 (stamps 1, 2, 3), then id 1 is accessed again
+    // (stamp 4). FIFO-by-smallest-id would evict 1; LRU must evict 2.
+    let entries = [(1u32, 4u64), (2, 2), (3, 3)];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(2));
+}
+
+#[test]
+fn lru_victim_repeated_touches_protect_hot_entries() {
+    // 3 was inserted last but 1 and 3 were both re-read afterwards; the
+    // coldest entry is 2 regardless of insertion order.
+    let entries = [(1u32, 5u64), (2, 2), (3, 6)];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(2));
+}
+
+#[test]
+fn lru_victim_matches_insert_order_when_never_touched() {
+    let entries = [(1u32, 1u64), (2, 2), (3, 3)];
+    assert_eq!(lru_victim(entries.iter().copied()), Some(1));
+}
+
+#[test]
+fn lru_victim_of_no_entries_is_none() {
+    assert_eq!(lru_victim(std::iter::empty()), None);
+}
