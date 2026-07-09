@@ -74,7 +74,7 @@ fn expect_range_args(
 fn expect_symbolp(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::Symbol(id) => Ok(resolve_sym(id).to_owned()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), *value],
         )),
@@ -84,7 +84,7 @@ fn expect_symbolp(value: &Value) -> Result<String, Flow> {
 fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("wholenump"), *value],
         )),
@@ -170,7 +170,7 @@ pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>)
                 Ok(Value::NIL)
             }
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[1]],
         )),

@@ -13,14 +13,14 @@ fn assert_float_eq(val: &Value, expected: f64, epsilon: f64) {
                 f
             );
         }
-        other => panic!("expected Float, got {:?}", val),
+        _other => panic!("expected Float, got {:?}", val),
     }
 }
 
 fn assert_int_eq(val: &Value, expected: i64) {
     match val.kind() {
         ValueKind::Fixnum(n) => assert_eq!(n, expected, "expected {} but got {}", expected, n),
-        other => panic!("expected Int, got {:?}", val),
+        _other => panic!("expected Int, got {:?}", val),
     }
 }
 
@@ -170,7 +170,7 @@ fn test_fround() {
             assert_eq!(f, 0.0);
             assert!(f.is_sign_negative(), "expected negative zero");
         }
-        other => panic!("expected Float, got {:?}", result),
+        _other => panic!("expected Float, got {:?}", result),
     }
 }
 

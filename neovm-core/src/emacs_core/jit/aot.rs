@@ -29,7 +29,6 @@ use super::compile::{CompileError, DeoptCells};
 use super::mir;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::value::Value;
-use crate::tagged::value::{FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE};
 
 /// Wrap a stringly backend error as a `CompileError` (module-init flavor — the
 /// ObjectModule setup + emit are the "module" steps here).
@@ -213,6 +212,7 @@ const RECIPE_T: u8 = 6;
 /// bails to the JIT rather than emit an artifact it cannot rebuild — keeping AOT
 /// strictly additive (R1c-6: miss/error → JIT).
 #[derive(Debug)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) struct UnsupportedRecipe(pub Value);
 
 /// Serialize one `Value` into `out` as a canonical, pointer-free recipe.
@@ -1910,7 +1910,7 @@ pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String
     let f = mk_fn(f_ops.clone(), f_consts.clone(), 1);
 
     // Emit + place F's AOT `.so` (call-bearing → precise deopt).
-    let hash = testkit_emit_and_place_so(&f_ops, &f_consts, 1, dir)
+    let _hash = testkit_emit_and_place_so(&f_ops, &f_consts, 1, dir)
         .ok_or("F not AOT-runnable (expected call-bearing → Some)")?;
     let ctx = &mut ev as *mut Context;
     let count = |cell: Value| cell.cons_car().as_fixnum().unwrap_or(-1);
@@ -5631,7 +5631,7 @@ mod tests {
         // One pure-arith required-only candidate (lambda (a) (+ a 5)) → D0 AOT.
         let ops = vec![Op::Constant(0), Op::Add, Op::Return];
         let constants = vec![Value::make_int(5)];
-        let arity = 1usize;
+        let _arity = 1usize;
         let mut a = ByteCodeFunction::new(LambdaParams {
             required: vec![SymId(1)],
             optional: Vec::new(),

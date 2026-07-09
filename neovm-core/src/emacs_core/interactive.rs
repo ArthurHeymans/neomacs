@@ -11,7 +11,7 @@
 //!   `this-command-keys-vector`, `thing-at-point`, `bounds-of-thing-at-point`,
 //!   `symbol-at-point`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
@@ -21,21 +21,18 @@ use super::keyboard::pure::{
     KEY_CHAR_SUPER, make_event_array_value,
 };
 use super::keymap::{
-    KeyEvent, KeymapMarker,
-    command_remapping_command_name as keymap_command_remapping_command_name,
+    KeymapMarker, command_remapping_command_name as keymap_command_remapping_command_name,
     command_remapping_lookup_in_keymaps as keymap_command_remapping_lookup_in_keymaps,
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
     current_active_maps_for_position, current_active_maps_for_position_read_only,
-    expand_meta_prefix_char_events_in_obarray, format_key_event, format_key_sequence,
     get_keymap_in_obarray, is_list_keymap, key_event_to_emacs_event, list_keymap_for_each_binding,
-    lookup_keymap_with_partial, make_sparse_list_keymap, minor_mode_key_binding_in_context,
-    resolve_active_key_binding, where_is_keymaps_in_context,
+    lookup_keymap_with_partial, minor_mode_key_binding_in_context, resolve_active_key_binding,
+    where_is_keymaps_in_context,
 };
-use super::mode::{MajorMode, MinorMode};
 use super::symbol::Obarray;
 use super::value::*;
-use crate::buffer::{EmacsBytePos, TextExtent};
+use crate::buffer::EmacsBytePos;
 use crate::emacs_core::SymId;
 
 // ---------------------------------------------------------------------------
@@ -412,6 +409,7 @@ pub(crate) fn builtin_call_interactively(eval: &mut Context, args: Vec<Value>) -
 }
 
 /// `(interactive-p)` -> t if the calling function was called interactively.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_interactive_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("interactive-p", &args, 0)?;
     let _ = eval;
@@ -422,6 +420,7 @@ pub(crate) fn builtin_interactive_p(eval: &mut Context, args: Vec<Value>) -> Eva
 /// `(called-interactively-p &optional KIND)`
 /// Return t if the calling function was called interactively.
 /// KIND can be 'interactive or 'any.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_called_interactively_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     // Accept 0 or 1 args
     if args.len() > 1 {
@@ -524,6 +523,7 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>)
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_commandp_impl(
     obarray: &Obarray,
     interactive: &InteractiveRegistry,
@@ -588,11 +588,11 @@ fn command_modes_from_quoted_interactive_form(form: &Value) -> Result<Option<Val
     match pair_cdr.kind() {
         ValueKind::Nil => Ok(Some(Value::NIL)),
         ValueKind::Cons => {
-            let arg_pair_car = pair_cdr.cons_car();
+            let _arg_pair_car = pair_cdr.cons_car();
             let arg_pair_cdr = pair_cdr.cons_cdr();
             Ok(Some(arg_pair_cdr))
         }
-        tail => Err(signal(
+        _tail => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), pair_cdr],
         )),
@@ -969,7 +969,7 @@ fn value_is_interactive_form(value: &Value) -> bool {
     match value.kind() {
         ValueKind::Cons => {
             let pair_car = value.cons_car();
-            let pair_cdr = value.cons_cdr();
+            let _pair_cdr = value.cons_cdr();
             pair_car.as_symbol_name() == Some("interactive")
         }
         _ => false,
@@ -1021,7 +1021,7 @@ fn value_is_declare_form(value: &Value) -> bool {
     match value.kind() {
         ValueKind::Cons => {
             let pair_car = value.cons_car();
-            let pair_cdr = value.cons_cdr();
+            let _pair_cdr = value.cons_cdr();
             pair_car.as_symbol_name() == Some("declare")
         }
         _ => false,
@@ -1145,6 +1145,7 @@ fn command_designator_p_in_state(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CommandInvocationKind {
     CallInteractively,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     CommandExecute,
 }
 
@@ -1278,6 +1279,7 @@ struct InteractiveInvocationContext {
 }
 
 impl InteractiveInvocationContext {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_keys_arg(eval: &Context, keys: Option<&Value>) -> Self {
         Self::from_keys_arg_in_state(eval.read_command_keys(), keys)
     }
@@ -1425,6 +1427,7 @@ fn dynamic_or_global_symbol_value_in_state(
     obarray.symbol_value(name).cloned()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_buffer_or_global_symbol_value(
     eval: &Context,
     buf: &crate::buffer::Buffer,
@@ -1549,6 +1552,7 @@ fn interactive_other_buffer_default(buffers: &mut crate::buffer::BufferManager) 
     super::builtins::other_buffer_impl(buffers, vec![avoid]).unwrap_or(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_string_code_returns_no_args_without_eval(
     code: &crate::heap_types::LispString,
 ) -> bool {
@@ -1575,6 +1579,7 @@ fn interactive_next_event_with_parameters_in_state(
     interactive_last_input_event_with_parameters_in_state(obarray, dynamic)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_args_from_string_code_in_state(
     obarray: &mut Obarray,
     dynamic: &mut Vec<OrderedRuntimeBindingMap>,
@@ -2102,6 +2107,7 @@ fn interactive_use_region_p_in_vm_runtime(shared: &mut super::eval::Context) -> 
         .map(|value| value.is_truthy())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_buffer_read_only_active(eval: &Context, buf: &crate::buffer::Buffer) -> bool {
     interactive_buffer_read_only_active_in_state(&eval.obarray, &[], buf)
 }
@@ -2118,6 +2124,7 @@ fn interactive_buffer_read_only_active_in_state(
         .is_some_and(|v| v.is_truthy())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_require_writable_current_buffer(eval: &Context) -> Result<(), Flow> {
     interactive_require_writable_current_buffer_in_state(&eval.obarray, &[], &eval.buffers)
 }
@@ -2141,6 +2148,7 @@ fn interactive_require_writable_current_buffer_in_state(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_apply_shift_selection_prefix(eval: &mut Context) {
     interactive_apply_shift_selection_prefix_in_state(
         &mut eval.obarray,
@@ -2294,6 +2302,7 @@ fn interactive_apply_prefix_flags(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn interactive_apply_prefix_flags_in_state(
     obarray: &mut Obarray,
     dynamic: &mut [OrderedRuntimeBindingMap],
@@ -2400,6 +2409,7 @@ fn parse_interactive_spec_from_value(spec: &Value) -> Option<ParsedInteractiveSp
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn parsed_interactive_spec_from_lambda(lambda: &LambdaData) -> Option<ParsedInteractiveSpec> {
     lambda
         .body
@@ -3094,6 +3104,7 @@ pub(crate) fn resolve_call_interactively_target_and_args_in_eval(
     Ok((func, call_args))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn resolve_call_interactively_target_and_args_in_state(
     obarray: &mut Obarray,
     dynamic: &mut Vec<OrderedRuntimeBindingMap>,
@@ -3670,6 +3681,7 @@ fn self_insert_should_auto_fill(eval: &Context, ch: char) -> bool {
 }
 
 /// `(keyboard-quit)` -- cancel the current command sequence.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_keyboard_quit(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("keyboard-quit", &args, 0)?;
     Err(signal("quit", vec![]))
@@ -3740,10 +3752,12 @@ pub(crate) fn builtin_key_binding_impl(
 }
 
 /// `(local-key-binding KEY &optional ACCEPT-DEFAULTS)`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_local_key_binding(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     builtin_local_key_binding_impl(eval, args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_local_key_binding_impl(
     ctx: &crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -3999,6 +4013,7 @@ fn single_command_key_vector_in_state(read_command_keys: &[Value]) -> Value {
     Value::vector(Vec::<Value>::new())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn single_command_key_vector(eval: &Context) -> Value {
     single_command_key_vector_in_state(eval.read_command_keys())
 }
@@ -4042,6 +4057,7 @@ pub(crate) fn builtin_clear_this_command_keys(eval: &mut Context, args: Vec<Valu
 }
 
 pub(crate) trait CommandKeyRuntime {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn read_command_keys(&self) -> &[Value];
     fn clear_command_key_state(&mut self, keep_record: bool);
 }

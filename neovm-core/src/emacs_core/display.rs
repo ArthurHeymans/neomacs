@@ -47,6 +47,7 @@ impl WindowSystemKind {
         matches!(self, Self::Neo | Self::X)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn supports_selections(self) -> bool {
         matches!(
             self,
@@ -260,6 +261,7 @@ fn terminal_not_x_display_error(value: &Value) -> Option<Flow> {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn expect_frame_designator(value: &Value) -> Result<(), Flow> {
     match value.kind() {
         ValueKind::Fixnum(id) if id >= 0 => Ok(()),
@@ -272,6 +274,7 @@ pub(crate) fn expect_frame_designator(value: &Value) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_display_designator(value: &Value) -> Result<(), Flow> {
     if value.is_nil() || terminal_designator_p(value) {
         return Ok(());
@@ -330,6 +333,7 @@ fn expect_optional_display_designator_eval(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn frame_not_live_error(value: &Value) -> Flow {
     let printable = match value.kind() {
         ValueKind::String => display_string_text(value).expect("checked string"),
@@ -341,6 +345,7 @@ fn frame_not_live_error(value: &Value) -> Flow {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn frame_not_live_error_eval(_eval: &super::eval::Context, value: &Value) -> Flow {
     let printable = match value.kind() {
         ValueKind::String => display_string_text(value).expect("checked string"),
@@ -424,6 +429,7 @@ pub(crate) fn x_window_system_active(eval: &super::eval::Context) -> bool {
     host_window_system.is_some_and(gui_window_system_active_value)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn x_window_system_active_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[crate::emacs_core::value::OrderedRuntimeBindingMap],
@@ -538,6 +544,7 @@ fn gui_x_query_target_eval(
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn gui_x_query_target_in_state(
     frames: &crate::window::FrameManager,
     obarray: &crate::emacs_core::symbol::Obarray,
@@ -569,6 +576,7 @@ fn expect_optional_window_system_frame_arg(value: &Value) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_optional_window_system_frame_arg_in_state(
     frames: &crate::window::FrameManager,
     value: &Value,
@@ -677,6 +685,7 @@ fn parse_x_geometry(spec: &str) -> Option<Value> {
     Some(Value::list(pairs))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn display_optional_capability_p(name: &str, args: &[Value]) -> EvalResult {
     expect_max_args(name, args, 1)?;
     match args.first() {
@@ -694,6 +703,7 @@ fn display_optional_capability_p(name: &str, args: &[Value]) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn display_optional_capability_p_eval(
     eval: &mut super::eval::Context,
     name: &str,
@@ -756,6 +766,7 @@ fn x_optional_display_query_error_eval(
     x_optional_display_query_error(name, &args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn x_optional_display_query_error_in_state(
     frames: &crate::window::FrameManager,
     name: &str,
@@ -775,6 +786,7 @@ pub(crate) fn x_optional_display_query_error_in_state(
 // ---------------------------------------------------------------------------
 
 /// Context-aware variant of `display-graphic-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_graphic_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -787,6 +799,7 @@ pub(crate) fn builtin_display_graphic_p(
 }
 
 /// Context-aware variant of `display-grayscale-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_grayscale_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -795,6 +808,7 @@ pub(crate) fn builtin_display_grayscale_p(
 }
 
 /// Context-aware variant of `display-mouse-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_mouse_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -803,6 +817,7 @@ pub(crate) fn builtin_display_mouse_p(
 }
 
 /// Context-aware variant of `display-popup-menus-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_popup_menus_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -811,6 +826,7 @@ pub(crate) fn builtin_display_popup_menus_p(
 }
 
 /// Context-aware variant of `display-symbol-keys-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_symbol_keys_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -819,6 +835,7 @@ pub(crate) fn builtin_display_symbol_keys_p(
 }
 
 /// Context-aware variant of `display-pixel-width`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_pixel_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -828,6 +845,7 @@ pub(crate) fn builtin_display_pixel_width(
 }
 
 /// Context-aware variant of `display-pixel-height`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_pixel_height(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -837,6 +855,7 @@ pub(crate) fn builtin_display_pixel_height(
 }
 
 /// Context-aware variant of `display-mm-width`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_mm_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -846,6 +865,7 @@ pub(crate) fn builtin_display_mm_width(
 }
 
 /// Context-aware variant of `display-mm-height`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_mm_height(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -855,6 +875,7 @@ pub(crate) fn builtin_display_mm_height(
 }
 
 /// Context-aware variant of `display-screens`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_screens(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -881,6 +902,7 @@ pub(crate) fn builtin_display_color_cells(
 }
 
 /// Context-aware variant of `display-planes`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_planes(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -904,6 +926,7 @@ pub(crate) fn builtin_display_planes(
 }
 
 /// Context-aware variant of `display-visual-class`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_visual_class(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -921,6 +944,7 @@ pub(crate) fn builtin_display_visual_class(
 }
 
 /// Context-aware variant of `display-backing-store`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_backing_store(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -930,6 +954,7 @@ pub(crate) fn builtin_display_backing_store(
 }
 
 /// Context-aware variant of `display-save-under`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_save_under(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -939,6 +964,7 @@ pub(crate) fn builtin_display_save_under(
 }
 
 /// Context-aware variant of `display-selections-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_selections_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -977,6 +1003,7 @@ pub(crate) fn builtin_window_system(
 }
 
 /// Context-aware variant of `frame-edges`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_edges(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-edges", &args, 0, 2)?;
     if let Some(frame) = args.first() {
@@ -993,6 +1020,7 @@ pub(crate) fn builtin_frame_edges(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 /// Context-aware variant of `display-images-p`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_images_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1133,6 +1161,7 @@ fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
 }
 
 /// (x-popup-dialog POSITION CONTENTS &optional HEADER) -> nil/error in batch context.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_x_popup_dialog_batch(args: Vec<Value>) -> EvalResult {
     validate_x_popup_dialog_args(&args)?;
     Ok(Value::NIL)
@@ -1150,7 +1179,7 @@ fn popup_menu_key_event_from_path(path: &[Value]) -> Value {
 }
 
 fn popup_menu_item_from_binding(
-    key: Value,
+    _key: Value,
     def: Value,
     depth: u32,
     is_tty: bool,
@@ -1275,13 +1304,21 @@ struct PopupMenuPosition {
 
 #[derive(Clone, Copy, Debug)]
 struct PopupMenuPositionDebug {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     top_level_xy: Option<(f32, f32)>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     posn_len: Option<usize>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     area: Option<&'static str>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     posn_xy: Option<(f32, f32)>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     anchor_xy: Option<(f32, f32)>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     width_height: Option<(f32, f32)>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     frame_id: Option<FrameId>,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     frame_menu_bar_height: Option<u32>,
     used_anchor: bool,
     used_pending_anchor: bool,
@@ -1851,7 +1888,7 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         let window_designator = match position_cdr.kind() {
             ValueKind::Cons => {
                 let pair_car = position_cdr.cons_car();
-                let pair_cdr = position_cdr.cons_cdr();
+                let _pair_cdr = position_cdr.cons_cdr();
                 pair_car
             }
             _ => Value::NIL,
@@ -1996,6 +2033,7 @@ pub(crate) fn builtin_x_focus_frame(eval: &mut Context, args: Vec<Value>) -> Eva
 }
 
 /// (x-get-clipboard) -> nil in batch/no-X context.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_x_get_clipboard(args: Vec<Value>) -> EvalResult {
     expect_args("x-get-clipboard", &args, 0)?;
     Ok(Value::NIL)
@@ -2031,6 +2069,7 @@ pub(crate) fn builtin_x_show_tip(args: Vec<Value>) -> EvalResult {
 }
 
 /// (x-setup-function-keys TERMINAL) -> nil/error in batch/no-X context.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_x_setup_function_keys(args: Vec<Value>) -> EvalResult {
     expect_args("x-setup-function-keys", &args, 1)?;
     match args[0].kind() {
@@ -2112,6 +2151,7 @@ pub(crate) fn builtin_x_get_resource(
     Err(window_system_not_initialized_error())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_x_apply_session_resources(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2202,12 +2242,14 @@ pub(crate) fn builtin_x_own_selection_internal(args: Vec<Value>) -> EvalResult {
 }
 
 /// (gui-get-selection &optional TYPE DATA-TYPE) -> nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gui_get_selection(args: Vec<Value>) -> EvalResult {
     expect_max_args("gui-get-selection", &args, 2)?;
     Ok(Value::NIL)
 }
 
 /// (gui-get-primary-selection) -> error in batch/no-X context.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gui_get_primary_selection(args: Vec<Value>) -> EvalResult {
     expect_args("gui-get-primary-selection", &args, 0)?;
     Err(signal(
@@ -2217,18 +2259,21 @@ pub(crate) fn builtin_gui_get_primary_selection(args: Vec<Value>) -> EvalResult 
 }
 
 /// (gui-select-text TEXT) -> nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gui_select_text(args: Vec<Value>) -> EvalResult {
     expect_args("gui-select-text", &args, 1)?;
     Ok(Value::NIL)
 }
 
 /// (gui-selection-value) -> nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gui_selection_value(args: Vec<Value>) -> EvalResult {
     expect_args("gui-selection-value", &args, 0)?;
     Ok(Value::NIL)
 }
 
 /// (gui-set-selection TYPE VALUE) -> nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gui_set_selection(args: Vec<Value>) -> EvalResult {
     expect_args("gui-set-selection", &args, 2)?;
     Ok(Value::NIL)
@@ -2520,6 +2565,7 @@ pub(crate) fn builtin_x_display_pixel_height(
 /// Context-aware variant of `display-monitor-attributes-list`.
 ///
 /// This populates the `frames` slot from the live frame list.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_monitor_attributes_list(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2539,6 +2585,7 @@ pub(crate) fn builtin_display_monitor_attributes_list(
 /// Context-aware variant of `frame-monitor-attributes`.
 ///
 /// This populates the `frames` slot from the live frame list.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_monitor_attributes(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2556,6 +2603,7 @@ pub(crate) fn builtin_frame_monitor_attributes(
 }
 
 /// Build a single monitor alist with reasonable default values.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_monitor_alist(frames: Value) -> Value {
     // geometry: (x y width height)
     let geometry = Value::list(vec![

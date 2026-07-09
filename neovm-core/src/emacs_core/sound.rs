@@ -20,12 +20,16 @@ use strum::{EnumString, IntoStaticStr};
 // ---------------------------------------------------------------------------
 
 struct SoundSpec {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     file: Option<String>,
     #[cfg(feature = "sound")]
     data: Option<Vec<u8>>,
     #[cfg(not(feature = "sound"))]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     has_data: bool,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     volume: f32,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     device: Option<String>,
 }
 

@@ -44,10 +44,7 @@ pub(crate) trait FromValue: Sized {
 
 /// Build the canonical `(wrong-type-argument PREDICATE value)` signal.
 pub(crate) fn wrong_type(predicate: &str, value: Value) -> Flow {
-    signal(
-        "wrong-type-argument",
-        vec![Value::symbol(predicate), value],
-    )
+    signal("wrong-type-argument", vec![Value::symbol(predicate), value])
 }
 
 /// Identity: accepts any value. Lets a typed signature keep raw `Value`
@@ -140,6 +137,7 @@ impl FromValue for LispCharPos1 {
 /// `fixnump` — strictly a fixnum (bignums rejected), mirroring
 /// `expect_fixnum` / GNU `CHECK_FIXNUM`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) struct Fixnum(pub(crate) i64);
 
 impl FromValue for Fixnum {
@@ -151,6 +149,7 @@ impl FromValue for Fixnum {
 /// `wholenump` — a non-negative fixnum, mirroring `expect_wholenump` /
 /// GNU `CHECK_FIXNAT`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) struct Wholenum(pub(crate) i64);
 
 impl FromValue for Wholenum {
@@ -162,6 +161,7 @@ impl FromValue for Wholenum {
 /// `characterp` — a valid Emacs character code (0..=0x3FFFFF), mirroring
 /// `expect_character_code` / GNU `CHECK_CHARACTER`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) struct CharacterCode(pub(crate) i64);
 
 impl FromValue for CharacterCode {

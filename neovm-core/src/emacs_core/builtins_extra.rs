@@ -17,8 +17,6 @@ use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
-#[cfg(unix)]
-use std::ffi::CStr;
 use std::fs;
 
 // ---------------------------------------------------------------------------
@@ -61,7 +59,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *val],
         )),
@@ -71,7 +69,7 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
 fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *val],
         )),
@@ -109,7 +107,7 @@ fn list_car_or_signal(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
         ValueKind::Cons => Ok(value.cons_car()),
         ValueKind::Nil => Ok(Value::NIL),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), *value],
         )),
@@ -211,6 +209,7 @@ fn assoc_string_downcase(codes: &[u32]) -> Vec<u32> {
         .collect()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
     match val.kind() {
         ValueKind::Nil => Ok(Vec::new()),
@@ -226,7 +225,7 @@ fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
                         result.push(pair_car);
                         cursor = pair_cdr;
                     }
-                    tail => {
+                    _tail => {
                         return Err(signal(
                             "wrong-type-argument",
                             vec![Value::symbol("listp"), cursor],
@@ -244,7 +243,7 @@ fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
         .into_iter()
         .map(|code| Value::fixnum(code as i64))
         .collect()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), *val],
         )),
@@ -255,6 +254,7 @@ fn collect_sequence_strict(val: &Value) -> Result<Vec<Value>, Flow> {
 // Advanced list operations
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn remove_list_equal(args: Vec<Value>) -> EvalResult {
     expect_args("remove", &args, 2)?;
     let target = &args[0];
@@ -305,7 +305,7 @@ pub(crate) fn builtin_take(args: Vec<Value>) -> EvalResult {
                 result.push(pair_car);
                 cursor = pair_cdr;
             }
-            tail => {
+            _tail => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("listp"), cursor],
@@ -450,6 +450,7 @@ pub(crate) fn builtin_subrp(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(bare-symbol SYMBOL-OR-SYMBOL-WITH-POS)` -> symbol.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bare_symbol(args: Vec<Value>) -> EvalResult {
     expect_args("bare-symbol", &args, 1)?;
     bare_symbol_value(args[0])
@@ -546,12 +547,14 @@ pub(crate) fn builtin_byte_code_function_p(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(compiled-function-p OBJ)` -> t if compiled function.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_compiled_function_p(args: Vec<Value>) -> EvalResult {
     expect_args("compiled-function-p", &args, 1)?;
     Ok(Value::bool_val(args[0].is_bytecode()))
 }
 
 /// `(closurep OBJ)` -> t if closure.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_closurep(args: Vec<Value>) -> EvalResult {
     expect_args("closurep", &args, 1)?;
     Ok(Value::bool_val(
@@ -577,6 +580,7 @@ pub(crate) fn builtin_natnump(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(zerop OBJ)` -> t if zero.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_zerop(args: Vec<Value>) -> EvalResult {
     expect_args("zerop", &args, 1)?;
     let is_zero = match args[0].kind() {
@@ -851,6 +855,7 @@ fn operating_system_release() -> Option<String> {
 }
 
 /// `(emacs-version)` -> string.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_emacs_version(args: Vec<Value>) -> EvalResult {
     expect_max_args("emacs-version", &args, 1)?;
     if args.first().is_some_and(|arg| !arg.is_nil()) {

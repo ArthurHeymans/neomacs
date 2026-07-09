@@ -1,6 +1,5 @@
 use super::super::intern::intern;
 use super::*;
-use crate::emacs_core::value::ValueKind;
 use crate::test_utils::{runtime_startup_context, runtime_startup_eval_all};
 
 fn bootstrap_context() -> crate::emacs_core::Context {

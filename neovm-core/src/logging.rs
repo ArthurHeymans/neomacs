@@ -243,7 +243,7 @@ fn open_file_layer(
 }
 
 fn file_layer_for(
-    target: LogTarget,
+    _target: LogTarget,
 ) -> (
     Option<BoxedLayer>,
     Option<tracing_appender::non_blocking::WorkerGuard>,

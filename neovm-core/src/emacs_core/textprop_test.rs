@@ -7,7 +7,6 @@ use crate::emacs_core::builtins::{
     builtin_previous_char_property_change, builtin_previous_property_change,
 };
 use crate::emacs_core::error::Flow;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
 use malachite::Integer;
 
 /// Helper: create an evaluator with a buffer containing the given text.

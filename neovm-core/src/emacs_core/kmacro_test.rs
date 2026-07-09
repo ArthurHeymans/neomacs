@@ -989,7 +989,7 @@ fn test_name_last_kbd_macro() {
             let items = func.unwrap().as_vector_data().unwrap().clone();
             assert_eq!(items.len(), 1);
         }
-        other => panic!("Expected Vector, got {:?}", func.unwrap()),
+        _other => panic!("Expected Vector, got {:?}", func.unwrap()),
     }
 }
 
@@ -997,7 +997,6 @@ fn test_name_last_kbd_macro() {
 fn test_name_last_kbd_macro_wrong_type() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
-    use crate::emacs_core::value::{ValueKind, VecLikeType};
 
     let mut eval = Context::new();
 
@@ -1060,7 +1059,7 @@ fn test_resolve_macro_events_string() {
     assert_eq!(events.len(), 5);
     match events[0].kind() {
         ValueKind::Fixnum(n) if n == 'h' as i64 => {}
-        other => panic!("Expected Char('h'), got {:?}", events[0]),
+        _other => panic!("Expected Char('h'), got {:?}", events[0]),
     }
 }
 

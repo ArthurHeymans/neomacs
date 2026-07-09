@@ -16,7 +16,7 @@ use crate::buffer::{
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
 use std::borrow::Cow;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 
 // Sentinel constants removed — no longer needed with Vec<u8> LispString
 
@@ -93,6 +93,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -629,6 +630,7 @@ fn checked_buffer_hash_lisp_region(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn normalize_current_buffer_region_bounds(
     eval: &super::eval::Context,
     start_arg: &Value,
@@ -1227,6 +1229,7 @@ pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Val
 
 /// (equal-including-properties O1 O2)
 /// Like `equal`, but also compares text properties of strings.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_equal_including_properties(args: Vec<Value>) -> EvalResult {
     expect_args("equal-including-properties", &args, 2)?;
     Ok(Value::bool_val(try_equal_value_including_properties(
@@ -1251,6 +1254,7 @@ pub(crate) fn builtin_equal_including_properties_2(
 /// (widget-get WIDGET PROPERTY)
 /// WIDGET is a list (plist-like).  Extract PROPERTY from the widget's plist
 /// tail (skip car which is the widget type).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_widget_get(args: Vec<Value>) -> EvalResult {
     expect_args("widget-get", &args, 2)?;
     let widget = &args[0];
@@ -1274,6 +1278,7 @@ pub(crate) fn builtin_widget_get(args: Vec<Value>) -> EvalResult {
 /// (widget-put WIDGET PROPERTY VALUE)
 /// Set PROPERTY to VALUE in the widget plist. Returns VALUE.
 /// Since widgets are mutable lists, we modify in-place by walking cons cells.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_widget_put(args: Vec<Value>) -> EvalResult {
     expect_args("widget-put", &args, 3)?;
     let widget = &args[0];
@@ -1283,7 +1288,7 @@ pub(crate) fn builtin_widget_put(args: Vec<Value>) -> EvalResult {
     // Walk the cdr of WIDGET (skip the type cons cell) looking for PROPERTY.
     if widget.is_cons() {
         let mut cursor = {
-            let cell_car = widget.cons_car();
+            let _cell_car = widget.cons_car();
             let cell_cdr = widget.cons_cdr();
             cell_cdr
         };
@@ -1292,7 +1297,7 @@ pub(crate) fn builtin_widget_put(args: Vec<Value>) -> EvalResult {
                 ValueKind::Cons => {
                     let key = {
                         let cell_car = cursor.cons_car();
-                        let cell_cdr = cursor.cons_cdr();
+                        let _cell_cdr = cursor.cons_cdr();
                         cell_car
                     };
                     if equal_value(&key, property, 0) {
@@ -1332,6 +1337,7 @@ pub(crate) fn builtin_widget_put(args: Vec<Value>) -> EvalResult {
 
 /// (widget-apply WIDGET PROPERTY &rest ARGS)
 /// Apply WIDGET's PROPERTY function to WIDGET and ARGS.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_widget_apply(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

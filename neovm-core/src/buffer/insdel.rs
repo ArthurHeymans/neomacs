@@ -4,20 +4,18 @@
 //! `insdel.c`-style boundary. It rehomes the existing `Buffer` edit core
 //! without changing behavior.
 
-use super::{Buffer, BufferId, BufferManager, TextPropertyTable};
+use super::{Buffer, BufferId, BufferManager};
 use crate::buffer::edit_transaction::{
-    BufferEditState, DeleteSideEffectPolicy, DeleteTextPlan, InsertMarkerAdjustment,
-    InsertMarkerPlacement, InsertSideEffectPolicy, InsertTextPlan, MeasuredDeleteEdit,
-    MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceSideEffectPolicy,
-    ReplaceTextPlan, SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
-    SharedTextEditOutcome, SharedTextEditStatePolicy, TranspositionStoragePlan,
-    char_pos_for_emacs_byte, emacs_byte_for_char_pos, lisp_string_from_buffer_bytes,
-    modification_tick_delta,
+    InsertMarkerAdjustment, InsertMarkerPlacement, InsertTextPlan, MeasuredDeleteEdit,
+    MeasuredInsertEdit, MeasuredReplaceEdit, MeasuredSameLenEdit, ReplaceTextPlan,
+    SameLenModifiedStatePolicy, SameLenSubstitutionPlan, SharedTextEditMetadata,
+    SharedTextEditOutcome, TranspositionStoragePlan,
 };
-use crate::buffer::undo;
+#[cfg(test)]
+use crate::buffer::position::EmacsByteLen;
 use crate::buffer::{
-    CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextEditRange,
-    TextExtent, TextInsertion, TextPositionAnchor, TextReplacement, TextTransposition,
+    CharRange, EmacsBytePos, EmacsByteRange, TextEditRange, TextExtent, TextInsertion,
+    TextReplacement, TextTransposition,
 };
 use crate::heap_types::LispString;
 

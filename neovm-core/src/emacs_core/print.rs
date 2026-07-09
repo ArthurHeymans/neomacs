@@ -1221,6 +1221,7 @@ fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut 
     });
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_bytecode_literal(value: &Value, options: PrintOptions) -> String {
     with_bytecode_literal_slots(value, |slots| {
         let parts: Vec<String> = slots
@@ -1313,6 +1314,7 @@ fn value_is_symbol_named(value: &Value, name: &str) -> bool {
 
 /// GNU prints a window-configuration as the opaque pseudovector
 /// `#<window-configuration>`; detect it by its distinct type tag.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_window_configuration_value(value: &Value) -> bool {
     value.is_window_configuration()
 }
@@ -1746,6 +1748,7 @@ pub fn print_value_with_buffers_and_options(
     print_value_stateful_with_buffers(value, Some(buffers), options)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn print_list_shorthand_with_buffers(
     value: &Value,
     buffers: &crate::buffer::BufferManager,
@@ -1796,6 +1799,7 @@ fn print_list_shorthand_with_buffers(
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn print_cons_with_buffers(
     value: &Value,
     out: &mut String,
@@ -2180,6 +2184,7 @@ fn append_symbol_bytes(id: super::intern::SymId, out: &mut Vec<u8>, options: Pri
     out.extend_from_slice(&symbol_bytes(id, options));
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_symbol_name(name: &str) -> String {
     if name.is_empty() {
         return "##".to_string();
@@ -2271,6 +2276,7 @@ fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn append_symbol_name_bytes(name: &crate::heap_types::LispString, out: &mut Vec<u8>) {
     append_symbol_name_bytes_with_escape(name, out, true);
 }
@@ -2672,6 +2678,7 @@ fn format_interpreted_closure(value: &Value, options: PrintOptions) -> String {
         .unwrap_or_else(|| "#[]".to_string())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn print_list_shorthand(value: &Value, options: PrintOptions) -> Option<String> {
     let items = list_to_vec(value)?;
     if items.len() != 2 {
@@ -2770,6 +2777,7 @@ fn quote_payload(value: &Value) -> Option<Value> {
     value_is_symbol_named(&items[0], "quote").then_some(items[1])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn print_cons(value: &Value, out: &mut String, options: PrintOptions) {
     let mut cursor = *value;
     let mut first = true;
@@ -2893,6 +2901,7 @@ fn append_bool_vector_bytes(value: &Value, nbits: usize, out: &mut Vec<u8>) {
 
 // -- Hash-table printing ----------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_hash_table(value: &Value, options: PrintOptions) -> String {
     let table = value.as_hash_table().unwrap().clone();
     let mut out = String::from("#s(hash-table");

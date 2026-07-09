@@ -6,12 +6,12 @@ use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
 use crate::emacs_core::fontset;
+use crate::emacs_core::indent;
 use crate::emacs_core::intern::{
     NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id, resolve_sym_lisp_string,
 };
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
-use crate::emacs_core::{indent, xdisp};
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -192,6 +192,7 @@ pub(crate) fn resolve_variable_alias_id(
     resolve_variable_alias_id_in_obarray(&eval.obarray, symbol)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn resolve_variable_alias_name(
     eval: &super::eval::Context,
     name: &str,
@@ -199,6 +200,7 @@ pub(crate) fn resolve_variable_alias_name(
     resolve_variable_alias_name_in_obarray(&eval.obarray, name)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn resolve_variable_alias_name_in_obarray(
     obarray: &Obarray,
     name: &str,
@@ -206,6 +208,7 @@ pub(crate) fn resolve_variable_alias_name_in_obarray(
     Ok(resolve_sym(resolve_variable_alias_id_in_obarray(obarray, intern(name))?).to_string())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn would_create_variable_alias_cycle(eval: &super::eval::Context, new: &str, old: &str) -> bool {
     would_create_variable_alias_cycle_in_obarray(eval.obarray(), intern(new), intern(old))
 }
@@ -234,6 +237,7 @@ pub(crate) fn would_create_variable_alias_cycle_in_obarray(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_boundp(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("boundp", &args, 1)?;
     builtin_boundp_1(eval, args[0])
@@ -261,6 +265,7 @@ pub(crate) fn builtin_obarrayp(args: Vec<Value>) -> EvalResult {
     Ok(Value::bool_val(is_obarray_value(args[0])))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_special_variable_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -533,6 +538,7 @@ pub(crate) fn builtin_internal_delete_indirect_variable(
     Ok(args[0])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_fboundp(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("fboundp", &args, 1)?;
     builtin_fboundp_1(eval, args[0])
@@ -546,6 +552,7 @@ pub(crate) fn builtin_fboundp_1(eval: &mut super::eval::Context, arg: Value) -> 
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_symbol_value(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -572,6 +579,7 @@ pub(super) fn startup_virtual_autoload_function_cell(
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_symbol_function(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -585,11 +593,13 @@ pub(crate) fn builtin_symbol_function_1(eval: &mut super::eval::Context, arg: Va
 }
 
 /// Obarray-only implementation shared by `builtin_symbol_function` and doc.rs.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn symbol_function_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResult {
     expect_args("symbol-function", &args, 1)?;
     symbol_function_impl_1(obarray, args[0])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn symbol_function_impl_1(obarray: &Obarray, arg: Value) -> EvalResult {
     symbol_function_impl_1_checked(obarray, arg, false)
 }
@@ -663,6 +673,7 @@ fn dispatch_symbol_func_arity_override_in_obarray(
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("set", &args, 2)?;
     builtin_set_2(eval, args[0], args[1])
@@ -723,6 +734,7 @@ pub(crate) fn builtin_fset_2(
     Ok(def)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn would_create_function_alias_cycle(
     eval: &super::eval::Context,
     target_symbol: SymId,
@@ -995,6 +1007,7 @@ fn symbol_has_valid_ccl_program_idx_in_obarray(
     Ok(idx.as_int().is_some_and(|n| n >= 0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn symbol_has_valid_ccl_program_idx(
     eval: &mut super::eval::Context,
     symbol: &Value,
@@ -1222,6 +1235,7 @@ fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
     Ok((expanded, did_expand))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_macroexpand_with_runtime<R: MacroexpandRuntime>(
     runtime: &mut R,
     args: Vec<Value>,
@@ -1264,6 +1278,7 @@ pub(crate) fn builtin_indirect_function(
 }
 
 /// Obarray-only implementation shared by `builtin_indirect_function` and doc.rs.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn indirect_function_impl(obarray: &Obarray, args: Vec<Value>) -> EvalResult {
     indirect_function_impl_checked(obarray, args, false)
 }
@@ -1358,6 +1373,7 @@ pub(crate) fn resolve_indirect_symbol_by_id(
     resolve_indirect_symbol_by_id_in_obarray(eval.obarray(), symbol)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_indirect_symbol_with_name(
     eval: &super::eval::Context,
     name: &str,
@@ -1366,6 +1382,7 @@ fn resolve_indirect_symbol_with_name(
         .map(|(resolved, value)| (resolve_sym(resolved).to_string(), value))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn resolve_indirect_symbol(eval: &super::eval::Context, name: &str) -> Option<Value> {
     resolve_indirect_symbol_with_name(eval, name).map(|(_, value)| value)
 }
@@ -1402,6 +1419,7 @@ pub(crate) fn obarray_hash_lisp_string(s: &crate::heap_types::LispString, len: u
     obarray_hash_bytes(normalized.as_bytes(), len)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn obarray_hash(s: &str, len: usize) -> usize {
     obarray_hash_bytes(s.as_bytes(), len)
 }
@@ -1557,7 +1575,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
         if !matches!(header.kind, crate::tagged::header::HeapObjectKind::String) {
             // Dump bc_buf state for debugging
             let bc_buf_len = eval.bc_buf.len();
-            let bc_frames_len = eval.bc_frames.len();
+            let _bc_frames_len = eval.bc_frames.len();
             let bc_frames_info: Vec<String> = eval
                 .bc_frames
                 .iter()
@@ -1845,11 +1863,13 @@ pub(crate) fn builtin_make_temp_file_internal(
     super::fileio::builtin_make_temp_file_internal(eval, args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibuffer_innermost_command_loop_p(args: Vec<Value>) -> EvalResult {
     expect_range_args("minibuffer-innermost-command-loop-p", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibuffer_prompt_end(args: Vec<Value>) -> EvalResult {
     expect_args("minibuffer-prompt-end", &args, 0)?;
     Ok(Value::fixnum(1))
@@ -2580,6 +2600,7 @@ pub(crate) fn builtin_map_charset_chars(
 
 // map-keymap and map-keymap-internal are now eval-backed in keymaps.rs
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_mapbacktrace(args: Vec<Value>) -> EvalResult {
     expect_range_args("mapbacktrace", &args, 1, 2)?;
     match args[0].kind() {
@@ -3140,6 +3161,7 @@ pub(crate) fn builtin_record(args: Vec<Value>) -> EvalResult {
     Ok(Value::make_record(args))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_recordp(args: Vec<Value>) -> EvalResult {
     expect_args("recordp", &args, 1)?;
     Ok(Value::bool_val(args[0].is_record()))
@@ -3164,6 +3186,7 @@ pub(crate) fn builtin_query_fontset(args: Vec<Value>) -> EvalResult {
     Ok(fontset::query_fontset_registry(&pattern, regexpp).map_or(Value::NIL, Value::string))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_recent_auto_save_p(args: Vec<Value>) -> EvalResult {
     expect_args("recent-auto-save-p", &args, 0)?;
     Ok(Value::NIL)
@@ -3220,6 +3243,7 @@ pub(crate) fn builtin_redirect_debugging_output(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_redirect_frame_focus(args: Vec<Value>) -> EvalResult {
     expect_range_args("redirect-frame-focus", &args, 1, 2)?;
     if !args[0].is_nil() && !args[0].is_frame() {
@@ -3280,6 +3304,7 @@ pub(crate) fn builtin_resize_mini_window_internal(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_restore_buffer_modified_p(args: Vec<Value>) -> EvalResult {
     expect_args("restore-buffer-modified-p", &args, 1)?;
     Ok(args[0])
@@ -3295,6 +3320,7 @@ pub(crate) fn builtin_set_this_command_keys(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_buffer_auto_saved(args: Vec<Value>) -> EvalResult {
     expect_args("set-buffer-auto-saved", &args, 0)?;
     Ok(Value::NIL)
@@ -3349,6 +3375,7 @@ pub(crate) fn builtin_set_fontset_font(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_frame_window_state_change(args: Vec<Value>) -> EvalResult {
     expect_range_args("set-frame-window-state-change", &args, 0, 2)?;
     if let Some(frame) = args.first() {
@@ -3744,6 +3771,7 @@ pub(crate) fn builtin_tty_suppress_bold_inverse_default_colors(args: Vec<Value>)
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_unicode_property_table_internal(args: Vec<Value>) -> EvalResult {
     expect_args("unicode-property-table-internal", &args, 1)?;
     Ok(Value::NIL)
@@ -4237,6 +4265,7 @@ pub(crate) fn builtin_xw_display_color_p_ctx(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_innermost_minibuffer_p(args: Vec<Value>) -> EvalResult {
     expect_range_args("innermost-minibuffer-p", &args, 0, 1)?;
     Ok(Value::NIL)
@@ -4317,7 +4346,7 @@ fn interactive_form_from_quoted_interactive_form(form: &Value) -> Result<Option<
         ]))),
         ValueKind::Cons => {
             let arg_pair_car = pair_cdr.cons_car();
-            let arg_pair_cdr = pair_cdr.cons_cdr();
+            let _arg_pair_cdr = pair_cdr.cons_cdr();
             Ok(Some(Value::list(vec![
                 Value::symbol("interactive"),
                 arg_pair_car,
@@ -4384,11 +4413,13 @@ fn interactive_form_from_bytecode_value(function: Value) -> Option<Value> {
     Some(Value::list(vec![Value::symbol("interactive"), spec_val]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) enum InteractiveFormPlan {
     Return(Value),
     Autoload { fundef: Value, funname: Value },
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn plan_interactive_form_in_state(
     obarray: &Obarray,
     interactive: &crate::emacs_core::interactive::InteractiveRegistry,
@@ -4706,6 +4737,7 @@ pub(crate) fn builtin_local_variable_if_set_p(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
     expect_range_args("lock-buffer", &args, 0, 1)?;
     if let Some(filename) = args.first() {
@@ -4716,6 +4748,7 @@ pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lock_file(args: Vec<Value>) -> EvalResult {
     expect_args("lock-file", &args, 1)?;
     let _ = expect_lisp_string(&args[0])?;
@@ -4764,11 +4797,13 @@ pub(crate) fn builtin_lossage_size(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(LOSSAGE_SIZE.with(|slot| *slot.borrow())))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_unlock_buffer(args: Vec<Value>) -> EvalResult {
     expect_args("unlock-buffer", &args, 0)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_unlock_file(args: Vec<Value>) -> EvalResult {
     expect_args("unlock-file", &args, 1)?;
     let _ = expect_lisp_string(&args[0])?;
@@ -5834,16 +5869,19 @@ pub(crate) fn builtin_dump_emacs_portable_sort_predicate_copied(args: Vec<Value>
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_byte_code(args: Vec<Value>) -> EvalResult {
     expect_args("byte-code", &args, 3)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_decode_coding_region(args: Vec<Value>) -> EvalResult {
     expect_range_args("decode-coding-region", &args, 3, 4)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_encode_coding_region(args: Vec<Value>) -> EvalResult {
     expect_range_args("encode-coding-region", &args, 3, 4)?;
     Ok(Value::NIL)
@@ -6239,6 +6277,7 @@ pub(crate) fn closure_from_reader_literal_slots(slots: &[Value]) -> EvalResult {
 
 /// Core logic for constructing a `Value::ByteCode` from GNU-style parts.
 /// Used by both `make-byte-code` builtin and `sf_byte_code_literal`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn make_byte_code_from_parts(
     arglist: &Value,
     bytecode_str: &Value,
@@ -6395,7 +6434,7 @@ pub(crate) fn make_interpreted_closure_from_parts(
     docstring: Option<&Value>,
     interactive: Option<&Value>,
 ) -> EvalResult {
-    let docstring_value = docstring.copied().unwrap_or(Value::NIL);
+    let _docstring_value = docstring.copied().unwrap_or(Value::NIL);
     let iform = interactive.copied().unwrap_or(Value::NIL);
 
     check_interpreted_closure_args(params_value)?;
@@ -6574,6 +6613,7 @@ fn quote_payload_value(value: Value) -> Option<Value> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
     expect_range_args("make-char", &args, 1, 5)?;
     let Some(charset) = args[0].as_symbol_name() else {
@@ -6598,10 +6638,12 @@ pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn invalid_make_char_code() -> Flow {
     signal("error", vec![Value::string("Invalid code(s)")])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn default_charset_code(charset: &str) -> Option<i64> {
     match charset {
         "ascii" => Some(0),
@@ -6611,6 +6653,7 @@ fn default_charset_code(charset: &str) -> Option<i64> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_char_code(charset: &str, code1: i64) -> Option<u32> {
     if code1 < 0 {
         return None;

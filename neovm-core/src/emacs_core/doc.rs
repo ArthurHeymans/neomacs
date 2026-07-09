@@ -163,6 +163,7 @@ fn documentation_plan(
     Ok((plan, lisp_directory))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_documentation_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: Vec<Value>,
@@ -305,7 +306,7 @@ fn function_doc_or_error(func_val: Value) -> EvalResult {
                 .as_ref()
                 .map_or(Value::NIL, |doc| Value::heap_string(doc.clone())))
         }
-        other => Err(signal("invalid-function", vec![func_val])),
+        _other => Err(signal("invalid-function", vec![func_val])),
     }
 }
 
@@ -325,7 +326,7 @@ fn quoted_lambda_documentation(function: &Value) -> Option<EvalResult> {
     if !tail.is_cons() {
         return Some(Err(signal("invalid-function", vec![*function])));
     };
-    let params_and_body_car = tail.cons_car();
+    let _params_and_body_car = tail.cons_car();
     let params_and_body_cdr = tail.cons_cdr();
     tail = params_and_body_cdr;
 
@@ -333,14 +334,14 @@ fn quoted_lambda_documentation(function: &Value) -> Option<EvalResult> {
         ValueKind::Nil => Some(Ok(Value::NIL)),
         ValueKind::Cons => {
             let body_car = tail.cons_car();
-            let body_cdr = tail.cons_cdr();
+            let _body_cdr = tail.cons_cdr();
             if body_car.is_string() {
                 Some(Ok(body_car))
             } else {
                 Some(Ok(Value::NIL))
             }
         }
-        other => Some(Err(signal(
+        _other => Some(Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), tail],
         ))),
@@ -8114,6 +8115,7 @@ fn documentation_property_plan(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_documentation_property_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: Vec<Value>,

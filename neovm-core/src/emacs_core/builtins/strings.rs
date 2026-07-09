@@ -10,7 +10,6 @@ use malachite::base::num::basic::traits::Zero;
 use malachite::base::num::conversion::traits::{FromStringBase, RoundingFrom, ToStringBase};
 use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
-use std::str::FromStr;
 
 // ===========================================================================
 // String operations
@@ -682,6 +681,7 @@ pub(crate) fn builtin_number_to_string(
 }
 
 /// Pure form (tests + internal callers); uses the standard case table only.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_upcase(args: Vec<Value>) -> EvalResult {
     upcase_with_override(args, super::super::casetab::CaseTableOverride::none())
 }
@@ -890,6 +890,7 @@ fn transform_string_case(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn upcase_string_emacs_compat(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -939,6 +940,7 @@ fn preserve_emacs_upcase_string_payload(code: i64) -> bool {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn runtime_string_result_multibyte(source_is_multibyte: bool, rendered: &str) -> bool {
     if source_is_multibyte {
         return true;
@@ -1066,6 +1068,7 @@ pub(crate) fn builtin_downcase_in_state(
     downcase_with_word_pred(args, is_word, casetab)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn downcase_string_emacs_compat(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -1109,6 +1112,7 @@ pub(crate) fn builtin_ngettext(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_format(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     // With specbind, dynamic let-bindings are written directly to the obarray,
     // so print_options_from_state correctly resolves print-* variables.
@@ -1336,7 +1340,7 @@ fn apply_width(s: &str, spec: &FormatSpec) -> String {
         Some(w) if w > s.chars().count() => w,
         _ => return s.to_string(),
     };
-    let pad_char = if spec.zero && !spec.minus { '0' } else { ' ' };
+    let _pad_char = if spec.zero && !spec.minus { '0' } else { ' ' };
     if spec.minus {
         format!("{:<width$}", s, width = w)
     } else if spec.zero && !spec.minus {
@@ -1753,6 +1757,7 @@ fn push_format_literal_code(
 /// Defaults to `true` for value kinds whose printed form cannot carry a raw
 /// sentinel (numbers, symbols — symbol names are already valid `&str`), and is
 /// conservative (`false`) past a depth bound to stay cycle-safe.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn value_render_pure_unicode(v: Value, depth: u32) -> bool {
     if depth > 64 {
         return false;
@@ -2097,6 +2102,7 @@ fn build_format_result(
     result
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_format_wrapper_strict(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2307,7 +2313,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
             }
             c as u32
         }
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("characterp"), args[1]],
@@ -2351,6 +2357,7 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_string(args: Vec<Value>) -> EvalResult {
     builtin_string_slice(&args)
 }
@@ -2400,7 +2407,7 @@ pub(crate) fn builtin_unibyte_string(args: Vec<Value>) -> EvalResult {
     for arg in args {
         let n = match arg.kind() {
             ValueKind::Fixnum(v) => v,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), arg],

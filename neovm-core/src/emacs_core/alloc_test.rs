@@ -1,5 +1,6 @@
 use super::*;
 use crate::emacs_core::eval::Context;
+use crate::emacs_core::value::list_to_vec;
 
 #[test]
 fn register_bootstrap_vars_matches_gnu_alloc_defaults() {

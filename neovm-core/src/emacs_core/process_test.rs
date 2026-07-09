@@ -7,31 +7,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// Create an evaluator with minimal Elisp shims for process testing.
-/// These shims mirror GNU Emacs Elisp functions that wrap C-level builtins.
-fn eval_with_process_shims() -> Context {
-    let mut ev = Context::new();
-    // Define minimal Elisp shims matching GNU Emacs subr.el/env.el
-    let shims = r#"
-(defalias 'getenv #'(lambda (variable &optional frame)
-  (getenv-internal variable)))
-(defalias 'setenv #'(lambda (variable &optional value substitute)
-  (setenv-internal variable value t)))
-(defalias 'start-process #'(lambda (name buffer program &rest args)
-  (make-process :name name :buffer buffer
-                :command (if program (cons program args)))))
-(defalias 'start-process-shell-command #'(lambda (name buffer command)
-  (start-process name buffer shell-file-name
-                 shell-command-switch command)))
-(defalias 'shell-command-to-string #'(lambda (command)
-  (with-output-to-string
-    (call-process shell-file-name nil standard-output nil
-                  shell-command-switch command))))
-"#;
-    let _ = ev.eval_str(shims);
-    ev
-}
-
 #[test]
 fn process_finite_domains_match_gnu_symbols() {
     assert_eq!(ProcessKind::Real.name(), "real");

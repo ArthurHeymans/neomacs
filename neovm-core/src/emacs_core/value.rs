@@ -15,7 +15,6 @@ use malachite::integer::Integer;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -24,19 +23,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use strum::{EnumString, IntoStaticStr};
 
 use super::error::{Flow, signal};
-use super::intern::{SymId, intern, resolve_sym};
+use super::intern::{SymId, intern};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyPlistRun, TextPropertyTable};
 use crate::buffer::{CharPos0, CharRange, EmacsBytePos};
-use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{
     HeapWriteKind, MEMORY_USE_COUNT_LEN, MemoryUseCountSlot, note_heap_write, with_tagged_heap,
 };
 use crate::tagged::header::{
-    BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FloatObj, FrameObj,
-    HashTableObj, LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj,
-    ProcessObj, RecordObj, StringObj, SubCharTableObj, TimerObj, VecLikeHeader, VectorObj,
-    WindowObj, XwidgetObj, XwidgetViewObj,
+    BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FrameObj, HashTableObj,
+    LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj, ProcessObj, RecordObj,
+    StringObj, SubCharTableObj, TimerObj, VectorObj, WindowObj, XwidgetObj, XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -138,6 +135,7 @@ impl OrderedSymMap {
     }
 
     /// Reconstruct from a vec of entries (for pdump load).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_entries(entries: Vec<(SymId, Value)>) -> Self {
         Self { entries }
     }
@@ -248,6 +246,7 @@ impl OrderedRuntimeBindingMap {
         self.entries.len()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_entries(entries: Vec<(SymId, RuntimeBindingValue)>) -> Self {
         Self { entries }
     }
@@ -526,7 +525,6 @@ impl LambdaParams {
 
 use crate::tagged::header::{
     CLOSURE_ARGLIST, CLOSURE_CODE, CLOSURE_CONSTANTS, CLOSURE_DOC_STRING, CLOSURE_INTERACTIVE,
-    CLOSURE_MIN_SLOTS, CLOSURE_STACK_DEPTH,
 };
 
 impl LambdaData {
@@ -697,6 +695,7 @@ impl HashTableMakeKeyword {
         Self::from_symbol_name(value.as_symbol_name()?)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn name(self) -> &'static str {
         self.into()
     }
@@ -723,6 +722,7 @@ impl HashTableLiteralKey {
         Self::from_symbol_name(value.as_symbol_name()?)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn name(self) -> &'static str {
         self.into()
     }

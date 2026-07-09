@@ -1,5 +1,4 @@
 use super::*;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::heap_types::LispString;
 
 fn fresh_eval() -> super::super::eval::Context {

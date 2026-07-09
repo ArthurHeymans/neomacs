@@ -41,6 +41,7 @@ pub(super) struct FileWatch {
 }
 
 pub(super) trait FileNotifyBackend {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn allocated_p(&self) -> bool;
     fn watch_list(&self) -> Vec<FileWatch>;
     fn add_watch(&mut self, path: &std::path::Path) -> Result<FileNotifyWatchDescriptor, Flow>;
@@ -168,6 +169,7 @@ pub(crate) fn reset_file_notify_thread_locals() {
     FILE_NOTIFY_STATE.with(|slot| *slot.borrow_mut() = FileNotifyState::default());
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_inotify_watch_list(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-watch-list", &args, 0)?;
     FILE_NOTIFY_STATE.with(|slot| {
@@ -182,6 +184,7 @@ pub(crate) fn builtin_inotify_watch_list(args: Vec<Value>) -> EvalResult {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_inotify_allocated_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-allocated-p", &args, 0)?;
     FILE_NOTIFY_STATE.with(|slot| {

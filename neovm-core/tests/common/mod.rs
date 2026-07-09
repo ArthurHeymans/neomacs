@@ -15,6 +15,7 @@ thread_local! {
         const { RefCell::new(None) };
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn oracle_emacs_path() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("NEOVM_FORCE_ORACLE_PATH") {
         let path = PathBuf::from(path);
@@ -38,10 +39,12 @@ pub fn oracle_emacs_path() -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn oracle_enabled() -> bool {
     oracle_emacs_path().is_some()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -49,6 +52,7 @@ pub fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn gnu_window_c_path() -> Option<PathBuf> {
     let mut dir = repo_root();
     for _ in 0..5 {
@@ -63,6 +67,7 @@ pub fn gnu_window_c_path() -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn elisp_string(path: &Path) -> String {
     format!(
         "\"{}\"",
@@ -72,6 +77,7 @@ pub fn elisp_string(path: &Path) -> String {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn write_temp_elisp_file(
     prefix: &str,
     suffix: &str,
@@ -89,6 +95,7 @@ fn write_temp_elisp_file(
     Ok(file.into_temp_path())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn run_oracle_eval(form: &str) -> Result<String, String> {
     let Some(oracle_bin) = oracle_emacs_path() else {
         return Err("GNU Emacs oracle binary not found".to_string());
@@ -160,6 +167,7 @@ pub fn run_oracle_eval(form: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub fn run_neovm_eval(form: &str) -> Result<String, String> {
     let mut eval = RUNTIME_TEMPLATE.with(|slot| {
         if slot.borrow().is_none() {

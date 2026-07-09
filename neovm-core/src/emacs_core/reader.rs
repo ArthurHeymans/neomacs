@@ -1,7 +1,6 @@
 //! Reader/printer builtins: read-from-string, read, prin1-to-string (enhanced),
 //! format-spec, and various interactive-input stubs.
 
-use super::custom::CustomManager;
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 // storage imports removed — now using emacs_char directly
@@ -126,7 +125,7 @@ fn minibuffer_history_spec(hist_arg: Option<&Value>) -> MinibufferHistorySpec {
 
     match hist.kind() {
         ValueKind::Nil => default_minibuffer_history_spec(),
-        ValueKind::Symbol(id) if hist == Value::T => MinibufferHistorySpec {
+        ValueKind::Symbol(_id) if hist == Value::T => MinibufferHistorySpec {
             variable_value: Value::T,
             history_name: None,
             position: Value::fixnum(0),
@@ -144,7 +143,7 @@ fn minibuffer_history_spec(hist_arg: Option<&Value>) -> MinibufferHistorySpec {
                     position,
                     ..default_minibuffer_history_spec()
                 },
-                ValueKind::Symbol(id) if history_var == Value::T => MinibufferHistorySpec {
+                ValueKind::Symbol(_id) if history_var == Value::T => MinibufferHistorySpec {
                     variable_value: Value::T,
                     history_name: None,
                     position,
@@ -234,7 +233,7 @@ fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Fl
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -279,7 +278,7 @@ fn expect_initial_input_stringish(value: &Value) -> Result<(), Flow> {
         ValueKind::Nil | ValueKind::String => Ok(()),
         ValueKind::Cons => {
             let pair_car = value.cons_car();
-            let pair_cdr = value.cons_cdr();
+            let _pair_cdr = value.cons_cdr();
             if !pair_car.is_string() {
                 return Err(signal(
                     "wrong-type-argument",
@@ -288,7 +287,7 @@ fn expect_initial_input_stringish(value: &Value) -> Result<(), Flow> {
             }
             Ok(())
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -315,7 +314,7 @@ fn expect_completing_read_initial_input(value: &Value) -> Result<(), Flow> {
             }
             Ok(())
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -386,6 +385,7 @@ fn activate_minibuffer_window_in_state(
     Some(saved)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn activate_minibuffer_window(
     eval: &mut super::eval::Context,
     minibuf_id: crate::buffer::BufferId,
@@ -548,6 +548,7 @@ fn run_minibuffer_mode_if_bound(eval: &mut super::eval::Context, mode: &str) -> 
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinibufferWindowState) {
     restore_minibuffer_window_in_state(
         &mut eval.frames,
@@ -558,6 +559,7 @@ fn restore_minibuffer_window(eval: &mut super::eval::Context, saved: ActiveMinib
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_invalid_read_syntax_in_buffer(
     buffer_text: &str,
     absolute_error_pos: usize,
@@ -577,6 +579,7 @@ fn signal_invalid_read_syntax_in_buffer(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_invalid_read_syntax_in_lisp_string(
     buffer_text: &crate::heap_types::LispString,
     absolute_error_pos: usize,
@@ -1400,6 +1403,7 @@ pub(crate) fn finish_read_string_with_minibuffer(
     read_from_minibuffer(&minibuffer_args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_read_string_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -1584,9 +1588,10 @@ pub(crate) fn completing_read_function_value(eval: &super::eval::Context) -> Opt
         .filter(|function| !function.is_nil())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_completing_read_in_state_with_minibuffer(
     obarray: &mut Obarray,
-    dynamic: &mut [OrderedRuntimeBindingMap],
+    _dynamic: &mut [OrderedRuntimeBindingMap],
     buffers: &mut crate::buffer::BufferManager,
     custom: &crate::emacs_core::custom::CustomManager,
     specpdl: &[crate::emacs_core::eval::SpecBinding],
@@ -2085,14 +2090,17 @@ pub(crate) trait KeyboardInputRuntime {
     fn peek_unread_command_event(&self) -> Option<Value>;
     fn replace_unread_command_event_with_singleton(&mut self, event: Value);
     fn record_input_event(&mut self, event: Value);
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn record_nonmenu_input_event(&mut self, event: Value);
     fn set_read_command_keys(&mut self, keys: Vec<Value>);
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn clear_read_command_keys(&mut self);
     fn read_command_keys(&self) -> &[Value];
     fn has_input_receiver(&self) -> bool;
     fn has_pending_low_level_events(&self) -> bool {
         false
     }
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn read_char_blocking(&mut self) -> Result<Value, Flow>;
     fn read_char_with_timeout(&mut self, timeout: Option<Duration>) -> Result<Option<Value>, Flow>;
     fn read_key_sequence_blocking(
@@ -2528,6 +2536,7 @@ pub(crate) fn builtin_set_quit_char(
 /// `(waiting-for-user-input-p)`
 ///
 /// Batch-mode compatibility: always returns nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_waiting_for_user_input_p(args: Vec<Value>) -> EvalResult {
     expect_args("waiting-for-user-input-p", &args, 0)?;
     Ok(Value::NIL)
@@ -2612,6 +2621,7 @@ pub(crate) fn finish_yes_or_no_p_with_minibuffer(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_yes_or_no_p_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -2757,6 +2767,7 @@ pub(crate) fn finish_read_char_interactive_in_runtime(
 /// Read a key from the command input.
 /// In batch mode, returns next `unread-command-events` event, else nil.
 /// In interactive mode, blocks on the input channel via `read_char()`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_read_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() > 2 {
         return Err(signal(

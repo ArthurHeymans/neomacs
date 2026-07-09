@@ -17,9 +17,9 @@ use super::position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, EmacsByteLen,
     EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
-use super::text::{
-    BufferTextBackendKind, BufferTextBytesSnapshot, ImplementedBufferTextBackendKind,
-};
+#[cfg(test)]
+use super::text::BufferTextBytesSnapshot;
+use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // Phase 10F: BufferLocals is gone. Per-buffer Lisp bindings now live
 // in `Buffer::local_var_alist` (for LOCALIZED), `Buffer::slots[]`
 // (for FORWARDED BUFFER_OBJFWD), and `Buffer::keymap` / the
@@ -33,7 +33,6 @@ use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
-use crate::tagged::gc::with_tagged_heap;
 use crate::window::WindowId;
 use rustc_hash::FxHashMap;
 
@@ -5121,6 +5120,7 @@ impl BufferManager {
         Some(())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn clear_inserted_plain_text_properties_in_emacs_byte_range(
         &mut self,
         id: BufferId,
@@ -5552,7 +5552,7 @@ impl BufferManager {
                     buf.set_buffer_local("buffer-undo-list", Value::NIL);
                     buf.undo_state.set_recorded_first_change(false);
                 }
-                other => {
+                _other => {
                     buf.set_buffer_local("buffer-undo-list", value);
                 }
             }

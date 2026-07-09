@@ -174,6 +174,7 @@ fn expect_strict_string(v: &Value) -> Result<String, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_sql_cstring(v: &Value) -> Result<CString, Flow> {
     let s = v
         .as_lisp_string()
@@ -314,6 +315,7 @@ unsafe fn sqlite_errmsg_for_db(db: *mut ffi::sqlite3) -> String {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 unsafe fn sqlite_errstr(code: i32) -> String {
     let msg = unsafe { ffi::sqlite3_errstr(code) };
     if msg.is_null() {

@@ -22,9 +22,7 @@ use super::keyboard::pure::{
     KEY_CHAR_MOD_MASK, KEY_CHAR_SHIFT, KEY_CHAR_SUPER, reorder_event_symbol_modifiers,
 };
 use super::symbol::Obarray;
-use super::value::{
-    OrderedRuntimeBindingMap, Value, ValueKind, VecLikeType, eq_value, list_to_vec,
-};
+use super::value::{OrderedRuntimeBindingMap, Value, ValueKind, eq_value, list_to_vec};
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
@@ -807,10 +805,12 @@ fn keymap_binding_spine(keymap: &Value) -> Option<Value> {
     Some(*keymap)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lookup_in_keymap_level(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
     lookup_in_keymap_level_impl(keymap, event, t_ok, true)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lookup_in_keymap_level_unresolved(keymap: &Value, event: &Value, t_ok: bool) -> Option<Value> {
     lookup_in_keymap_level_impl(keymap, event, t_ok, false)
 }
@@ -1626,6 +1626,7 @@ fn dynamic_or_global_symbol_value_in_state(
     obarray.symbol_value(name).cloned()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value_by_sym_id_in_state(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
@@ -1683,6 +1684,7 @@ pub(crate) fn minor_mode_map_entry(entry: &Value) -> Option<(SymId, Value)> {
     Some((mode_name, cdr))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn key_binding_lookup_in_keymap_in_obarray(
     obarray: &Obarray,
     keymap: &Value,
@@ -1813,7 +1815,7 @@ fn assq_in_alist(alist: &Value, key: &Value) -> bool {
             continue;
         };
         let pair_car = entry.cons_car();
-        let pair_cdr = entry.cons_cdr();
+        let _pair_cdr = entry.cons_cdr();
         if pair_car == *key {
             return true;
         }

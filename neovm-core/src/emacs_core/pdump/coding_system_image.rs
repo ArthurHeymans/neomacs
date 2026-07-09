@@ -541,6 +541,7 @@ pub(crate) fn empty_coding_system_manager() -> DumpCodingSystemManager {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn coding_system_manager_is_empty(manager: &DumpCodingSystemManager) -> bool {
     manager.systems_syms.is_empty()
         && manager.systems.is_empty()

@@ -4,8 +4,6 @@
 
 use super::casetab::{CaseMap, CaseTableOverride};
 use super::error::{EvalResult, Flow, signal};
-use super::symbol::Obarray;
-use super::syntax::forward_word;
 use super::value::*;
 use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::value::ValueKind;
@@ -40,7 +38,7 @@ fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Re
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -51,12 +49,19 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 // Character helpers
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_META: i64 = 0x8000000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_CTL: i64 = 0x4000000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_SHIFT: i64 = 0x2000000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_HYPER: i64 = 0x1000000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_SUPER: i64 = 0x0800000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_ALT: i64 = 0x0400000;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const CHAR_MODIFIER_MASK: i64 =
     CHAR_META | CHAR_CTL | CHAR_SHIFT | CHAR_HYPER | CHAR_SUPER | CHAR_ALT;
 
@@ -244,6 +249,7 @@ fn push_multibyte_chars(out: &mut Vec<u8>, chars: impl IntoIterator<Item = char>
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ascii_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte >= 0x80
 }
@@ -251,6 +257,7 @@ fn ascii_word_byte(byte: u8) -> bool {
 /// Word-boundary predicate over the *standard* syntax table, for the pure/test
 /// casing forms that run without a current buffer. Mirrors GNU's `Sword` test
 /// against the standard syntax table.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn standard_word_predicate(code: u32) -> bool {
     crate::emacs_core::syntax::standard_syntax_class_for_code(code)
         == crate::emacs_core::syntax::SyntaxClass::Word
@@ -461,6 +468,7 @@ fn upcase_initials_lisp_string(
     LispString::from_emacs_bytes(out)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn downcase_case_string_emacs_compat(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
@@ -476,6 +484,7 @@ fn downcase_case_string_emacs_compat(text: &str) -> String {
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn upcase_case_string_emacs_compat(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for ch in text.chars() {
@@ -779,6 +788,7 @@ pub(crate) fn builtin_capitalize_in_state(
 
 /// Capitalize a string: uppercase the first letter of each word,
 /// lowercase the rest.  A "word" starts after any non-alphanumeric character.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn capitalize_string(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut new_word = true;
@@ -851,6 +861,7 @@ pub(crate) fn builtin_upcase_initials_in_state(
 }
 
 /// Uppercase the first letter of each word, leaving the rest unchanged.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn upcase_initials_string(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut new_word = true;
@@ -907,6 +918,7 @@ pub(crate) fn replace_match_case_action_lisp_default(
     replace_match_case_action_lisp(matched, default_is_word_char)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn replace_match_case_action_with<F>(
     matched: &str,
     mut is_word_char: F,
@@ -951,6 +963,7 @@ where
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn apply_replace_match_case(replacement: &str, matched: &str) -> String {
     apply_replace_match_case_with(replacement, matched, default_is_word_char)
 }
@@ -959,6 +972,7 @@ pub(crate) fn apply_replace_match_case(replacement: &str, matched: &str) -> Stri
 /// predicate used for the "previous character is a word constituent"
 /// check. Use this from paths that have a buffer syntax table in
 /// scope so per-mode definitions of word constituents apply.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn apply_replace_match_case_with<F>(
     replacement: &str,
     matched: &str,
@@ -1227,7 +1241,7 @@ pub(crate) fn builtin_char_resolve_modifiers(args: Vec<Value>) -> EvalResult {
 
     let code = match args[0].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("fixnump"), args[0]],

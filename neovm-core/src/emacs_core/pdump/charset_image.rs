@@ -448,6 +448,7 @@ pub(crate) fn empty_charset_registry() -> DumpCharsetRegistry {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn charset_registry_is_empty(registry: &DumpCharsetRegistry) -> bool {
     registry.charsets.is_empty()
         && registry.priority_syms.is_empty()

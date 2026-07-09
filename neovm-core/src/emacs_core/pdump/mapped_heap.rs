@@ -82,6 +82,7 @@ pub(crate) struct MappedBytes {
 }
 
 impl MappedHeapView {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_slice(bytes: &[u8]) -> Self {
         Self {
             ptr: bytes.as_ptr().cast_mut(),
@@ -90,6 +91,7 @@ impl MappedHeapView {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_mut_slice(bytes: &mut [u8]) -> Self {
         Self {
             ptr: bytes.as_mut_ptr(),
@@ -428,6 +430,7 @@ pub(crate) fn extract_mapped_heap_payloads(state: &mut DumpContextState) -> Mapp
     extract_tagged_heap_payloads(&mut state.tagged_heap)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn clear_heap_metadata(heap: &mut DumpTaggedHeap) {
     heap.mapped_cons.clear();
     heap.mapped_floats.clear();
@@ -436,6 +439,7 @@ pub(crate) fn clear_heap_metadata(heap: &mut DumpTaggedHeap) {
     heap.mapped_slots.clear();
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), DumpError> {
     let mut layout = HeapLayoutCursor::default();
 
@@ -646,11 +650,13 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
 }
 
 #[derive(Default)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 struct HeapLayoutCursor {
     offset: usize,
 }
 
 impl HeapLayoutCursor {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn push_bytes_len(&mut self, payload_len: usize) -> super::types::DumpByteSpan {
         self.align_to(HEAP_PAYLOAD_ALIGN);
         let offset = self.offset;

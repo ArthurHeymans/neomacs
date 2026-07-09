@@ -1184,23 +1184,6 @@ fn vm_compiled_maphash_closure_mutates_captured_accumulator_like_face_list() {
     );
 }
 
-fn execute_manual_vm<T>(
-    mut func: ByteCodeFunction,
-    init: impl FnOnce(&mut ByteCodeFunction, &mut crate::buffer::BufferManager) -> T,
-) -> (Value, crate::buffer::BufferManager, T) {
-    let mut eval = Context::new_minimal_vm_harness();
-    let init_state = init(&mut func, &mut eval.buffers);
-
-    let result = {
-        let mut vm = new_vm(&mut eval);
-        vm.execute(&func, vec![])
-            .expect("manual bytecode should execute")
-    };
-
-    let buffers = std::mem::replace(&mut eval.buffers, crate::buffer::BufferManager::new());
-    (result, buffers, init_state)
-}
-
 /// Like `execute_manual_vm` but builds the ByteCodeFunction AFTER the
 /// evaluator is initialized, avoiding stale symbol/value handles from
 /// thread-local runtime replacement.
@@ -1791,6 +1774,7 @@ fn vm_bcall_funcall_recursion_reports_bytecode_error_like_gnu() {
     }
 }
 
+#[test]
 fn vm_unbind_restores_saved_excursion_point() {
     let (result, buffers, (buffer_id, saved_point)) = execute_manual_vm_built(|buffers| {
         let buffer_id = buffers.create_buffer("excursion");
@@ -5732,7 +5716,6 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
                   'error)))"#,
         |eval| {
             use crate::emacs_core::process::ProcessKind;
-            use crate::emacs_core::value::ValueKind;
 
             let buffer_id = eval.buffers.create_buffer("*vm-serial-proc*");
             eval.buffers.set_current(buffer_id);

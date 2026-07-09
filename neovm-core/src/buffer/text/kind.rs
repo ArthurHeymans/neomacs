@@ -72,18 +72,22 @@ impl ImplementedBufferTextBackendKind {
     pub(crate) const PIECE_TREE: Self = Self(BufferTextBackendKind::PieceTree);
     pub(crate) const ROPE: Self = Self(BufferTextBackendKind::Rope);
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn variants() -> impl Iterator<Item = Self> {
         BufferTextBackendKind::implemented_variants().filter_map(BufferTextBackendKind::implemented)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn non_gap_variants() -> impl Iterator<Item = Self> {
         Self::variants().filter(|kind| !kind.is_gap_buffer())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn symbol_name(self) -> &'static str {
         self.0.symbol_name()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) const fn is_gap_buffer(self) -> bool {
         self.0.is_gap_buffer()
     }

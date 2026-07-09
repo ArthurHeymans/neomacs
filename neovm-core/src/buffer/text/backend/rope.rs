@@ -144,6 +144,7 @@ impl RopeTextBackend {
         self.metrics().emacs_bytes_usize()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn is_empty(&self) -> bool {
         self.len() == 0
     }

@@ -6,16 +6,15 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 use crate::emacs_core::editfns::{
     builtin_delete_and_extract_region, builtin_delete_region, builtin_erase_buffer,
 };
+use crate::emacs_core::intern::intern_uninterned;
 use crate::emacs_core::textprop::builtin_make_overlay;
 use crate::emacs_core::treesit as runtime_treesit;
 use crate::emacs_core::value::{
-    HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, Value, ValueKind, VecLikeType,
+    HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, Value, ValueKind,
     get_string_text_properties_for_value,
 };
 use crate::emacs_core::{Context, format_eval_result};
-use crate::test_utils::{
-    load_minimal_gnu_backquote_runtime, runtime_startup_context, runtime_startup_eval_all,
-};
+use crate::test_utils::{load_minimal_gnu_backquote_runtime, runtime_startup_context};
 use malachite::integer::Integer;
 use std::fs;
 use tree_sitter::Language;
@@ -37,10 +36,6 @@ fn decode_value_char_codes(v: &Value) -> Vec<u32> {
 }
 
 /// Backward-compat: decode char codes from an &str (for tests using as_str).
-fn decode_storage_char_codes(s: &str) -> Vec<u32> {
-    crate::emacs_core::string_escape::decode_storage_char_codes(s, true)
-}
-
 fn dispatch_builtin_pure(name: &str, args: Vec<Value>) -> Option<EvalResult> {
     super::dispatch_builtin_without_eval_state(name, args)
 }
@@ -145,10 +140,6 @@ fn load_gnu_save_selected_window_runtime(eval: &mut Context) {
     ] {
         eval_first_gnu_form_after_marker(eval, &window_source, marker);
     }
-}
-
-fn bootstrap_eval_all(src: &str) -> Vec<String> {
-    runtime_startup_eval_all(src)
 }
 
 #[test]
@@ -5456,7 +5447,7 @@ fn pure_dispatch_typed_string_width_and_bytes_work() {
 #[test]
 fn pure_dispatch_typed_extended_list_ops_work() {
     crate::test_utils::init_test_tracing();
-    let seq = Value::list(vec![
+    let _seq = Value::list(vec![
         Value::fixnum(1),
         Value::fixnum(2),
         Value::fixnum(3),

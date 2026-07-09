@@ -158,8 +158,7 @@ fn string_designator_accepts_symbols() {
     let mut eval = Context::new();
     let from_string = StringDesignator::from_value(&mut eval, Value::string("abc")).unwrap();
     assert_eq!(from_string.0.as_bytes(), b"abc");
-    let from_symbol =
-        StringDesignator::from_value(&mut eval, Value::symbol("abc")).unwrap();
+    let from_symbol = StringDesignator::from_value(&mut eval, Value::symbol("abc")).unwrap();
     assert_eq!(from_symbol.0.as_bytes(), b"abc");
     let bad = Value::fixnum(1);
     assert_wrong_type(
@@ -240,13 +239,8 @@ fn typed_subr_extracts_arguments_in_order_and_signals_typed_errors() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
 
-    let ok = sample_typed_repeat(
-        &mut eval,
-        Value::string("ab"),
-        Value::fixnum(3),
-        Value::NIL,
-    )
-    .expect("typed call");
+    let ok = sample_typed_repeat(&mut eval, Value::string("ab"), Value::fixnum(3), Value::NIL)
+        .expect("typed call");
     assert_eq!(
         ok.as_lisp_string().map(|s| s.as_bytes().to_vec()),
         Some(b"ababab".to_vec())

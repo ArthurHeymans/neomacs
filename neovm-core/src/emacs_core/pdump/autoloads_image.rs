@@ -410,6 +410,7 @@ pub(crate) fn empty_autoloads() -> DumpAutoloadManager {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn autoloads_is_empty(autoloads: &DumpAutoloadManager) -> bool {
     autoloads.entries_syms.is_empty()
         && autoloads.entries.is_empty()

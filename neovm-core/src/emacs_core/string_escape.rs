@@ -3,7 +3,9 @@
 const RAW_BYTE_SENTINEL_BASE: u32 = 0xE000;
 const RAW_BYTE_SENTINEL_MIN: u32 = 0xE080;
 const RAW_BYTE_SENTINEL_MAX: u32 = 0xE0FF;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const RAW_BYTE_CHAR_MIN: u32 = 0x3FFF80;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const RAW_BYTE_CHAR_MAX: u32 = 0x3FFFFF;
 // Unibyte raw bytes 0x80..0xFF are stored as U+E380..U+E3FF (BASE + byte); see
 // `bytes_to_unibyte_storage_string`. Bytes 0x00..0x7F stay ASCII, so the
@@ -23,6 +25,7 @@ const EXT_SEQ_MAX_LEN: u32 = 6;
 /// Encode non-Unicode Emacs character codes as NeoVM internal sentinels.
 ///
 /// Returns `None` for Unicode scalar values (which can be stored directly).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn encode_nonunicode_char_for_storage(code: u32) -> Option<String> {
     if code <= 0x10FFFF && char::from_u32(code).is_some() {
         return None;
@@ -43,6 +46,7 @@ pub(crate) fn encode_nonunicode_char_for_storage(code: u32) -> Option<String> {
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn encode_emacs_extended_utf8(code: u32) -> Vec<u8> {
     if code <= 0x7F {
         vec![code as u8]
@@ -143,6 +147,7 @@ fn decode_emacs_extended_utf8(bytes: &[u8]) -> Option<u32> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn encode_extended_sequence_for_storage(bytes: &[u8]) -> String {
     let mut out = String::new();
     out.push(char::from_u32(EXT_SEQ_PREFIX).expect("valid extended prefix sentinel"));
@@ -295,12 +300,14 @@ pub(crate) fn scan_storage_units(s: &str, multibyte: bool) -> Vec<StorageUnit> {
 /// storage string without an explicit flag. Data paths that know the flag
 /// (e.g. `storage_string_to_buffer_bytes`) thread it through `scan_storage_units`
 /// directly instead.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn scan_storage_units_auto(s: &str) -> Vec<StorageUnit> {
     scan_storage_units(s, !storage_string_contains_unibyte_bytes(s))
 }
 
 /// [`decode_storage_char_codes`] with multibyte-ness inferred from content (see
 /// [`scan_storage_units_auto`]). For callers holding a bare storage string.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn decode_storage_char_codes_auto(s: &str) -> Vec<u32> {
     decode_storage_char_codes(s, !storage_string_contains_unibyte_bytes(s))
 }
@@ -367,6 +374,7 @@ pub(crate) fn storage_string_contains_unibyte_bytes(s: &str) -> bool {
 ///
 /// This keeps byte-oriented Elisp semantics for operations like `aref`,
 /// `string-bytes`, and `secure-hash` binary output.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn bytes_to_unibyte_storage_string(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
     for b in bytes {
@@ -430,6 +438,7 @@ pub(crate) fn decode_storage_char_codes(s: &str, multibyte: bool) -> Vec<u32> {
 
 /// Compute Emacs-like display width for NeoVM string storage.
 /// Count logical Emacs characters in NeoVM string storage.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn storage_char_len(s: &str) -> usize {
     if !storage_has_special_units(s) {
         return if s.is_ascii() {
@@ -442,6 +451,7 @@ pub(crate) fn storage_char_len(s: &str) -> usize {
 }
 
 /// Count Emacs string bytes represented by NeoVM string storage.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn storage_byte_len(s: &str) -> usize {
     if !storage_has_special_units(s) {
         return s.len();
@@ -453,6 +463,7 @@ pub(crate) fn storage_byte_len(s: &str) -> usize {
 }
 
 /// Convert a storage-byte boundary to the corresponding logical Emacs byte offset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn storage_byte_to_logical_byte(s: &str, storage_byte_pos: usize) -> usize {
     if !storage_has_special_units(s) {
         return storage_byte_pos.min(s.len());
@@ -476,6 +487,7 @@ pub(crate) fn storage_byte_to_logical_byte(s: &str, storage_byte_pos: usize) -> 
 }
 
 /// Convert a logical Emacs byte offset at a character boundary to a storage-byte offset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn storage_logical_byte_to_storage_byte(s: &str, logical_byte_pos: usize) -> usize {
     if !storage_has_special_units(s) {
         return logical_byte_pos.min(s.len());
@@ -529,6 +541,7 @@ pub(crate) fn octal_escape_unibyte_eight_bit(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn push_escaped_literal_byte(out: &mut Vec<u8>, byte: u8) {
     match byte {
         b'"' => out.extend_from_slice(br#"\""#),
@@ -568,6 +581,7 @@ pub(crate) fn format_lisp_string_bytes_emacs(
 /// Push an octal escape for a character code, choosing 1-3 digits.
 /// If the next character after the octal escape is an octal digit ('0'–'7'),
 /// we must use 3 digits to avoid misinterpretation (matching GNU's `octalout`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn push_octal_escape_contextual(out: &mut Vec<u8>, byte: u8, next_char: Option<char>) {
     let need_three_digits = byte > 0o77
         || next_char.is_some_and(|nc| {
@@ -757,6 +771,7 @@ pub(crate) fn format_lisp_string_bytes_inner_emacs(
 /// Backward-compat wrapper: format a Rust `&str` (old sentinel-encoded strings).
 /// This delegates to the new Emacs-byte-based formatter via a simple UTF-8 →
 /// Emacs encoding pass (for pure Unicode text this is a no-op).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn format_lisp_string_bytes_inner(s: &str, options: &PrintOptions) -> Vec<u8> {
     if storage_has_special_units(s) {
         use crate::emacs_core::emacs_char;
@@ -789,6 +804,7 @@ fn is_hex_digit(b: u8) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Compute Emacs display width from bytes in Emacs internal encoding.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn display_width_emacs(data: &[u8], is_multibyte: bool) -> usize {
     use crate::emacs_core::emacs_char;
     if is_multibyte {

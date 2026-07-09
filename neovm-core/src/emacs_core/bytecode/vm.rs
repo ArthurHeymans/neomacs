@@ -1,28 +1,23 @@
 //! Bytecode virtual machine — stack-based interpreter.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use smallvec::SmallVec;
 
 use super::chunk::ByteCodeFunction;
 use super::opcode::Op;
-use crate::buffer::BufferManager;
-use crate::emacs_core::advice::VariableWatcherList;
 use crate::emacs_core::builtins;
-use crate::emacs_core::coding::CodingSystemManager;
-use crate::emacs_core::custom::CustomManager;
 use crate::emacs_core::error::*;
 use crate::emacs_core::eval::{
-    ConditionFrame, Context, LispArgVec, ResumeTarget, SubrEntry, lookup_global_subr_entry,
+    ConditionFrame, LispArgVec, ResumeTarget, SubrEntry, lookup_global_subr_entry,
     subr_entry_from_value,
 };
-use crate::emacs_core::intern::{SymId, intern, intern_uninterned, lookup_interned, resolve_sym};
-use crate::emacs_core::regex::MatchData;
+use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
 use crate::emacs_core::value::*;
 use crate::tagged::header::{SubrDispatchKind, SubrFn};
-use crate::window::{FrameId, FrameManager, Window};
+use crate::window::FrameId;
 
 /// Dynamic, execution-weighted opcode histogram for the Tier-0 interpreter
 /// dispatch loop. Compiled in ONLY under the `vm-profile` feature, so the
@@ -463,7 +458,7 @@ impl<'a> Vm<'a> {
 
     fn with_frame_roots<T>(
         &mut self,
-        func: &ByteCodeFunction,
+        _func: &ByteCodeFunction,
         extra: &[Value],
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
@@ -514,6 +509,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn with_macro_expansion_scope<T>(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, Flow>,
@@ -547,6 +543,7 @@ impl<'a> Vm<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn result_roots(result: &EvalResult) -> Vec<Value> {
         let mut roots = Vec::new();
         match result {
@@ -2965,6 +2962,7 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn lookup_var(&mut self, name: &str) -> EvalResult {
         if name.starts_with(':') {
             return Ok(Value::keyword(name));
@@ -3003,6 +3001,7 @@ impl<'a> Vm<'a> {
         Err(signal("void-variable", vec![Value::symbol(name)]))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn assign_var(&mut self, name: &str, value: Value) -> Result<(), Flow> {
         let name_id = intern(name);
         let resolved = crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
@@ -3084,6 +3083,7 @@ impl<'a> Vm<'a> {
         Ok(())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn run_variable_watchers(
         &mut self,
         name: &str,
@@ -3094,6 +3094,7 @@ impl<'a> Vm<'a> {
         self.run_variable_watchers_by_id(intern(name), new_value, old_value, operation)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn run_variable_watchers_with_where(
         &mut self,
         name: &str,
@@ -3130,30 +3131,36 @@ impl<'a> Vm<'a> {
         self.call_function(function, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hooks_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::hook_runtime::run_named_hooks(self, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hook_with_args_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_min_args("run-hook-with-args", args, 1)?;
         crate::emacs_core::hook_runtime::run_named_hook_with_args(self, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hook_with_args_until_success_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_min_args("run-hook-with-args-until-success", args, 1)?;
         crate::emacs_core::hook_runtime::run_named_hook_with_args_until_success(self, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hook_with_args_until_failure_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_min_args("run-hook-with-args-until-failure", args, 1)?;
         crate::emacs_core::hook_runtime::run_named_hook_with_args_until_failure(self, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hook_wrapped_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_min_args("run-hook-wrapped", args, 2)?;
         crate::emacs_core::hook_runtime::run_named_hook_wrapped(self, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_run_hook_query_error_with_timeout_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("run-hook-query-error-with-timeout", args, 1)?;
         let hook_sym = crate::emacs_core::hook_runtime::resolve_hook_symbol(&self.ctx, args[0])?;
@@ -3164,6 +3171,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("set", args, 2)?;
         let symbol = crate::emacs_core::builtins::symbols::expect_symbol_id(&args[0])?;
@@ -3248,6 +3256,7 @@ impl<'a> Vm<'a> {
         Ok(value)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_default_toplevel_value_shared(&mut self, args: &[Value]) -> EvalResult {
         let symbol = crate::emacs_core::builtins::symbols::expect_symbol_id(&args[0])?;
         let resolved = crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
@@ -3275,6 +3284,7 @@ impl<'a> Vm<'a> {
         Ok(Value::NIL)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_defalias_shared(&mut self, args: &[Value]) -> EvalResult {
         let plan = crate::emacs_core::builtins::plan_defalias_in_obarray(&self.ctx.obarray, args)?;
         let crate::emacs_core::builtins::DefaliasPlan {
@@ -3318,6 +3328,7 @@ impl<'a> Vm<'a> {
         Ok(result)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_defvaralias_shared(&mut self, args: &[Value]) -> EvalResult {
         let state_change =
             crate::emacs_core::builtins::symbols::defvaralias_impl(&mut *self.ctx, args.to_vec())?;
@@ -3343,6 +3354,7 @@ impl<'a> Vm<'a> {
         Ok(state_change.result)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_makunbound_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("makunbound", args, 1)?;
         let symbol = crate::emacs_core::builtins::symbols::expect_symbol_id(&args[0])?;
@@ -3364,18 +3376,22 @@ impl<'a> Vm<'a> {
         Ok(args[0])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_local_variable_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::custom::builtin_make_local_variable(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_local_variable_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::custom::builtin_local_variable_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_local_variables_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::custom::builtin_buffer_local_variables(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_kill_local_variable_shared(&mut self, args: &[Value]) -> EvalResult {
         let outcome =
             crate::emacs_core::custom::builtin_kill_local_variable_impl(&mut *self.ctx, args)?;
@@ -3393,6 +3409,7 @@ impl<'a> Vm<'a> {
         Ok(outcome.result)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn ensure_selected_frame_id(&mut self) -> FrameId {
         crate::emacs_core::window_cmds::ensure_selected_frame_id_in_state(
             &mut self.ctx.frames,
@@ -3400,6 +3417,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn resolve_frame_id(&mut self, arg: Option<&Value>, predicate: &str) -> Result<FrameId, Flow> {
         let Some(val) = arg else {
             return Ok(self.ensure_selected_frame_id());
@@ -3436,6 +3454,7 @@ impl<'a> Vm<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn ensure_global_keymap(&mut self) -> Value {
         if let Some(value) = self.ctx.obarray.symbol_value("global-map").copied() {
             if crate::emacs_core::keymap::is_list_keymap(&value) {
@@ -3447,6 +3466,7 @@ impl<'a> Vm<'a> {
         keymap
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mapcar_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("mapcar", args, 2)?;
         let func = args[0];
@@ -3470,6 +3490,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn mapcar1_fast<F>(
         &mut self,
         len: usize,
@@ -3523,6 +3544,7 @@ impl<'a> Vm<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mapc_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("mapc", args, 2)?;
         let func = args[0];
@@ -3541,6 +3563,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mapcan_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("mapcan", args, 2)?;
         let func = args[0];
@@ -3564,6 +3587,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mapconcat_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_range_args("mapconcat", args, 2, 3)?;
         let func = args[0];
@@ -3605,6 +3629,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_sort_fast(&mut self, args: &[Value]) -> EvalResult {
         let crate::emacs_core::builtins::higher_order::SortOptions {
             key_fn,
@@ -3692,6 +3717,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_frame_list_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("frame-list", args, 0)?;
         let _ = self.ensure_selected_frame_id();
@@ -3705,6 +3731,7 @@ impl<'a> Vm<'a> {
         Ok(Value::list(frames))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_framep_fast(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("framep", args, 1)?;
         let id = match args[0].kind() {
@@ -3718,46 +3745,57 @@ impl<'a> Vm<'a> {
         Ok(frame.parameter("window-system").unwrap_or(Value::T))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_frame_parameter_fast(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::window_cmds::builtin_frame_parameter(self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_fboundp_fast(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::symbols::builtin_fboundp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_indentation_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::indent::builtin_current_indentation(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_indent_to_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::indent::builtin_indent_to(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_column_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::indent::builtin_current_column(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_string_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_string(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_substring_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_substring(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_field_beginning_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_field_beginning(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_field_end_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_field_end(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_field_string_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_field_string(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_field_string_no_properties_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_field_string_no_properties(
             &mut *self.ctx,
@@ -3765,34 +3803,42 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_constrain_to_field_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_constrain_to_field(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_point_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_point(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_accept_process_output_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::process::builtin_accept_process_output(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_list_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_list(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_other_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_other_buffer(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_generate_new_buffer_name_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_generate_new_buffer_name(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_get_file_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_get_file_buffer(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_indirect_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         let plan = crate::emacs_core::builtins::prepare_make_indirect_buffer_in_manager(
             &mut self.ctx.buffers,
@@ -3822,18 +3868,22 @@ impl<'a> Vm<'a> {
         Ok(Value::make_buffer(plan.id))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_kill_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_kill_buffer(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_active_maps_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::keymaps::builtin_current_active_maps_impl(&mut *self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_minor_mode_maps_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::keymaps::builtin_current_minor_mode_maps_impl(&*self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_map_keymap_shared(&mut self, args: &[Value], include_parents: bool) -> EvalResult {
         let (function, mut keymap) = if include_parents {
             builtins::expect_min_args("map-keymap", args, 2)?;
@@ -3879,6 +3929,7 @@ impl<'a> Vm<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_map_char_table_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("map-char-table", args, 2)?;
         let function = args[0];
@@ -3898,18 +3949,22 @@ impl<'a> Vm<'a> {
         crate::emacs_core::kmacro::builtin_execute_kbd_macro(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_command_remapping_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::interactive::builtin_command_remapping_impl(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_key_binding_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::interactive::builtin_key_binding_impl(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_local_key_binding_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::interactive::builtin_local_key_binding_impl(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_minor_mode_key_binding_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::interactive::builtin_minor_mode_key_binding_impl(
             &*self.ctx,
@@ -3917,14 +3972,17 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_buffer_multibyte_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_set_buffer_multibyte(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_barf_if_buffer_read_only_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_barf_if_buffer_read_only_impl(
             &*self.ctx,
@@ -3932,10 +3990,12 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_and_inherit_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_and_inherit(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_before_markers_and_inherit_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_before_markers_and_inherit(
             &mut *self.ctx,
@@ -3943,62 +4003,77 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_point_min_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_point_min(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_point_max_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_point_max(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_goto_char_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_goto_char(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_char_after_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_char_after(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_char_before_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_char_before(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_size_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_size(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_byte_to_position_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_byte_to_position(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_position_bytes_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_position_bytes(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_get_byte_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_get_byte(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_narrow_to_region_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_narrow_to_region(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_widen_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_widen(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_modified_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_modified_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_buffer_modified_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_set_buffer_modified_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_modified_tick_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_modified_tick(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_chars_modified_tick_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_chars_modified_tick(
             &mut *self.ctx,
@@ -4006,34 +4081,42 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_char_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_char(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_byte_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_byte(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_subst_char_in_region_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_subst_char_in_region(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_bobp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_bobp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_eobp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_eobp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_bolp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_bolp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_eolp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_eolp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_line_beginning_position_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_line_beginning_position(
             &mut *self.ctx,
@@ -4041,26 +4124,32 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_line_end_position_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_line_end_position(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_before_markers_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_before_markers(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_insert_buffer_substring_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_insert_buffer_substring(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_replace_region_contents_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_replace_region_contents(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_delete_char_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_delete_char(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_substring_no_properties_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_buffer_substring_no_properties(
             &*self.ctx,
@@ -4068,18 +4157,22 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_following_char_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_following_char(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_preceding_char_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_preceding_char(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_delete_region_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_delete_region(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_compare_buffer_substrings_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_compare_buffer_substrings_with_case_fold(
             self.case_fold_search_enabled(),
@@ -4088,38 +4181,47 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_delete_field_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_delete_field(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_delete_and_extract_region_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_delete_and_extract_region(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_erase_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::editfns::builtin_erase_buffer(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_undo_boundary_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::undo::builtin_undo_boundary(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_enable_undo_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_enable_undo(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_disable_undo_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_disable_undo(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_kill_all_local_variables_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_kill_all_local_variables(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_buffer_local_value_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_buffer_local_value(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_local_variable_if_set_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::symbols::builtin_local_variable_if_set_p(
             &mut *self.ctx,
@@ -4127,6 +4229,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_variable_binding_locus_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::symbols::builtin_variable_binding_locus(
             &mut *self.ctx,
@@ -4134,16 +4237,19 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_move_to_column_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::indent::builtin_move_to_column(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn case_fold_search_enabled(&mut self) -> bool {
         self.lookup_var("case-fold-search")
             .map(|value| !value.is_nil())
             .unwrap_or(true)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_search_forward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_search_forward_with_state(
             self.case_fold_search_enabled(),
@@ -4153,6 +4259,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_search_backward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_search_backward_with_state(
             self.case_fold_search_enabled(),
@@ -4162,6 +4269,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_re_search_forward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_re_search_forward_with_state(
             self.case_fold_search_enabled(),
@@ -4171,6 +4279,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_re_search_backward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_re_search_backward_with_state(
             self.case_fold_search_enabled(),
@@ -4180,6 +4289,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_search_forward_regexp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_search_forward_regexp_with_state(
             self.case_fold_search_enabled(),
@@ -4189,6 +4299,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_search_backward_regexp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_search_backward_regexp_with_state(
             self.case_fold_search_enabled(),
@@ -4198,6 +4309,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_looking_at_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_looking_at_with_state(
             self.case_fold_search_enabled(),
@@ -4207,6 +4319,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_looking_at_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_looking_at_p_with_state(
             self.case_fold_search_enabled(),
@@ -4215,6 +4328,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_posix_looking_at_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_posix_looking_at_with_state(
             self.case_fold_search_enabled(),
@@ -4224,6 +4338,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_posix_string_match_shared(&mut self, args: &[Value]) -> EvalResult {
         let case_fold = self.case_fold_search_enabled();
         let case_translation = if case_fold {
@@ -4246,6 +4361,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_match_data_translate_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_match_data_translate_with_state(
             &self.ctx.buffers,
@@ -4254,22 +4370,27 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_replace_match_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_replace_match(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_find_charset_region_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::charset::builtin_find_charset_region(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_charset_after_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::charset::builtin_charset_after(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_compose_region_internal_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::composite::builtin_compose_region_internal(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_interactive_form_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_args("interactive-form", args, 1)?;
         let mut target = args[0];
@@ -4308,22 +4429,27 @@ impl<'a> Vm<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_skip_chars_forward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_skip_chars_forward(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_skip_chars_backward_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::navigation::builtin_skip_chars_backward(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_scan_lists_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::syntax::builtin_scan_lists(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_scan_sexps_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::syntax::builtin_scan_sexps(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn visible_variable_value_or_nil(&self, name: &str) -> Value {
         let name_id = intern(name);
         if let Some(value) = self.ctx.lexenv_lookup_cached_in(self.ctx.lexenv, name_id) {
@@ -5251,6 +5377,7 @@ impl<'a> Vm<'a> {
     }
 
     /// Execute a compiled function without param binding (for inline compilation).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn execute_inline(&mut self, func: &ByteCodeFunction) -> EvalResult {
         let condition_stack_base = self.ctx.condition_stack_len();
         let frame_base = self.ctx.bc_buf.len();
@@ -5481,6 +5608,7 @@ impl<'a> Vm<'a> {
             .funcall_general(Value::subr_from_sym_id(Self::builtin_name_id(name)), args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn with_default_directory_binding<T>(
         &mut self,
         directory: &crate::heap_types::LispString,
@@ -5502,10 +5630,12 @@ impl<'a> Vm<'a> {
         result
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_documentation_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::doc::builtin_documentation_in_vm_runtime(&mut self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_documentation_property_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::doc::builtin_documentation_property_in_vm_runtime(
             &mut self.ctx,
@@ -5513,10 +5643,12 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_format_mode_line_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::xdisp::builtin_format_mode_line_in_vm_runtime(&mut self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_from_minibuffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::finish_read_from_minibuffer_in_vm_runtime(&mut self.ctx, args)
     }
@@ -5551,6 +5683,7 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_assoc_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_range_args("assoc", args, 2, 3)?;
         if args.get(2).is_some_and(|value| !value.is_nil()) {
@@ -5598,6 +5731,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::builtins::builtin_assoc(&mut *self.ctx, vec![args[0], args[1]])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_plist_member_shared(&mut self, args: &[Value]) -> EvalResult {
         builtins::expect_range_args("plist-member", args, 2, 3)?;
         if args.get(2).is_some_and(|value| !value.is_nil()) {
@@ -5669,6 +5803,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::builtins_extra::builtin_garbage_collect_stats()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_kill_emacs_shared(&mut self, args: &[Value]) -> EvalResult {
         let request = crate::emacs_core::builtins::symbols::plan_kill_emacs_request(args)?;
         self.builtin_run_hooks_shared(&[Value::symbol("kill-emacs-hook")])?;
@@ -5677,6 +5812,7 @@ impl<'a> Vm<'a> {
         Err(signal_suppressed("kill-emacs", vec![]))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_macroexpand_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::symbols::builtin_macroexpand_slice_with_runtime(self, args)
     }
@@ -5721,10 +5857,12 @@ impl<'a> Vm<'a> {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_string_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::finish_read_string_in_vm_runtime(&mut self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_completing_read_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::validate_completing_read_arity(args)?;
         if let Some(function) = crate::emacs_core::reader::completing_read_function_value(&self.ctx)
@@ -5735,6 +5873,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::reader::finish_completing_read_in_vm_runtime(&mut self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_buffer_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::minibuffer::builtin_read_buffer_in_runtime(self.ctx, args)?;
         let completing_args = crate::emacs_core::minibuffer::read_buffer_completing_args(
@@ -5745,6 +5884,7 @@ impl<'a> Vm<'a> {
         self.builtin_completing_read_shared(&completing_args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_try_completion_shared(&mut self, args: &[Value]) -> EvalResult {
         let candidates =
             crate::emacs_core::minibuffer::completion_candidates_from_collection_in_state(
@@ -5767,6 +5907,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_all_completions_shared(&mut self, args: &[Value]) -> EvalResult {
         let candidates =
             crate::emacs_core::minibuffer::completion_candidates_from_collection_in_state(
@@ -5789,6 +5930,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_file_name_completion_shared(&mut self, args: &[Value]) -> EvalResult {
         let needs_eval_predicate = matches!(
             args.get(2),
@@ -5825,14 +5967,17 @@ impl<'a> Vm<'a> {
         crate::emacs_core::dired::builtin_file_name_completion(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_command_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::minibuffer::finish_read_command_in_vm_runtime(&mut self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_variable_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::minibuffer::finish_read_variable_in_vm_runtime(&mut self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_test_completion_shared(&mut self, args: &[Value]) -> EvalResult {
         let candidates =
             crate::emacs_core::minibuffer::completion_candidates_from_collection_in_state(
@@ -5855,26 +6000,32 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_input_pending_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_input_pending_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_discard_input_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_discard_input(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_input_mode_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_current_input_mode(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_input_mode_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_set_input_mode(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_input_interrupt_mode_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_set_input_interrupt_mode(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_char_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(value) =
             crate::emacs_core::reader::builtin_read_char_in_runtime(self.ctx, args)?
@@ -5884,14 +6035,17 @@ impl<'a> Vm<'a> {
         crate::emacs_core::reader::finish_read_char_interactive_in_runtime(self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_from_string_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_read_from_string(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::builtin_read(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_event_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(value) =
             crate::emacs_core::lread::builtin_read_event_in_runtime(self.ctx, args)?
@@ -5901,6 +6055,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::lread::finish_read_event_interactive_in_runtime(self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_char_exclusive_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(value) =
             crate::emacs_core::lread::builtin_read_char_exclusive_in_runtime(self.ctx, args)?
@@ -5910,6 +6065,7 @@ impl<'a> Vm<'a> {
         crate::emacs_core::lread::finish_read_char_exclusive_interactive_in_runtime(self.ctx, args)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_key_sequence_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(value) =
             crate::emacs_core::reader::builtin_read_key_sequence_in_runtime(self.ctx, args)?
@@ -5922,6 +6078,7 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_read_key_sequence_vector_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(value) =
             crate::emacs_core::reader::builtin_read_key_sequence_vector_in_runtime(self.ctx, args)?
@@ -5934,50 +6091,62 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_recent_keys_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::keymaps::builtin_recent_keys_impl(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_message_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_current_message(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_case_table_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::casetab::builtin_current_case_table(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_standard_case_table_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::casetab::builtin_standard_case_table(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_case_table_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::casetab::builtin_set_case_table(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_standard_case_table_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::casetab::builtin_set_standard_case_table(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_format_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_format_wrapper_strict(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_format_message_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_format_message(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_message_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_message(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_message_box_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_message_box(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_message_or_box_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_message_or_box(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_thread_shared(&mut self, args: &[Value]) -> EvalResult {
         let (thread_id, function) =
             crate::emacs_core::threads::prepare_make_thread(&mut self.ctx.threads, args)?;
@@ -5995,86 +6164,107 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_join_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_join(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_yield_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_yield(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_name_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_name(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_live_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_live_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_threadp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_threadp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_signal_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_signal(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_current_thread_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_current_thread(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_all_threads_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_all_threads(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_thread_last_error_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_thread_last_error(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_mutex_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_make_mutex(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mutex_name_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_mutex_name(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mutex_lock_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_mutex_lock(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mutex_unlock_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_mutex_unlock(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_mutexp_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_mutexp(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_condition_variable_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_make_condition_variable(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_condition_variable_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_condition_variable_p(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_condition_name_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_condition_name(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_condition_mutex_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_condition_mutex(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_condition_wait_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_condition_wait(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_condition_notify_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::threads::builtin_condition_notify(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_princ_shared(&mut self, args: &[Value]) -> EvalResult {
         let target =
             crate::emacs_core::builtins::resolve_print_target_in_state(&*self.ctx, args.get(1));
@@ -6088,6 +6278,7 @@ impl<'a> Vm<'a> {
         Ok(args[0])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_prin1_shared(&mut self, args: &[Value]) -> EvalResult {
         let target =
             crate::emacs_core::builtins::resolve_print_target_in_state(&*self.ctx, args.get(1));
@@ -6101,10 +6292,12 @@ impl<'a> Vm<'a> {
         Ok(args[0])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_prin1_to_string_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::builtin_prin1_to_string_impl(&*self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_print_shared(&mut self, args: &[Value]) -> EvalResult {
         let target =
             crate::emacs_core::builtins::resolve_print_target_in_state(&*self.ctx, args.get(1));
@@ -6126,6 +6319,7 @@ impl<'a> Vm<'a> {
         Ok(args[0])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_terpri_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(result) =
             crate::emacs_core::builtins::builtin_terpri_impl(&mut *self.ctx, args.to_vec())?
@@ -6138,6 +6332,7 @@ impl<'a> Vm<'a> {
         Ok(Value::T)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_write_char_shared(&mut self, args: &[Value]) -> EvalResult {
         if let Some(result) =
             crate::emacs_core::builtins::builtin_write_char_impl(&mut *self.ctx, args.to_vec())?
@@ -6152,22 +6347,27 @@ impl<'a> Vm<'a> {
         Ok(Value::fixnum(char_code))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_redraw_frame_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::dispnew::pure::builtin_redraw_frame(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_x_get_resource_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::display::builtin_x_get_resource(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_x_list_fonts_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::display::builtin_x_list_fonts(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_x_server_vendor_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::display::builtin_x_server_vendor(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_xw_display_color_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::symbols::builtin_xw_display_color_p_ctx(
             &*self.ctx,
@@ -6175,43 +6375,53 @@ impl<'a> Vm<'a> {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_display_color_cells_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::display::builtin_display_color_cells(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_tty_type_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::terminal::pure::builtin_tty_type(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_suspend_tty_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::terminal::pure::builtin_suspend_tty(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_resume_tty_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::terminal::pure::builtin_resume_tty(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_x_create_frame_shared(&mut self, args: &[Value]) -> EvalResult {
         tracing::debug!("builtin_x_create_frame_shared: delegating to Context");
         crate::emacs_core::window_cmds::builtin_x_create_frame(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_make_frame_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::window_cmds::builtin_make_frame(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_frame_height_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::window_cmds::builtin_set_frame_height(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_frame_width_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::window_cmds::builtin_set_frame_width(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_set_frame_size_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::window_cmds::builtin_set_frame_size(&mut *self.ctx, args.to_vec())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn builtin_yes_or_no_p_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::reader::finish_yes_or_no_p_in_vm_runtime(&mut self.ctx, args)
     }
@@ -6348,6 +6558,7 @@ fn unwind_handlers_to_selected_resume(
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn normalize_vm_builtin_error(name: &str, flow: Flow) -> Flow {
     match flow {
         Flow::Signal(mut sig) if sig.symbol_name() == "wrong-number-of-arguments" => {

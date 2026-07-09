@@ -410,6 +410,7 @@ impl BufferText {
         TextEditRange::empty_at(byte_pos, char_pos)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn insertion_at_emacs_byte_pos(
         &self,
         byte_pos: EmacsBytePos,
@@ -811,6 +812,7 @@ impl BufferText {
         Self::finish_backend_content_mutation(&mut storage);
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn replace_same_len_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
@@ -833,6 +835,7 @@ impl BufferText {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn shares_storage_with(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.storage, &other.storage)
     }
@@ -841,10 +844,12 @@ impl BufferText {
         self.storage.borrow().backend.dump_text()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn dump_snapshot(&self) -> BufferTextBytesSnapshot {
         self.storage.borrow().backend.snapshot()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn from_snapshot(snapshot: BufferTextBytesSnapshot) -> Self {
         Self::from_backend(TextBackend::from_snapshot(
             snapshot,

@@ -5,7 +5,7 @@ use super::tls::{
     parse_gnutls_boot_parameters,
 };
 use super::value::Value;
-use crate::emacs_core::builtins::{
+use crate::emacs_core::builtins::gnutls::{
     builtin_gnutls_error_fatalp, builtin_gnutls_error_string,
     builtin_gnutls_peer_status_warning_describe,
 };

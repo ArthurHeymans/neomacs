@@ -2,7 +2,6 @@ use super::*;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::intern::{intern, resolve_sym};
 use crate::emacs_core::pdump::dump_to_file;
-use crate::emacs_core::value::ValueKind;
 
 // -----------------------------------------------------------------------
 // CharsetRegistry unit tests

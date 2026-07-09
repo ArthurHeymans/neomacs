@@ -11,10 +11,8 @@
 use std::cell::RefCell;
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
 use super::value::{
-    HashKey, HashTableTest, RuntimeBindingValue, Value, ValueKind, VecLikeType,
-    bool_vector_equal_hash_key,
+    HashKey, HashTableTest, Value, ValueKind, VecLikeType, bool_vector_equal_hash_key,
 };
 
 thread_local! {
@@ -99,7 +97,7 @@ fn check_category(value: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn extract_char_opt(value: &Value, fn_name: &str) -> Result<Option<char>, Flow> {
+fn extract_char_opt(value: &Value, _fn_name: &str) -> Result<Option<char>, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(super::builtins::character_code_to_rust_char(c)),
         _ => Err(signal(
@@ -121,7 +119,7 @@ fn extract_char(value: &Value, fn_name: &str) -> Result<char, Flow> {
     })
 }
 
-fn extract_char_code(value: &Value, fn_name: &str) -> Result<i64, Flow> {
+fn extract_char_code(value: &Value, _fn_name: &str) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(c as i64),
         _ => Err(signal(

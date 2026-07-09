@@ -182,6 +182,7 @@ impl ProcessWaitPolicy {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn just_this_one(self) -> bool {
         matches!(self, Self::TargetOnly(_))
     }
@@ -213,8 +214,10 @@ impl TimerWaitPolicy {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SpecialInputWaitPolicy {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     Suppress,
     ServiceOnly,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     CompleteOnAny,
     CompleteOnResize,
 }
@@ -367,6 +370,7 @@ impl WaitRequest {
         Self::input_pending_poll(TimerWaitPolicy::Run)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn timer_service(redisplay: bool) -> Self {
         Self {
             deadline: WaitDeadline::Poll,
@@ -378,6 +382,7 @@ impl WaitRequest {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sleep_until(deadline: Instant) -> Self {
         Self {
             deadline: WaitDeadline::until(deadline),
@@ -414,10 +419,12 @@ impl WaitRequest {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn deadline(self) -> WaitDeadline {
         self.deadline
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn deadline_is_poll(self) -> bool {
         matches!(self.deadline, WaitDeadline::Poll)
     }
@@ -430,6 +437,7 @@ impl WaitRequest {
         self.deadline.timer_deadline()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn deadline_is_forever(self) -> bool {
         matches!(self.deadline, WaitDeadline::Forever)
     }
@@ -438,10 +446,12 @@ impl WaitRequest {
         self.processes.target_process()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn completes_on_any_process_activity(self) -> bool {
         matches!(self.processes, ProcessWaitPolicy::Any)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn completes_on_target_process_activity(self, process: ProcessId) -> bool {
         matches!(
             self.processes,
@@ -449,6 +459,7 @@ impl WaitRequest {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn restricts_process_service_to_target(self) -> bool {
         self.processes.just_this_one()
     }
@@ -843,10 +854,12 @@ impl super::eval::Context {
         self.service_wait_request_once(&WaitRequest::service_once(true))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn service_timers_with_redisplay(&mut self) -> Result<(), Flow> {
         self.service_wait_request_once(&WaitRequest::timer_service(true))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn service_timers_without_redisplay(&mut self) -> Result<(), Flow> {
         self.service_wait_request_once(&WaitRequest::timer_service(false))
     }
@@ -858,6 +871,7 @@ impl super::eval::Context {
         self.service_wait_request_processes(request, WaitProcessService::Poll, true)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn service_wait_request_once_has_target_process_activity(
         &mut self,
         request: &WaitRequest,
@@ -867,6 +881,7 @@ impl super::eval::Context {
             .has_target_process_activity())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn service_wait_request_source_events_outcome(
         &mut self,
         request: &WaitRequest,
@@ -879,6 +894,7 @@ impl super::eval::Context {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn service_wait_request_source_events_have_target_process_activity(
         &mut self,
         request: &WaitRequest,
@@ -889,6 +905,7 @@ impl super::eval::Context {
             .has_target_process_activity())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn service_process_output_wait_once_has_target_process_activity(
         &mut self,
         request: ProcessOutputWaitRequest,
@@ -897,6 +914,7 @@ impl super::eval::Context {
         self.service_wait_request_once_has_target_process_activity(&wait)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn service_process_output_wait_source_events_have_target_process_activity(
         &mut self,
         request: ProcessOutputWaitRequest,
@@ -1113,6 +1131,7 @@ impl super::eval::Context {
             .map(ProcessOutputWaitOutcome::from_completion)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn wait_until(&mut self, deadline: Instant) -> Result<(), Flow> {
         let _ = self.wait_reading_process_output(WaitRequest::sleep_until(deadline))?;
         Ok(())

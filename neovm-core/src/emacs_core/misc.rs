@@ -10,6 +10,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use strum::{EnumString, IntoStaticStr};
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const MAX_EMACS_CHAR: i64 = 0x3FFFFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -136,6 +137,7 @@ pub(crate) fn builtin_copy_alist(args: Vec<Value>) -> EvalResult {
 
 /// `(rassoc KEY ALIST)` -- find the first entry in ALIST whose cdr equals KEY
 /// (using `equal`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_rassoc(args: Vec<Value>) -> EvalResult {
     builtin_rassoc_with_symbols(args, false)
 }
@@ -177,10 +179,12 @@ fn builtin_rassoc_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool)
 }
 
 /// `(rassq KEY ALIST)` -- like rassoc but uses `eq` for comparison.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_rassq(args: Vec<Value>) -> EvalResult {
     builtin_rassq_with_symbols(args, false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_rassq_with_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -188,6 +192,7 @@ pub(crate) fn builtin_rassq_with_ctx(
     builtin_rassq_with_symbols(args, eval.symbols_with_pos_enabled)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn builtin_rassq_with_symbols(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
     expect_args("rassq", &args, 2)?;
     builtin_rassq_values(args[0], args[1], symbols_with_pos_enabled)
@@ -356,6 +361,7 @@ pub(crate) fn builtin_safe_length(args: Vec<Value>) -> EvalResult {
 /// `(subst-char-in-string FROMCHAR TOCHAR STRING &optional INPLACE)` --
 /// replace all occurrences of FROMCHAR with TOCHAR in STRING.
 /// INPLACE is ignored (we always return a new string).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_subst_char_in_string(args: Vec<Value>) -> EvalResult {
     expect_min_args("subst-char-in-string", &args, 3)?;
     expect_max_args("subst-char-in-string", &args, 4)?;
@@ -624,6 +630,7 @@ pub(crate) fn builtin_display_line_numbers_update_width(args: Vec<Value>) -> Eva
 // defsubr registry (subr.el's defun wins at runtime) and its fixed
 // output did not match GNU semantics.
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_threadp(eval: &super::eval::Context, value: &Value) -> Result<(), Flow> {
     expect_threadp_in_state(&eval.threads, value)
 }

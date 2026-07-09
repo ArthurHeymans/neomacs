@@ -11,7 +11,7 @@
 //! - Face merging (overlay face on top of base face)
 
 use crate::emacs_core::intern::{SymId, resolve_sym};
-use crate::emacs_core::value::{Value, ValueKind, next_float_id};
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
@@ -61,6 +61,7 @@ impl LFaceAttr {
         usize::from(u8::from(self))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_index(index: usize) -> Option<Self> {
         let index = u8::try_from(index).ok()?;
         Self::try_from(index).ok()
@@ -1200,7 +1201,7 @@ fn parse_box_value(value: &Value) -> Option<BoxBorder> {
                         ValueKind::Fixnum(n) => width = n as i32,
                         ValueKind::Cons => {
                             let pair_car = item.cons_car();
-                            let pair_cdr = item.cons_cdr();
+                            let _pair_cdr = item.cons_cdr();
                             if let Some(n) = pair_car.as_fixnum() {
                                 width = n as i32;
                             }

@@ -20,9 +20,7 @@ pub use emacs_core::value::{Value, ValueKind};
 
 pub const CORE_BACKEND: &str = "rust";
 
-use neovm_host_abi::{
-    LispValue, SelectOp, SelectResult, Signal, TaskError, TaskOptions,
-};
+use neovm_host_abi::{LispValue, SelectOp, SelectResult, Signal, TaskError, TaskOptions};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

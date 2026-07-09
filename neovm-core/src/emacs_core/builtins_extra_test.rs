@@ -1,9 +1,8 @@
 use super::*;
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::intern::intern;
-use crate::emacs_core::value::{LambdaData, LambdaParams, ValueKind, next_float_id};
+use crate::emacs_core::value::{LambdaData, LambdaParams};
 use crate::test_utils::runtime_startup_eval_all;
-use malachite::base::num::arithmetic::traits::Pow;
 use malachite::integer::Integer;
 
 fn bootstrap_eval(src: &str) -> Vec<String> {

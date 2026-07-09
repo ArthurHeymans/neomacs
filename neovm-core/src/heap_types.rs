@@ -783,6 +783,7 @@ impl LispString {
         self.recompute_size();
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn has_trailing_nul(&self) -> bool {
         self.storage().has_trailing_nul()
     }

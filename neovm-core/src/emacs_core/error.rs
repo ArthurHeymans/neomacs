@@ -139,6 +139,7 @@ pub(crate) fn signal_with_data(symbol: &str, data: Value) -> Flow {
 }
 
 /// Create a signal with raw cdr payload without running `signal-hook-function`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn signal_with_data_suppressed(symbol: &str, data: Value) -> Flow {
     signal_with_data_internal(symbol, data, true)
 }

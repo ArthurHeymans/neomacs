@@ -348,6 +348,7 @@ impl SymbolRegistry {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn resolve_name_lisp_string(&self, id: NameId) -> &'static LispString {
         self.names.resolve_lisp_string(id)
     }
@@ -693,6 +694,7 @@ pub(crate) fn resolve_name(id: NameId) -> &'static str {
 }
 
 #[inline]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn resolve_name_lisp_string(id: NameId) -> &'static LispString {
     let registry = global_symbol_registry().read();
     registry.resolve_name_lisp_string(id)

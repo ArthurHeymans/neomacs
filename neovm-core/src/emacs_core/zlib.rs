@@ -10,7 +10,7 @@ use super::editfns::{
     buffer_read_only_active_in_state, signal_after_text_change, signal_before_text_change,
     text_change_for_lisp_string_replacement_in_manager,
 };
-use super::error::{EvalResult, Flow, signal};
+use super::error::{EvalResult, signal};
 use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };

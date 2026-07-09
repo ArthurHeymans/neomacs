@@ -3441,7 +3441,7 @@ fn split_window_in_tree(
 
     if tree.id() == target {
         let new_before_target = placement.is_before_target();
-        let old_id = tree.id();
+        let _old_id = tree.id();
         let old_bounds = *tree.bounds();
         let old_window = tree.clone();
         // The new internal (parent) node takes the old window's slot, so it

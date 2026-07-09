@@ -4,7 +4,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
 use super::super::value::{Value, ValueKind};
-use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_context};
+use crate::test_utils::runtime_startup_context;
 use malachite::integer::Integer;
 use std::fs;
 use std::path::PathBuf;
@@ -144,7 +144,7 @@ fn eval_str(ev: &mut Context, src: &str) -> Value {
 fn eval_int(ev: &mut Context, src: &str) -> i64 {
     match eval_str(ev, src).kind() {
         ValueKind::Fixnum(n) => n,
-        other => panic!("expected Int, got {:?}", eval_str(ev, src)),
+        _other => panic!("expected Int, got {:?}", eval_str(ev, src)),
     }
 }
 

@@ -16,7 +16,7 @@ use super::intern::{intern, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
 use crate::emacs_core::SymId;
-use crate::emacs_core::builtins::symbols::{expect_symbol_id, symbol_id};
+use crate::emacs_core::builtins::symbols::expect_symbol_id;
 use crate::emacs_core::value::ValueKind;
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;

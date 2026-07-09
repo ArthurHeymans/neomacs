@@ -1,8 +1,6 @@
 use super::*;
 use crate::buffer::CharPos0;
-use crate::emacs_core::value::{
-    ValueKind, VecLikeType, equal_value, get_string_text_properties_table_for_value,
-};
+use crate::emacs_core::value::{equal_value, get_string_text_properties_table_for_value};
 
 #[test]
 fn compose_region_internal_min_args() {

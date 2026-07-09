@@ -3,7 +3,7 @@ use super::{
     WindowDisplayState, WindowId, WindowMargins,
 };
 use crate::buffer::{BufferId, LispCharPos1};
-use crate::emacs_core::value::{Value, next_float_id};
+use crate::emacs_core::value::Value;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowBufferDisplayDefaults {

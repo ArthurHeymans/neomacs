@@ -87,7 +87,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -265,6 +265,7 @@ fn parse_integer_or_marker_arg(value: &Value) -> Result<IntegerOrMarkerArg, Flow
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_number_or_marker_count(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -316,7 +317,7 @@ fn clamped_window_position_in_state(
 fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *value],
         )),
@@ -324,6 +325,7 @@ fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
 }
 
 /// Extract a number-or-marker argument as f64.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_number_or_marker(value: &Value) -> Result<f64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
@@ -353,7 +355,7 @@ fn expect_margin_width(value: &Value) -> Result<usize, Flow> {
             }
             Ok(n as usize)
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -509,6 +511,7 @@ fn window_is_bottommost(frame: &crate::window::Frame, window_id: WindowId) -> bo
 ///
 /// - nil/omitted => selected live window
 /// - non-nil invalid designator => `(wrong-type-argument PRED VALUE)`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_window_object_id_with_pred(
     eval: &mut super::eval::Context,
     arg: Option<&Value>,
@@ -582,6 +585,7 @@ fn resolve_window_id_or_error_in_state(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_window_designator_for_error(eval: &super::eval::Context, value: &Value) -> String {
     if let Some(wid) = window_id_from_designator(value) {
         if eval.frames.is_window_object_id(wid) || value.is_window() {
@@ -591,6 +595,7 @@ fn format_window_designator_for_error(eval: &super::eval::Context, value: &Value
     super::print::print_value(value)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_window_id_or_window_error(
     eval: &mut super::eval::Context,
     arg: Option<&Value>,
@@ -705,6 +710,7 @@ pub(crate) fn resolve_frame_id_in_state(
 /// Resolve a frame designator that may also be a live window designator.
 ///
 /// `frame-first-window` accepts either a frame or window object in GNU Emacs.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_frame_or_window_frame_id(
     eval: &mut super::eval::Context,
     arg: Option<&Value>,
@@ -2078,6 +2084,7 @@ pub(crate) fn builtin_window_start(
 /// `(window-group-start &optional WINDOW)` -> integer position.
 ///
 /// Batch GNU Emacs exposes group-start as point-min (`1`) in startup flows.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_group_start(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2272,6 +2279,7 @@ pub(crate) fn builtin_set_window_start(
     Ok(result)
 }
 /// `(set-window-group-start WINDOW POS &optional NOFORCE)` -> POS.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_window_group_start(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2754,6 +2762,7 @@ fn scroll_prefix_value(value: &Value) -> i64 {
     crate::emacs_core::prefix::prefix_numeric_value(value)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn default_scroll_columns(eval: &super::eval::Context, fid: FrameId, wid: WindowId) -> i64 {
     default_scroll_columns_in_state(&eval.frames, fid, wid)
 }
@@ -3882,6 +3891,7 @@ pub(crate) fn builtin_window_at(eval: &mut super::eval::Context, args: Vec<Value
 // Window manipulation
 // ===========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn split_window_internal_impl(
     eval: &mut super::eval::Context,
     window: Value,
@@ -4344,6 +4354,7 @@ pub(crate) fn builtin_select_window(
 /// `(other-window COUNT &optional ALL-FRAMES)` -> nil.
 ///
 /// Select another window in cyclic order.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_other_window(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -4852,7 +4863,7 @@ pub(crate) fn builtin_display_buffer(
         let car = match action.kind() {
             ValueKind::Cons => {
                 let snap_car = action.cons_car();
-                let snap_cdr = action.cons_cdr();
+                let _snap_cdr = action.cons_cdr();
                 snap_car
             }
             _ => return false,
@@ -5637,6 +5648,7 @@ fn flush_pending_live_gui_resize(
 // Scroll / frame visibility command shims
 // ===========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn recenter_missing_display_error() -> Flow {
     signal(
         "error",
@@ -5726,6 +5738,7 @@ mod pixel_scroll_apply_tests {
 }
 
 /// `(scroll-up-command &optional ARG)` — delegates to scroll-up.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_scroll_up_command(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5735,6 +5748,7 @@ pub(crate) fn builtin_scroll_up_command(
 }
 
 /// `(scroll-down-command &optional ARG)` — delegates to scroll-down.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_scroll_down_command(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5745,6 +5759,7 @@ pub(crate) fn builtin_scroll_down_command(
 
 /// Compute scroll distance: if ARG is nil, use window height minus
 /// next-screen-context-lines; otherwise use ARG as line count.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn scroll_lines(eval: &mut super::eval::Context, arg: Option<&Value>, direction: i64) -> i64 {
     scroll_lines_in_state(
         &eval.obarray,
@@ -5833,6 +5848,7 @@ pub(crate) fn builtin_scroll_down(eval: &mut super::eval::Context, args: Vec<Val
 
 /// Move point by `lines` newlines (positive=forward, negative=backward).
 /// Signals end-of-buffer or beginning-of-buffer on boundary.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn scroll_by_lines(eval: &mut super::eval::Context, lines: i64) -> EvalResult {
     scroll_by_lines_in_state(&mut eval.frames, &mut eval.buffers, lines)
 }
@@ -5963,6 +5979,7 @@ fn scroll_by_lines_in_state(
 }
 
 /// `(recenter-top-bottom &optional ARG)` — delegates to recenter.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_recenter_top_bottom(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -6093,7 +6110,7 @@ pub(crate) fn builtin_iconify_frame(
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("iconify-frame", &args, 1)?;
     let fid = resolve_frame_id_in_state(frames, buffers, args.first(), "frame-live-p")?;
-    let frame = frames
+    let _frame = frames
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     set_frame_visibility(eval, fid, false)?;
@@ -7518,6 +7535,7 @@ fn parsed_effective_internal_border_width(
         .unwrap_or(0)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn current_gui_frame_metrics(eval: &super::eval::Context) -> GuiFrameMetrics {
     current_gui_frame_metrics_in_state(&eval.frames)
 }

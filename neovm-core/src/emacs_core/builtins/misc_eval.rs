@@ -707,6 +707,7 @@ pub(crate) fn builtin_load(eval: &mut super::eval::Context, args: Vec<Value>) ->
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_load_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("load-file", &args, 1)?;
     let file = crate::emacs_core::builtins::expect_lisp_string(&args[0])?.clone();
@@ -715,6 +716,7 @@ pub(crate) fn builtin_load_file(eval: &mut super::eval::Context, args: Vec<Value
         .map_err(eval_error_to_flow)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_eval(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("eval", &args, 1)?;
     expect_max_args("eval", &args, 2)?;
@@ -844,7 +846,7 @@ fn text_property_stickiness_in_state(
 
 pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
-    dynamic: &[OrderedRuntimeBindingMap],
+    _dynamic: &[OrderedRuntimeBindingMap],
     buf: &crate::buffer::Buffer,
     insert_start: usize,
     insert_len: usize,
@@ -1076,6 +1078,7 @@ fn value_list_contains(list: &Value, prop: Value) -> bool {
     false
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn buffer_read_only_active(
     eval: &super::eval::Context,
     buf: &crate::buffer::Buffer,
@@ -1178,6 +1181,7 @@ pub(crate) fn builtin_bury_buffer_internal(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bury_buffer_internal_impl(
     buffers: &mut crate::buffer::BufferManager,
     args: Vec<Value>,
@@ -1546,6 +1550,7 @@ pub(crate) fn dispatch_print_callback_emacs_chars(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn write_print_output(
     eval: &mut super::eval::Context,
     printcharfun: Option<&Value>,
@@ -1631,7 +1636,7 @@ fn write_terpri_output(eval: &mut super::eval::Context, target: Value) -> Result
             let _ = eval.buffers.insert_into_buffer(id, "\n");
             Ok(())
         }
-        other => {
+        _other => {
             // Root the callable target across eval.apply().
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(target);
@@ -1643,6 +1648,7 @@ fn write_terpri_output(eval: &mut super::eval::Context, target: Value) -> Result
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn print_value_eval(eval: &super::eval::Context, value: &Value) -> String {
     super::error::print_value_with_eval(eval, value)
 }
@@ -1861,6 +1867,7 @@ fn print_value_princ_bytes_list_shorthand(
     Some(out)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn prin1_to_string_value(value: &Value, noescape: bool) -> String {
     if noescape {
         match value.kind() {
@@ -1998,6 +2005,7 @@ fn apply_print_override_setting(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn prin1_to_string_value_eval(
     eval: &super::eval::Context,
     value: &Value,
@@ -2006,6 +2014,7 @@ fn prin1_to_string_value_eval(
     prin1_to_string_value_in_state(eval, value, noescape)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn prin1_to_lisp_string_value_in_state(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
@@ -2015,6 +2024,7 @@ pub(crate) fn prin1_to_lisp_string_value_in_state(
         .expect("nil print overrides cannot fail")
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn prin1_to_string_value_in_state(
     ctx: &crate::emacs_core::eval::Context,
     value: &Value,
@@ -2314,7 +2324,7 @@ pub(crate) fn finish_write_char_in_eval(
                 let _ = eval.buffers.insert_lisp_string_into_buffer(id, &ls);
             }
         }
-        other => {
+        _other => {
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(target);
             let call_result = eval.apply(target, vec![Value::fixnum(char_code)]);
@@ -2418,7 +2428,7 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
 
 pub(crate) fn builtin_current_cpu_time(args: Vec<Value>) -> EvalResult {
     expect_args("current-cpu-time", &args, 0)?;
-    use crate::emacs_core::value::{ValueKind, VecLikeType};
+
     use std::sync::OnceLock;
     use std::time::Instant;
     static CPU_TIME_START: OnceLock<Instant> = OnceLock::new();

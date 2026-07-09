@@ -1,7 +1,7 @@
 use super::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::ValueKind;
 
 /// Map a regex front-end error string to its Lisp signal.  Compile
 /// errors are `invalid-regexp`; the matcher's fail-stack overflow is a
@@ -697,6 +697,7 @@ pub(crate) fn builtin_posix_search_backward(
     re_search_backward_with_state_posix(case_fold, true, &mut eval.buffers, md_slot, &args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_search_forward_regexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -712,6 +713,7 @@ pub(crate) fn builtin_search_forward_regexp(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_search_forward_regexp_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
@@ -722,6 +724,7 @@ pub(crate) fn builtin_search_forward_regexp_with_state(
     builtin_re_search_forward_with_state(case_fold, buffers, match_data, args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_search_backward_regexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -737,6 +740,7 @@ pub(crate) fn builtin_search_backward_regexp(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_search_backward_regexp_with_state(
     case_fold: bool,
     buffers: &mut crate::buffer::BufferManager,
@@ -801,6 +805,7 @@ pub(crate) fn builtin_looking_at_with_state(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_looking_at_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -811,6 +816,7 @@ pub(crate) fn builtin_looking_at_p(
     builtin_looking_at_p_with_state(case_fold, &eval.buffers, &args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_looking_at_p_with_state(
     case_fold: bool,
     buffers: &crate::buffer::BufferManager,
@@ -1215,6 +1221,7 @@ pub(crate) fn builtin_posix_string_match(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_match_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1799,6 +1806,7 @@ fn update_match_data_after_buffer_replace(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_match_with_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     buffers: &mut crate::buffer::BufferManager,
@@ -1817,7 +1825,7 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
     buffers: &mut crate::buffer::BufferManager,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
-    case_symbols_as_words: bool,
+    _case_symbols_as_words: bool,
 ) -> EvalResult {
     expect_min_args("replace-match", args, 1)?;
     if args.len() > 5 {

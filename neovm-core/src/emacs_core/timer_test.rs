@@ -1,4 +1,3 @@
-use super::super::value::next_float_id;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }

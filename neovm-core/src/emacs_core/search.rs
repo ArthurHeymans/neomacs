@@ -13,7 +13,6 @@
 //! - `word-search-forward`, `word-search-backward`
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::intern;
 use super::regex::MatchGroup;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos};
@@ -34,6 +33,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -55,6 +55,7 @@ fn buffer_match_char_pos_to_byte_pos(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
@@ -66,10 +67,11 @@ fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Resu
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *val],
         )),
@@ -79,17 +81,18 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
 fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *val],
         )),
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integer_or_marker(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *val],
         )),
@@ -126,6 +129,7 @@ fn regexp_quote_lisp_string(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn normalize_string_start_arg(string: &str, start: Option<&Value>) -> Result<usize, Flow> {
     let Some(start_val) = start else {
         return Ok(0);
@@ -230,6 +234,7 @@ pub(crate) fn normalize_lisp_string_start_arg(
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn flatten_match_data(md: &super::regex::MatchData) -> Value {
     let mut trailing = md.groups.len();
     while trailing > 0 && md.groups[trailing - 1].is_none() {
@@ -271,6 +276,7 @@ pub(crate) fn builtin_regexp_quote(args: Vec<Value>) -> EvalResult {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn parse_replace_regexp_subexp_start_lisp(
     args: &[Value],
     string: &crate::heap_types::LispString,
@@ -298,11 +304,13 @@ fn parse_replace_regexp_subexp_start_lisp(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 struct ReplaceRegexpSubexpStart {
     subexp: usize,
     start: usize,
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn translate_match_data_to_substring(
     match_data: &super::regex::MatchData,
     delta: i64,
@@ -318,6 +326,7 @@ fn translate_match_data_to_substring(
     translated
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_match_on_substring(
     source: &crate::heap_types::LispString,
     replacement: &crate::heap_types::LispString,
@@ -792,6 +801,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     Ok((buffer_start, buffer_end, replacement_only))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_regexp_in_string_lisp<F>(
     args: &[Value],
     case_fold: bool,
@@ -882,11 +892,13 @@ where
 /// See the extended comment on the identical helper in
 /// `builtins/misc_eval.rs` (audit finding #3 in
 /// `drafts/regex-search-audit.md`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_regexp_in_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

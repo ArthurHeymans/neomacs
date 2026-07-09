@@ -1,5 +1,4 @@
 use super::*;
-use malachite::base::num::arithmetic::traits::Pow;
 use malachite::integer::Integer;
 
 fn install_test_runtime() {

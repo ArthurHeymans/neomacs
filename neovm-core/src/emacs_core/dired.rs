@@ -11,9 +11,9 @@ use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::heap_types::LispString;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 #[cfg(unix)]
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::fs;
 use std::io::ErrorKind;
 
@@ -65,7 +65,7 @@ fn expect_lisp_string(_name: &str, value: &Value) -> Result<LispString, Flow> {
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -431,7 +431,6 @@ fn build_file_attributes(filename: &LispString, id_format: FileIdFormat) -> Opti
     // Device.
     #[cfg(unix)]
     let device = {
-        use crate::emacs_core::value::ValueKind;
         use std::os::unix::fs::MetadataExt;
         Value::fixnum(sym_meta.dev() as i64)
     };
@@ -1121,6 +1120,7 @@ fn filter_completion_candidates(
         .collect()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn filter_completions_by_symbol_predicate(
     eval: &mut Context,
     predicate: Option<&Value>,
@@ -1147,6 +1147,7 @@ fn filter_completions_by_symbol_predicate(
     Ok(filtered)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn symbol_predicate_matches_candidate(
     eval: &mut Context,
     symbol: &str,

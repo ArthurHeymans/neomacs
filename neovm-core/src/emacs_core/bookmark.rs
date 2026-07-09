@@ -15,7 +15,6 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::error::{EvalResult, Flow, signal};
@@ -351,6 +350,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -362,6 +362,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -379,7 +380,7 @@ fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -395,6 +396,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 /// In batch/non-file buffers GNU Emacs signals:
 ///   (error "Buffer not visiting a file or directory")
 /// This implementation mirrors that behavior.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_set(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -447,6 +449,7 @@ pub(crate) fn builtin_bookmark_set(
 ///
 /// Returns an alist: ((filename . F) (position . P) (annotation . A))
 /// or signals an error if the bookmark does not exist.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_jump(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -504,6 +507,7 @@ pub(crate) fn builtin_bookmark_jump(
 }
 
 /// (bookmark-delete NAME &optional BATCH) -> nil
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_delete(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -531,6 +535,7 @@ pub(crate) fn builtin_bookmark_delete(
 }
 
 /// (bookmark-rename OLD NEW) -> nil
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_rename(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -737,6 +742,7 @@ pub(crate) fn builtin_bookmark_set_annotation(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn default_bookmark_file() -> LispString {
     if let Ok(home) = std::env::var("HOME") {
         return LispString::from_utf8(&format!("{home}/.config/emacs/bookmarks"));
@@ -744,6 +750,7 @@ fn default_bookmark_file() -> LispString {
     LispString::from_utf8(".config/emacs/bookmarks")
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
     if let Some(v) = eval.obarray.symbol_value("bookmark-default-file") {
         if let Some(ls) = v.as_lisp_string() {
@@ -753,6 +760,7 @@ fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
     default_bookmark_file()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn bookmark_timestamp_file(eval: &super::eval::Context) -> Option<LispString> {
     let value = eval.obarray.symbol_value("bookmark-bookmarks-timestamp")?;
     if !value.is_cons() {
@@ -762,6 +770,7 @@ fn bookmark_timestamp_file(eval: &super::eval::Context) -> Option<LispString> {
     pair_car.as_lisp_string().cloned()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn bookmark_save_stamp(path: &LispString) -> Value {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -775,12 +784,14 @@ fn bookmark_save_stamp(path: &LispString) -> Value {
     ])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn set_bookmark_timestamp(eval: &mut super::eval::Context, file: &LispString) {
     eval.obarray
         .set_symbol_value("bookmark-bookmarks-timestamp", bookmark_save_stamp(file));
 }
 
 /// (bookmark-save &optional PARG FILE BATCH) -> nil or save-stamp list
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_save(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -863,6 +874,7 @@ pub(crate) fn builtin_bookmark_save(
 }
 
 /// (bookmark-load FILE &optional OVERWRITE NO-MSG BATCH) -> message string or nil
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_load(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -882,7 +894,7 @@ pub(crate) fn builtin_bookmark_load(
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
             .clone(),
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("stringp"), args[0]],

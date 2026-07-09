@@ -7,7 +7,7 @@
 //! - `func-arity`, `indirect-function`
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::{SymId, lookup_interned, resolve_name, resolve_sym};
+use super::intern::{SymId, resolve_name, resolve_sym};
 use super::value::*;
 use crate::tagged::header::{SubrDispatchKind, SubrObj};
 use std::collections::HashMap;
@@ -28,6 +28,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -39,6 +40,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
@@ -93,6 +95,7 @@ pub(crate) fn public_evaluator_subr_names() -> impl Iterator<Item = &'static str
 /// This list mirrors `Context::try_special_form()` in `eval.rs`.
 /// Only includes forms that are evaluator-owned by construction:
 /// GNU C special forms, evaluator internals, and NeoVM-owned runtime forms.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_evaluator_special_form_name(name: &str) -> bool {
     matches!(
         name,
@@ -137,6 +140,7 @@ fn is_public_special_form_name(name: &str) -> bool {
     PUBLIC_SPECIAL_FORM_NAMES.contains(&name)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_special_form(name: &str) -> bool {
     is_public_special_form_name(name)
 }
@@ -146,6 +150,7 @@ pub(crate) fn is_special_form(name: &str) -> bool {
 ///
 /// After removing the Rust sf_ forms that duplicated Elisp macros,
 /// there are no longer any forms that need this skip.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_evaluator_sf_skip_macroexpand(_name: &str) -> bool {
     false
 }
@@ -453,6 +458,7 @@ fn subr_arity_from_registry(ctx: &super::eval::Context, sym_id: SymId) -> Value 
     subr_arity_value(name)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn subr_arity_from_value(subr: Value) -> Option<Value> {
     // Try global table first (new path)
     if let Some(sym_id) = subr.as_subr_id() {
@@ -487,6 +493,7 @@ fn subr_arity_from_value(subr: Value) -> Option<Value> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn special_form_min_arity(subr: &SubrObj) -> usize {
     if subr.min_args > 0 || subr.max_args.is_some() {
         subr.min_args as usize
@@ -534,6 +541,7 @@ pub(crate) fn builtin_interpreted_function_p(args: Vec<Value>) -> EvalResult {
 /// GNU Emacs (eval.c): checks if OBJECT is a symbol whose function cell
 /// contains a subr with max_args == UNEVALLED.  NeoVM checks the symbol
 /// name against the evaluator's special-form table.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_special_form_p(args: Vec<Value>) -> EvalResult {
     expect_args("special-form-p", &args, 1)?;
     let result = match args[0].kind() {
@@ -580,6 +588,7 @@ pub(crate) fn macrop_check(obj: &Value) -> EvalResult {
 /// In our simplified VM, any callable value (lambda, subr, bytecode) is
 /// treated as a potential command.  A more complete implementation would
 /// check for an `interactive` declaration.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_commandp(args: Vec<Value>) -> EvalResult {
     expect_min_args("commandp", &args, 1)?;
     expect_max_args("commandp", &args, 2)?;
@@ -635,6 +644,7 @@ pub(crate) fn builtin_func_arity_ctx(
 }
 
 /// Legacy pure version for callers that don't have Context access.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_func_arity_impl(args: Vec<Value>) -> EvalResult {
     expect_args("func-arity", &args, 1)?;
     let original = args[0];

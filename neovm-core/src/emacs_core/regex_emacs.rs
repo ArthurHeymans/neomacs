@@ -846,8 +846,10 @@ struct CompileStackEntry {
     /// Bytecode position of the fixup jump for alternation (or 0).
     fixup_alt_jump: Option<usize>,
     /// Bytecode position of the last expression start (for postfix ops).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     laststart_offset: Option<usize>,
     /// Group number at the time of \( (before incrementing).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     regnum: usize,
     /// The actual group number assigned to this \( (None for shy groups).
     assigned_group: Option<usize>,
@@ -867,6 +869,7 @@ struct CompileStackEntry {
 ///
 /// # Returns
 /// A `CompiledPattern` with bytecode ready for the matcher.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn regex_compile(
     pattern: &str,
     posix: bool,
@@ -895,7 +898,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
     buf.multibyte = pattern.is_multibyte();
     buf.target_multibyte = pattern.is_multibyte();
     buf.translate = translation;
-    let case_fold = buf.translate.is_some();
+    let _case_fold = buf.translate.is_some();
 
     let pattern_bytes = pattern.as_bytes();
     let plen = pattern_bytes.len();
@@ -5514,7 +5517,7 @@ fn one_char_match_superset(buf: &CompiledPattern, pos: usize) -> Option<CharSupe
             }
         }
         RegexOp::CharsetNot => {
-            let charset_pos = pos;
+            let _charset_pos = pos;
             let bitmap_len = (*bytecode.get(pos + 1)? & 0x7F) as usize;
             if pos + 2 + bitmap_len > bytecode.len() {
                 return None;
@@ -6859,6 +6862,7 @@ pub(crate) fn re_search(
 // ---------------------------------------------------------------------------
 
 /// Compile a pattern and search for it in text.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn search_pattern(
     pattern_str: &str,
     text: &str,
@@ -6879,6 +6883,7 @@ pub(crate) fn search_pattern(
 }
 
 /// Compile a pattern and match at a specific position.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn match_pattern(
     pattern_str: &str,
     text: &str,

@@ -1,6 +1,5 @@
 use super::*;
 use crate::emacs_core::intern::{intern, resolve_sym};
-use crate::emacs_core::value::ValueKind;
 
 fn mgr() -> CodingSystemManager {
     CodingSystemManager::new()

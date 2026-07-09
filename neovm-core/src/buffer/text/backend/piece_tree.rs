@@ -6,7 +6,6 @@ use crate::buffer::text::TextBackendDebugLayout;
 use crate::buffer::text::{
     BufferTextBytesSnapshot, TextEditRange, TextExtent, TextMetrics, TextReplacement,
     emacs_byte_to_char_in_slice, emacs_char_count_bytes, emacs_char_to_byte_in_slice,
-    is_emacs_char_boundary,
 };
 
 use super::treap::{TreapPriority, TreapSerial};
@@ -205,6 +204,7 @@ impl PieceTreeTextBackend {
         self.metrics().emacs_bytes_usize()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn is_empty(&self) -> bool {
         self.len() == 0
     }

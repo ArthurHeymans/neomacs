@@ -8,9 +8,7 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::{
-    BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
-};
+use crate::buffer::{BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -148,6 +146,7 @@ fn current_buffer_in_manager(buffers: &BufferManager) -> Result<&crate::buffer::
     buffers.current_buffer().ok_or_else(no_buffer)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let name_id = intern(name);
     if eval.lexical_binding() && !eval.obarray.is_special(name) {
@@ -756,6 +755,7 @@ pub(crate) fn builtin_line_number_at_pos(
 }
 
 /// (count-lines BEG END)
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_count_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("count-lines", &args, 2)?;
     expect_max_args("count-lines", &args, 3)?;
@@ -1278,6 +1278,7 @@ pub(crate) fn builtin_skip_chars_backward(
 // ===========================================================================
 
 /// (mark &optional FORCE) -> integer or signal
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_mark_nav(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let _force = args.first().is_some_and(|v| v.is_truthy());
     let buf = eval.buffers.current_buffer().ok_or_else(no_buffer)?;

@@ -4,12 +4,9 @@
 //! and all dispnew-related builtins (redraw, ding, termscript,
 //! send-string-to-terminal, internal-show-cursor, force-window-update).
 
-use crate::emacs_core::display::{expect_frame_designator, live_frame_designator_p};
+use crate::emacs_core::display::live_frame_designator_p;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
-use crate::emacs_core::terminal::pure::{
-    expect_terminal_designator, expect_terminal_designator_eval,
-    expect_terminal_designator_in_state,
-};
+use crate::emacs_core::terminal::pure::expect_terminal_designator_eval;
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::window::WindowId;
@@ -61,6 +58,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 // Window designator helpers
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_window_designator(value: &Value) -> Result<(), Flow> {
     if value.is_nil() {
         Ok(())
@@ -100,6 +98,7 @@ fn expect_window_designator_eval(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn live_window_designator_p_in_state(frames: &crate::window::FrameManager, value: &Value) -> bool {
     match value.kind() {
         ValueKind::Veclike(VecLikeType::Window) => frames
@@ -112,6 +111,7 @@ fn live_window_designator_p_in_state(frames: &crate::window::FrameManager, value
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_window_designator_in_state(
     frames: &crate::window::FrameManager,
     value: &Value,
@@ -139,6 +139,7 @@ fn selected_window_id(eval: &mut crate::emacs_core::eval::Context) -> Option<Win
     eval.frames.get(frame_id).map(|frame| frame.selected_window)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn selected_window_id_in_state(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -159,6 +160,7 @@ fn resolve_internal_show_cursor_window_id(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_internal_show_cursor_window_id_in_state(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -232,7 +234,7 @@ pub(crate) fn builtin_send_string_to_terminal(
             }
             Ok(Value::NIL)
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), args[0]],
         )),

@@ -29,8 +29,7 @@
 
 use super::intern::{
     NameId, SymId, intern, intern_lisp_string, is_canonical_id, lookup_interned,
-    lookup_interned_lisp_string, resolve_name, resolve_sym, resolve_sym_lisp_string,
-    symbol_name_id,
+    lookup_interned_lisp_string, resolve_name, resolve_sym_lisp_string, symbol_name_id,
 };
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::emacs_core::error::Flow;
@@ -1169,10 +1168,12 @@ impl Obarray {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn is_global_member(&self, id: SymId) -> bool {
         self.slot(id).is_some_and(|sym| sym.interned_global)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn value_from_symbol_id(&self, id: SymId) -> Value {
         if self.is_global_member(id) {
             let name = resolve_sym_lisp_string(id);
@@ -1664,7 +1665,7 @@ impl Obarray {
     pub fn read_localized(
         &self,
         id: SymId,
-        target_buf: Value,
+        _target_buf: Value,
         target_alist: Value,
     ) -> Option<Value> {
         let blv = self.blv(id)?;
@@ -1687,10 +1688,10 @@ impl Obarray {
     pub fn has_per_buffer_binding(
         &self,
         id: SymId,
-        target_buf: Value,
+        _target_buf: Value,
         target_alist: Value,
     ) -> bool {
-        let Some(blv) = self.blv(id) else {
+        let Some(_blv) = self.blv(id) else {
             return false;
         };
         // See `read_localized`: in Neomacs the alist is authoritative.
@@ -1841,7 +1842,7 @@ impl Obarray {
     pub fn find_symbol_value_in_buffer(
         &mut self,
         id: SymId,
-        current_buffer_id: Option<crate::buffer::BufferId>,
+        _current_buffer_id: Option<crate::buffer::BufferId>,
         current_buffer_value: Value,
         local_var_alist: Value,
         current_buffer_slots: Option<&[Value]>,

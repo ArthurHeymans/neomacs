@@ -279,7 +279,7 @@ pub(crate) fn builtin_ccl_execute_on_string_impl(args: Vec<Value>) -> EvalResult
             let message = ccl_program_code_index_message(&program, designator_kind);
             Err(signal("error", vec![Value::string(message)]))
         }
-        other => {
+        _other => {
             // Type error: STRING must be a string or nil
             Err(signal(
                 "wrong-type-argument",

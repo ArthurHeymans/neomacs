@@ -86,6 +86,7 @@ fn expect_fixnum_arg(name: &str, arg: &Value) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_window_text_pixel_size_from_arg(from: Value) -> Result<(), Flow> {
     if from.is_nil() || from.is_t() {
         return Ok(());
@@ -98,6 +99,7 @@ fn validate_window_text_pixel_size_from_arg(from: Value) -> Result<(), Flow> {
     expect_integer_or_marker(&from)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_window_text_pixel_size_to_arg(to: Value) -> Result<(), Flow> {
     if to.is_nil() || to.is_t() {
         return Ok(());
@@ -143,6 +145,7 @@ fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
     LineColumn { line, column: col }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn region_text_metrics(bytes: &[u8], multibyte: bool) -> RegionTextMetrics {
     if bytes.is_empty() {
         return RegionTextMetrics {
@@ -883,6 +886,7 @@ fn window_text_pixel_size_includes_mode_line(mode_lines: Option<&Value>) -> bool
 /// (format-mode-line &optional FORMAT FACE WINDOW BUFFER) -> string
 ///
 /// Batch-compatible behavior: accepts 1..4 args and returns an empty string.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_format_mode_line(args: Vec<Value>) -> EvalResult {
     expect_args_range("format-mode-line", &args, 1, 4)?;
     if let Some(window) = args.get(2) {
@@ -909,6 +913,7 @@ pub(crate) fn builtin_format_mode_line(args: Vec<Value>) -> EvalResult {
 /// Handles string formats with %-construct expansion and list-based format
 /// specs by recursively processing elements (symbols, strings, :eval, :propertize,
 /// and conditional cons cells).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn format_mode_line_from_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -1088,6 +1093,7 @@ pub(crate) fn finish_format_mode_line_in_eval(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_format_mode_line_in_state_with_eval(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -1135,6 +1141,7 @@ pub(crate) fn finish_format_mode_line_in_state_with_eval(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_format_mode_line_in_vm_runtime(
     shared: &mut crate::emacs_core::eval::Context,
     args: &[Value],
@@ -2139,6 +2146,7 @@ fn format_mode_line_recursive(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_mode_line_recursive_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2304,6 +2312,7 @@ fn format_mode_line_recursive_in_state(
     false
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_mode_line_recursive_in_state_with_eval(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
@@ -2488,6 +2497,7 @@ fn format_mode_line_recursive_in_state_with_eval(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn format_mode_line_recursive_in_vm_runtime(
     shared: &mut crate::emacs_core::eval::Context,
     args_roots: &[Value],
@@ -3461,6 +3471,7 @@ pub(crate) fn builtin_line_pixel_height(args: Vec<Value>) -> EvalResult {
 ///
 /// Batch-compatible behavior returns `(0 . 0)` and enforces argument
 /// validation for WINDOW / FROM / TO.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_text_pixel_size(args: Vec<Value>) -> EvalResult {
     expect_args_range("window-text-pixel-size", &args, 0, 7)?;
 
@@ -3662,6 +3673,7 @@ fn resolve_live_window_for_text_pixel_size(
 ///
 /// Batch-compatible behavior: no window visibility is reported, so this
 /// returns nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_pos_visible_in_window_p(args: Vec<Value>) -> EvalResult {
     expect_args_range("pos-visible-in-window-p", &args, 0, 3)?;
     if let Some(window) = args.get(1) {
@@ -4265,6 +4277,7 @@ pub(crate) fn builtin_move_to_window_line(
 /// (tool-bar-height &optional FRAME PIXELWISE) -> integer
 ///
 /// Get the height of the tool bar. Returns 0 (no tool bar).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tool_bar_height(args: Vec<Value>) -> EvalResult {
     expect_args_range("tool-bar-height", &args, 0, 2)?;
     // Return 0 (no tool bar)
@@ -4309,6 +4322,7 @@ pub(crate) fn builtin_tool_bar_height_ctx(
 /// (tab-bar-height &optional FRAME PIXELWISE) -> integer
 ///
 /// Get the height of the tab bar. Returns 0 (no tab bar).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tab_bar_height(args: Vec<Value>) -> EvalResult {
     expect_args_range("tab-bar-height", &args, 0, 2)?;
     // Return 0 (no tab bar)
@@ -4473,6 +4487,7 @@ pub(crate) fn builtin_long_line_optimizations_p(args: Vec<Value>) -> EvalResult 
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_optional_frame_designator(
     eval: &super::eval::Context,
     value: Option<&Value>,
@@ -4480,6 +4495,7 @@ fn validate_optional_frame_designator(
     validate_optional_frame_designator_in_state(&eval.frames, value)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_optional_frame_designator_in_state(
     frames: &crate::window::FrameManager,
     value: Option<&Value>,
@@ -4603,6 +4619,7 @@ fn resolve_optional_window_buffer(
     None
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_optional_window_buffer_in_state(
     frames: &crate::window::FrameManager,
     value: Option<&Value>,
@@ -4645,6 +4662,7 @@ fn resolve_mode_line_buffer(
     resolve_optional_window_buffer(eval, window)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_mode_line_buffer_in_state(
     frames: &crate::window::FrameManager,
     window: Option<&Value>,

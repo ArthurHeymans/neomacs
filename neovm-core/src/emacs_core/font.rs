@@ -25,7 +25,7 @@ use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
-use crate::buffer::{Buffer, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
+use crate::buffer::{Buffer, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
 use crate::face::{
     BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
@@ -98,6 +98,7 @@ impl FontSpacing {
         name.parse().ok()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_gnu_code(code: i64) -> Option<Self> {
         let code = i32::try_from(code).ok()?;
         Self::try_from(code).ok()
@@ -209,6 +210,7 @@ pub fn alternative_font_families(family: &str) -> Vec<String> {
         .unwrap_or_else(|| vec![lookup.to_string()])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ascii_downcase_lisp_string(text: &LispString) -> LispString {
     let mut data = text.as_bytes().to_vec();
     for byte in &mut data {
@@ -673,6 +675,7 @@ fn frame_device_designator_p(value: &Value) -> bool {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn optional_selected_frame_designator_p(value: &Value) -> bool {
     value.is_nil() || frame_device_designator_p(value)
 }
@@ -2330,6 +2333,7 @@ fn face_remapping_for_current_buffer(eval: &super::eval::Context) -> FaceRemappi
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn apply_face_layers(face_table: &crate::face::FaceTable, layers: &[FaceLayer]) -> RuntimeFace {
     apply_face_layers_with_remapping(face_table, layers, &FaceRemapping::new())
 }
@@ -3992,6 +3996,7 @@ pub(crate) fn clear_created_lisp_face(name: &str) {
     });
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn copy_defaults_overrides(src: &str, dst: &str) {
     let src_face = face_symbol_id(src);
     let dst_face = face_symbol_id(dst);
@@ -4015,6 +4020,7 @@ fn copy_defaults_overrides(src: &str, dst: &str) {
     });
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn copy_selected_overrides(src: &str, dst: &str) {
     let src_face = face_symbol_id(src);
     let dst_face = face_symbol_id(dst);
@@ -4591,6 +4597,7 @@ fn apply_lisp_face_vector_update_for_frame_arg(
 /// overrides.  This matches GNU Emacs' behaviour where the face vector in
 /// `Vface_new_frame_defaults` reflects the full face definition regardless
 /// of which frame domains the attributes were set on.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_lisp_face_vector_merged(face_name: &str) -> Value {
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
     values.push(Value::symbol("face"));
@@ -4800,6 +4807,7 @@ fn lisp_face_attribute_value(face: &str, attr: LFaceAttr, defaults_frame: bool) 
     lisp_face_attribute_base_value(face, attr, defaults_frame)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_face_attribute_value_merged(face: &str, attr: LFaceAttr) -> Value {
     if let Some(v) = get_face_override(face, attr, false) {
         return v;
@@ -5857,6 +5865,7 @@ pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) 
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn runtime_face_to_lisp_vector(face: &RuntimeFace) -> Value {
     let mut values = Vec::with_capacity(LISP_FACE_VECTOR_LEN);
     values.push(Value::symbol("face"));
@@ -6103,6 +6112,7 @@ pub(crate) fn builtin_face_attribute_relative_p(args: Vec<Value>) -> EvalResult 
 
 /// `(merge-face-attribute ATTRIBUTE VALUE1 VALUE2)` -- return VALUE1 unless it
 /// is the symbol `unspecified`, in which case return VALUE2.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_merge_face_attribute(args: Vec<Value>) -> EvalResult {
     expect_args("merge-face-attribute", &args, 3)?;
     Ok(merge_face_attribute_impl(None, &args))
@@ -6144,6 +6154,7 @@ fn merge_face_attribute_impl(eval: Option<&mut super::eval::Context>, args: &[Va
 }
 
 /// `(face-list &optional FRAME)` -- return list of known face names.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_face_list(args: Vec<Value>) -> EvalResult {
     expect_max_args("face-list", &args, 1)?;
     Ok(Value::list(
@@ -6224,6 +6235,7 @@ fn parse_color_16bit_any(color_name: &str) -> Option<(i64, i64, i64)> {
 
 /// `(color-defined-p COLOR &optional FRAME)` -- nil if unknown; otherwise truthy
 /// for known RGB/hex and supported terminal color names.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_color_defined_p(args: Vec<Value>) -> EvalResult {
     expect_min_args("color-defined-p", &args, 1)?;
     expect_max_args("color-defined-p", &args, 2)?;
@@ -6265,6 +6277,7 @@ pub(crate) fn builtin_xw_color_defined_p_ctx(
 ///
 /// In batch/TTY compatibility mode we approximate resolved colors to the
 /// nearest entry in the 8-color terminal palette.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_color_values(args: Vec<Value>) -> EvalResult {
     expect_min_args("color-values", &args, 1)?;
     expect_max_args("color-values", &args, 2)?;
@@ -6584,6 +6597,7 @@ fn approximate_tty_color((r, g, b): (i64, i64, i64)) -> (i64, i64, i64) {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn invalid_get_device_terminal_error(value: &Value) -> Flow {
     signal(
         "error",
@@ -6594,6 +6608,7 @@ fn invalid_get_device_terminal_error(value: &Value) -> Flow {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn color_device_designator_p(value: &Value) -> bool {
     match value.kind() {
         ValueKind::Nil => true,
@@ -6601,6 +6616,7 @@ fn color_device_designator_p(value: &Value) -> bool {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_optional_color_device_arg(args: &[Value], idx: usize) -> Result<(), Flow> {
     if let Some(value) = args.get(idx) {
         if !color_device_designator_p(value) {
@@ -6611,6 +6627,7 @@ fn expect_optional_color_device_arg(args: &[Value], idx: usize) -> Result<(), Fl
 }
 
 /// `(defined-colors &optional FRAME)` -- return a list of defined color names.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_defined_colors(args: Vec<Value>) -> EvalResult {
     expect_max_args("defined-colors", &args, 1)?;
     expect_optional_color_device_arg(&args, 0)?;
@@ -6622,6 +6639,7 @@ pub(crate) fn builtin_defined_colors(args: Vec<Value>) -> EvalResult {
 
 /// `(face-id FACE &optional FRAME)` -- return numeric face id for known and
 /// dynamically created faces.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_face_id(args: Vec<Value>) -> EvalResult {
     expect_min_args("face-id", &args, 1)?;
     expect_max_args("face-id", &args, 2)?;

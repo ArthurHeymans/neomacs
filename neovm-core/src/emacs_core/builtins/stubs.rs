@@ -18,21 +18,25 @@ pub(crate) fn builtin_fontset_list_all(args: Vec<Value>) -> EvalResult {
 // term.c gap-fill stubs
 // =========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_at(args: Vec<Value>) -> EvalResult {
     expect_args("tty-frame-at", &args, 2)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_geometry(args: Vec<Value>) -> EvalResult {
     expect_range_args("tty-frame-geometry", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_edges(args: Vec<Value>) -> EvalResult {
     expect_range_args("tty-frame-edges", &args, 0, 2)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_list_z_order(args: Vec<Value>) -> EvalResult {
     expect_range_args("tty-frame-list-z-order", &args, 0, 1)?;
     Ok(Value::NIL)
@@ -176,6 +180,7 @@ pub(crate) fn builtin_neomacs_frame_geometry(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_neomacs_frame_edges(args: Vec<Value>) -> EvalResult {
     expect_range_args("neomacs-frame-edges", &args, 0, 2)?;
     Ok(Value::NIL)
@@ -1239,6 +1244,7 @@ pub(crate) fn builtin_init_image_library(args: Vec<Value>) -> EvalResult {
     Ok(Value::bool_val(available))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {
     expect_range_args("describe-buffer-bindings", &args, 1, 3)?;
     if !args[0].is_buffer() {
@@ -1426,6 +1432,7 @@ pub(crate) fn builtin_frame_after_make_frame(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_ancestor_p(args: Vec<Value>) -> EvalResult {
     expect_args("frame-ancestor-p", &args, 2)?;
     expect_frame_live_or_nil(&args[0])?;
@@ -1433,6 +1440,7 @@ pub(crate) fn builtin_frame_ancestor_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_bottom_divider_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-bottom-divider-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1441,6 +1449,7 @@ pub(crate) fn builtin_frame_bottom_divider_width(args: Vec<Value>) -> EvalResult
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_child_frame_border_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-child-frame-border-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1449,6 +1458,7 @@ pub(crate) fn builtin_frame_child_frame_border_width(args: Vec<Value>) -> EvalRe
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_focus(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-focus", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1473,6 +1483,7 @@ pub(crate) fn builtin_frame_fringe_width(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_internal_border_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-internal-border-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1498,6 +1509,7 @@ pub(crate) fn builtin_frame_or_buffer_changed_p(args: Vec<Value>) -> EvalResult 
     Err(signal("void-variable", vec![*symbol]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_parent(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-parent", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1514,6 +1526,7 @@ pub(crate) fn builtin_frame_pointer_visible_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::T)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_right_divider_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-right-divider-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1546,6 +1559,7 @@ pub(crate) fn builtin_frame_scroll_bar_width(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_window_state_change(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-window-state-change", &args, 0, 1)?;
     if let Some(frame) = args.first() {
@@ -1686,6 +1700,7 @@ pub(crate) fn builtin_garbage_collect_heapsize(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_get_unicode_property_internal(args: Vec<Value>) -> EvalResult {
     expect_args("get-unicode-property-internal", &args, 2)?;
     Err(signal(
@@ -1694,6 +1709,7 @@ pub(crate) fn builtin_get_unicode_property_internal(args: Vec<Value>) -> EvalRes
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) const FACE_ATTRIBUTES_VECTOR_LEN: usize = 20;
 
 pub(crate) fn builtin_font_get_system_font(args: Vec<Value>) -> EvalResult {
@@ -1747,6 +1763,7 @@ fn is_font_spec(value: &Value) -> bool {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn unspecified_face_attributes_vector() -> Value {
     Value::vector(vec![
         Value::symbol("unspecified");
@@ -1754,11 +1771,13 @@ fn unspecified_face_attributes_vector() -> Value {
     ])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult {
     expect_args("face-attributes-as-vector", &args, 1)?;
     Ok(unspecified_face_attributes_vector())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_window_live_or_nil_in_state(frames: &FrameManager, value: &Value) -> Result<(), Flow> {
     if value.is_nil() {
         return Ok(());
@@ -1905,6 +1924,7 @@ fn expect_frame_live_or_nil(value: &Value) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_bottom_divider_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("window-bottom-divider-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
@@ -2004,6 +2024,7 @@ pub(crate) fn builtin_window_old_pixel_width(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_right_divider_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("window-right-divider-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
@@ -2012,6 +2033,7 @@ pub(crate) fn builtin_window_right_divider_width(args: Vec<Value>) -> EvalResult
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_scroll_bar_height(args: Vec<Value>) -> EvalResult {
     expect_range_args("window-scroll-bar-height", &args, 0, 1)?;
     if let Some(window) = args.first() {
@@ -2020,6 +2042,7 @@ pub(crate) fn builtin_window_scroll_bar_height(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(0))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_scroll_bar_width(args: Vec<Value>) -> EvalResult {
     expect_range_args("window-scroll-bar-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
@@ -2037,12 +2060,14 @@ pub(crate) fn builtin_window_scroll_bar_width(args: Vec<Value>) -> EvalResult {
 /// "Toplevel" means outside any let binding.  This pure stub returns nil;
 /// a full implementation needs eval access (buffer manager + dynamic stack)
 /// and is dispatched via the eval-backed path in builtins/mod.rs.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_buffer_local_toplevel_value(args: Vec<Value>) -> EvalResult {
     expect_range_args("buffer-local-toplevel-value", &args, 1, 2)?;
     Ok(Value::NIL)
 }
 
 /// GNU eval.c:857 — set SYMBOL's toplevel buffer-local value in BUFFER.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_buffer_local_toplevel_value(args: Vec<Value>) -> EvalResult {
     expect_range_args("set-buffer-local-toplevel-value", &args, 2, 3)?;
     Ok(args[1])
@@ -2062,6 +2087,7 @@ pub(crate) fn builtin_debugger_trap(args: Vec<Value>) -> EvalResult {
 /// These are test/benchmark functions (inside ENABLE_UTF_8_CONVERTER_TEST
 /// in GNU).  NeoVM stores all strings as UTF-8 natively, so decode is a
 /// pass-through.  We validate arguments per GNU to return nil on bad input.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_internal_decode_string_utf_8(args: Vec<Value>) -> EvalResult {
     expect_args("internal-decode-string-utf-8", &args, 7)?;
     // GNU returns nil if STRING is not a string.
@@ -2082,6 +2108,7 @@ pub(crate) fn builtin_internal_decode_string_utf_8(args: Vec<Value>) -> EvalResu
 /// GNU coding.c:10306 — internal-encode-string-utf-8.
 ///
 /// Same rationale as decode: NeoVM strings are already UTF-8.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_internal_encode_string_utf_8(args: Vec<Value>) -> EvalResult {
     expect_args("internal-encode-string-utf-8", &args, 7)?;
     if args[0].as_utf8_str().is_none() {
@@ -2110,11 +2137,13 @@ pub(crate) fn builtin_overlay_tree(args: Vec<Value>) -> EvalResult {
 // thread.c gap-fill stubs
 // =========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_thread_buffer_disposition(args: Vec<Value>) -> EvalResult {
     expect_args("thread-buffer-disposition", &args, 1)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_thread_set_buffer_disposition(args: Vec<Value>) -> EvalResult {
     expect_args("thread-set-buffer-disposition", &args, 2)?;
     // Stub: ignore the set
@@ -2125,6 +2154,7 @@ pub(crate) fn builtin_thread_set_buffer_disposition(args: Vec<Value>) -> EvalRes
 // window.c gap-fill stubs
 // =========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_discard_buffer_from_window(args: Vec<Value>) -> EvalResult {
     expect_range_args("window-discard-buffer-from-window", &args, 2, 3)?;
     Ok(Value::NIL)
@@ -2135,11 +2165,13 @@ pub(crate) fn builtin_window_discard_buffer_from_window(args: Vec<Value>) -> Eva
 // (cursor audit Finding 2). The placeholder that lived here used to
 // return `nil` unconditionally.
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_combine_windows(args: Vec<Value>) -> EvalResult {
     expect_args("combine-windows", &args, 2)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_uncombine_window(args: Vec<Value>) -> EvalResult {
     expect_args("uncombine-window", &args, 1)?;
     Ok(Value::NIL)
@@ -2186,11 +2218,13 @@ pub(crate) fn builtin_remember_mouse_glyph(
 // image.c gap-fill stubs
 // =========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lookup_image(args: Vec<Value>) -> EvalResult {
     expect_args("lookup-image", &args, 1)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_imagemagick_types(args: Vec<Value>) -> EvalResult {
     expect_args("imagemagick-types", &args, 0)?;
     Ok(Value::NIL)
@@ -2200,11 +2234,13 @@ pub(crate) fn builtin_imagemagick_types(args: Vec<Value>) -> EvalResult {
 // font.c gap-fill stubs
 // =========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_font_drive_otf(args: Vec<Value>) -> EvalResult {
     expect_args("font-drive-otf", &args, 6)?;
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_font_otf_alternates(args: Vec<Value>) -> EvalResult {
     expect_args("font-otf-alternates", &args, 3)?;
     Ok(Value::NIL)

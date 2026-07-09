@@ -501,8 +501,11 @@ pub(crate) fn builtin_kill_local_variable(
 
 pub(crate) struct KillLocalVariableOutcome {
     pub result: Value,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub removed: bool,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub resolved_id: SymId,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub buffer_id: Option<crate::buffer::BufferId>,
 }
 

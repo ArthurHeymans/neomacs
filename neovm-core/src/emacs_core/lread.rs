@@ -8,7 +8,6 @@ use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::buffer::{EmacsByteRange, LispCharPos1};
 use crate::heap_types::LispString;
-use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -64,7 +63,7 @@ fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
         ValueKind::Symbol(id) => Ok(LispString::from_utf8(resolve_sym(id))),
         ValueKind::Nil => Ok(LispString::from_unibyte(b"nil".to_vec())),
         ValueKind::T => Ok(LispString::from_unibyte(b"t".to_vec())),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -75,6 +74,7 @@ fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {
 // Eval-dependent builtins
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn strip_reader_prefix(source: &str) -> (&str, bool) {
     if !source.starts_with("#!") {
         return (source, false);
@@ -112,6 +112,7 @@ fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flo
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn eval_forms_from_source(
     eval: &mut super::eval::Context,
     source: &str,
@@ -137,6 +138,7 @@ pub(crate) fn eval_forms_from_lisp_source(
 }
 
 /// Streaming read-eval loop for source strings, using the Value reader.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn eval_forms_from_source_streaming(
     eval: &mut super::eval::Context,
     source: &str,
@@ -533,6 +535,7 @@ pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Val
     eval_forms_from_lisp_source(eval, &source)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_eval_buffer_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -545,6 +548,7 @@ pub(crate) fn builtin_eval_buffer_in_vm_runtime(
     result
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_eval_region_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -557,6 +561,7 @@ pub(crate) fn builtin_eval_region_in_vm_runtime(
 }
 
 /// Streaming read-eval for VM runtime callers rooted at the VM call boundary.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn eval_forms_from_source_in_vm_runtime_streaming(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -860,6 +865,7 @@ fn load_suffix_list(value: Option<&Value>, name: &str) -> Result<Vec<String>, Fl
 /// `(locate-file FILENAME PATH &optional SUFFIXES PREDICATE)`
 ///
 /// Search PATH for FILENAME with each suffix in SUFFIXES.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_locate_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("locate-file", &args, 2)?;
     expect_max_args("locate-file", &args, 4)?;
@@ -1039,7 +1045,7 @@ fn parse_suffixes_argument(value: &Value) -> Result<Vec<LispString>, Flow> {
             ValueKind::String => {
                 suffixes.push(entry.as_lisp_string().expect("checked string").clone())
             }
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), entry],
@@ -1050,6 +1056,7 @@ fn parse_suffixes_argument(value: &Value) -> Result<Vec<LispString>, Flow> {
     Ok(suffixes)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn normalize_locate_file_public_predicate(
     eval: &mut super::eval::Context,
     predicate: Value,
@@ -1070,6 +1077,7 @@ fn normalize_locate_file_public_predicate(
     Ok(predicate)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn access_mask_from_predicate_symbols(items: &[Value]) -> Value {
     let mut mask = 0;
     for item in items {

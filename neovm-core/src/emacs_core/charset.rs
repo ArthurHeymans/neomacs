@@ -11,7 +11,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
-use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::buffer::{EmacsBytePos, LispCharPos1};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};

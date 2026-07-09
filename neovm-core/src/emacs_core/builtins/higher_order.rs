@@ -168,6 +168,7 @@ fn apply1(eval: &mut super::eval::Context, func: Value, arg: Value) -> EvalResul
     args.push(arg);
     eval.apply(func, args)
 }
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_apply(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_apply_slice(eval, &args)
 }
@@ -235,6 +236,7 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_funcall(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_funcall_slice(eval, &args)
 }
@@ -247,6 +249,7 @@ pub(crate) fn builtin_funcall_slice(eval: &mut super::eval::Context, args: &[Val
     eval.apply_from_lisp_funcall(func, call_args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_funcall_interactively(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -282,6 +285,7 @@ pub(crate) fn builtin_funcall_with_delayed_message(
 // Higher-order
 // ===========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn for_each_sequence_element<F>(seq: &Value, mut f: F) -> Result<(), Flow>
 where
     F: FnMut(Value) -> Result<(), Flow>,
@@ -300,7 +304,7 @@ where
                         cursor = pair_cdr;
                         f(item)?;
                     }
-                    tail => {
+                    _tail => {
                         return Err(signal(
                             "wrong-type-argument",
                             vec![Value::symbol("listp"), cursor],
@@ -342,6 +346,7 @@ where
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_mapcar(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
@@ -380,6 +385,7 @@ pub(crate) fn builtin_mapcar_2(
     Ok(result_list)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_mapc(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() != 2 {
         return Err(signal(
@@ -606,6 +612,7 @@ pub(crate) fn parse_sort_options(args: &[Value]) -> Result<SortOptions, Flow> {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_sort(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_sort_slice(eval, &args)
 }
@@ -671,7 +678,7 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
                 Ok(Value::vector(sorted_values))
             }
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("list-or-vector-p"), args[0]],
         )),
@@ -691,8 +698,6 @@ pub(crate) fn stable_sort_values_with(
     lessp_fn: Value,
     reverse: bool,
 ) -> Result<Vec<Value>, Flow> {
-    use crate::emacs_core::value::{ValueKind, VecLikeType};
-
     if values.len() < 2 {
         return Ok(values.to_vec());
     }

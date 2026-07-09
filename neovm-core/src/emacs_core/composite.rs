@@ -47,10 +47,11 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integerp(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *arg],
         )),
@@ -60,7 +61,7 @@ fn expect_integerp(arg: &Value) -> Result<(), Flow> {
 fn expect_integer_or_marker_p(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
         ValueKind::Fixnum(_) => Ok(()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integer-or-marker-p"), *arg],
         )),
@@ -284,6 +285,7 @@ fn composition_lookup_relative(id: i64) -> bool {
 }
 
 /// A registered (Form-B) composition property `(ID LENGTH COMPONENTS-VEC . MOD)`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn composition_registered_p(prop: Value) -> bool {
     prop.is_cons() && prop.cons_car().is_fixnum()
 }

@@ -157,7 +157,7 @@ pub(crate) fn key_events_from_designator(
         ValueKind::Veclike(VecLikeType::Vector) => {
             decode_encoded_key_events(designator).map_err(KeyDesignatorError::Parse)
         }
-        other => Err(KeyDesignatorError::WrongType(*designator)),
+        _other => Err(KeyDesignatorError::WrongType(*designator)),
     }
 }
 
@@ -168,7 +168,7 @@ fn decode_encoded_key_events(encoded: &Value) -> Result<Vec<KeyEvent>, String> {
             let items = encoded.as_vector_data().unwrap().clone();
             items.iter().map(decode_vector_event).collect()
         }
-        other => Err(format!(
+        _other => Err(format!(
             "expected kbd-encoded string or vector, got {}",
             encoded.type_name()
         )),
@@ -256,7 +256,7 @@ fn decode_vector_event(item: &Value) -> Result<KeyEvent, String> {
         // Event modifier list: (MODIFIER... BASE-EVENT)
         // e.g. (control ??) => Ctrl+?, (meta control ?a) => M-C-a
         ValueKind::Cons => decode_event_modifier_list(item),
-        other => Err(format!(
+        _other => Err(format!(
             "invalid key vector element type: {}",
             item.type_name()
         )),
@@ -296,7 +296,7 @@ fn decode_event_modifier_list(list: &Value) -> Result<KeyEvent, String> {
                         let base = decode_int_event(n)?;
                         return Ok(apply_mods_to_event(base, mods));
                     }
-                    other => {
+                    _other => {
                         return Err(format!(
                             "invalid base event in modifier list: {}",
                             pair_car.type_name()
@@ -318,7 +318,7 @@ fn decode_event_modifier_list(list: &Value) -> Result<KeyEvent, String> {
                     mods,
                 ));
             }
-            other => {
+            _other => {
                 return Err(format!(
                     "invalid base event in modifier list: {}",
                     cursor.type_name()

@@ -4,7 +4,6 @@ use crate::emacs_core::dispnew::pure::{
     builtin_redraw_frame, builtin_send_string_to_terminal, reset_dispnew_thread_locals,
 };
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
-use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::terminal::pure::{
     builtin_controlling_tty_p, builtin_frame_terminal, builtin_resume_tty,
     builtin_selected_terminal, builtin_set_terminal_parameter, builtin_suspend_tty,
@@ -12,7 +11,6 @@ use crate::emacs_core::terminal::pure::{
     builtin_terminal_parameter, builtin_terminal_parameters, builtin_tty_top_frame,
     builtin_tty_type, reset_terminal_thread_locals, terminal_handle_value,
 };
-use crate::emacs_core::value::ValueKind;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

@@ -2,7 +2,7 @@ use super::*;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::intern::{intern, intern_uninterned};
-use crate::emacs_core::value::{ValueKind, VecLikeType};
+use crate::emacs_core::value::ValueKind;
 
 // -----------------------------------------------------------------------
 // Char-table tests

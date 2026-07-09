@@ -5,7 +5,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::{Context, format_eval_result};
 use crate::heap_types::LispString;
-use crate::test_utils::{load_minimal_gnu_backquote_runtime, runtime_startup_eval_all};
+use crate::test_utils::load_minimal_gnu_backquote_runtime;
 use std::fs;
 use std::path::PathBuf;
 
@@ -52,17 +52,6 @@ fn eval_all_with(ev: &mut Context, src: &str) -> Vec<String> {
         .collect();
     ev.restore_specpdl_roots(roots);
     result
-}
-
-fn bootstrap_eval_all(src: &str) -> Vec<String> {
-    runtime_startup_eval_all(src)
-}
-
-fn bootstrap_eval_one(src: &str) -> String {
-    bootstrap_eval_all(src)
-        .into_iter()
-        .last()
-        .expect("bootstrap eval result")
 }
 
 fn eval_first_gnu_form_after_marker(eval: &mut Context, source: &str, marker: &str) {

@@ -1,6 +1,5 @@
 use super::*;
-use malachite::base::num::arithmetic::traits::{Abs, DivRem, Pow};
-use malachite::base::num::basic::traits::Zero;
+use malachite::base::num::arithmetic::traits::{Abs, Pow};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::base::rounding_modes::RoundingMode;
@@ -75,6 +74,7 @@ fn integer_from_value(eval: &super::eval::Context, value: &Value) -> Result<Inte
 /// the tag). A sum like `most-positive-fixnum + 1` does not overflow
 /// i64 yet exceeds fixnum range; the final i64 result therefore returns
 /// through `Value::make_int`, mirroring GNU `make_int` (`src/lisp.h`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_add(eval: &mut super::super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_add_slice(eval, &args)
 }
@@ -200,6 +200,7 @@ fn continue_bignum_add(
 /// * 0 args -> 0
 /// * 1 arg  -> negation (with bignum promotion for `MIN_FIXNUM`)
 /// * N args -> arith_driver in subtract mode
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_sub(eval: &mut super::super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_sub_slice(eval, &args)
 }
@@ -584,6 +585,7 @@ fn bignum_or_int_to_integer(value: &Value) -> Result<Integer, Flow> {
 
 /// `(1+ NUMBER)` — mirrors GNU `Fadd1` (`src/data.c:3634`).
 /// Promotes to bignum on `MOST_POSITIVE_FIXNUM + 1`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_add1(args: Vec<Value>) -> EvalResult {
     expect_args("1+", &args, 1)?;
     add1_value(args[0])
@@ -619,6 +621,7 @@ fn add1_value(arg: Value) -> EvalResult {
 
 /// `(1- NUMBER)` — mirrors GNU `Fsub1` (`src/data.c:3658`).
 /// Promotes to bignum on `MOST_NEGATIVE_FIXNUM - 1`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_sub1(args: Vec<Value>) -> EvalResult {
     expect_args("1-", &args, 1)?;
     sub1_value(args[0])
@@ -652,6 +655,7 @@ fn sub1_value(arg: Value) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_max(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_max_slice(eval, &args)
 }
@@ -661,6 +665,7 @@ pub(crate) fn builtin_max_slice(eval: &mut super::eval::Context, args: &[Value])
     minmax_driver(eval, args, NumCmp::Gt)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_min(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_min_slice(eval, &args)
 }
@@ -740,6 +745,7 @@ pub(crate) fn builtin_abs(args: Vec<Value>) -> EvalResult {
 /// can produce a value with the high bits set (e.g. `(logand -1 -1)
 /// → -1` is fine, but `(logand most-positive-fixnum #x7fffffffffffffff)`
 /// could exceed fixnum range). Return through `make_int`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_logand(args: Vec<Value>) -> EvalResult {
     builtin_logand_slice(&args)
 }
@@ -753,6 +759,7 @@ pub(crate) fn builtin_logand_slice(args: &[Value]) -> EvalResult {
     builtin_logop(args, BignumLogop::And)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_logior(args: Vec<Value>) -> EvalResult {
     builtin_logior_slice(&args)
 }
@@ -766,6 +773,7 @@ pub(crate) fn builtin_logior_slice(args: &[Value]) -> EvalResult {
     builtin_logop(args, BignumLogop::Or)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_logxor(args: Vec<Value>) -> EvalResult {
     builtin_logxor_slice(&args)
 }
@@ -936,6 +944,7 @@ fn mul_2exp_would_overflow(value: &Integer, count: i64) -> bool {
 /// COUNT may be bignums. The result is promoted to bignum on left
 /// shifts that exceed fixnum range — most importantly `(ash 1 100)`
 /// must return 2^100, not 0 (audit §2.7).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_ash(args: Vec<Value>) -> EvalResult {
     builtin_ash_slice(&args)
 }
@@ -1062,8 +1071,6 @@ fn arithcompare(
     a: &Value,
     b: &Value,
 ) -> Result<Option<std::cmp::Ordering>, Flow> {
-    use std::cmp::Ordering;
-
     // Float on either side. GNU `arithcompare` compares a float against
     // an integer (fixnum OR bignum) EXACTLY — it never coerces the
     // integer to a double first (data.c:2734-2758 / 2777-2795 /
@@ -1175,6 +1182,7 @@ fn arithcompare_chain_or_fast_fixnum_pair(
     arithcompare_chain(eval, args, op)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_eq(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,
@@ -1191,6 +1199,7 @@ pub(crate) fn builtin_num_eq_slice(
     arithcompare_chain(eval, args, NumCmp::Eq)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_lt(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,
@@ -1207,6 +1216,7 @@ pub(crate) fn builtin_num_lt_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Lt)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_le(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,
@@ -1223,6 +1233,7 @@ pub(crate) fn builtin_num_le_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Le)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_gt(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,
@@ -1239,6 +1250,7 @@ pub(crate) fn builtin_num_gt_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Gt)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_ge(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,
@@ -1255,6 +1267,7 @@ pub(crate) fn builtin_num_ge_slice(
     arithcompare_chain_or_fast_fixnum_pair(eval, args, NumCmp::Ge)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_num_ne(
     eval: &mut super::super::eval::Context,
     args: Vec<Value>,

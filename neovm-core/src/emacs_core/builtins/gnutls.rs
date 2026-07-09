@@ -60,6 +60,7 @@ pub(crate) fn builtin_gnutls_errorp(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gnutls_error_string(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-string", &args, 1)?;
     gnutls_error_string_impl(None, args[0])
@@ -83,6 +84,7 @@ fn gnutls_error_string_impl(eval: Option<&Context>, error: Value) -> EvalResult 
     Ok(Value::string(message))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gnutls_error_fatalp(args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-error-fatalp", &args, 1)?;
     gnutls_error_fatalp_impl(None, args[0])
@@ -253,6 +255,7 @@ pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
     gnutls_symmetric_cipher(args, GnutlsCipherOperation::Encrypt)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn gnutls_crypto_unavailable() -> EvalResult {
     Err(signal(
         "error",

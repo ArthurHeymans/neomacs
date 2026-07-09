@@ -5,18 +5,15 @@
 //! `string-to-syntax` descriptor parser.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::ops::Deref;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
-use super::value::{RuntimeBindingValue, Value, ValueKind, list_to_vec};
+use super::value::{Value, ValueKind, list_to_vec};
 use crate::buffer::{
-    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
-    LispCharPos1,
+    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
 };
 
 #[inline]
@@ -123,6 +120,7 @@ pub(crate) fn restore_syntax_code_objects(objects: Value) {
 }
 
 /// Snapshot the current thread's canonical standard syntax-table object.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn snapshot_standard_syntax_table_object() -> Option<Value> {
     STANDARD_SYNTAX_TABLE_OBJECT.with(|slot| *slot.borrow())
 }
@@ -650,6 +648,7 @@ impl SyntaxTable {
     }
 
     /// Build a `SyntaxTable` that reads from the given chartable `Value`.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_chartable(chartable: Value) -> Self {
         Self { chartable }
     }
@@ -2167,6 +2166,7 @@ pub(crate) fn builtin_string_to_syntax(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(make-syntax-table &optional PARENT)` — create a new syntax table.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_syntax_table(args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
@@ -2328,6 +2328,7 @@ fn current_buffer_syntax_table_object_in_buffers(
     Ok(fallback)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn current_buffer_syntax_table_object(eval: &mut super::eval::Context) -> Result<Value, Flow> {
     current_buffer_syntax_table_object_in_buffers(&mut eval.buffers)
 }
@@ -2364,6 +2365,7 @@ fn set_current_buffer_syntax_table_object_in_buffers(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn set_current_buffer_syntax_table_object(
     eval: &mut super::eval::Context,
     table: Value,
@@ -2386,6 +2388,7 @@ fn set_current_buffer_syntax_table_object(
 /// which copies `Vstandard_syntax_table` into every fresh
 /// `buffer->syntax_table` — so from the reader's point of view a
 /// "never-set" slot always behaves like the standard.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn syntax_entry_at_char(table: &Value, c: char) -> Option<SyntaxEntry> {
     syntax_entry_at_char_code(table, c as u32)
 }
@@ -2407,6 +2410,7 @@ pub(crate) fn syntax_entry_at_char_code(table: &Value, code: u32) -> Option<Synt
 /// `SYNTAX(c)` in `src/syntax.h`. Uses the same fallback as
 /// `SyntaxTable::char_syntax` on the old compiled form: codepoints
 /// >= 0x80 default to Word; below 0x80 default to Whitespace.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn syntax_class_at_char(table: &Value, c: char) -> SyntaxClass {
     syntax_class_at_char_code(table, c as u32)
 }
@@ -2455,6 +2459,7 @@ fn syntax_entry_from_chartable_entry(entry: &Value) -> Option<SyntaxEntry> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn syntax_table_from_chartable(table: Value) -> Result<SyntaxTable, Flow> {
     if builtin_syntax_table_p(vec![table])?.is_nil() {
         return Err(signal(
@@ -2659,7 +2664,7 @@ pub(crate) fn builtin_syntax_class_to_char(args: Vec<Value>) -> EvalResult {
 
     let class = match args[0].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("fixnump"), args[0]],
@@ -2971,6 +2976,7 @@ pub(crate) fn builtin_char_syntax_in_buffers(
 /// characters and only while the variable is set; callers OR it with their base
 /// (`Sword`/alphanumeric) word check. Uses the current buffer's syntax table,
 /// matching GNU's `SETUP_BUFFER_SYNTAX_TABLE`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn case_symbols_as_words_predicate(
     eval: &super::eval::Context,
 ) -> impl Fn(u32) -> bool + Copy + 'static {
@@ -3019,6 +3025,7 @@ pub(crate) fn casing_word_predicate(
 }
 
 /// `(syntax-after POS)` — return syntax descriptor for char at POS.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_syntax_after(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -3026,6 +3033,7 @@ pub(crate) fn builtin_syntax_after(
     builtin_syntax_after_in_buffers(&eval.buffers, args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_syntax_after_in_buffers(
     buffers: &BufferManager,
     args: Vec<Value>,
@@ -3971,6 +3979,7 @@ pub(crate) fn builtin_forward_word(
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_forward_word_in_buffers(
     buffers: &mut BufferManager,
     args: Vec<Value>,
@@ -3980,7 +3989,7 @@ pub(crate) fn builtin_forward_word_in_buffers(
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[0]],
@@ -4005,6 +4014,7 @@ pub(crate) fn builtin_forward_word_in_buffers(
 }
 
 /// `(backward-word &optional COUNT)` — move point backward COUNT words.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_backward_word(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -4014,7 +4024,7 @@ pub(crate) fn builtin_backward_word(
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[0]],
@@ -4041,6 +4051,7 @@ pub(crate) fn builtin_backward_word(
 
 /// `(forward-sexp &optional COUNT)` — move point forward over COUNT balanced
 /// expressions.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_forward_sexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -4050,7 +4061,7 @@ pub(crate) fn builtin_forward_sexp(
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[0]],
@@ -4100,6 +4111,7 @@ pub(crate) fn builtin_forward_sexp(
 
 /// `(backward-sexp &optional COUNT)` — move point backward over COUNT balanced
 /// expressions.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_backward_sexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -4109,7 +4121,7 @@ pub(crate) fn builtin_backward_sexp(
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[0]],
@@ -4174,7 +4186,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
 
     let from = match args[0].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("integer-or-marker-p"), args[0]],
@@ -4183,7 +4195,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     };
     let count = match args[1].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("integerp"), args[1]],
@@ -4192,7 +4204,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     };
     let depth = match args[2].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("integerp"), args[2]],
@@ -4252,7 +4264,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
 
     let from = match args[0].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("number-or-marker-p"), args[0]],
@@ -4261,7 +4273,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     };
     let count = match args[1].kind() {
         ValueKind::Fixnum(n) => n,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("integerp"), args[1]],
@@ -5049,6 +5061,7 @@ fn parse_state_from_range_with_options(
     (state.into_value(), char_pos_to_lisp_i64(from_char + idx))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn parse_state_from_range(buf: &Buffer, table: &SyntaxTable, from: i64, to: i64) -> Value {
     parse_state_from_range_with_options(
         buf,
@@ -5140,6 +5153,7 @@ pub(crate) fn builtin_parse_partial_sexp(
 }
 
 /// `(syntax-ppss &optional POS)` — parser state at POS.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     if args.len() > 1 {
         return Err(signal(
@@ -5166,7 +5180,7 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
     } else {
         match args[0].kind() {
             ValueKind::Fixnum(n) => n,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("number-or-marker-p"), args[0]],
@@ -5215,6 +5229,7 @@ pub(crate) fn builtin_syntax_ppss(eval: &mut super::eval::Context, args: Vec<Val
 ///
 /// NeoVM currently computes parser state directly, so this is a no-op that
 /// enforces Emacs-compatible arity/type behavior.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_syntax_ppss_flush_cache(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5231,7 +5246,7 @@ pub(crate) fn builtin_syntax_ppss_flush_cache(
             eval.syntax_ppss_last = None;
             Ok(Value::NIL)
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("number-or-marker-p"), args[0]],
         )),
@@ -5267,7 +5282,7 @@ pub(crate) fn builtin_skip_syntax_forward_in_buffers(
     let limit = if args.len() > 1 && !args[1].is_nil() {
         match args[1].kind() {
             ValueKind::Fixnum(n) => Some(n),
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[1]],
@@ -5334,7 +5349,7 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
     let limit = if args.len() > 1 && !args[1].is_nil() {
         match args[1].kind() {
             ValueKind::Fixnum(n) => Some(n),
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("integerp"), args[1]],

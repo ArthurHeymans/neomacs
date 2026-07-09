@@ -133,10 +133,12 @@ impl TimeMicros {
         ])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn to_float(&self) -> f64 {
         self.secs as f64 + self.usecs as f64 / 1_000_000.0
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn add(self, other: TimeMicros) -> TimeMicros {
         let mut psecs = self.psecs + other.psecs;
         let mut usecs = self.usecs + other.usecs;
@@ -158,6 +160,7 @@ impl TimeMicros {
         TimeMicros { secs, usecs, psecs }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sub(self, other: TimeMicros) -> TimeMicros {
         let mut psecs = self.psecs - other.psecs;
         let mut usecs = self.usecs - other.usecs;
@@ -235,6 +238,7 @@ impl TimeMicros {
         Value::cons(Value::make_integer(ticks), Value::make_integer(hz.clone()))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn less_than(self, other: TimeMicros) -> bool {
         if self.secs != other.secs {
             self.secs < other.secs
@@ -245,6 +249,7 @@ impl TimeMicros {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn equal(self, other: TimeMicros) -> bool {
         self.secs == other.secs && self.usecs == other.usecs && self.psecs == other.psecs
     }
@@ -327,6 +332,7 @@ fn time_error_overflow() -> Flow {
 struct ParsedTime {
     time: TimeMicros,
     hz: i64,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     form: TimeInputForm,
     exact_ticks_hz: Option<(Integer, Integer)>,
 }
@@ -2026,6 +2032,7 @@ pub(crate) fn builtin_decode_time(args: Vec<Value>) -> EvalResult {
 ///   - `list`          -> `(HIGH LOW USEC PSEC)`
 ///   - `integer`       -> integer seconds
 ///   - `t`             -> `(TICKS . HZ)` (highest precision cons cell)
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_time_convert(args: Vec<Value>) -> EvalResult {
     builtin_time_convert_with_current_time_list(args, true)
 }

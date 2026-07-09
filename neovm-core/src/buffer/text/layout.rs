@@ -44,6 +44,7 @@ impl GapCompatState {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(in crate::buffer) struct GapDebugLayout {
     pub(in crate::buffer) gpt: CharPos0,
     pub(in crate::buffer) z: CharPos0,
@@ -53,12 +54,14 @@ pub(in crate::buffer) struct GapDebugLayout {
 }
 
 impl GapDebugLayout {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const fn compat_state(self) -> GapCompatState {
         GapCompatState::new(self.gpt, self.gap_byte_len)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(in crate::buffer) enum TextBackendDebugLayout {
     Gap(GapDebugLayout),
     PieceTree(TextMetrics),
@@ -66,6 +69,7 @@ pub(in crate::buffer) enum TextBackendDebugLayout {
 }
 
 impl TextBackendDebugLayout {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn metrics(self) -> TextMetrics {
         match self {
             Self::Gap(layout) => TextMetrics::from_lengths(
@@ -77,6 +81,7 @@ impl TextBackendDebugLayout {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn gap(self) -> Option<GapDebugLayout> {
         match self {
             Self::Gap(layout) => Some(layout),

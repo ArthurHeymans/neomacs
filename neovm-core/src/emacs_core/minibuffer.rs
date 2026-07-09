@@ -78,14 +78,14 @@ fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Fl
 fn first_default_value(default: Value) -> Value {
     match default.kind() {
         ValueKind::Cons => default.cons_car(),
-        other => default,
+        _other => default,
     }
 }
 
 fn normalize_symbol_reader_default(default: Value) -> Value {
     match first_default_value(default).kind() {
         ValueKind::Symbol(id) => Value::string(resolve_sym(id)),
-        other => first_default_value(default),
+        _other => first_default_value(default),
     }
 }
 
@@ -401,6 +401,7 @@ pub(crate) fn install_minibuffer_buffer_text(
     prompt_end
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn default_minibuffer_prompt_properties() -> Value {
     Value::list(vec![Value::symbol("read-only"), Value::T])
 }
@@ -541,6 +542,7 @@ impl MinibufferManager {
         Ok(self.state_stack.last_mut().unwrap())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn read_from_minibuffer(
         &mut self,
         buffer_id: BufferId,
@@ -1147,6 +1149,7 @@ pub(crate) fn finish_read_command_with_minibuffer(
     finish_symbol_reader_with_minibuffer(args, read_from_minibuffer)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_read_command_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -1198,6 +1201,7 @@ pub(crate) fn finish_read_variable_with_minibuffer(
     finish_symbol_reader_with_minibuffer(args, read_from_minibuffer)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_read_variable_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
@@ -1211,6 +1215,7 @@ pub(crate) fn finish_read_variable_in_vm_runtime(
 /// `(minibuffer-prompt)` — returns the current minibuffer prompt or nil.
 ///
 /// Stub: returns nil (no active minibuffer in non-interactive mode).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibuffer_prompt(args: Vec<Value>) -> EvalResult {
     expect_args("minibuffer-prompt", &args, 0)?;
     Ok(Value::NIL)
@@ -1303,6 +1308,7 @@ pub(crate) fn builtin_minibuffer_contents_no_properties_ctx(
 /// `(minibuffer-depth)` — returns the current recursive minibuffer depth.
 ///
 /// Stub: returns 0.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibuffer_depth(args: Vec<Value>) -> EvalResult {
     expect_args("minibuffer-depth", &args, 0)?;
     Ok(Value::fixnum(0))
@@ -1320,6 +1326,7 @@ pub(crate) fn builtin_minibuffer_depth_ctx(
 ///
 /// Batch-compatible behavior: accepts 0..=2 args, validates BUFFER-like first
 /// arg shape, and returns nil (no active minibuffer).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibufferp(args: Vec<Value>) -> EvalResult {
     validate_minibufferp_args(&args)?;
     Ok(Value::NIL)
@@ -1455,6 +1462,7 @@ pub(crate) fn builtin_exit_recursive_edit(
 ///
 /// Emacs exits by throwing to the `exit` tag; without a catch this
 /// surfaces as `no-catch`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_exit_minibuffer(args: Vec<Value>) -> EvalResult {
     expect_args("exit-minibuffer", &args, 0)?;
     Err(Flow::Throw {
@@ -1467,6 +1475,7 @@ pub(crate) fn builtin_exit_minibuffer(args: Vec<Value>) -> EvalResult {
 ///
 /// Batch/non-interactive mode has no active minibuffer, so this matches GNU
 /// Emacs by signaling a plain `error`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abort_minibuffers(args: Vec<Value>) -> EvalResult {
     expect_args("abort-minibuffers", &args, 0)?;
     Err(signal("error", vec![Value::string("Not in a minibuffer")]))
@@ -1565,6 +1574,7 @@ pub(crate) fn builtin_abort_recursive_edit(
 /// - Alist of (string . _) pairs
 /// - Vector of strings
 /// - nil → empty
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn value_to_string_list(val: &Value) -> Vec<String> {
     match val.kind() {
         ValueKind::Nil => Vec::new(),
@@ -1684,6 +1694,7 @@ fn completion_text_from_value(value: &Value) -> Option<CompletionText> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn completion_display_string_from_value(value: &Value) -> Option<String> {
     let completion = completion_text_from_value(value)?;
     let string = completion.lisp_string();
@@ -1705,7 +1716,7 @@ fn completion_candidates_from_list_value(collection: &Value) -> Vec<CompletionCa
         .filter_map(|item| {
             let key = match item.kind() {
                 ValueKind::Cons => item.cons_car(),
-                other => item,
+                _other => item,
             };
             completion_text_from_value(&key).map(|completion| CompletionCandidate {
                 completion,
@@ -1716,6 +1727,7 @@ fn completion_candidates_from_list_value(collection: &Value) -> Vec<CompletionCa
         .collect()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn completion_candidates_from_vector_value(collection: &Value) -> Vec<CompletionCandidate> {
     let Some(items) = collection.as_vector_data() else {
         return Vec::new();
@@ -2192,6 +2204,7 @@ fn completion_ignore_case(obarray: &Obarray) -> bool {
 /// or unset.
 ///
 /// Public alias for use from the bytecode VM.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn completion_regexp_list_from_obarray(obarray: &Obarray) -> Vec<String> {
     completion_regexp_lisp_list_from_obarray(obarray)
         .into_iter()

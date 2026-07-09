@@ -80,6 +80,7 @@ fn expect_frame_designator(_name: &str, value: &Value) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn integer_or_marker_p(value: &Value) -> bool {
     value.as_int().is_some() || value.is_marker()
 }
@@ -301,6 +302,7 @@ enum ImageArea {
 }
 
 impl ImageArea {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_symbol_value(value: Value) -> Option<Self> {
         value.as_symbol_name()?.parse().ok()
     }
@@ -321,10 +323,12 @@ pub(crate) fn is_supported_image_type(name: &str) -> bool {
     ImageType::from_symbol_name(name).is_some()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn normalize_image_type_name(name: &str) -> Option<&'static str> {
     ImageFilenameType::from_file_extension(name).map(ImageFilenameType::name)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_image_area(area: Value) -> Result<(), Flow> {
     if area.is_nil() || ImageArea::from_symbol_value(area).is_some() {
         return Ok(());
@@ -336,6 +340,7 @@ fn validate_image_area(area: Value) -> Result<(), Flow> {
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn infer_image_type_from_filename(path: &str) -> Option<&'static str> {
     ImageFilenameType::from_file_name(path).map(ImageFilenameType::name)
 }
@@ -479,6 +484,7 @@ fn image_spec_plist(spec: &Value) -> Value {
 ///
 /// Return t if image type TYPE is available in this Emacs instance.
 /// Supported types: png, jpeg, gif, svg, webp, xpm, xbm, pbm, tiff, bmp.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_image_type_available_p(args: Vec<Value>) -> EvalResult {
     expect_args("image-type-available-p", &args, 1)?;
     let type_name = match args[0].as_symbol_name() {
@@ -502,6 +508,7 @@ pub(crate) fn builtin_image_type_available_p(args: Vec<Value>) -> EvalResult {
 /// PROPS are additional property-list pairs (e.g. :width 100 :height 200).
 ///
 /// Returns: (image :type TYPE :file FILE-OR-DATA ... PROPS)
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_create_image(args: Vec<Value>) -> EvalResult {
     expect_min_args("create-image", &args, 1)?;
 
@@ -571,6 +578,7 @@ pub(crate) fn builtin_create_image(args: Vec<Value>) -> EvalResult {
 /// Batch/no-window semantics:
 /// - invalid SPEC -> `(error "Invalid image specification")`
 /// - valid SPEC in batch -> `(error "Window system frame should be used")`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_image_size(args: Vec<Value>) -> EvalResult {
     expect_min_args("image-size", &args, 1)?;
     expect_max_args("image-size", &args, 3)?;
@@ -634,6 +642,7 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
 /// Batch/no-window semantics:
 /// - invalid SPEC -> `(error "Invalid image specification")`
 /// - valid SPEC in batch -> `(error "Window system frame should be used")`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_image_mask_p(args: Vec<Value>) -> EvalResult {
     expect_min_args("image-mask-p", &args, 1)?;
     expect_max_args("image-mask-p", &args, 2)?;
@@ -733,6 +742,7 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
 ///
 /// Display IMAGE at POINT in the current buffer as an overlay.
 /// Stub: does nothing, returns nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_put_image(args: Vec<Value>) -> EvalResult {
     expect_min_args("put-image", &args, 2)?;
     expect_max_args("put-image", &args, 4)?;
@@ -766,6 +776,7 @@ pub(crate) fn builtin_put_image(args: Vec<Value>) -> EvalResult {
 ///
 /// Insert IMAGE into the current buffer at point.
 /// Batch stub: validates IMAGE and returns t.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_image(args: Vec<Value>) -> EvalResult {
     expect_min_args("insert-image", &args, 1)?;
     expect_max_args("insert-image", &args, 5)?;
@@ -789,6 +800,7 @@ pub(crate) fn builtin_insert_image(args: Vec<Value>) -> EvalResult {
 ///
 /// Remove images between START and END in BUFFER.
 /// Stub: does nothing, returns nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_remove_images(args: Vec<Value>) -> EvalResult {
     expect_min_args("remove-images", &args, 2)?;
     expect_max_args("remove-images", &args, 3)?;
@@ -818,6 +830,7 @@ pub(crate) fn builtin_remove_images(args: Vec<Value>) -> EvalResult {
 /// - invalid SPEC -> `(error "Invalid image specification")`
 /// - FRAME = t -> nil (all-frames path)
 /// - otherwise -> `(error "Window system frame should be used")`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_image_flush(args: Vec<Value>) -> EvalResult {
     expect_min_args("image-flush", &args, 1)?;
     expect_max_args("image-flush", &args, 2)?;
@@ -957,6 +970,7 @@ pub(crate) fn builtin_imagep(args: Vec<Value>) -> EvalResult {
 /// - TYPE, when non-nil, must be a symbol and is returned (normalized aliases).
 /// - Without TYPE, type is inferred from file extension.
 /// - If type inference fails, signal `unknown-image-type`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_image_type(args: Vec<Value>) -> EvalResult {
     expect_min_args("image-type", &args, 1)?;
     expect_max_args("image-type", &args, 3)?;

@@ -175,6 +175,7 @@ impl TerminalManager {
             .find(|terminal| eq_value(&terminal.handle, value))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn find_by_handle_mut(&mut self, value: &Value) -> Option<&mut TerminalRecord> {
         self.terminals
             .iter_mut()
@@ -318,6 +319,7 @@ fn terminal_runtime() -> TerminalRuntime {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn terminal_runtime_active() -> bool {
     terminal_runtime().active
 }
@@ -330,10 +332,12 @@ pub(crate) fn terminal_runtime_supports_color() -> bool {
     terminal_runtime().supports_color()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn terminal_runtime_suspended() -> bool {
     terminal_runtime().suspended
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn set_terminal_runtime_suspended(suspended: bool) {
     TERMINAL_MANAGER.with(|slot| {
         slot.borrow_mut()
@@ -343,6 +347,7 @@ fn set_terminal_runtime_suspended(suspended: bool) {
     });
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn with_terminal_host<R>(
     f: impl FnOnce(&mut dyn TerminalHost) -> Result<R, String>,
 ) -> Result<R, Flow> {
@@ -479,6 +484,7 @@ pub(crate) fn terminal_designator_eval_p(
     decode_terminal_id_eval(eval, value).is_some()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn terminal_designator_in_state_p(
     frames: &crate::window::FrameManager,
     value: &Value,
@@ -502,6 +508,7 @@ pub(crate) fn terminal_designator_in_state_p(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn expect_terminal_designator(value: &Value) -> Result<(), Flow> {
     if terminal_designator_p(value) {
         Ok(())
@@ -527,6 +534,7 @@ pub(crate) fn expect_terminal_designator_eval(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn expect_terminal_designator_in_state(
     frames: &crate::window::FrameManager,
     value: &Value,
@@ -595,7 +603,7 @@ fn terminal_parameters_with_defaults(params: &[(Value, Value)]) -> Vec<(Value, V
 fn expect_symbol_key(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
         ValueKind::Nil | ValueKind::T | ValueKind::Symbol(_) => Ok(*value),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), *value],
         )),
@@ -620,6 +628,7 @@ fn terminal_runtime_for_id(id: u64) -> TerminalRuntime {
 /// `make-terminal-frame`, which in a real session run on an interactive
 /// terminal (the production batch path deliberately has neither a controlling
 /// tty nor a type, so frame creation errors like GNU).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn mark_selected_terminal_usable_for_test(eval: &crate::emacs_core::eval::Context) {
     if let Some(id) = decode_terminal_id_eval(eval, &Value::NIL) {
         TERMINAL_MANAGER.with(|slot| {

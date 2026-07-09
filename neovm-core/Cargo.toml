@@ -118,7 +118,13 @@ sha2.workspace = true
 name = "buffer_text_backends"
 harness = false
 
+# These three were crate-wide "allow" until 2026-07: that silenced the
+# compiler's cheapest correctness signal for ALL code, including new code.
+# They are now live. Pre-existing not-yet-wired GNU-parity scaffolding was
+# grandfathered with per-item allows (grep for "grandfathered when
+# dead_code lint was enabled") - delete the item or wire it up, then drop
+# the marker. Do not add new blanket allows here.
 [lints.rust]
-unused_imports = "allow"
-unused_variables = "allow"
-dead_code = "allow"
+unused_imports = "warn"
+unused_variables = "warn"
+dead_code = "warn"

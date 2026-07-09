@@ -112,7 +112,7 @@ fn lcms2_library_candidates(paths: &[PathBuf]) -> String {
 /// color lookup function. This gives us the full X11 color database
 /// (788 colors including grey0-grey100, DarkGoldenrod, etc.) with
 /// zero runtime file I/O — the table is compiled into the binary.
-fn generate_x11_color_table(project_root: &Path, manifest_dir: &Path) {
+fn generate_x11_color_table(project_root: &Path, _manifest_dir: &Path) {
     let rgb_path = project_root.join("etc/rgb.txt");
     println!("cargo:rerun-if-changed={}", rgb_path.display());
 

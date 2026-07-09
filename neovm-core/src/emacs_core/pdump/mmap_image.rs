@@ -136,6 +136,7 @@ impl LoadedMmapImage {
         Some(&self.mmap[section.offset as usize..section.offset as usize + section.len as usize])
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn section_mut(&mut self, kind: DumpSectionKind) -> Option<&mut [u8]> {
         let section = self
             .sections
@@ -229,11 +230,13 @@ impl LoadedMmapImage {
         Ok(start..end)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn contains_ptr(&self, ptr: *const u8) -> bool {
         let ptr = ptr as usize;
         self.mapped_range().contains(&ptr)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn mapped_range(&self) -> std::ops::Range<usize> {
         let start = self.mmap.as_ptr() as usize;
         start..start + self.mmap.len()

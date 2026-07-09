@@ -4,7 +4,9 @@
 //! and JSON parsing/serialization for the Elisp interpreter.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::{intern, intern_uninterned, resolve_sym};
+#[cfg(test)]
+use super::intern::intern_uninterned;
+use super::intern::{intern, resolve_sym};
 use super::value::*;
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,6 +17,7 @@ use strum::{EnumString, IntoStaticStr};
 // Argument helpers (local copies for this module)
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
@@ -26,6 +29,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -52,6 +56,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 #[cfg(test)]
 static CL_GENSYM_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -62,6 +67,7 @@ fn expect_int(val: &Value) -> Result<i64, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_number_or_marker(val: &Value) -> Result<f64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n as f64),
@@ -74,6 +80,7 @@ fn expect_number_or_marker(val: &Value) -> Result<f64, Flow> {
 }
 
 /// Collect elements from any sequence type into a Vec.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_string_elements(value: &Value) -> Vec<Value> {
     let string = value
         .as_lisp_string()
@@ -84,6 +91,7 @@ fn lisp_string_elements(value: &Value) -> Vec<Value> {
         .collect()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_lisp_string_like(
     string: &crate::heap_types::LispString,
     codes: impl IntoIterator<Item = u32>,
@@ -108,6 +116,7 @@ fn make_lisp_string_like(
     Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_string_char_subseq(value: Value, start: usize, end: usize) -> Value {
     let string = value
         .as_lisp_string()
@@ -126,6 +135,7 @@ fn lisp_string_char_subseq(value: Value, start: usize, end: usize) -> Value {
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn collect_sequence(val: &Value) -> Vec<Value> {
     match val.kind() {
         ValueKind::Nil => Vec::new(),
@@ -143,11 +153,11 @@ fn cl_list_nth(list: &Value, index: usize) -> EvalResult {
         match cursor.kind() {
             ValueKind::Nil => return Ok(Value::NIL),
             ValueKind::Cons => {
-                let pair_car = cursor.cons_car();
+                let _pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
                 cursor = pair_cdr;
             }
-            tail => {
+            _tail => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("listp"), cursor],
@@ -159,7 +169,7 @@ fn cl_list_nth(list: &Value, index: usize) -> EvalResult {
     match cursor.kind() {
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => Ok(cursor.cons_car()),
-        tail => Err(signal(
+        _tail => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("listp"), cursor],
         )),
@@ -315,6 +325,7 @@ pub(crate) fn builtin_cl_remove(args: Vec<Value>) -> EvalResult {
     super::builtins_extra::remove_list_equal(args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn seq_position_list_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
     let mut elements = Vec::new();
     let mut cursor = *seq;
@@ -327,7 +338,7 @@ fn seq_position_list_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
                 elements.push(pair_car);
                 cursor = pair_cdr;
             }
-            tail => {
+            _tail => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("listp"), cursor],
@@ -337,6 +348,7 @@ fn seq_position_list_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn seq_position_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
     match seq.kind() {
         ValueKind::Nil => Ok(Vec::new()),
@@ -350,6 +362,7 @@ fn seq_position_elements(seq: &Value) -> Result<Vec<Value>, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn seq_default_match(left: &Value, right: &Value) -> bool {
     if equal_value(left, right, 0) {
         return true;
@@ -360,6 +373,7 @@ fn seq_default_match(left: &Value, right: &Value) -> bool {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn seq_collect_concat_arg(arg: &Value) -> Result<Vec<Value>, Flow> {
     match arg.kind() {
         ValueKind::Nil => Ok(Vec::new()),
@@ -375,7 +389,7 @@ fn seq_collect_concat_arg(arg: &Value) -> Result<Vec<Value>, Flow> {
                         out.push(pair_car);
                         cursor = pair_cdr;
                     }
-                    tail => {
+                    _tail => {
                         return Err(signal(
                             "wrong-type-argument",
                             vec![Value::symbol("listp"), cursor],
@@ -401,6 +415,7 @@ fn seq_collect_concat_arg(arg: &Value) -> Result<Vec<Value>, Flow> {
 // ===========================================================================
 
 /// `(seq-reverse SEQ)` — reverse a sequence.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_reverse(args: Vec<Value>) -> EvalResult {
     expect_args("seq-reverse", &args, 1)?;
     let mut elems = seq_position_elements(&args[0])?;
@@ -428,6 +443,7 @@ pub(crate) fn builtin_seq_reverse(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-drop SEQ N)` — drop first n elements.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_drop(args: Vec<Value>) -> EvalResult {
     expect_args("seq-drop", &args, 2)?;
     let n = expect_int(&args[1])?;
@@ -463,7 +479,7 @@ pub(crate) fn builtin_seq_drop(args: Vec<Value>) -> EvalResult {
                 match cursor.kind() {
                     ValueKind::Nil => return Ok(Value::NIL),
                     ValueKind::Cons => {
-                        let pair_car = cursor.cons_car();
+                        let _pair_car = cursor.cons_car();
                         let pair_cdr = cursor.cons_cdr();
                         cursor = pair_cdr;
                         remaining -= 1;
@@ -486,6 +502,7 @@ pub(crate) fn builtin_seq_drop(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-take SEQ N)` — take first n elements.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_take(args: Vec<Value>) -> EvalResult {
     expect_args("seq-take", &args, 2)?;
     let n = expect_int(&args[1])?;
@@ -528,7 +545,7 @@ pub(crate) fn builtin_seq_take(args: Vec<Value>) -> EvalResult {
                         cursor = pair_cdr;
                         remaining -= 1;
                     }
-                    tail => {
+                    _tail => {
                         return Err(signal(
                             "wrong-type-argument",
                             vec![Value::symbol("listp"), cursor],
@@ -545,6 +562,7 @@ pub(crate) fn builtin_seq_take(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn builtin_seq_subseq_legacy(args: &[Value]) -> EvalResult {
     let elems = collect_sequence(&args[0]);
     let start = expect_int(&args[1])? as usize;
@@ -566,6 +584,7 @@ fn builtin_seq_subseq_legacy(args: &[Value]) -> EvalResult {
 }
 
 /// `(seq-subseq SEQ START &optional END)` — subsequence.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_subseq(args: Vec<Value>) -> EvalResult {
     expect_min_args("seq-subseq", &args, 2)?;
     let start = expect_int(&args[1])?;
@@ -605,6 +624,7 @@ pub(crate) fn builtin_seq_subseq(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-concatenate TYPE &rest SEQS)` — concatenate sequences into target type.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_concatenate(args: Vec<Value>) -> EvalResult {
     expect_min_args("seq-concatenate", &args, 1)?;
     let target = match args[0].kind() {
@@ -653,6 +673,7 @@ pub(crate) fn builtin_seq_concatenate(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-empty-p SEQ)` — is sequence empty?
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_empty_p(args: Vec<Value>) -> EvalResult {
     expect_args("seq-empty-p", &args, 1)?;
     match args[0].kind() {
@@ -678,6 +699,7 @@ pub(crate) fn builtin_seq_empty_p(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-min SEQ)` — minimum element (numeric).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_min(args: Vec<Value>) -> EvalResult {
     expect_args("seq-min", &args, 1)?;
     let elems = seq_position_elements(&args[0])?;
@@ -700,6 +722,7 @@ pub(crate) fn builtin_seq_min(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(seq-max SEQ)` — maximum element (numeric).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_max(args: Vec<Value>) -> EvalResult {
     expect_args("seq-max", &args, 1)?;
     let elems = seq_position_elements(&args[0])?;
@@ -726,6 +749,7 @@ pub(crate) fn builtin_seq_max(args: Vec<Value>) -> EvalResult {
 // ===========================================================================
 
 /// `(seq-position SEQ ELT &optional TESTFN)` — return first matching index.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_position(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1106,6 +1130,7 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
 }
 
 /// `(seq-contains-p SEQ ELT &optional TESTFN)` — membership test for sequence.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_contains_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1154,6 +1179,7 @@ pub(crate) fn builtin_seq_contains_p(
 }
 
 /// `(seq-mapn FN &rest SEQS)` — map over multiple sequences.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("seq-mapn", &args, 2)?;
     let func = args[0];
@@ -1184,6 +1210,7 @@ pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>
 }
 
 /// `(seq-do FN SEQ)` — apply fn for side effects, return nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_do(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-do", &args, 2)?;
     let func = args[0];
@@ -1204,6 +1231,7 @@ pub(crate) fn builtin_seq_do(eval: &mut super::eval::Context, args: Vec<Value>) 
 }
 
 /// `(seq-count PRED SEQ)` — count elements matching predicate.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_count(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-count", &args, 2)?;
     let pred = args[0];
@@ -1228,6 +1256,7 @@ pub(crate) fn builtin_seq_count(eval: &mut super::eval::Context, args: Vec<Value
 }
 
 /// `(seq-reduce FN SEQ INITIAL)` — reduce with initial value.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_reduce(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-reduce", &args, 3)?;
     let func = args[0];
@@ -1251,6 +1280,7 @@ pub(crate) fn builtin_seq_reduce(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 /// `(seq-some PRED SEQ)` — some element matches predicate.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_some(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-some", &args, 2)?;
     let pred = args[0];
@@ -1274,6 +1304,7 @@ pub(crate) fn builtin_seq_some(eval: &mut super::eval::Context, args: Vec<Value>
 }
 
 /// `(seq-every-p PRED SEQ)` — all elements match predicate.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_every_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-every-p", &args, 2)?;
     let pred = args[0];
@@ -1297,6 +1328,7 @@ pub(crate) fn builtin_seq_every_p(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 /// `(seq-sort PRED SEQ)` — sort with predicate.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_sort(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("seq-sort", &args, 2)?;
     let pred = args[0];

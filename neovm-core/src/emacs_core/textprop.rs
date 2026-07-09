@@ -5,7 +5,7 @@
 
 use super::builtins::builtin_copy_sequence;
 use super::error::{EvalResult, Flow, signal};
-use super::intern::{NIL_SYM_ID, T_SYM_ID, resolve_sym};
+use super::intern::{NIL_SYM_ID, T_SYM_ID};
 // storage imports removed — now using emacs_char directly
 use super::plist;
 use super::symbol::Obarray;
@@ -116,6 +116,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -127,6 +128,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int_eval(eval: &super::eval::Context, value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -140,6 +142,7 @@ fn expect_int_eval(eval: &super::eval::Context, value: &Value) -> Result<i64, Fl
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -151,6 +154,7 @@ fn expect_integer_or_marker(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integer_or_marker_eval(eval: &super::eval::Context, value: &Value) -> Result<i64, Flow> {
     super::position::fix_position_eval(eval, value)
 }
@@ -461,6 +465,7 @@ fn args_out_of_range_range(begin0: Value, end0: Value) -> Flow {
     signal("args-out-of-range", vec![begin0, end0])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn validate_string_point(
     s: &crate::heap_types::LispString,
     pos: i64,
@@ -592,6 +597,7 @@ pub(crate) fn byte_to_elisp_pos(
 
 /// Resolve the optional OBJECT argument to a buffer id.
 /// If nil or absent, uses the current buffer.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_buffer_id(
     eval: &super::eval::Context,
     object: Option<&Value>,
@@ -823,6 +829,7 @@ fn list_names_for_remove(list: Value) -> Vec<Value> {
 
 /// Convert ordered property pairs to an Elisp plist.
 /// Preserves the order from the property interval (matching GNU Emacs behavior).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ordered_pairs_to_plist(pairs: &[(Value, Value)]) -> Value {
     let mut items = Vec::new();
     for (key, val) in pairs {
@@ -2973,6 +2980,7 @@ pub(crate) fn builtin_overlay_get(eval: &mut super::eval::Context, args: Vec<Val
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_overlay_get_in_buffers(
     _buffers: &BufferManager,
     args: Vec<Value>,
@@ -3287,6 +3295,7 @@ pub(crate) fn builtin_overlay_properties_in_buffers(
 }
 
 /// (remove-overlays &optional BEG END NAME VAL)
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_remove_overlays(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

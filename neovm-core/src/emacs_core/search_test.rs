@@ -324,7 +324,7 @@ fn call_looking_at_in_buffer(pattern: Value, buffer_text: &str) -> EvalResult {
 fn assert_int(val: Value, expected: i64) {
     match val.kind() {
         ValueKind::Fixnum(n) => assert_eq!(n, expected),
-        other => panic!("Expected Int({}), got {:?}", expected, val),
+        _other => panic!("Expected Int({}), got {:?}", expected, val),
     }
 }
 
@@ -342,7 +342,7 @@ fn assert_str(val: Value, expected: &str) {
             let s = val.as_utf8_str().unwrap().to_owned();
             assert_eq!(&*s, expected);
         }
-        other => panic!("Expected string {:?}, got {:?}", expected, val),
+        _other => panic!("Expected string {:?}, got {:?}", expected, val),
     }
 }
 
@@ -355,7 +355,7 @@ fn assert_lisp_string_bytes(val: Value, expected: &[u8], multibyte: bool) {
             assert_eq!(s.as_bytes(), expected);
             assert_eq!(s.is_multibyte(), multibyte);
         }
-        other => panic!("Expected string bytes {:?}, got {:?}", expected, val),
+        _other => panic!("Expected string bytes {:?}, got {:?}", expected, val),
     }
 }
 

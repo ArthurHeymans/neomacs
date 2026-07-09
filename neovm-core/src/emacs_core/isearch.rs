@@ -11,7 +11,6 @@
 use std::collections::VecDeque;
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::intern;
 use super::regex::MatchGroup;
 use super::value::{Value, ValueKind};
 use crate::buffer::{Buffer, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1};
@@ -21,6 +20,7 @@ use crate::heap_types::LispString;
 // Argument helpers (local copies, matching builtins.rs convention)
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {
         Err(signal(
@@ -98,6 +98,7 @@ fn append_runtime_fragment_to_lisp_string(value: &mut LispString, fragment: &str
     *value = value.concat(&fragment);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_string(val: &Value) -> Result<&'static LispString, Flow> {
     // Issue #131: keep the search/replace argument byte-faithful — hand the
     // caller the real LispString (Emacs bytes), not a PUA-sentinel storage form.
@@ -105,6 +106,7 @@ fn expect_string(val: &Value) -> Result<&'static LispString, Flow> {
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("stringp"), *val]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integer_or_marker(
     buffers: &crate::buffer::BufferManager,
     val: &Value,
@@ -121,6 +123,7 @@ fn expect_integer_or_marker(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_sequence_string(val: &Value) -> Result<&'static LispString, Flow> {
     // Issue #131: byte-faithful — see `expect_string`.
     val.as_lisp_string().ok_or_else(|| {
@@ -131,10 +134,12 @@ fn expect_sequence_string(val: &Value) -> Result<&'static LispString, Flow> {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_pos_to_byte(buf: &crate::buffer::Buffer, pos: LispCharPos1) -> EmacsBytePos {
     buf.lisp_pos_to_accessible_emacs_byte_pos(pos)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_pos_value_to_byte(
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
@@ -146,6 +151,7 @@ fn lisp_pos_value_to_byte(
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replacement_region_bounds(
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
@@ -181,6 +187,7 @@ fn replacement_region_bounds(
     Ok(EmacsByteRange::ordered(start, end))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn line_operation_region_bounds(
     buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
@@ -199,6 +206,7 @@ fn line_operation_region_bounds(
     Ok(EmacsByteRange::ordered(start, end))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn line_start_at_or_before(source: &[u8], at: usize) -> usize {
     let pos = at.min(source.len());
     match source[..pos].iter().rposition(|&b| b == b'\n') {
@@ -241,11 +249,13 @@ fn lisp_pattern_has_uppercase(pattern: &crate::heap_types::LispString) -> bool {
 /// observed. See the extended comment on the identical helper in
 /// `builtins/misc_eval.rs` (audit finding #3 in
 /// `drafts/regex-search-audit.md`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
     if buf.get_read_only() {
         return true;
@@ -260,6 +270,7 @@ fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
         .is_some_and(|value| value.is_truthy())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn case_fold_for_pattern(
     eval: &super::eval::Context,
     pattern: &crate::heap_types::LispString,
@@ -282,18 +293,21 @@ fn case_fold_for_pattern(
     !lisp_pattern_has_uppercase(pattern)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn case_replace_enabled(eval: &super::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "case-replace")
         .map(|value| !value.is_nil())
         .unwrap_or(true)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_lax_whitespace_enabled(eval: &super::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "replace-lax-whitespace")
         .map(|value| !value.is_nil())
         .unwrap_or(false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_search_whitespace_regexp(eval: &super::eval::Context) -> Option<LispString> {
     // Issue #131: return the whitespace regexp as a byte-faithful LispString. The
     // default `[ \t\n\r]+` is ASCII, but a user-set `search-whitespace-regexp`
@@ -309,6 +323,7 @@ fn resolve_search_whitespace_regexp(eval: &super::eval::Context) -> Option<LispS
     Some(raw)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn quote_emacs_regexp_literal_bytes(literal: &[u8], result: &mut Vec<u8>) {
     // Issue #131: quote Emacs regexp metacharacters byte-by-byte. All quoted
     // metacharacters are ASCII; non-ASCII Emacs bytes pass through untouched.
@@ -323,6 +338,7 @@ fn quote_emacs_regexp_literal_bytes(literal: &[u8], result: &mut Vec<u8>) {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn build_lax_whitespace_pattern(pattern: &[u8], whitespace_regex: &[u8]) -> Vec<u8> {
     // Issue #131: operate on Emacs bytes — a literal run is byte-faithful, and the
     // ASCII space (0x20) that separates runs cannot appear inside a multibyte
@@ -356,6 +372,7 @@ fn build_lax_whitespace_pattern(pattern: &[u8], whitespace_regex: &[u8]) -> Vec<
     raw
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn string_matches_regexp(
     line: &[u8],
     multibyte: bool,
@@ -379,6 +396,7 @@ fn string_matches_regexp(
     .map_err(|e| signal("invalid-regexp", vec![Value::string(e)]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_line_operation_byte_range(
     eval: &mut super::eval::Context,
     current_id: crate::buffer::BufferId,
@@ -418,6 +436,7 @@ fn delete_line_operation_byte_range(
     super::editfns::signal_after_text_change(eval, change)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_line_operation_ranges(
     eval: &mut super::eval::Context,
     current_id: crate::buffer::BufferId,
@@ -441,6 +460,7 @@ fn delete_line_operation_ranges(
     Ok(deleted_ranges)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn count_string_regexp_matches(
     text: &[u8],
     pattern: &LispString,
@@ -1430,6 +1450,7 @@ fn resolve_case_fold(override_val: Option<bool>, search_string: &LispString) -> 
 // Helper: build regex pattern with optional case-insensitive flag
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn build_regex_pattern(pattern: &str, case_fold: bool) -> String {
     let translated = super::regex::translate_emacs_regex(pattern);
     if case_fold {
@@ -1572,6 +1593,7 @@ fn find_match(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_delimited_word_char(ch: char) -> bool {
     ch.is_alphanumeric()
 }
@@ -1588,6 +1610,7 @@ fn is_delimited_word_char(ch: char) -> bool {
 /// - If `matched` starts with an uppercase letter and the rest is lowercase
 ///   (capitalized), uppercase the first char of replacement and keep the rest.
 /// - Otherwise return `replacement` unmodified.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn preserve_case(replacement: &str, matched: &str) -> String {
     super::casefiddle::apply_replace_match_case(replacement, matched)
 }
@@ -1600,10 +1623,12 @@ fn preserve_case(replacement: &str, matched: &str) -> String {
 // `\N`/`\&` replacement expansion.
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn code_is_delimited_word_char(code: u32) -> bool {
     char::from_u32(code).is_some_and(is_delimited_word_char)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_delimited_match_bytes(text: &[u8], start: usize, end: usize) -> bool {
     let left = if start > 0 {
         let prev_len = crate::emacs_core::emacs_char::raw_prev_char_len(text, start);
@@ -1622,6 +1647,7 @@ fn is_delimited_match_bytes(text: &[u8], start: usize, end: usize) -> bool {
     left_ok && right_ok
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn preserve_case_emacs_bytes(replacement: &[u8], matched: &[u8], multibyte: bool) -> Vec<u8> {
     let rep = lisp_string_from_buffer_bytes(replacement.to_vec(), multibyte);
     let mat = lisp_string_from_buffer_bytes(matched.to_vec(), multibyte);
@@ -1630,6 +1656,7 @@ fn preserve_case_emacs_bytes(replacement: &[u8], matched: &[u8], multibyte: bool
         .to_vec()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expand_emacs_replacement_bytes(
     rep: &[u8],
     groups: &[Option<MatchGroup>],
@@ -1689,6 +1716,7 @@ fn expand_emacs_replacement_bytes(
 // Builtin functions (stubs for evaluator dispatch)
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_string_eval_impl(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1976,6 +2004,7 @@ fn replace_string_eval_impl(
 
 /// `(replace-string FROM-STRING TO-STRING &optional DELIMITED START END BACKWARD REGION-NONCONTIGUOUS-P)` —
 /// evaluator-backed non-interactive replace subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1983,6 +2012,7 @@ pub(crate) fn builtin_replace_string(
     replace_string_eval_impl(eval, args, false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_regexp_eval_impl(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2181,6 +2211,7 @@ fn replace_regexp_eval_impl(
 
 /// `(replace-regexp REGEXP TO-STRING &optional DELIMITED START END BACKWARD REGION-NONCONTIGUOUS-P)` —
 /// evaluator-backed non-interactive regexp replacement subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_regexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2193,6 +2224,7 @@ pub(crate) fn builtin_replace_regexp(
 ///
 /// Current subset behavior performs unconditional replacement across the target
 /// region, matching batch automation use-cases.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_query_replace(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2206,6 +2238,7 @@ pub(crate) fn builtin_query_replace(
 ///
 /// Current subset behavior performs unconditional regexp replacement across the
 /// target region, matching batch automation use-cases.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_query_replace_regexp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2221,6 +2254,7 @@ pub(crate) fn builtin_query_replace_regexp(
 
 /// `(keep-lines REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed non-interactive line filtering subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("keep-lines", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
@@ -2307,6 +2341,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
 
 /// `(flush-lines REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed non-interactive line filtering subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("flush-lines", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
@@ -2387,6 +2422,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
 
 /// `(how-many REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed regexp match counting subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_max_args("how-many", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
@@ -2416,6 +2452,7 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
 
 /// `(count-matches REGEXP &optional START END INTERACTIVE)` —
 /// evaluator-backed regexp match counting subset.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_count_matches(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2448,6 +2485,7 @@ pub(crate) fn builtin_count_matches(
 
 /// `(isearch-forward)` — interactive command; returns batch-mode error in
 /// non-interactive contexts.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_isearch_forward(args: Vec<Value>) -> EvalResult {
     expect_min_max_args("isearch-forward", &args, 0, 2)?;
     Err(signal(
@@ -2460,6 +2498,7 @@ pub(crate) fn builtin_isearch_forward(args: Vec<Value>) -> EvalResult {
 
 /// `(isearch-backward)` — interactive command; returns batch-mode error in
 /// non-interactive contexts.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_isearch_backward(args: Vec<Value>) -> EvalResult {
     expect_min_max_args("isearch-backward", &args, 0, 2)?;
     Err(signal(

@@ -219,7 +219,7 @@ fn string_to_syntax_prefix_class() {
     let value = syntax_entry_to_value(&entry);
     if value.is_cons() {
         let cell_car = value.cons_car();
-        let cell_cdr = value.cons_cdr();
+        let _cell_cdr = value.cons_cdr();
         assert!(cell_car.is_fixnum());
     } else {
         panic!("Expected cons cell");
@@ -1205,7 +1205,7 @@ fn syntax_entry_to_value_with_flags() {
     let val = syntax_entry_to_value(&entry);
     if val.is_cons() {
         let cell_car = val.cons_car();
-        let cell_cdr = val.cons_cdr();
+        let _cell_cdr = val.cons_cdr();
         // code = 1 (punctuation) | (0x03 << 16) = 1 | 196608 = 196609
         assert!(cell_car.is_fixnum());
     } else {

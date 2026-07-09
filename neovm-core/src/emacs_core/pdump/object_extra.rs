@@ -271,6 +271,7 @@ fn object_needs_extra(obj: &DumpHeapObject) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Load the sparse ObjectExtra section into the present extra records.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_object_extra(section: &[u8]) -> Result<Vec<ObjectExtra>, DumpError> {
     let (_count, payload) = object_extra_payload(section)?;
     let mut cursor = object_value_codec::Cursor::new_at(payload, 0);

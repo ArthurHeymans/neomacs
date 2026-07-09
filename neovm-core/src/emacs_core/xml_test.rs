@@ -1,5 +1,4 @@
 use super::*;
-use crate::emacs_core::value::ValueKind;
 
 fn make_ctx() -> super::super::eval::Context {
     super::super::eval::Context::new()

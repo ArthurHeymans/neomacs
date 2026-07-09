@@ -1,8 +1,7 @@
 use super::*;
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::eval::Context;
-use crate::emacs_core::value::{ValueKind, VecLikeType};
-use crate::emacs_core::{print, string_escape};
+use crate::emacs_core::print;
 
 /// Test helper: create a minimal eval context for widget-apply tests.
 fn test_eval_ctx() -> crate::emacs_core::eval::Context {

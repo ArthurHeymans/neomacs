@@ -18,7 +18,6 @@
 
 use super::error::{
     EvalResult, Flow, signal, signal_id, signal_suppressed, signal_with_data, signal_with_data_id,
-    signal_with_data_suppressed,
 };
 use super::intern::{SymId, intern, resolve_sym};
 use super::symbol::Obarray;
@@ -586,6 +585,7 @@ fn register_simple(obarray: &mut Obarray, name: &str, message: &str, parents: &[
 
 /// Extract parent symbol(s) from the PARENT argument of `define-error`.
 /// Accepts either a single symbol or a list of symbols.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn extract_parent_symbols(value: &Value) -> Result<Vec<String>, Flow> {
     match value.kind() {
         ValueKind::Symbol(id) => Ok(vec![resolve_sym(id).to_owned()]),

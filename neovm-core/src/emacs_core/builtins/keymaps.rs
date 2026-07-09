@@ -7,13 +7,13 @@ use crate::emacs_core::symbol::Obarray;
 use super::keymap::{
     KeyEvent, KeymapMarker, collect_minor_mode_map_entries_in_state,
     collect_minor_mode_maps_in_state, current_active_maps_for_position,
-    current_active_maps_for_position_read_only, ensure_global_keymap_in_obarray,
-    expand_meta_prefix_char_events_in_obarray, get_keymap_in_obarray, get_keymap_in_runtime,
-    is_list_keymap, key_event_to_emacs_event, list_keymap_accessible, list_keymap_copy,
-    list_keymap_define_seq_in_obarray, list_keymap_define_seq_in_obarray_ex,
-    list_keymap_inherits_from, list_keymap_parent, list_keymap_set_parent,
-    lookup_key_in_keymaps_in_obarray, lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap,
-    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    ensure_global_keymap_in_obarray, expand_meta_prefix_char_events_in_obarray,
+    get_keymap_in_obarray, get_keymap_in_runtime, is_list_keymap, key_event_to_emacs_event,
+    list_keymap_accessible, list_keymap_copy, list_keymap_define_seq_in_obarray,
+    list_keymap_define_seq_in_obarray_ex, list_keymap_inherits_from, list_keymap_parent,
+    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray,
+    lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap, make_sparse_list_keymap,
+    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -126,7 +126,7 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                             events.push(*item);
                         }
                     }
-                    other => {
+                    _other => {
                         return Err(signal(
                             "wrong-type-argument",
                             vec![Value::symbol("arrayp"), *value],
@@ -246,7 +246,7 @@ pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value])
                 .filter(|entry| {
                     if entry.is_cons() {
                         let pair_car = entry.cons_car();
-                        let pair_cdr = entry.cons_cdr();
+                        let _pair_cdr = entry.cons_cdr();
                         // pair_car is the prefix vector
                         if pair_car.is_vector() {
                             let entry_prefix = pair_car.as_vector_data().unwrap().clone();
@@ -358,6 +358,7 @@ pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Valu
     lookup_key_with_menu_compat_runtime(eval, &keymaps, &events, t_ok)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lookup_key_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
     expect_min_args("lookup-key", &args, 2)?;
     expect_max_args("lookup-key", &args, 3)?;
@@ -378,6 +379,7 @@ pub(crate) fn builtin_lookup_key_impl(obarray: &Obarray, args: &[Value]) -> Eval
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lookup_key_with_menu_compat(
     obarray: &Obarray,
     keymaps: &[Value],
@@ -516,6 +518,7 @@ fn resolve_lookup_keymaps_in_runtime(
     Ok(vec![get_keymap_in_runtime(eval, value, true, true)?])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_lookup_keymaps_in_obarray(obarray: &Obarray, value: &Value) -> Result<Vec<Value>, Flow> {
     if is_list_keymap(value) {
         return Ok(vec![*value]);
@@ -618,6 +621,7 @@ pub(super) fn builtin_use_global_map(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_use_global_map_impl(obarray: &mut Obarray, args: &[Value]) -> EvalResult {
     expect_args("use-global-map", args, 1)?;
     let keymap = expect_keymap_in_obarray(obarray, &args[0])?;
@@ -965,6 +969,7 @@ pub(super) fn builtin_keymap_parent(
     Ok(list_keymap_parent(&keymap))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_keymap_parent_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
     expect_args("keymap-parent", &args, 1)?;
     let keymap = get_keymap_in_obarray(obarray, &args[0], true)?;
@@ -993,6 +998,7 @@ pub(super) fn builtin_set_keymap_parent(
     Ok(parent)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_keymap_parent_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
     expect_args("set-keymap-parent", &args, 2)?;
     let keymap = get_keymap_in_obarray(obarray, &args[0], true)?;
@@ -1011,6 +1017,7 @@ pub(crate) fn builtin_set_keymap_parent_impl(obarray: &Obarray, args: &[Value]) 
     Ok(parent)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn is_lisp_keymap_object(value: &Value) -> bool {
     is_list_keymap(value)
 }
@@ -1098,6 +1105,7 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
     Ok(Value::string(rendered))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn parse_event_symbol_prefixes(mut name: &str) -> (Vec<Value>, &str) {
     let mut mods = Vec::new();
     loop {

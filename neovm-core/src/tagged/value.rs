@@ -27,13 +27,13 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 
 use crate::emacs_core::intern::{
-    SymId, UNBOUND_SYM_ID, canonical_symbol_for_name, is_canonical_id, resolve_name, resolve_sym,
-    resolve_sym_lisp_string, symbol_name_id,
+    SymId, UNBOUND_SYM_ID, canonical_symbol_for_name, resolve_name, resolve_sym_lisp_string,
+    symbol_name_id,
 };
 use crate::heap_types::LispString;
 
 use super::header::{
-    BignumObj, ConsCell, FloatObj, GcHeader, ModuleFunctionObj, SqliteObj, StringObj, SubrObj,
+    BignumObj, ConsCell, FloatObj, ModuleFunctionObj, SqliteObj, StringObj, SubrObj,
     SymbolWithPosObj, UserPtrObj, VecLikeHeader, VecLikeType,
 };
 

@@ -1,5 +1,6 @@
 use super::super::intern::intern;
 use super::*;
+use crate::emacs_core::intern::resolve_sym;
 
 #[test]
 fn set_internal_bind_codes_match_gnu_set_internal_bind() {

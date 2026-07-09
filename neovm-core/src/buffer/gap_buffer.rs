@@ -162,6 +162,7 @@ impl GapBuffer {
 
     /// Whether the buffer contains no text.
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -194,6 +195,7 @@ impl GapBuffer {
     }
 
     /// Number of logical Emacs bytes in the buffer.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub fn emacs_byte_len(&self) -> usize {
         self.total_bytes
     }
@@ -204,6 +206,7 @@ impl GapBuffer {
     }
 
     /// GNU `Z`: character position of the end of buffer text.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub fn z(&self) -> usize {
         self.total_chars
     }
@@ -214,6 +217,7 @@ impl GapBuffer {
     }
 
     /// GNU `Z_BYTE`: logical Emacs byte position of the end of buffer text.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub fn z_byte(&self) -> usize {
         self.total_bytes
     }
@@ -424,6 +428,7 @@ impl GapBuffer {
     // Mutation
     // -----------------------------------------------------------------------
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn insert_emacs_bytes_at_emacs_byte_pos(&mut self, pos: EmacsBytePos, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
@@ -435,6 +440,7 @@ impl GapBuffer {
         );
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn insert_emacs_bytes_at_emacs_byte_pos_with_char_len(
         &mut self,
         pos: EmacsBytePos,
@@ -492,6 +498,7 @@ impl GapBuffer {
         self.byte_char_cache.set(TextPositionAnchor::ZERO);
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn insert_storage_string_at_emacs_byte_pos(&mut self, pos: EmacsBytePos, s: &str) {
         if s.is_empty() {
             return;
@@ -501,6 +508,7 @@ impl GapBuffer {
         self.insert_emacs_bytes_at_emacs_byte_pos(pos, &bytes);
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn delete_emacs_byte_range(&mut self, range: EmacsByteRange) {
         let start = range.start().get();
         let end = range.end().get();
@@ -525,6 +533,7 @@ impl GapBuffer {
     /// count of the region.
     ///
     /// Mirrors GNU `del_range_2` (`src/insdel.c:1991`).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn delete_emacs_byte_range_with_char_len(
         &mut self,
         range: EmacsByteRange,
@@ -600,6 +609,7 @@ impl GapBuffer {
         self.insert_measured_emacs_bytes(replacement.byte_start(), bytes, replacement.new_extent());
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn replace_same_len_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,

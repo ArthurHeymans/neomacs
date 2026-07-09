@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferManager, EmacsByteRange};
+use crate::buffer::BufferManager;
 use crate::heap_types::LispString;
 
 /// Build a child `Command` already isolated into its own OS session.
@@ -86,6 +86,7 @@ pub(crate) fn isolate_child_command(command: &mut Command) {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         return Err(signal(
@@ -373,6 +374,7 @@ pub(super) fn subprocess_default_directory(eval: &super::eval::Context) -> Optio
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn configure_subprocess_current_dir(eval: &super::eval::Context, command: &mut Command) {
     if let Some(dir) = subprocess_default_directory(eval) {
         command.current_dir(dir);
@@ -584,7 +586,7 @@ fn parse_real_buffer_destination_in_state(
                 Err(signal_wrong_type_string(first))
             }
         }
-        other => Err(signal_wrong_type_string(*value)),
+        _other => Err(signal_wrong_type_string(*value)),
     }
 }
 
@@ -601,7 +603,7 @@ fn parse_stderr_destination(value: &Value) -> Result<(StderrTarget, Option<LispS
                     .clone(),
             ),
         )),
-        other => Err(signal_wrong_type_string(*value)),
+        _other => Err(signal_wrong_type_string(*value)),
     }
 }
 
@@ -911,6 +913,7 @@ fn run_process_command_in_state(
     Ok(call_process_status_value(output.status))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn run_process_capture_output(
     eval: &super::eval::Context,
     program: &LispString,
@@ -940,6 +943,7 @@ fn parse_optional_infile(args: &[Value], index: usize) -> Result<Option<LispStri
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_lisp_string_variable(
     obarray: &super::symbol::Obarray,
     name: &str,
@@ -953,6 +957,7 @@ fn obarray_lisp_string_variable(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_process_lines_status_error(program: &LispString, status: i32) -> Flow {
     signal(
         "error",
@@ -963,10 +968,12 @@ fn signal_process_lines_status_error(program: &LispString, status: i32) -> Flow 
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn shell_command_fragment(value: &Value) -> Result<LispString, Flow> {
     super::process::char_sequence_to_lisp_string(value)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn mapconcat_identity_lisp_strings(strings: &[LispString], separator: &[u8]) -> LispString {
     if strings.is_empty() {
         return LispString::from_unibyte(Vec::new());
@@ -993,6 +1000,7 @@ fn mapconcat_identity_lisp_strings(strings: &[LispString], separator: &[u8]) -> 
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn shell_command_with_legacy_args(command: &Value, args: &[Value]) -> Result<LispString, Flow> {
     let mut parts = Vec::with_capacity(args.len() + 1);
     parts.push(shell_command_fragment(command)?);
@@ -1287,6 +1295,7 @@ pub(crate) fn builtin_call_process(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_call_process_shell_command(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1305,6 +1314,7 @@ pub(crate) fn builtin_call_process_shell_command(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_file(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1324,6 +1334,7 @@ pub(crate) fn builtin_process_file(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_file_shell_command(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1342,6 +1353,7 @@ pub(crate) fn builtin_process_file_shell_command(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_lines(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1356,6 +1368,7 @@ pub(crate) fn builtin_process_lines(
     Ok(parse_output_lines(&stdout))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_lines_ignore_status(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1367,6 +1380,7 @@ pub(crate) fn builtin_process_lines_ignore_status(
     Ok(parse_output_lines(&stdout))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_lines_handling_status(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1399,6 +1413,7 @@ pub(crate) fn builtin_call_process_region(
     Ok(result)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn parse_output_lines(stdout: &[u8]) -> Value {
     let mut text = String::from_utf8_lossy(stdout).into_owned();
     if text.ends_with('\n') {

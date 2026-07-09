@@ -1,5 +1,4 @@
 use super::super::eval::Context;
-use super::super::intern::intern;
 use super::*;
 use crate::heap_types::LispString;
 
@@ -943,7 +942,6 @@ fn test_sf_with_mutex_executes_body() {
 #[test]
 fn test_sf_with_mutex_unlocks_on_error() {
     crate::test_utils::init_test_tracing();
-    use crate::emacs_core::value::ValueKind;
 
     let mut eval = Context::new();
     let mx = builtin_make_mutex(&mut eval, vec![]).unwrap();

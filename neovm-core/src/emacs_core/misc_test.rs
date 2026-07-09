@@ -1,5 +1,4 @@
 use super::*;
-use crate::emacs_core::string_escape;
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::load_minimal_gnu_backquote_runtime;
 
@@ -71,7 +70,7 @@ fn rassoc_found() {
     // Should return (b . 2)
     if result.is_cons() {
         let pair_car = result.cons_car();
-        let pair_cdr = result.cons_cdr();
+        let _pair_cdr = result.cons_cdr();
         assert!(eq_value(&pair_car, &Value::symbol("b")));
     } else {
         panic!("expected cons");
@@ -96,7 +95,7 @@ fn rassq_found() {
     let result = builtin_rassq(vec![Value::symbol("yes"), alist]).unwrap();
     if result.is_cons() {
         let pair_car = result.cons_car();
-        let pair_cdr = result.cons_cdr();
+        let _pair_cdr = result.cons_cdr();
         assert!(eq_value(&pair_car, &Value::symbol("x")));
     } else {
         panic!("expected cons");

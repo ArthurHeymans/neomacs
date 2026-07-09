@@ -1,4 +1,5 @@
 use super::*;
+use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::value::HashTableTest;
 
 #[test]
@@ -303,7 +304,7 @@ fn parse_arglist_descriptor_zero_args() {
 #[test]
 fn parse_arglist_value_from_list() {
     crate::test_utils::init_test_tracing();
-    use crate::emacs_core::intern::intern;
+
     let arglist = Value::list(vec![
         Value::symbol("x"),
         Value::symbol("&optional"),

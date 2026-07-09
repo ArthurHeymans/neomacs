@@ -6,10 +6,9 @@ pub type WakeupFd = std::os::unix::io::RawFd;
 pub type WakeupFd = std::os::windows::io::RawHandle;
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashSet, VecDeque};
-use std::hash::{Hash, Hasher};
+use std::collections::HashSet;
+use std::hash::Hash;
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
@@ -27,12 +26,9 @@ use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_ST
 use super::error::*;
 use super::interactive::InteractiveRegistry;
 use super::intern::{
-    NameId, SymId, intern, intern_uninterned, is_canonical_id, is_keyword_id, resolve_name,
-    resolve_sym, resolve_sym_metadata, symbol_name_id,
+    SymId, intern, intern_uninterned, is_canonical_id, is_keyword_id, resolve_sym, symbol_name_id,
 };
-use super::keymap::{
-    list_keymap_define, list_keymap_set_parent, make_list_keymap, make_sparse_list_keymap,
-};
+use super::keymap::{list_keymap_define, list_keymap_set_parent, make_sparse_list_keymap};
 use super::kmacro::KmacroManager;
 use super::minibuffer::MinibufferManager;
 use super::mode::ModeRegistry;
@@ -117,6 +113,7 @@ fn push_optional_lcms2_feature(features: &mut Vec<&'static str>) {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn portable_initial_feature_names() -> Vec<&'static str> {
     // GNU initializes `features' from C subsystems that are actually linked
     // into the executable.  Neomacs has its own cross-platform `neo' GUI
@@ -189,6 +186,7 @@ struct RedisplaySignature {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SyntaxPpssLast {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) buffer_id: BufferId,
     pub(crate) pos: i64,
     pub(crate) modified_tick: i64,
@@ -343,6 +341,7 @@ pub(crate) fn subr_entry_from_value(function: Value) -> Option<(SymId, SubrEntry
 }
 
 /// Access a subr entry by reference (avoids cloning).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn with_global_subr_entry<R>(
     sym_id: SymId,
     f: impl FnOnce(&SubrEntry) -> R,
@@ -356,6 +355,7 @@ pub(crate) fn with_global_subr_entry<R>(
 }
 
 /// Clear all subr entries (used during heap reset).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn clear_global_subr_table() {
     GLOBAL_SUBR_TABLE.with(|table| table.borrow_mut().clear());
 }
@@ -1038,6 +1038,7 @@ cached_symbol_id!(memory_full_symbol, "memory-full");
 cached_symbol_id!(gc_elapsed_symbol, "gc-elapsed");
 cached_symbol_id!(gcs_done_symbol, "gcs-done");
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_lambda_like_symbol_id(id: SymId) -> bool {
     id == lambda_symbol() || id == closure_symbol()
 }
@@ -1155,6 +1156,7 @@ pub(crate) fn feature_present_in_state(
     features.iter().any(|feature| *feature == id)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn add_feature_in_state(obarray: &mut Obarray, features: &mut Vec<SymId>, name: &str) {
     refresh_features_from_variable_in_state(obarray, features);
     let id = intern(name);
@@ -1831,6 +1833,7 @@ pub struct Context {
     /// NeoVM keeps the actual evaluator-owned symbol identity here so the
     /// public `internal-interpreter-environment` symbol can stay visible
     /// while remaining unbound and non-special.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) internal_interpreter_environment_symbol: SymId,
     /// GNU `eval.c` hot-path DEFVARs exposed via direct globals like
     /// `Vquit_flag`, `Vinhibit_quit`, and `Vthrow_on_input`.
@@ -2081,6 +2084,7 @@ pub struct Context {
     /// GNU `lisp_eval_depth`: one shared counter for interpreted cons-form
     /// evaluation, Lisp-visible `funcall`, and bytecode `Bcall`.
     pub(crate) depth: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     eval_counter: u64,
     /// Maximum recursion depth.
     pub(crate) max_depth: usize,
@@ -2437,6 +2441,7 @@ pub(crate) struct SpecpdlRootScopeState {
     saved_len: usize,
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn bind_lexical_value_rooted_in_specpdl(
     lexenv: &mut Value,
     specpdl: &mut Vec<SpecBinding>,
@@ -2725,11 +2730,13 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn subr_is_context_callable_id(&self, sym_id: SymId) -> bool {
         self.subr_dispatch_kind_or_compat(sym_id) == SubrDispatchKind::ContextCallable
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn has_registered_subr(&self, sym_id: SymId) -> bool {
         lookup_global_subr_entry(sym_id).is_some_and(|e| e.function.is_some())
     }
@@ -4436,7 +4443,6 @@ impl Context {
         // per terminal, so model it as a dynamically scoped runtime variable.
         obarray.make_special("overriding-terminal-local-map");
         obarray.set_symbol_value("overriding-text-conversion-style", Value::symbol("lambda"));
-
     }
 
     /// Core eval.c / keyboard.c DEFVAR globals plus the standard error
@@ -4589,7 +4595,6 @@ impl Context {
         // Initialize indentation variables (tab-width, indent-tabs-mode, etc.)
         super::indent::init_indent_vars(obarray);
         super::font::init_font_vars(obarray);
-
     }
 
     /// C-level DEFVAR registrations mirroring GNU's per-file syms_of_*()
@@ -4597,7 +4602,6 @@ impl Context {
     /// declared via DEFVAR in GNU C, it must be registered here or elisp
     /// reading or let-binding it gets void-variable.
     fn seed_c_level_defvars(obarray: &mut Obarray, custom: &mut CustomManager) {
-
         // `case-fold-search` is DEFVAR_LISP + Fmake_variable_buffer_local
         // in GNU `buffer.c:5971-5975`. Install it as a LOCALIZED symbol
         // with `local_if_set = 1` at init time so reads/writes route
@@ -6889,6 +6893,7 @@ impl Context {
         self.run_hook_if_bound("kbd-macro-termination-hook")
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn pending_gnu_timer(timer: Value) -> Option<PendingGnuTimer> {
         if !timer.is_vector() {
             return None;
@@ -6921,6 +6926,7 @@ impl Context {
         })
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn pending_gnu_idle_timer(timer: Value) -> Option<PendingGnuTimer> {
         if !timer.is_vector() {
             return None;
@@ -7397,7 +7403,7 @@ impl Context {
         let heap_ptr: *mut crate::tagged::gc::TaggedHeap = &mut *self.tagged_heap;
         // True only when a whole mark+sweep cycle finishes in this call, gating
         // the once-per-collection bookkeeping below.
-        let mut cycle_completed = false;
+        let cycle_completed;
         // Safety: GC is stop-the-world with exclusive `&mut self`. Root
         // enumeration only reads Context state while seeding the collector via
         // the raw heap pointer, which aliases `self.tagged_heap`.
@@ -8188,6 +8194,7 @@ impl Context {
     /// The remaining evaluator entry points either root their live Values
     /// explicitly or run before materializing heap-backed Values, so this path
     /// now uses exact roots rather than conservative stack scanning.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn maybe_gc_and_quit(&mut self) -> Result<(), Flow> {
         self.maybe_quit_before_gc()?;
         if self.gc_safe_point_exact_should_collect() {
@@ -8558,6 +8565,7 @@ impl Context {
         feature_present_in_state(&self.obarray, &mut self.features, name)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn add_feature(&mut self, name: &str) {
         add_feature_in_state(&mut self.obarray, &mut self.features, name);
     }
@@ -9101,6 +9109,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn current_message_slot(&mut self) -> &mut Option<crate::heap_types::LispString> {
         &mut self.current_message
     }
@@ -9931,6 +9940,7 @@ impl Context {
         self.eval_symbol_by_id(intern(symbol))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_symbol_callable(
         &mut self,
         sym_id: SymId,
@@ -10092,6 +10102,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn maybe_writeback_mutating_first_arg(
         &mut self,
         called_name: &str,
@@ -10163,6 +10174,7 @@ impl Context {
         });
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn replace_alias_refs_in_value(
         value: &mut Value,
         from: &Value,
@@ -10381,6 +10393,7 @@ impl Context {
         Ok(arg)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_quote_value(&mut self, tail: Value) -> EvalResult {
         self.sf_quote_value_named(quote_symbol(), tail)
     }
@@ -10389,6 +10402,7 @@ impl Context {
         Ok(self.one_unevalled_arg(call_name, tail)?)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_function_value(&mut self, tail: Value) -> EvalResult {
         self.sf_function_value_named(function_symbol(), tail)
     }
@@ -10405,6 +10419,7 @@ impl Context {
         self.instantiate_callable_cons_form(Value::cons(Value::from_sym_id(lambda_symbol()), tail))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_let_value(&mut self, tail: Value) -> EvalResult {
         self.sf_let_value_named(let_symbol(), tail)
     }
@@ -10577,6 +10592,7 @@ impl Context {
         result
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_let_star_value(&mut self, tail: Value) -> EvalResult {
         self.sf_let_star_value_named(let_star_symbol(), tail)
     }
@@ -10685,6 +10701,7 @@ impl Context {
         result
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_setq_value(&mut self, tail: Value) -> EvalResult {
         self.sf_setq_value_named(setq_symbol(), tail)
     }
@@ -10759,6 +10776,7 @@ impl Context {
         Ok(last)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_if_value(&mut self, tail: Value) -> EvalResult {
         self.sf_if_value_named(if_symbol(), tail)
     }
@@ -10854,6 +10872,7 @@ impl Context {
         Ok(Value::NIL)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_while_value(&mut self, tail: Value) -> EvalResult {
         self.sf_while_value_named(while_symbol(), tail)
     }
@@ -10923,6 +10942,7 @@ impl Context {
         result
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_prog1_value(&mut self, tail: Value) -> EvalResult {
         self.sf_prog1_value_named(prog1_symbol(), tail)
     }
@@ -10948,6 +10968,7 @@ impl Context {
         Ok(first)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_defvar_value(&mut self, tail: Value) -> EvalResult {
         self.sf_defvar_value_named(defvar_symbol(), tail)
     }
@@ -11027,6 +11048,7 @@ impl Context {
         Ok(Value::from_sym_id(sym_id))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_defconst_value(&mut self, tail: Value) -> EvalResult {
         self.sf_defconst_value_named(defconst_symbol(), tail)
     }
@@ -11090,6 +11112,7 @@ impl Context {
         Ok(Value::from_sym_id(sym_id))
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_catch_value(&mut self, tail: Value) -> EvalResult {
         self.sf_catch_value_named(catch_symbol(), tail)
     }
@@ -11139,6 +11162,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_unwind_protect_value(&mut self, tail: Value) -> EvalResult {
         self.sf_unwind_protect_value_named(unwind_protect_symbol(), tail)
     }
@@ -11184,6 +11208,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn sf_condition_case_value(&mut self, tail: Value) -> EvalResult {
         self.sf_condition_case_value_named(condition_case_symbol(), tail)
     }
@@ -11532,9 +11557,7 @@ impl Context {
         let maxdepth = args[2];
 
         use crate::emacs_core::bytecode::ByteCodeFunction;
-        use crate::emacs_core::bytecode::decode::{
-            decode_gnu_bytecode_with_offset_map, string_value_to_bytes,
-        };
+        use crate::emacs_core::bytecode::decode::decode_gnu_bytecode_with_offset_map;
         use crate::emacs_core::value::LambdaParams;
 
         // Bytecode strings are unibyte and may contain non-UTF-8 bytes.
@@ -11934,6 +11957,7 @@ impl Context {
     // Lambda / Function application
     // -----------------------------------------------------------------------
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn make_interpreted_closure_with_expr_runtime_hook(
         &mut self,
         params_value: Value,
@@ -12058,6 +12082,7 @@ impl Context {
         });
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
         let args = self.backtrace_args_from_owned(args);
         self.specpdl.push(SpecBinding::Backtrace {
@@ -12189,6 +12214,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn backtrace_args_len(&self, args: &BacktraceArgs) -> usize {
         match args {
             BacktraceArgs::Unevalled(_) => 1,
@@ -12322,6 +12348,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn restore_eval_temp_roots(&mut self, scope: EvalTempRootScopeState) {
         self.eval_temp_roots.truncate(scope.saved_len);
     }
@@ -12524,6 +12551,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn save_vm_frame_roots(&self) -> usize {
         self.vm_root_frames
             .last()
@@ -12727,6 +12755,7 @@ impl Context {
     /// Mirrors GNU's `eval_sub` SYMBOLP arm at `eval.c:2600-2625`,
     /// where `original_fun` (the symbol) is the value written into the
     /// specpdl entry via `record_in_backtrace (original_fun, args, ...)`.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn apply_with_frame_function(
         &mut self,
         frame_function: Value,
@@ -13027,6 +13056,7 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn check_funcall_subr_arity(&self, sym_id: SymId, nargs: usize) -> Option<Flow> {
         self.check_funcall_subr_arity_value(Value::subr_from_sym_id(sym_id), nargs)
     }
@@ -13393,11 +13423,13 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn resolve_named_call_target(&mut self, name: &str) -> NamedCallTarget {
         self.resolve_named_call_target_by_id(intern(name))
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn store_named_call_cache(&mut self, symbol: SymId, target: NamedCallTarget) {
         let function_epoch = self.obarray.function_epoch();
         if self.named_call_cache.len() < NAMED_CALL_CACHE_CAPACITY {
@@ -13412,6 +13444,7 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_named_callable_by_id(
         &mut self,
         sym_id: SymId,
@@ -13432,6 +13465,7 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_named_callable(
         &mut self,
         name: &str,
@@ -13447,6 +13481,7 @@ impl Context {
         self.unbind_to_with_result(bt_count, result)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_named_callable_by_id_core(
         &mut self,
         sym_id: SymId,
@@ -13488,6 +13523,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_named_callable_core(
         &mut self,
         name: &str,
@@ -13517,7 +13553,7 @@ impl Context {
                 result
             }
             NamedCallTarget::Subr(func) => {
-                let sym_id = intern(name);
+                let _sym_id = intern(name);
                 let result = self.apply_subr_object(func, args, rewrite_builtin_wrong_arity);
                 // Do NOT poison the cache with Void when the subr was found.
                 if func
@@ -13554,7 +13590,7 @@ impl Context {
         sym_id: SymId,
         autoload_form: Value,
         args: LispArgVec,
-        rewrite_builtin_wrong_arity: bool,
+        _rewrite_builtin_wrong_arity: bool,
     ) -> EvalResult {
         // Startup wrappers often expose autoload-shaped function cells for names
         // backed by builtins. Keep the autoload shape while preserving callability.
@@ -13588,6 +13624,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn apply_evaluator_callable(
         &mut self,
         name: &str,
@@ -13701,6 +13738,7 @@ impl Context {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn bind_lexical_value_rooted(&mut self, sym: SymId, value: Value) {
         bind_lexical_value_rooted_in_specpdl(&mut self.lexenv, &mut self.specpdl, sym, value);
     }
@@ -13794,6 +13832,7 @@ impl Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn macro_expansion_context_key(&self) -> u64 {
         self.macro_expansion_context_key_for_environment(None)
     }
@@ -14775,6 +14814,7 @@ pub(crate) fn specbind_in_state(
 /// Note: LetLocal bindings require a buffer manager; the standalone version
 /// only handles Let bindings. LetLocal in the VM is not expected since
 /// the VM's VarBind opcode doesn't produce buffer-local bindings.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn unbind_to_in_state(
     obarray: &mut Obarray,
     specpdl: &mut Vec<SpecBinding>,
@@ -15303,6 +15343,7 @@ impl Context {
     // Methods previously on VmSharedState, now on Context directly
     // -----------------------------------------------------------------------
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn begin_eval_with_lexical_arg(
         &mut self,
         lexical_arg: Option<Value>,
@@ -15315,6 +15356,7 @@ impl Context {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn finish_eval_with_lexical_arg(&mut self, state: ActiveEvalLexicalArgState) {
         finish_eval_with_lexical_arg_in_state(
             &mut self.obarray,
@@ -15334,10 +15376,12 @@ impl Context {
         self.macro_expansion_scope_depth = self.macro_expansion_scope_depth.saturating_sub(1);
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn kmacro_mut(&mut self) -> &mut KmacroManager {
         &mut self.kmacro
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn gui_frame_creation_state(
         &mut self,
     ) -> (
@@ -15828,6 +15872,7 @@ impl Context {
         None
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn run_unlet_watchers(&mut self, bindings: &[(String, Value, Value)]) -> Result<(), Flow> {
         for (name, _, restored_value) in bindings.iter().rev() {
             self.run_variable_watchers(name, restored_value, &Value::NIL, "unlet")?;
@@ -15879,6 +15924,7 @@ impl Context {
         Ok(())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn run_variable_watchers(
         &mut self,
         name: &str,
@@ -15889,6 +15935,7 @@ impl Context {
         self.run_variable_watchers_by_id(intern(name), new_value, old_value, operation)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn run_variable_watchers_with_where(
         &mut self,
         name: &str,
@@ -15906,6 +15953,7 @@ impl Context {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn assign_with_watchers(
         &mut self,
         name: &str,

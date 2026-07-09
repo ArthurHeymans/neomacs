@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{
-    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor,
+    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
     text_props::TextPropertyTable,
 };
 use crate::heap_types::LispString;
@@ -570,6 +570,7 @@ pub fn file_truename(filename: &str, default_dir: Option<&str>) -> String {
     resolved
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn file_truename_lisp_inner(
     filename: &crate::heap_types::LispString,
     default_dir: &crate::heap_types::LispString,
@@ -636,6 +637,7 @@ fn file_truename_lisp_inner(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn file_truename_lisp(
     filename: &crate::heap_types::LispString,
     default_dir: Option<&crate::heap_types::LispString>,
@@ -1597,6 +1599,7 @@ pub fn file_attributes(filename: &str) -> Option<FileAttributes> {
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn file_modes(filename: &str) -> Option<u32> {
     let meta = fs::symlink_metadata(filename).ok()?;
     #[cfg(unix)]
@@ -1657,7 +1660,7 @@ fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispStr
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -1954,6 +1957,7 @@ fn lisp_file_name_absolute_system_p(filename: &crate::heap_types::LispString) ->
     filename.as_bytes().first() == Some(&b'/')
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_string_runtime_eq(
     left: &crate::heap_types::LispString,
     right: &crate::heap_types::LispString,
@@ -2040,6 +2044,7 @@ fn expand_and_dir_to_file_lisp_for_file_predicate(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lisp_files_splice_dirname_file(
     dirname: &crate::heap_types::LispString,
     file: &crate::heap_types::LispString,
@@ -2051,6 +2056,7 @@ fn lisp_files_splice_dirname_file(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -2061,7 +2067,7 @@ fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Fl
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("sequencep"), *value],
         )),
@@ -2071,7 +2077,7 @@ fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Fl
 fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *value],
         )),
@@ -2130,13 +2136,14 @@ fn parse_timestamp_arg(value: &Value) -> Result<(i64, i64), Flow> {
             let nanos = usec * 1_000;
             Ok(normalize_secs_nanos(secs, nanos))
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("numberp"), *value],
         )),
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn validate_file_truename_counter(counter: &Value) -> Result<(), Flow> {
     if counter.is_nil() {
         return Ok(());
@@ -2161,11 +2168,13 @@ fn validate_file_truename_counter(counter: &Value) -> Result<(), Flow> {
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn temporary_file_directory_for_eval(eval: &Context) -> Option<crate::heap_types::LispString> {
     let val = eval.obarray.symbol_value("temporary-file-directory")?;
     val.as_lisp_string().cloned()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_temp_file_impl(
     eval: &super::eval::Context,
     temp_dir: &crate::heap_types::LispString,
@@ -2184,6 +2193,7 @@ fn make_temp_file_impl(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn temp_file_absolute_prefix(
     temp_dir: &crate::heap_types::LispString,
     prefix: &crate::heap_types::LispString,
@@ -2206,6 +2216,7 @@ enum TempCreateKind {
 }
 
 impl TempCreateKind {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_dir_flag(dir_flag: bool) -> Self {
         if dir_flag {
             Self::Directory
@@ -2409,6 +2420,7 @@ pub(crate) fn builtin_make_temp_file_internal(
     Ok(Value::heap_string(path))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn split_nearby_temp_prefix(
     prefix: &crate::heap_types::LispString,
 ) -> Option<(crate::heap_types::LispString, crate::heap_types::LispString)> {
@@ -2586,6 +2598,7 @@ pub(crate) fn builtin_get_truename_buffer(args: Vec<Value>) -> EvalResult {
 
 /// Context-aware variant of `make-temp-file` that honors dynamic
 /// `temporary-file-directory`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_temp_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("make-temp-file", &args, 1)?;
     if args.len() > 4 {
@@ -2628,6 +2641,7 @@ pub(crate) fn builtin_make_temp_file(eval: &mut Context, args: Vec<Value>) -> Ev
 /// Context-aware variant of `make-nearby-temp-file` that resolves relative
 /// directory-containing prefixes against dynamic/default `default-directory`
 /// and honors dynamic `temporary-file-directory` fallback.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_nearby_temp_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("make-nearby-temp-file", &args, 1)?;
     if args.len() > 3 {
@@ -2658,6 +2672,7 @@ pub(crate) fn builtin_make_nearby_temp_file(eval: &mut Context, args: Vec<Value>
 
 /// `(file-truename FILENAME)` — resolves FILENAME against
 /// dynamic/default `default-directory` and follows symlinks.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_file_truename(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "file-truename", &args)? {
         return Ok(result);
@@ -2745,7 +2760,7 @@ pub(crate) fn builtin_file_name_concat(args: Vec<Value>) -> EvalResult {
                     parts.push(s);
                 }
             }
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), value],
@@ -2833,10 +2848,12 @@ pub(crate) fn default_directory_lisp_in_state(
         .and_then(|val| val.as_lisp_string().cloned())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn default_directory_lisp_for_eval(eval: &Context) -> Option<crate::heap_types::LispString> {
     default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn implicit_default_directory_lisp_for_eval(
     eval: &Context,
 ) -> Result<crate::heap_types::LispString, Flow> {
@@ -3007,6 +3024,7 @@ fn signal_file_io_path(err: std::io::Error, action: &str, path: &str) -> Flow {
     signal_file_io_error(err, format!("{action} {path}"))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_file_io_paths(err: std::io::Error, action: &str, from: &str, to: &str) -> Flow {
     signal_file_io_error(err, format!("{action} {from} to {to}"))
 }
@@ -3027,6 +3045,7 @@ fn signal_directory_files_error(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn signal_file_action_error(err: std::io::Error, action: &str, path: &str) -> Flow {
     get_file_errno_data(&err, action, vec![Value::string(path)])
 }
@@ -3400,6 +3419,7 @@ fn set_file_modes_path(path: &Path, mode: i64, nofollow: bool) -> std::io::Resul
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn set_file_times_compat(
     filename: &str,
     timestamp: Option<(i64, i64)>,
@@ -3552,6 +3572,7 @@ fn set_file_times_path(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_file_compat(filename: &str) -> Result<(), Flow> {
     match delete_file(filename) {
         Ok(()) => Ok(()),
@@ -3689,6 +3710,7 @@ pub(crate) fn builtin_set_file_acl(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(file-locked-p FILENAME)`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_file_locked_p(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "file-locked-p", &args)? {
         return Ok(result);
@@ -4183,6 +4205,7 @@ pub(crate) fn builtin_default_file_modes(args: Vec<Value>) -> EvalResult {
 
 /// Context-aware variant of `delete-file` that resolves relative paths
 /// against dynamic/default `default-directory`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_delete_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler_expanding(eval, "delete-file", &args, 2)? {
         return Ok(result);
@@ -4238,6 +4261,7 @@ pub(crate) fn builtin_delete_directory_internal(
 
 /// Context-aware variant of `delete-directory` that resolves relative paths
 /// against dynamic/default `default-directory`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_delete_directory(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if let Some(result) = dispatch_file_handler(eval, "delete-directory", &args)? {
         return Ok(result);
@@ -4611,11 +4635,13 @@ pub(crate) fn builtin_find_file_name_handler(eval: &mut Context, args: Vec<Value
 /// handler is only used when `OPERATION` is in that list. This lets
 /// handlers declare a restricted operation set without writing
 /// trampolines for everything else.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn find_file_name_handler(obarray: &Obarray, filename: &str, operation: Value) -> Value {
     let filename = super::builtins::plain_str_to_lisp_string(filename, !filename.is_ascii());
     find_file_name_handler_lisp(obarray, &filename, operation)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn find_file_name_handler_lisp(
     obarray: &Obarray,
     filename: &crate::heap_types::LispString,
@@ -4820,6 +4846,7 @@ fn dispatch_file_handler_expanding(
 /// Two-argument variant for builtins like `copy-file` and `rename-file`.
 /// Mirrors GNU's pattern of consulting the handler for the source
 /// first and falling back to the destination.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn dispatch_file_handler_two_arg(
     eval: &mut Context,
     operation_name: &str,
@@ -4907,7 +4934,7 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -5402,6 +5429,7 @@ impl DecodedFileContents {
         &self.text
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn text_properties(&self) -> Option<&TextPropertyTable> {
         let table = self.text().intervals();
         if table.is_empty() { None } else { Some(table) }
@@ -6235,6 +6263,7 @@ pub(crate) fn builtin_write_region(
 /// Read file FILENAME into a buffer and return the buffer.
 /// If a buffer visiting FILENAME already exists, return it.
 /// Does not select the buffer.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_find_file_noselect(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

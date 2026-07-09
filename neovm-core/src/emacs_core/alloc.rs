@@ -5,7 +5,7 @@
 //! on the same low-level variables during runtime and bootstrap.
 
 use crate::emacs_core::symbol::Obarray;
-use crate::emacs_core::value::{Value, list_to_vec, next_float_id};
+use crate::emacs_core::value::Value;
 
 /// Register bootstrap variables owned by the allocation / GC subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {

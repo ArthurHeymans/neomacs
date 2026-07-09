@@ -451,6 +451,7 @@ impl EmacsByteLen {
 }
 
 impl CharDelta {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const ZERO: Self = Self(0);
 
     pub(in crate::buffer) fn insertion(len: CharLen) -> Self {
@@ -471,6 +472,7 @@ impl CharDelta {
 }
 
 impl EmacsByteDelta {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const ZERO: Self = Self(0);
 
     pub(in crate::buffer) fn insertion(len: EmacsByteLen) -> Self {

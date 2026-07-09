@@ -5,7 +5,6 @@
 //! and pure builtins for case-table predicates and character case conversion.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
 use super::value::*;
 use crate::tagged::header::store_value_atomic;
 use std::cell::RefCell;
@@ -181,11 +180,13 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
 }
 
 /// Signal `wrong-type-argument` with a predicate name.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn wrong_type(pred: &str, got: &Value) -> Flow {
     signal("wrong-type-argument", vec![Value::symbol(pred), *got])
 }
 
 /// Extract a character from a Value (Int or Char), signal otherwise.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_char(value: &Value) -> Result<char, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => super::builtins::character_code_to_rust_char(c).ok_or_else(|| {
@@ -194,7 +195,7 @@ fn expect_char(value: &Value) -> Result<char, Flow> {
                 vec![Value::string("Invalid character code"), *value],
             )
         }),
-        other => Err(wrong_type("characterp", value)),
+        _other => Err(wrong_type("characterp", value)),
     }
 }
 
@@ -372,6 +373,7 @@ pub(crate) fn make_case_table_with_pair(uc: i64, lc: i64) -> Value {
 }
 
 /// Create an empty case-table char-table (valid for `case-table-p`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn make_case_table_value() -> Value {
     build_char_table(
         "case-table",
@@ -381,6 +383,7 @@ fn make_case_table_value() -> Value {
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ensure_standard_case_table_object() -> EvalResult {
     STANDARD_CASE_TABLE_OBJECT.with(|slot| {
         if let Some(value) = slot.borrow().as_ref() {
@@ -536,6 +539,7 @@ pub(crate) enum CaseMap {
     /// The upcase table — extras[0] / `BVAR (current_buffer, upcase_table)`.
     Up,
     /// The canonicalize table — extras[1] / `BVAR (current_buffer, case_canon_table)`.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     Canon,
 }
 

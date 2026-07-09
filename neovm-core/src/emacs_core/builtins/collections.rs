@@ -13,6 +13,7 @@ pub(crate) fn builtin_make_vector(args: Vec<Value>) -> EvalResult {
     Ok(Value::vector(vec![args[1]; len]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_vector(args: Vec<Value>) -> EvalResult {
     Ok(Value::vector(args))
 }
@@ -278,6 +279,7 @@ pub(crate) fn builtin_aset(args: Vec<Value>) -> EvalResult {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_vconcat(args: Vec<Value>) -> EvalResult {
     builtin_vconcat_slice(&args)
 }
@@ -581,10 +583,12 @@ pub(crate) fn builtin_make_hash_table_slice(args: &[Value]) -> EvalResult {
     Ok(table)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gethash(args: Vec<Value>) -> EvalResult {
     builtin_gethash_with_symbols(args, false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_gethash_with_symbols(
     args: Vec<Value>,
     symbols_with_pos_enabled: bool,
@@ -717,10 +721,12 @@ fn builtin_gethash_values(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_puthash(args: Vec<Value>) -> EvalResult {
     builtin_puthash_with_symbols(args, false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_puthash_with_symbols(
     args: Vec<Value>,
     symbols_with_pos_enabled: bool,
@@ -819,10 +825,12 @@ fn builtin_puthash_values(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_remhash(args: Vec<Value>) -> EvalResult {
     builtin_remhash_with_symbols(args, false)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_remhash_with_symbols(
     args: Vec<Value>,
     symbols_with_pos_enabled: bool,
@@ -1256,6 +1264,7 @@ pub(crate) fn builtin_plist_member(
     plist_result
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn plist_member_eq(args: Vec<Value>) -> EvalResult {
     plist_member_eq_swp(args, false)
 }

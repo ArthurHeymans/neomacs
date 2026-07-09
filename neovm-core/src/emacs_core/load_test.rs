@@ -3907,6 +3907,7 @@ fn bootstrap_runtime_find_file_handles_multibyte_markdown_like_gnu() {
     assert_eq!(rendered, "OK (\"rust-display-engine.md\" t t)");
 }
 
+#[test]
 fn bootstrap_runtime_read_key_sequence_follows_escape_prefix_command() {
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");

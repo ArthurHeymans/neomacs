@@ -8,12 +8,10 @@
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
-    Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
-    TextExtent,
+    Buffer, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
@@ -112,7 +110,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_fixnump(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *val],
         )),
@@ -122,7 +120,7 @@ fn expect_fixnump(val: &Value) -> Result<i64, Flow> {
 fn expect_wholenump(val: &Value) -> Result<usize, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) if n >= 0 => Ok(n as usize),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("wholenump"), *val],
         )),
@@ -192,13 +190,16 @@ fn indent_tabs_mode_in_state(
         .is_none_or(|value| value.is_truthy())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
     super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf)
 }
 
 #[derive(Clone, Copy)]
 struct DecodedUnit {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     start: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     end: usize,
     code: u32,
     width: usize,
@@ -245,6 +246,7 @@ fn line_bounds(buf: &Buffer, point: EmacsBytePos) -> EmacsByteRange {
     EmacsByteRange::new(bol, eol)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn next_column(column: usize, ch: char, tab_width: usize) -> usize {
     if ch == '\t' {
         let tab = tab_width.max(1);
@@ -812,6 +814,7 @@ fn decode_lisp_string_units(text: &LispString) -> Vec<DecodedUnit> {
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn column_for_prefix(prefix: &str, tab_width: usize) -> usize {
     let mut column = 0usize;
     for ch in prefix.chars() {
@@ -860,10 +863,12 @@ fn indent_to_column_string(
 }
 
 #[inline]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_horizontal_space(ch: char) -> bool {
     ch == ' ' || ch == '\t'
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_horizontal_space_at_point(
     eval: &mut super::eval::Context,
     backward_only: bool,

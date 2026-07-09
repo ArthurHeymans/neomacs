@@ -4,9 +4,9 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
-use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
+use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
-use crate::buffer::{CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor};
+use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor};
 use crate::emacs_core::value::{StringTextPropertyRun, Value, ValueKind};
 use encoding_rs::{BIG5, GBK};
 
@@ -3609,6 +3609,7 @@ pub(crate) fn builtin_decode_coding_region(
 }
 
 /// `(char-width CHAR)` -> integer without a current display table.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_char_width(args: Vec<Value>) -> EvalResult {
     builtin_char_width_with_display_table(None, args)
 }
@@ -3641,7 +3642,7 @@ fn builtin_char_width_with_display_table(
     expect_args("char-width", &args, 1)?;
     let code = match args[0].kind() {
         ValueKind::Fixnum(c) => c as i64,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("characterp"), args[0]],
@@ -3690,6 +3691,7 @@ pub(crate) fn builtin_unibyte_string_p(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(encode-coding-string STRING CODING-SYSTEM)` -> string
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_encode_coding_string(args: Vec<Value>) -> EvalResult {
     builtin_encode_coding_string_with_known(args, known_coding_system)
 }
@@ -3723,7 +3725,7 @@ pub(crate) fn builtin_encode_coding_string_with_known(
             };
         }
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("symbolp"), args[1]],
@@ -3743,6 +3745,7 @@ pub(crate) fn builtin_encode_coding_string_with_known(
 }
 
 /// `(decode-coding-string STRING CODING-SYSTEM)` -> string
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_decode_coding_string(args: Vec<Value>) -> EvalResult {
     builtin_decode_coding_string_with_known(args, known_coding_system)
 }
@@ -3776,7 +3779,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
             };
         }
         ValueKind::Symbol(id) => resolve_sym(id).to_owned(),
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("symbolp"), args[1]],
@@ -3844,11 +3847,12 @@ pub(crate) fn builtin_char_or_string_p(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(char-displayable-p CHAR)` -> t, nil, or `unicode`
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_char_displayable_p(args: Vec<Value>) -> EvalResult {
     expect_args("char-displayable-p", &args, 1)?;
     let code = match args[0].kind() {
         ValueKind::Fixnum(c) => c as i64,
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("number-or-marker-p"), args[0]],

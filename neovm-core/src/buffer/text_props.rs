@@ -108,6 +108,7 @@ impl PartialEq<(usize, usize, Vec<(Value, Value)>)> for ObjectIntervalRun {
 }
 
 impl PropertyInterval {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn new(range: CharRange) -> Self {
         Self {
             start: range.start().get(),
@@ -1460,6 +1461,7 @@ fn plists_equal_values_equal(left: &[(Value, Value)], right: &[(Value, Value)]) 
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn plist_is_empty(plist: &[(Value, Value)]) -> bool {
     plist.is_empty()
 }
@@ -1505,6 +1507,7 @@ impl TextPropertyTable {
     }
 
     /// Find the interval containing `pos`, returning mutable (start, node).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn find_interval_mut(&mut self, pos: CharPos0) -> Option<(CharPos0, &mut IntervalNode)> {
         let (start, id) = self.intervals.find_id(pos)?;
         Some((start, &mut self.intervals.nodes[id.0]))
@@ -1608,6 +1611,7 @@ impl TextPropertyTable {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn replace_runs(&mut self, runs: Vec<IntervalRun>) {
         self.intervals = IntervalTree::from_runs(runs);
     }
@@ -1646,6 +1650,7 @@ impl TextPropertyTable {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn splice_interval_run(runs: &mut Vec<IntervalRun>, run: IntervalRun) {
         if run.start() >= run.end() {
             return;

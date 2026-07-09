@@ -795,7 +795,7 @@ fn parse_object_as_alist() {
             assert_eq!(pair_car, Value::symbol("x"));
             assert!(pair_cdr.is_fixnum());
         }
-        other => panic!("expected cons, got {:?}", items[0]),
+        _other => panic!("expected cons, got {:?}", items[0]),
     }
 }
 

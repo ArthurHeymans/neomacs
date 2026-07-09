@@ -574,6 +574,7 @@ impl LispValueVec {
 pub(crate) struct VectorScanEntry {
     pub(crate) base: *const TaggedValue,
     pub(crate) len: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) is_mapped: bool,
 }
 

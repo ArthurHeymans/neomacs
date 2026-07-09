@@ -1025,7 +1025,7 @@ fn font_encoding_repertory(value: &Value) -> Option<FontRepertory> {
             charset_exists(name).then(|| FontRepertory::Charset(id))
         }
         ValueKind::Cons => {
-            let pair_car = value.cons_car();
+            let _pair_car = value.cons_car();
             let pair_cdr = value.cons_cdr();
             if pair_cdr.is_nil() {
                 None

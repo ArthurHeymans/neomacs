@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::intern::{intern, resolve_sym};
+use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::value::{Value, ValueKind};
 
 /// Helper: read one form from a string, panic on error.

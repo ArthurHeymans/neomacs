@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
-use super::value::{Value, ValueKind, next_float_id};
+use super::value::{Value, ValueKind};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::header::VecLikeType;
@@ -63,6 +63,7 @@ impl RegisterContent {
 /// the GNU-parity `concat` path (which performs proper multibyte promotion)
 /// rather than a lossy Rust-`String` round-trip that would turn raw eight-bit
 /// bytes into `U+FFFD`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn join_rectangle_lines_faithfully(lines: &[LispString]) -> EvalResult {
     let mut args = Vec::with_capacity(lines.len().saturating_mul(2).saturating_sub(1));
     for (idx, line) in lines.iter().enumerate() {
@@ -191,6 +192,7 @@ impl GcTrace for RegisterManager {
 // Builtin helpers
 // ===========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
@@ -202,6 +204,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -213,6 +216,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
@@ -224,6 +228,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_string(value: &Value) -> Result<LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value.as_lisp_string().expect("string").clone()),
@@ -232,17 +237,18 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
         )),
         ValueKind::Nil => Ok(LispString::from_unibyte(b"nil".to_vec())),
         ValueKind::T => Ok(LispString::from_unibyte(b"t".to_vec())),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -252,6 +258,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 /// Extract a register character from a first argument.
 /// Accepts a Char directly, or an Int (treated as ASCII code), or a
 /// single-character string.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_register(value: &Value) -> Result<char, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => super::builtins::character_code_to_rust_char(c).ok_or_else(|| {
@@ -280,7 +287,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
                 )
             })
         }
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("characterp"), *value],
         )),
@@ -297,6 +304,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
 /// interpreted as a text string to store (the caller passes the
 /// extracted region text as a string in arg index 1).
 /// Simplified: (copy-to-register REGISTER TEXT) -> nil
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_copy_to_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -314,6 +322,7 @@ pub(crate) fn builtin_copy_to_register(
 /// Returns the text stored in the register as a string (for the caller
 /// to insert into the buffer).  Signals an error if the register is empty
 /// or does not hold text.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -348,6 +357,7 @@ pub(crate) fn builtin_insert_register(
 /// (point-to-register REGISTER) -> nil
 ///
 /// Store the current buffer name and point in the register.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_point_to_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -369,6 +379,7 @@ pub(crate) fn builtin_point_to_register(
 }
 
 /// (number-to-register NUMBER REGISTER) -> nil
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_number_to_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -385,6 +396,7 @@ pub(crate) fn builtin_number_to_register(
 /// If the register holds a number, add NUMBER to it.
 /// If it holds text, append the printed number.
 /// Otherwise signal an error.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_increment_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -421,6 +433,7 @@ pub(crate) fn builtin_increment_register(
 /// (view-register REGISTER) -> string
 ///
 /// Return a human-readable description of the register's contents.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_view_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -488,6 +501,7 @@ pub(crate) fn builtin_view_register(
 ///
 /// Return the content of a register as a Lisp value.
 /// Text -> string, Number -> integer, Marker -> marker, otherwise nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_get_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -530,6 +544,7 @@ pub(crate) fn builtin_register_to_string(
 ///
 /// Low-level: store an arbitrary Lisp value.  Strings become Text,
 /// integers become Number, otherwise stored as FrameConfig (opaque).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_register(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -546,7 +561,7 @@ pub(crate) fn builtin_set_register(
             eval.registers.clear(reg);
             return Ok(Value::NIL);
         }
-        other => RegisterContent::FrameConfig(args[1]),
+        _other => RegisterContent::FrameConfig(args[1]),
     };
     eval.registers.set(reg, content);
     Ok(Value::NIL)

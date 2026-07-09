@@ -2,7 +2,6 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -11,7 +10,7 @@ use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
-use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager, InsertionType};
+use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
 use crate::buffer::shared::SharedUndoState;
@@ -44,17 +43,16 @@ use crate::emacs_core::interactive::{InteractiveRegistry, InteractiveSpec};
 use crate::emacs_core::intern::{self, NameId, SymId};
 use crate::emacs_core::kmacro::KmacroManager;
 use crate::emacs_core::mode::{
-    self, CustomGroup as ModeCustomGroup, CustomType as ModeCustomType,
+    CustomGroup as ModeCustomGroup, CustomType as ModeCustomType,
     CustomVariable as ModeCustomVariable, FontLockDefaults, FontLockKeyword, MajorMode, MinorMode,
     ModeRegistry,
 };
 use crate::emacs_core::rect::RectangleState;
 use crate::emacs_core::register::{RegisterContent, RegisterManager};
 use crate::emacs_core::symbol::{LispSymbol, Obarray, SymbolTrappedWrite};
-use crate::emacs_core::syntax::{SyntaxClass, SyntaxEntry, SyntaxFlags, SyntaxTable};
 use crate::emacs_core::value::{
-    HashKey, HashTableTest, HashTableWeakness, LambdaData, LambdaParams, LispHashTable,
-    OrderedRuntimeBindingMap, OrderedSymMap, RuntimeBindingValue, StringTextPropertyRun, Value,
+    HashKey, HashTableTest, HashTableWeakness, LambdaParams, LispHashTable,
+    OrderedRuntimeBindingMap, RuntimeBindingValue, StringTextPropertyRun, Value,
 };
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::value::{
@@ -67,9 +65,8 @@ use crate::face::{
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
 use crate::tagged::header::{
-    BufferObj, ByteCodeObj, CLOSURE_MIN_SLOTS, ConsCell, FloatObj, FrameObj, GcHeader,
-    HashTableObj, HeapObjectKind, LambdaObj, LispValueVec, MacroObj, MarkerObj, OverlayObj,
-    RecordObj, StringObj, SubrObj, TimerObj, VecLikeHeader, VectorObj, WindowObj,
+    ByteCodeObj, CLOSURE_MIN_SLOTS, ConsCell, FloatObj, HeapObjectKind, LambdaObj, LispValueVec,
+    MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj, SubrObj, VecLikeHeader, VectorObj,
 };
 use crate::tagged::value::TaggedValue;
 
@@ -355,6 +352,7 @@ impl<'a> TaggedLoadState<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_tagged_heap(
         heap: DumpTaggedHeap,
         mapped_heap: Option<MappedHeapView>,
@@ -393,6 +391,7 @@ pub(crate) struct LoadDecoder<'a> {
 }
 
 impl LoadDecoder<'_> {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn new(heap: &DumpTaggedHeap) -> Self {
         Self::new_with_mapped_heap(heap, None)
     }
@@ -416,6 +415,7 @@ impl LoadDecoder<'_> {
 }
 
 impl<'a> LoadDecoder<'a> {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn from_tagged_heap_with_mapped_heap_and_fixups(
         heap: DumpTaggedHeap,
         mapped_heap: Option<MappedHeapView>,
@@ -442,6 +442,7 @@ impl<'a> LoadDecoder<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn preload_tagged_heap(&mut self) -> Result<(), DumpError> {
         self.preload_tagged_heap_with_value_fixup_section(None)
     }
@@ -1133,6 +1134,7 @@ impl<'a> LoadDecoder<'a> {
         Ok(())
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn mapped_raw_word_available(&self, value: &DumpValue) -> bool {
         match value {
             DumpValue::Nil | DumpValue::True | DumpValue::Int(_) | DumpValue::Unbound => true,
@@ -1160,6 +1162,7 @@ impl<'a> LoadDecoder<'a> {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn mapped_raw_words_available(&self, values: &[DumpValue]) -> bool {
         values
             .iter()
@@ -2635,7 +2638,7 @@ pub(crate) fn dump_symbol_data(
     dynamic_default: Option<Option<Value>>,
 ) -> DumpSymbolData {
     // Phase I (pdump v21): encode redirect + flags directly.
-    use crate::emacs_core::symbol::{SymbolInterned, SymbolRedirect};
+    use crate::emacs_core::symbol::SymbolRedirect;
     let redirect = sd.flags.redirect();
     let val = match redirect {
         SymbolRedirect::Plainval => {
@@ -2750,6 +2753,7 @@ fn load_runtime_binding_value(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn dump_ordered_sym_map(
     encoder: &mut DumpEncoder,
     m: &OrderedRuntimeBindingMap,
@@ -3742,6 +3746,7 @@ pub(crate) fn dump_watcher_list(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn dump_string_text_prop_run(
     encoder: &mut DumpEncoder,
     r: &StringTextPropertyRun,
@@ -3755,6 +3760,7 @@ pub(crate) fn dump_string_text_prop_run(
 
 /// Convert a TextPropertyTable to a list of DumpPropertyInterval entries (for string props).
 /// Does NOT allocate heap objects — serializes property values directly.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dump_string_text_property_table(
     encoder: &mut DumpEncoder,
     table: &TextPropertyTable,
@@ -3969,6 +3975,7 @@ pub(crate) fn load_op(op: &DumpOp) -> Result<Op, DumpError> {
 
 // --- Lambda / ByteCode ---
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_lambda_params(p: &DumpLambdaParams) -> LambdaParams {
     LambdaParams {
         required: p.required.iter().map(|s| load_sym_id(s)).collect(),
@@ -3999,6 +4006,7 @@ where
     pairs
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_bytecode(
     decoder: &mut LoadDecoder,
     bc: &DumpByteCodeFunction,
@@ -4085,6 +4093,7 @@ fn load_bytecode_owned(
 
 // --- Hash tables ---
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_hash_key(decoder: &mut LoadDecoder, k: &DumpHashKey) -> HashKey {
     match k {
         DumpHashKey::Nil => HashKey::Nil,
@@ -4204,6 +4213,7 @@ pub(crate) fn load_hash_table_weakness(w: &DumpHashTableWeakness) -> HashTableWe
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable) -> LispHashTable {
     let data: FxHashMap<HashKey, Value> = ht
         .entries
@@ -4510,7 +4520,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
             dump_buffer_byte_to_char_pos(&text, dump_emacs_byte_pos(db.pt)).get()
         }
     });
-    let mark_char = match db.mark {
+    let _mark_char = match db.mark {
         Some(mark) => Some(db.mark_char.unwrap_or_else(|| {
             if mark == db.begv {
                 begv_char
@@ -6014,6 +6024,7 @@ pub(crate) fn load_watcher_list(
     VariableWatcherList::from_dump(watchers)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_string_text_prop_run(
     decoder: &mut LoadDecoder,
     r: &DumpStringTextPropertyRun,
@@ -6026,6 +6037,7 @@ pub(crate) fn load_string_text_prop_run(
 }
 
 /// Convert a list of DumpPropertyInterval entries back to a TextPropertyTable.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_text_property_table(
     decoder: &mut LoadDecoder,
     intervals: &[DumpPropertyInterval],

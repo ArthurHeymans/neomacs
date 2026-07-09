@@ -16,7 +16,7 @@ use crate::buffer::{
     Buffer, BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType, LispCharPos1,
     TextPositionAnchor,
 };
-use crate::window::{Frame, FrameManager, Window, WindowId};
+use crate::window::{Frame, FrameManager, Window};
 
 /// Window-start markers use `InsertionType::Before` so the marker stays
 /// before text inserted at the window start position, matching GNU `w->start`.
@@ -91,7 +91,7 @@ pub fn create_window_markers(bm: &mut BufferManager, window: &mut Window, buffer
 
 pub fn unchain_window_markers(bm: &mut BufferManager, window: &mut Window) {
     let Window::Leaf {
-        buffer_id,
+        buffer_id: _,
         start_marker_id,
         point_marker_id,
         old_point_marker_id,

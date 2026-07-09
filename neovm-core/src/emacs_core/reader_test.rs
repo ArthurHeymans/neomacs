@@ -375,7 +375,7 @@ fn read_from_string_float() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(
                 pair_car.as_float().is_some()
                     && (pair_car.as_float().unwrap() - 3.125).abs() < 1e-10
@@ -393,7 +393,7 @@ fn read_from_string_char() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(&pair_car.is_char());
         }
         _ => panic!("Expected cons"),
@@ -408,7 +408,7 @@ fn read_from_string_nil() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(pair_car.is_nil());
         }
         _ => panic!("Expected cons"),
@@ -423,7 +423,7 @@ fn read_from_string_t() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(pair_car.is_t());
         }
         _ => panic!("Expected cons"),
@@ -438,7 +438,7 @@ fn read_from_string_vector() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(pair_car.is_vector());
         }
         _ => panic!("Expected cons"),
@@ -481,7 +481,7 @@ fn read_from_string_dotted_pair() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             // car should be a dotted pair (a . b)
             assert!(pair_car.is_cons());
         }
@@ -497,7 +497,7 @@ fn read_from_string_keyword() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert_eq!(pair_car.as_symbol_name(), Some(":test"));
         }
         _ => panic!("Expected cons"),
@@ -512,7 +512,7 @@ fn read_from_string_uninterned_symbol() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             match pair_car.kind() {
                 ValueKind::Symbol(id) => {
                     assert_eq!(resolve_sym(id), "test");
@@ -2190,7 +2190,7 @@ fn read_char_mouse_move_updates_mouse_position_even_without_track_mouse() {
     if !pixel.is_cons() {
         panic!("expected dotted mouse pixel position");
     };
-    let outer_car = pixel.cons_car();
+    let _outer_car = pixel.cons_car();
     let outer_cdr = pixel.cons_cdr();
     if !outer_cdr.is_cons() {
         panic!("expected inner cons");
@@ -3622,7 +3622,7 @@ fn read_from_string_negative_number() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(&pair_car.is_fixnum());
         }
         _ => panic!("Expected cons"),
@@ -3653,7 +3653,7 @@ fn read_from_string_hash_syntax() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(pair_car.is_fixnum());
         }
         _ => panic!("Expected cons"),
@@ -3965,7 +3965,7 @@ fn read_from_string_hash_dollar_uses_load_file_name() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert_eq!(pair_car.as_utf8_str(), Some("/tmp/reader-probe.elc"));
         }
         _ => panic!("Expected cons"),
@@ -3980,7 +3980,7 @@ fn read_from_string_hash_dollar_defaults_to_nil() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             assert!(pair_car.is_nil());
         }
         _ => panic!("Expected cons"),
@@ -4049,7 +4049,7 @@ fn read_from_string_hash_bracket_end_position() {
     let result = builtin_read_from_string(&mut ev, vec![Value::string(input)]).unwrap();
     match result.kind() {
         ValueKind::Cons => {
-            let pair_car = result.cons_car();
+            let _pair_car = result.cons_car();
             let pair_cdr = result.cons_cdr();
             assert_eq!(pair_cdr, Value::fixnum(expected_end));
         }
@@ -4068,7 +4068,7 @@ fn read_from_string_hash_table_literal_returns_hash_table() {
         panic!("Expected cons");
     };
     let pair_car = result.cons_car();
-    let pair_cdr = result.cons_cdr();
+    let _pair_cdr = result.cons_cdr();
     if !&pair_car.is_hash_table() {
         panic!("expected hash table object");
     };
@@ -4410,7 +4410,7 @@ fn read_from_string_hash_dollar_inside_dotted_pair_uses_load_file_name() {
     match result.kind() {
         ValueKind::Cons => {
             let pair_car = result.cons_car();
-            let pair_cdr = result.cons_cdr();
+            let _pair_cdr = result.cons_cdr();
             if !pair_car.is_cons() {
                 panic!("expected dotted pair");
             };

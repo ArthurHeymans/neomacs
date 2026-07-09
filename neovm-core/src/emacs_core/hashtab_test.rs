@@ -480,7 +480,7 @@ fn hash_table_nan_payloads_remain_distinct_for_eql_and_equal() {
                 if !entry.is_cons() {
                     panic!("expected alist cons entry");
                 };
-                let pair_car = entry.cons_car();
+                let _pair_car = entry.cons_car();
                 let pair_cdr = entry.cons_cdr();
                 hashes.push(pair_cdr.as_int().expect("diagnostic hash integer"));
             }
@@ -879,7 +879,7 @@ fn internal_hash_table_buckets_match_oracle_float_special_hashes() {
                 if !entry.is_cons() {
                     panic!("expected alist cons entry");
                 };
-                let pair_car = entry.cons_car();
+                let _pair_car = entry.cons_car();
                 let pair_cdr = entry.cons_cdr();
                 let hash = pair_cdr.as_int().expect("diagnostic hash integer");
                 seen.push(hash);

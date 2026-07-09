@@ -19,7 +19,6 @@ use crate::buffer::{
 };
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
-use malachite::base::num::logic::traits::SignificantBits;
 use malachite::integer::Integer;
 #[cfg(unix)]
 use std::ffi::CStr;
@@ -75,6 +74,7 @@ fn expect_integer(_name: &str, val: &Value) -> Result<i64, Flow> {
 
 /// Convert a Lisp 1-based character position to a 0-based byte position,
 /// clamping to the accessible region `[begv, zv]`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn lisp_pos_to_byte(
     buf: &crate::buffer::Buffer,
     lisp_pos: LispCharPos1,
@@ -136,6 +136,7 @@ pub(crate) fn ensure_current_buffer_writable_in_state(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ensure_current_buffer_writable(eval: &super::eval::Context) -> Result<(), Flow> {
     ensure_current_buffer_writable_in_state(&eval.obarray, &[], &eval.buffers)
 }
@@ -985,6 +986,7 @@ pub(crate) fn current_buffer_accessible_char_region_in_buffers(
 /// unibyte 0x80..0xFF bytes). Character args are encoded via
 /// `emacs_char::char_string`. The caller is responsible for wrapping the
 /// result into a `LispString` before handing it to buffer insertion.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn collect_insert_text(_name: &str, args: &[Value]) -> Result<Vec<u8>, Flow> {
     use crate::emacs_core::emacs_char;
     let mut bytes: Vec<u8> = Vec::new();
@@ -1039,6 +1041,7 @@ pub(crate) fn collect_insert_text(_name: &str, args: &[Value]) -> Result<Vec<u8>
 /// `(insert-before-markers &rest ARGS)` — insert at point, advancing ALL
 /// markers at that position past the inserted text (regardless of their
 /// InsertionType).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_before_markers(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1317,6 +1320,7 @@ pub(crate) fn builtin_buffer_substring_no_properties(
 }
 
 /// `(following-char)` — return character after point (0 if at end).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_following_char(
     ctx: &crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1380,6 +1384,7 @@ pub(crate) fn builtin_user_uid(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(file-user-uid)` — return the UID used for file ownership.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_file_user_uid(args: Vec<Value>) -> EvalResult {
     expect_args("file-user-uid", &args, 0)?;
     Ok(Value::fixnum(get_uid()))
@@ -1398,6 +1403,7 @@ pub(crate) fn builtin_group_gid(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(file-group-gid)` — return the GID used for file ownership.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_file_group_gid(args: Vec<Value>) -> EvalResult {
     expect_args("file-group-gid", &args, 0)?;
     Ok(Value::fixnum(get_gid()))

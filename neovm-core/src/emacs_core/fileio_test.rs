@@ -5038,7 +5038,7 @@ fn test_find_file_noselect() {
             assert!(!buf.is_modified());
             assert!(buf.get_undo_list().is_nil());
         }
-        other => panic!("Expected Buffer, got {:?}", buf_val),
+        _other => panic!("Expected Buffer, got {:?}", buf_val),
     }
 
     // Calling again with the same file should return the same buffer
@@ -5229,7 +5229,7 @@ fn test_find_file_noselect_nonexistent() {
             assert_eq!(buf.buffer_string(), "");
             assert!(buf.file_name_value().is_string());
         }
-        other => panic!("Expected Buffer, got {:?}", nonexistent_buf),
+        _other => panic!("Expected Buffer, got {:?}", nonexistent_buf),
     }
 }
 

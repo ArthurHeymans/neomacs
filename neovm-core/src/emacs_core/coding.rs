@@ -63,6 +63,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_integer_or_marker(val: &Value) -> Result<(), Flow> {
     if val.is_marker() {
         return Ok(());
@@ -279,6 +280,7 @@ pub(crate) fn requote_c_error_message(msg: &str, style: TextQuotingStyle) -> Str
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn non_nil_symbol_id(value: &Value) -> Option<SymId> {
     if value.is_nil() {
         None
@@ -1070,9 +1072,11 @@ impl CodingSystemManager {
         self.terminal_coding
     }
     // pdump accessors
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn dump_keyboard_coding(&self) -> &str {
         resolve_sym(self.keyboard_coding)
     }
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn dump_terminal_coding(&self) -> &str {
         resolve_sym(self.terminal_coding)
     }
@@ -1267,6 +1271,7 @@ impl Default for CodingSystemManager {
 
 /// `(coding-system-list &optional BASE-ONLY)` -- return a list of all coding systems.
 /// If BASE-ONLY is non-nil, only return base systems (no -unix/-dos/-mac variants).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_coding_system_list(
     mgr: &CodingSystemManager,
     args: Vec<Value>,
@@ -1344,6 +1349,7 @@ pub(crate) fn builtin_coding_system_aliases(
 /// `(coding-system-get CODING-SYSTEM PROP)` -- get a property of a coding system.
 /// Recognized built-in properties: :name, :type, :mnemonic, :eol-type.
 /// Other properties are looked up from the per-system property list.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_coding_system_get(mgr: &CodingSystemManager, args: Vec<Value>) -> EvalResult {
     expect_args("coding-system-get", &args, 2)?;
     let coding_name = coding_symbol_name(&args[0])?;
@@ -2038,6 +2044,7 @@ pub(crate) fn coding_inherit_eol_type_unix(
 
 /// `(coding-system-type CODING-SYSTEM)` -- return the type symbol of the
 /// coding system (e.g. utf-8, charset, raw-text, undecided).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_coding_system_type(
     mgr: &CodingSystemManager,
     args: Vec<Value>,
@@ -2059,6 +2066,7 @@ pub(crate) fn builtin_coding_system_type(
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 enum EolConversionRequest {
     Nil,
     Integer(i64),
@@ -2067,6 +2075,7 @@ enum EolConversionRequest {
 }
 
 impl EolConversionRequest {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_lisp_value(value: Value) -> Self {
         if value.is_nil() {
             return Self::Nil;
@@ -2114,6 +2123,7 @@ impl EolConversionRequest {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn eol_vector_ref(vector: Value, request: EolConversionRequest) -> EvalResult {
     let index = request.vector_index()?;
     let data = vector
@@ -2131,6 +2141,7 @@ fn eol_vector_ref(vector: Value, request: EolConversionRequest) -> EvalResult {
 /// `(coding-system-change-eol-conversion CODING-SYSTEM EOL-TYPE)` -- return
 /// a coding system derived from CODING-SYSTEM but with a different EOL type.
 /// EOL-TYPE is 0 (unix), 1 (dos), or 2 (mac), or a symbol.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_coding_system_change_eol_conversion(
     mgr: &CodingSystemManager,
     args: Vec<Value>,
@@ -2185,6 +2196,7 @@ pub(crate) fn builtin_coding_system_change_eol_conversion(
 /// `(coding-system-change-text-conversion CODING-SYSTEM TEXT-CODING)` -- return
 /// a coding system derived from TEXT-CODING but preserving the EOL type of
 /// CODING-SYSTEM.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_coding_system_change_text_conversion(
     mgr: &CodingSystemManager,
     args: Vec<Value>,
@@ -4498,6 +4510,7 @@ fn runtime_bucket_name(mgr: &CodingSystemManager, resolved_name: &str) -> Option
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn alias_sort_rank(canonical: &str, alias: &str) -> usize {
     match canonical {
         "utf-8" => match alias {

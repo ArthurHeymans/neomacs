@@ -21,7 +21,7 @@
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
-use crate::buffer::{BufferManager, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent};
+use crate::buffer::{EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------

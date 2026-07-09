@@ -16,18 +16,20 @@ use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
-use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
+use super::value::{Value, ValueKind, list_to_vec};
 use crate::buffer::{EmacsBytePos, TextExtent};
 use crate::heap_types::LispString;
 use strum::EnumString;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString)]
 #[strum(serialize_all = "kebab-case")]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 enum AbbrevSystemKeyword {
     Force,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 enum AbbrevSystemSetting {
     User,
     System,
@@ -35,6 +37,7 @@ enum AbbrevSystemSetting {
 }
 
 impl AbbrevSystemSetting {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn from_system_flag(flag: Value) -> Self {
         if flag.is_nil() {
             return Self::User;
@@ -342,10 +345,13 @@ fn apply_case(expansion: &str, word: &str, case_fixed: bool) -> String {
 // ===========================================================================
 
 /// Default obarray size for abbrev tables (same default as `obarray-make`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const ABBREV_TABLE_DEFAULT_SIZE: usize = 1511;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const ABBREV_TABLE_HEADER_NAME: &str = "";
 
 /// Hash a string for obarray bucket lookup.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_hash(s: &str, len: usize) -> usize {
     let hash = s
         .bytes()
@@ -354,6 +360,7 @@ fn obarray_hash(s: &str, len: usize) -> usize {
 }
 
 /// Search a bucket chain (cons list) for a symbol with the given name.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_bucket_find(bucket: Value, name: &str) -> Option<Value> {
     let mut current = bucket;
     loop {
@@ -374,6 +381,7 @@ fn obarray_bucket_find(bucket: Value, name: &str) -> Option<Value> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn symbol_id(value: Value) -> Option<SymId> {
     match value.kind() {
         ValueKind::Symbol(id) => Some(id),
@@ -383,6 +391,7 @@ fn symbol_id(value: Value) -> Option<SymId> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_insert_symbol(vec_val: Value, sym: Value) {
     let Some(name) = sym.as_symbol_name() else {
         return;
@@ -400,6 +409,7 @@ fn obarray_insert_symbol(vec_val: Value, sym: Value) {
 }
 
 /// Intern a symbol into a custom obarray (vector). Returns the symbol Value.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_intern(vec_val: Value, name: &str) -> Value {
     let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
     if vec_len == 0 {
@@ -421,6 +431,7 @@ fn obarray_intern(vec_val: Value, name: &str) -> Value {
 }
 
 /// Look up a symbol in a custom obarray (vector) without interning.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_lookup(vec_val: Value, name: &str) -> Option<Value> {
     let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
     if vec_len == 0 {
@@ -432,12 +443,14 @@ fn obarray_lookup(vec_val: Value, name: &str) -> Option<Value> {
     obarray_bucket_find(bucket, name)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn table_header_symbol(vec_val: Value) -> Option<Value> {
     obarray_lookup(vec_val, ABBREV_TABLE_HEADER_NAME)
 }
 
 /// Check if a Value is an abbrev table (obarray with a header symbol carrying
 /// a numeric `:abbrev-table-modiff` property).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_abbrev_table(eval: &super::eval::Context, value: &Value) -> bool {
     if super::builtins::symbols::check_obarray_value(*value).is_err() {
         return false;
@@ -455,6 +468,7 @@ fn is_abbrev_table(eval: &super::eval::Context, value: &Value) -> bool {
 }
 
 /// Collect all symbols from an obarray into a Vec.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_all_symbols(vec_val: Value) -> Vec<Value> {
     let all_slots = super::builtins::symbols::obarray_buckets(vec_val).unwrap_or_default();
     let mut symbols = Vec::new();
@@ -480,6 +494,7 @@ fn obarray_all_symbols(vec_val: Value) -> Vec<Value> {
 // Builtin helpers
 // ===========================================================================
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
@@ -491,6 +506,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -502,6 +518,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_string(value: &Value) -> Result<String, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -518,6 +535,7 @@ fn expect_string(value: &Value) -> Result<String, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_abbrev_table(eval: &super::eval::Context, value: &Value) -> Result<Value, Flow> {
     if is_abbrev_table(eval, value) {
         Ok(*value)
@@ -536,6 +554,7 @@ fn expect_abbrev_table(eval: &super::eval::Context, value: &Value) -> Result<Val
 /// (make-abbrev-table &optional PROPS) -> obarray
 ///
 /// Create a new empty abbrev table (obarray with a "0" symbol).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_abbrev_table(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -577,6 +596,7 @@ pub(crate) fn builtin_make_abbrev_table(
 ///
 /// Return t if OBJ is an abbrev table (obarray with "0" symbol having
 /// `abbrev-table` property).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_table_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -589,6 +609,7 @@ pub(crate) fn builtin_abbrev_table_p(
 ///
 /// TABLE is an abbrev table (obarray).
 /// NAME is a string. EXPANSION is a string or nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_define_abbrev(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -685,6 +706,7 @@ pub(crate) fn builtin_define_abbrev(
 /// (abbrev-symbol ABBREV &optional TABLE) -> symbol or nil
 ///
 /// Look up ABBREV in TABLE (or the local/global abbrev tables).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_symbol(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -720,6 +742,7 @@ pub(crate) fn builtin_abbrev_symbol(
 /// (abbrev-expansion ABBREV &optional TABLE) -> string or nil
 ///
 /// Look up the expansion of ABBREV without expanding it.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_expansion(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -768,6 +791,7 @@ pub(crate) fn builtin_abbrev_expansion(
 ///
 /// Reset all symbols in TABLE except the "0" property symbol.
 /// In GNU Emacs, system abbrevs are kept but with empty expansion.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_clear_abbrev_table(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -792,6 +816,7 @@ pub(crate) fn builtin_clear_abbrev_table(
 /// (abbrev-table-get TABLE PROP) -> value
 ///
 /// Get property PROP from the header symbol of TABLE.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_table_get(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -810,6 +835,7 @@ pub(crate) fn builtin_abbrev_table_get(
 /// (abbrev-table-put TABLE PROP VAL) -> VAL
 ///
 /// Set property PROP to VAL on the header symbol of TABLE.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_table_put(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -830,12 +856,14 @@ pub(crate) fn builtin_abbrev_table_put(
     Ok(args[2])
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn get_table_property(eval: &super::eval::Context, vec_val: Value, prop: &str) -> Option<Value> {
     table_header_symbol(vec_val)
         .and_then(symbol_id)
         .and_then(|id| eval.obarray().get_property_id(id, intern(prop)))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn increment_table_modiff(eval: &mut super::eval::Context, vec_val: Value) {
     let next = match get_table_property(eval, vec_val, ":abbrev-table-modiff") {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() + 1,
@@ -850,6 +878,7 @@ fn increment_table_modiff(eval: &mut super::eval::Context, vec_val: Value) {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn find_abbrev_symbol_in_table(
     eval: &super::eval::Context,
     abbrev: &str,
@@ -899,6 +928,7 @@ fn find_abbrev_symbol_in_table(
 ///
 /// NAME is a symbol. Creates the table as an obarray, sets it as NAME's value,
 /// and adds NAME to `abbrev-table-name-list`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_define_abbrev_table(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1018,6 +1048,7 @@ pub(crate) fn builtin_define_abbrev_table(
 /// (expand-abbrev) -> string or nil
 ///
 /// NeoVM stub: returns nil in batch/non-interactive use.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_expand_abbrev(
     _eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1030,6 +1061,7 @@ pub(crate) fn builtin_expand_abbrev(
 ///
 /// Insert a description of the abbrev table named NAME into the current buffer.
 /// This is a simplified version that inserts into the current buffer.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_abbrev_table_description(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

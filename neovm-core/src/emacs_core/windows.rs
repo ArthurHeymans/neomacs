@@ -8,17 +8,14 @@
 
 use super::intern::intern;
 use super::symbol::Obarray;
-use super::{
-    error::{EvalResult, Flow, signal},
-    eval::Context,
-    value::{Value, ValueKind},
-};
+use super::value::Value;
 
 #[cfg(windows)]
 thread_local! {
     static W32_VALID_CODEPAGES: std::cell::RefCell<Vec<i64>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn register_bootstrap_symbols(obarray: &mut Obarray) {
     register_w32term_symbols(obarray);
     register_w32proc_symbols(obarray);
@@ -396,6 +393,7 @@ fn expect_fixnump(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32term_symbols(obarray: &mut Obarray) {
     for name in [
         "vendor-specific-keysyms",
@@ -428,6 +426,7 @@ fn register_w32term_symbols(obarray: &mut Obarray) {
     defvar_bool(obarray, "w32-add-wrapped-menu-bar-lines", true);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32proc_symbols(obarray: &mut Obarray) {
     for name in ["high", "low", "cygwin", "msys", "w32-native"] {
         defsym(obarray, name);
@@ -448,6 +447,7 @@ fn register_w32proc_symbols(obarray: &mut Obarray) {
     defvar_lisp(obarray, "w32-collate-ignore-punctuation", Value::NIL);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32fns_symbols(obarray: &mut Obarray) {
     for name in [
         "undefined-color",
@@ -569,6 +569,7 @@ fn register_w32fns_symbols(obarray: &mut Obarray) {
     defvar_bool(obarray, "w32-follow-system-dark-mode", true);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32font_symbols(obarray: &mut Obarray) {
     defvar_lisp(obarray, "w32-charset-info-alist", Value::NIL);
     for name in [
@@ -597,14 +598,17 @@ fn register_w32font_symbols(obarray: &mut Obarray) {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32dwrite_symbols(obarray: &mut Obarray) {
     defvar_bool(obarray, "w32-inhibit-dwrite", false);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_w32console_symbols(obarray: &mut Obarray) {
     defvar_bool(obarray, "w32-use-full-screen-buffer", false);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn register_windows_dynamic_library_versions(obarray: &mut Obarray) {
     defvar_int(obarray, "libpng-version", -1);
     defvar_int(obarray, "libgif-version", -1);
@@ -617,20 +621,24 @@ fn register_windows_dynamic_library_versions(obarray: &mut Obarray) {
     );
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn defsym(obarray: &mut Obarray, name: &str) {
     let id = intern(name);
     obarray.ensure_interned_global_id(id);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn defvar_lisp(obarray: &mut Obarray, name: &str, value: Value) {
     obarray.set_symbol_value(name, value);
     obarray.make_special(name);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn defvar_int(obarray: &mut Obarray, name: &str, value: i64) {
     defvar_lisp(obarray, name, Value::fixnum(value));
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn defvar_bool(obarray: &mut Obarray, name: &str, value: bool) {
     defvar_lisp(obarray, name, if value { Value::T } else { Value::NIL });
 }
@@ -641,6 +649,7 @@ fn w32_mouse_button_tolerance_default() -> i64 {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn w32_mouse_button_tolerance_default() -> i64 {
     250
 }
@@ -651,6 +660,7 @@ fn w32_ansi_code_page() -> i64 {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn w32_ansi_code_page() -> i64 {
     0
 }
@@ -665,6 +675,7 @@ fn w32_multibyte_code_page() -> i64 {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn w32_multibyte_code_page() -> i64 {
     0
 }

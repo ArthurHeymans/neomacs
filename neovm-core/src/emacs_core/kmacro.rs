@@ -60,7 +60,7 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -242,6 +242,7 @@ fn start_kbd_macro_impl(
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn plan_call_last_kbd_macro(
     last_kbd_macro: Option<&[Value]>,
     args: &[Value],
@@ -371,6 +372,7 @@ pub(crate) fn builtin_execute_kbd_macro(
 ///
 /// Bind the last keyboard macro to SYMBOL as its function definition.
 /// Signals an error if no macro has been recorded.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn name_last_kbd_macro_impl(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -384,7 +386,7 @@ fn name_last_kbd_macro_impl(
             .as_lisp_string()
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
             .expect("ValueKind::String must carry LispString payload"),
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("symbolp"), args[0]],
@@ -410,6 +412,7 @@ fn name_last_kbd_macro_impl(
 ///
 /// Bind the last keyboard macro to SYMBOL as its function definition.
 /// Signals an error if no macro has been recorded.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_name_last_kbd_macro(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -444,6 +447,7 @@ pub(crate) fn builtin_executing_kbd_macro_p(
 }
 
 /// (last-kbd-macro) -> last recorded macro vector or nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_last_kbd_macro(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -458,6 +462,7 @@ pub(crate) fn builtin_last_kbd_macro(
 /// (kmacro-p OBJECT) -> non-nil when OBJECT is a keyboard macro value.
 ///
 /// Compatibility subset: accepts vector and string macro encodings.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_kmacro_p(args: Vec<Value>) -> EvalResult {
     expect_args("kmacro-p", &args, 1)?;
     Ok(Value::bool_val(args[0].is_vector() || args[0].is_string()))
@@ -501,7 +506,7 @@ pub(crate) fn builtin_kmacro_set_format(
                 string.clone()
             }
         }
-        other => {
+        _other => {
             return Err(signal(
                 "wrong-type-argument",
                 vec![Value::symbol("stringp"), args[0]],

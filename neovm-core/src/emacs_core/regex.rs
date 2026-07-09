@@ -69,6 +69,7 @@ fn buffer_syntax_lookup(buf: &Buffer) -> BufferSyntaxLookup {
 }
 
 #[inline]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn buffer_lisp_match_char_pos_to_byte_pos(buf: &Buffer, lisp_char_pos: usize) -> EmacsBytePos {
     buf.char_pos_to_emacs_byte_pos_clamped(
         CharPos0::new(lisp_char_pos).saturating_sub_len(CharLen::new(1)),
@@ -104,6 +105,7 @@ fn match_data_from_registers(regs: &MatchRegisters, offset: usize) -> MatchData 
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn storage_rel_to_emacs_byte(text: &str, base_emacs_byte: usize, storage_pos: usize) -> usize {
     base_emacs_byte
         + crate::emacs_core::string_escape::storage_byte_to_logical_byte(text, storage_pos)
@@ -160,6 +162,7 @@ enum CompiledSearchPattern {
 }
 
 pub(crate) struct IteratedStringMatches {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub capture_count: usize,
     pub matches: Vec<Vec<Option<MatchGroup>>>,
 }
@@ -360,6 +363,7 @@ impl SearchedString {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn to_owned(&self) -> String {
         let Some(string) = self.as_lisp_string() else {
             return String::new();
@@ -473,6 +477,7 @@ impl MatchData {
         )
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn searched_string_text(&self) -> Option<String> {
         self.searched_string().map(SearchedString::to_owned)
     }
@@ -1137,6 +1142,7 @@ fn compile_search_pattern_with_posix(
     Ok(compiled)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn compile_lisp_pattern_with_posix(
     pattern: &LispString,
     case_fold: bool,
@@ -1489,6 +1495,7 @@ fn literal_find(text: &str, literal: &str, case_fold: bool) -> Option<MatchGroup
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn literal_find_lisp_string(
     text: &crate::heap_types::LispString,
     literal: &str,
@@ -2549,6 +2556,7 @@ pub fn string_match_full_with_case_fold_and_posix(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn string_match_full_with_case_fold_source_lisp(
     pattern: &str,
     string: &crate::heap_types::LispString,
@@ -2572,6 +2580,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp(
 /// [`string_match_full_with_case_fold_source_lisp`] used by
 /// `posix-string-match` on Lisp strings. See GNU
 /// `src/search.c:Fposix_string_match`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn string_match_full_with_case_fold_source_lisp_posix(
     pattern: &str,
     string: &crate::heap_types::LispString,
@@ -2660,6 +2669,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn string_match_full_with_case_fold_source(
     pattern: &str,
     string: &str,
@@ -2812,6 +2822,7 @@ pub fn replace_match_buffer_with_syntax(
     Ok(())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn compute_buffer_replacement_with_syntax(
     buf: &Buffer,
     newtext: &str,
@@ -2938,6 +2949,7 @@ pub fn char_pos_to_byte(s: &str, char_pos: usize) -> usize {
         .unwrap_or(s.len())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn compute_replacement(
     newtext: &str,
     fixedcase: bool,
@@ -3217,6 +3229,7 @@ fn build_replacement(
     Ok(out)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn apply_match_case(replacement: &str, matched: &str) -> String {
     apply_replace_match_case(replacement, matched)
 }

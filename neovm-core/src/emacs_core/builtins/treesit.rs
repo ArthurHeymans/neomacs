@@ -14,9 +14,9 @@ use crate::emacs_core::builtins::buffers::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{SymId, resolve_sym};
 use crate::emacs_core::treesit::{
-    self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_BUFFER, PARSER_SLOT_EMBED_LEVEL,
-    PARSER_SLOT_LANGUAGE, PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserTagFilter,
-    QUERY_SLOT_LANGUAGE, QUERY_SLOT_SOURCE,
+    self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_EMBED_LEVEL, PARSER_SLOT_LANGUAGE,
+    PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserTagFilter, QUERY_SLOT_LANGUAGE,
+    QUERY_SLOT_SOURCE,
 };
 use crate::heap_types::LispString;
 
@@ -963,6 +963,7 @@ struct ResolvedNodeInput {
     parser_id: u64,
     parser_value: Value,
     language_symbol: Value,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     node_value: Value,
     node_raw: tree_sitter::ffi::TSNode,
 }
@@ -2277,7 +2278,7 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
     parser
         .parser
         .set_included_ranges(&ts_ranges)
-        .map_err(|err| {
+        .map_err(|_err| {
             signal(
                 "treesit-range-invalid",
                 vec![

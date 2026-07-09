@@ -2191,10 +2191,12 @@ pub(crate) struct AotLeafMeta {
 /// is handled everywhere (the GC-tested completeness rule).
 pub(crate) enum LeafBacking {
     /// JIT: the `JITModule` owns the executable memory `entry` points into.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     Jit(JITModule),
     /// AOT: a loaded shared object owns the code `entry` points into. `Arc` so
     /// several leaves from one unit share the single mapping; never unloaded
     /// while any backed leaf is cached.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     Aot(std::sync::Arc<LoadedUnit>),
 }
 
@@ -2240,6 +2242,7 @@ pub struct CompiledLeaf {
     /// lazily-cached callee leaf pointer. Generated code holds raw pointers
     /// into this Box (stable: boxed slice, owned here, code only runs under a
     /// live Rc of this leaf).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     spec_slots: Box<[SpecSlot]>,
     /// R2 increment B2 (AOT only): the per-site `expected` (subr/bytecode VALUE
     /// bits) array parallel to `spec_slots`, one entry per `Op::Call` spec site in
@@ -2248,6 +2251,7 @@ pub struct CompiledLeaf {
     /// it from the LIVE cell at load. Empty for JIT leaves (they bake `expected` as
     /// an `iconst`) and for AOT leaves with no armed spec site. Address-stable (a
     /// boxed slice, the sidecar's `spec_expected_base` points into it).
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     spec_expected: Box<[u64]>,
     /// Whether the body registers handler frames (`condition-case`/`catch`).
     /// When set, [`call`](Self::call) truncates `ctx.condition_stack` back to
@@ -3335,6 +3339,7 @@ fn retag_fixnum(fb: &mut FunctionBuilder, n: ClifValue) -> ClifValue {
 /// Lower a fixnum-fast-path binary op (`Add`/`Sub`) with the exact parity the
 /// interpreter uses (`vm.rs` `Op::Add`): require both operands be fixnums and
 /// the result be in fixnum range, else deopt. Returns the tagged-fixnum result.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_binop(
     fb: &mut FunctionBuilder,
     deopt: Block,
@@ -3390,6 +3395,7 @@ enum UnaryKind {
 /// stays in range, else deopt. The single out-of-range input per op is the
 /// boundary fixnum, so the interpreter's `n != BOUND` guard is reproduced
 /// exactly rather than a post-compute range check.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_unop(
     fb: &mut FunctionBuilder,
     deopt: Block,
@@ -3419,6 +3425,7 @@ fn lower_fixnum_unop(
 /// Lower a fixnum numeric comparison (`=`/`<`/`>`/`<=`/`>=`) with exact
 /// interpreter parity (`vm.rs` `Op::Lss` &c.): require both operands be fixnums
 /// else deopt, then select `t`/`nil` from the comparison — no branch needed.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_compare(
     fb: &mut FunctionBuilder,
     deopt: Block,
@@ -3443,6 +3450,7 @@ fn lower_fixnum_compare(
 /// Operands are <= 61-bit so the product is <= 122-bit; widening to `i128` makes
 /// it exact, then a single range check covers both i64 overflow and
 /// fixnum-range overflow at once.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_mul(
     fb: &mut FunctionBuilder,
     deopt: Block,
@@ -3487,6 +3495,7 @@ fn lower_fixnum_mul(
 /// the wrapped fixnum while the interpreter returns a bignum). The unboxed MIR
 /// analogue `raw_fixnum_divrem` is robust to that fix — it range-checks and deopts
 /// on the overflow rather than wrapping.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_divrem(
     fb: &mut FunctionBuilder,
     deopt: Block,

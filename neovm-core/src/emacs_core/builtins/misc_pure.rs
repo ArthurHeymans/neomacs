@@ -429,7 +429,7 @@ pub(crate) fn builtin_force_mode_line_update(
 
 pub(crate) fn builtin_get_internal_run_time(args: Vec<Value>) -> EvalResult {
     expect_args("get-internal-run-time", &args, 0)?;
-    use crate::emacs_core::value::ValueKind;
+
     use std::time::{SystemTime, UNIX_EPOCH};
     let dur = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -469,6 +469,7 @@ pub(crate) fn builtin_invocation_name(args: Vec<Value>) -> EvalResult {
     Ok(Value::string(name))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_error(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("error", &args, 1)?;
     let formatted = builtin_format_message(eval, args)?;
@@ -482,6 +483,7 @@ pub(crate) fn builtin_error(eval: &mut super::eval::Context, args: Vec<Value>) -
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_user_error(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("user-error", &args, 1)?;
     let formatted = builtin_format_message(eval, args)?;
@@ -507,6 +509,7 @@ pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_symbol_name(args: Vec<Value>) -> EvalResult {
     expect_args("symbol-name", &args, 1)?;
     builtin_symbol_name_value(args[0], false)
@@ -530,6 +533,7 @@ fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> E
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_symbol(args: Vec<Value>) -> EvalResult {
     expect_args("make-symbol", &args, 1)?;
     make_symbol_value(args[0])

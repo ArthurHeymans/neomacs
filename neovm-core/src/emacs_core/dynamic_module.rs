@@ -18,7 +18,7 @@ use super::intern::{intern, intern_lisp_string, resolve_sym};
 use super::value::Value;
 use crate::heap_types::LispString;
 use crate::tagged::gc::{HeapWriteKind, note_heap_write};
-use crate::tagged::header::{EmacsFinalizer, ModuleFunctionObj, UserPtrObj, VecLikeType};
+use crate::tagged::header::{ModuleFunctionObj, UserPtrObj, VecLikeType};
 
 // ============================================================================
 // C-compatible types matching GNU emacs-module.h

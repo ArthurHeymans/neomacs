@@ -837,6 +837,7 @@ pub(crate) fn builtin_buffer_string(
     ))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn resolve_buffer_designator_allow_nil_current(
     eval: &mut super::eval::Context,
     arg: &Value,
@@ -877,6 +878,7 @@ fn resolve_buffer_designator_allow_nil_current(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
@@ -993,6 +995,7 @@ fn resolve_lisp_range_with_buffer_defaults(
     Ok((LispCharPos1::new(start), LispCharPos1::new(end)))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn checked_buffer_slice_for_char_region(
     eval: &super::eval::Context,
     buffer_id: Option<BufferId>,
@@ -1650,6 +1653,7 @@ fn myers_edit_runs(
 }
 
 /// `(replace-buffer-contents SOURCE &optional MAX-SECS MAX-COSTS)` -> t
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_buffer_contents(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -3083,6 +3087,7 @@ pub(crate) fn builtin_command_error_default_function(args: Vec<Value>) -> EvalRe
     Ok(Value::NIL)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_point(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("point", &args, 0)?;
     builtin_point_0(eval)
@@ -3096,6 +3101,7 @@ pub(crate) fn builtin_point_0(eval: &mut super::eval::Context) -> EvalResult {
     Ok(Value::fixnum(buf.point_lisp_char_pos().as_i64()))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_point_min(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("point-min", &args, 0)?;
     builtin_point_min_0(eval)
@@ -3109,6 +3115,7 @@ pub(crate) fn builtin_point_min_0(eval: &mut super::eval::Context) -> EvalResult
     Ok(Value::fixnum(buf.point_min_lisp_char_pos().as_i64()))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_point_max(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("point-max", &args, 0)?;
     builtin_point_max_0(eval)
@@ -3122,6 +3129,7 @@ pub(crate) fn builtin_point_max_0(eval: &mut super::eval::Context) -> EvalResult
     Ok(Value::fixnum(buf.point_max_lisp_char_pos().as_i64()))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_goto_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("goto-char", &args, 1)?;
     builtin_goto_char_1(eval, args[0])
@@ -3483,7 +3491,6 @@ fn build_multibyte_conversion_byte_map(
                 map.push(new_pos);
                 new_pos += if b < 0x80 { 1 } else { 2 };
             }
-            p = old_bytes.len();
         }
         // string-as-unibyte: an eight-bit char collapses to its single raw byte;
         // any other multibyte char keeps its bytes.
@@ -4718,6 +4725,7 @@ pub(crate) fn builtin_char_before(eval: &mut super::eval::Context, args: Vec<Val
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_unibyte_storage_string(s: &str) -> bool {
     // A unibyte storage string has only ASCII chars (0x00..=0x7F) and
     // sentinel chars (0xE300..=0xE3FF) for bytes 0x80..=0xFF.

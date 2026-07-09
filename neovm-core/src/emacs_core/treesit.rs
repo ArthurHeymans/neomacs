@@ -12,19 +12,23 @@ pub(crate) const TREESIT_PARSER_TAG: &str = "treesit-parser";
 pub(crate) const TREESIT_NODE_TAG: &str = "treesit-node";
 pub(crate) const TREESIT_COMPILED_QUERY_TAG: &str = "treesit-compiled-query";
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) const PARSER_SLOT_TYPE: usize = 0;
 pub(crate) const PARSER_SLOT_ID: usize = 1;
 pub(crate) const PARSER_SLOT_LANGUAGE: usize = 2;
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) const PARSER_SLOT_BUFFER: usize = 3;
 pub(crate) const PARSER_SLOT_TAG: usize = 4;
 pub(crate) const PARSER_SLOT_EMBED_LEVEL: usize = 5;
 pub(crate) const PARSER_SLOT_NOTIFIERS: usize = 6;
 pub(crate) const PARSER_SLOT_INCLUDED_RANGES: usize = 7;
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) const NODE_SLOT_TYPE: usize = 0;
 pub(crate) const NODE_SLOT_ID: usize = 1;
 pub(crate) const NODE_SLOT_PARSER: usize = 2;
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) const QUERY_SLOT_TYPE: usize = 0;
 pub(crate) const QUERY_SLOT_ID: usize = 1;
 pub(crate) const QUERY_SLOT_LANGUAGE: usize = 2;
@@ -86,6 +90,7 @@ pub(crate) struct NodeEntry {
 }
 
 pub(crate) struct QueryEntry {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) language: SymId,
     pub(crate) compiled: Option<Query>,
 }

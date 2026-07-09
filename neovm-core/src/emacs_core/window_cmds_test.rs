@@ -1,6 +1,5 @@
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::eval::{GuiFrameHostSize, ResolvedFrameFont};
-use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::window_cmds::SplitWindowSide;
 use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format_eval_result};
 use crate::face::{FontSlant, FontWeight, FontWidth};

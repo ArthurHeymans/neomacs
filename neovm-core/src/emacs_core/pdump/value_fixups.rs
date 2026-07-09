@@ -45,6 +45,7 @@ pub(crate) enum RawValueFixup {
 }
 
 impl RawValueFixup {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn location_offset(&self) -> u64 {
         match self {
             Self::Symbol { location_offset }
@@ -91,6 +92,7 @@ pub(crate) fn value_fixups_section_bytes(fixups: &[RawValueFixup]) -> Result<Vec
     Ok(bytes)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_value_fixups_section(section: &[u8]) -> Result<Vec<RawValueFixup>, DumpError> {
     let (fixup_count, payload) = value_fixups_payload(section)?;
     let mut cursor = object_value_codec::Cursor::new(payload);

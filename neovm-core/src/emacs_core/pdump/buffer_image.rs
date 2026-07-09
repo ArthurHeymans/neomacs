@@ -879,6 +879,7 @@ pub(crate) fn empty_buffer_manager() -> DumpBufferManager {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn buffer_manager_is_empty(manager: &DumpBufferManager) -> bool {
     manager.buffers.is_empty()
         && manager.buffer_order.is_empty()

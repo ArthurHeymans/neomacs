@@ -15,7 +15,7 @@ use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 use crate::emacs_core::wait::CommandInputWaitOutcome;
 // decode_storage_char_codes import removed — now using emacs_char directly
-use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::heap_types::LispString;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -2226,7 +2226,7 @@ impl crate::emacs_core::eval::Context {
         match event.kind() {
             ValueKind::Cons => {
                 let pair_car = event.cons_car();
-                let pair_cdr = event.cons_cdr();
+                let _pair_cdr = event.cons_cdr();
                 matches!(
                     pair_car.as_symbol_name(),
                     Some("switch-frame") | Some("select-window")
@@ -2248,6 +2248,7 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn make_lispy_switch_frame_event(&self, emacs_frame_id: u64) -> Option<Value> {
         let frame = self.lispy_frame_event_target(emacs_frame_id)?;
         Some(Value::list(vec![Value::symbol("switch-frame"), frame]))
@@ -2403,7 +2404,7 @@ impl crate::emacs_core::eval::Context {
         events: &[Value],
         prompt: Value,
     ) -> Result<Option<KeySequenceSuffixTranslation>, crate::emacs_core::error::Flow> {
-        use crate::emacs_core::keymap::{is_list_keymap, list_keymap_lookup_seq};
+        use crate::emacs_core::keymap::is_list_keymap;
 
         if map.is_nil() || !is_list_keymap(&map) {
             return Ok(None);
@@ -5193,6 +5194,7 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn due_gnu_timers_snapshot(&self) -> Vec<Value> {
         let timers = self
             .obarray
@@ -5209,6 +5211,7 @@ impl crate::emacs_core::eval::Context {
             .collect()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn due_gnu_idle_timers_snapshot(&self) -> Vec<Value> {
         let Some(idle_duration) = self.current_idle_duration() else {
             return Vec::new();
@@ -5269,6 +5272,7 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn next_ordinary_gnu_timer_timeout(&self) -> Option<std::time::Duration> {
         self.next_ordinary_gnu_timer_timeout_before(None)
     }
@@ -5310,6 +5314,7 @@ impl crate::emacs_core::eval::Context {
             .min()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn next_input_wait_timeout(&self) -> Option<std::time::Duration> {
         let mut timeout: Option<std::time::Duration> = None;
 
@@ -5329,6 +5334,7 @@ impl crate::emacs_core::eval::Context {
         timeout
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn fire_pending_timers(&mut self) {
         let _ = self.service_timers_with_redisplay();
     }
@@ -5358,6 +5364,7 @@ impl crate::emacs_core::eval::Context {
         self.command_loop.set_command_key_sequences(translated, raw);
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn set_translated_command_keys(&mut self, keys: Vec<Value>) {
         self.command_loop.set_translated_command_keys(keys);
     }
@@ -5504,6 +5511,7 @@ impl crate::emacs_core::eval::Context {
         self.sync_keyboard_macro_runtime_vars();
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn finish_executing_kbd_macro_runtime(&mut self) {
         self.command_loop.finish_executing_kbd_macro();
         self.sync_keyboard_macro_runtime_vars();

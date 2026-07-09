@@ -87,7 +87,7 @@ fn collect_hook_functions_impl(
                 cursor = pair_cdr;
             }
         }
-        value => out.push(hook_value),
+        _value => out.push(hook_value),
     }
 }
 
@@ -329,6 +329,7 @@ pub(crate) fn run_hook_value_wrapped<R: HookRuntime>(
     })
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn run_hook_query_error_with_timeout<R: HookRuntime>(
     runtime: &mut R,
     hook_sym: SymId,

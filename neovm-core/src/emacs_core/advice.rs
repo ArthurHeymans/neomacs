@@ -6,7 +6,6 @@
 use rustc_hash::FxHashMap;
 
 use super::intern::SymId;
-use super::symbol::Obarray;
 use super::value::{Value, ValueKind, VecLikeType};
 use crate::gc_trace::GcTrace;
 

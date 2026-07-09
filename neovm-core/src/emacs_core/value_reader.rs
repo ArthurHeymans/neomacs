@@ -12,7 +12,7 @@
 //! propertized strings, reader skip (#@N).
 
 use super::eval::{push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
-use super::intern::{intern, intern_lisp_string, intern_uninterned_lisp_string, resolve_sym};
+use super::intern::{intern, intern_lisp_string, intern_uninterned_lisp_string};
 use malachite::base::num::conversion::traits::FromStringBase;
 use malachite::integer::Integer;
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage

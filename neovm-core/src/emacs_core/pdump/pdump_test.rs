@@ -7,7 +7,7 @@ use crate::emacs_core::format_eval_result;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::mode::{FontLockDefaults, FontLockKeyword, MajorMode};
 use crate::emacs_core::pdump::types::{
-    DumpByteCodeFunction, DumpHeapObject, DumpLambdaParams, DumpOp, DumpSymId, DumpValue,
+    DumpByteCodeFunction, DumpHeapObject, DumpLambdaParams, DumpOp, DumpSymId,
 };
 use crate::emacs_core::value::{
     StringTextPropertyRun, Value, get_string_text_properties_for_value, list_to_vec,

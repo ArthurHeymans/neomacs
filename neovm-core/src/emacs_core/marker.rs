@@ -309,6 +309,7 @@ pub(crate) fn marker_position_as_int_eval(
     marker_position_as_int_with_buffers(&eval.buffers, v)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn marker_buffer_value(v: &Value) -> Value {
     if !v.is_marker() {
         return Value::NIL;
@@ -387,6 +388,7 @@ pub(crate) fn builtin_marker_buffer(
 
 /// Buffer-aware marker-buffer for the VM fast dispatch path.
 /// Returns nil for killed buffers (same as the eval-aware version).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_marker_buffer_in_buffers(
     buffers: &BufferManager,
     args: Vec<Value>,
@@ -792,6 +794,7 @@ pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 /// Find a marker Value by id in a buffer's chain.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn find_marker_value_in_chain(
     buffers: &BufferManager,
     buffer_id: BufferId,

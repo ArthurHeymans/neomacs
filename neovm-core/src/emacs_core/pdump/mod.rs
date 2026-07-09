@@ -139,6 +139,7 @@ use crate::emacs_core::value;
 //   and mapped heap headers instead of one semantic descriptor tag per object.
 // v55: Runtime VecLikeType discriminants now mirror GNU `enum pvec_type` for
 //   all shared vectorlike tags; old mmap heap headers used Neomacs-local codes.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const FORMAT_VERSION: u32 = 55;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
@@ -635,6 +636,7 @@ fn reconstruct_evaluator_after_symbol_table(
     reconstruct_evaluator_after_symbol_table_with_decoder(state, decoder)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn reconstruct_evaluator_after_symbol_table_with_tagged_heap(
     state: &DumpContextState,
     tagged_heap_state: DumpTaggedHeap,

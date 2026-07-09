@@ -4,7 +4,7 @@ use super::*;
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::builtins::{builtin_puthash, builtin_remhash};
 use crate::emacs_core::value::{
-    HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, next_float_id,
+    HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun,
     set_string_text_properties_for_value,
 };
 

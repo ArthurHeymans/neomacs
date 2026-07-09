@@ -822,7 +822,7 @@ pub(crate) fn prepare_make_thread(
         match args[1].kind() {
             ValueKind::String => Some(args[1].as_lisp_string().expect("string").clone()),
             ValueKind::Nil => None,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), args[1]],
@@ -840,6 +840,7 @@ pub(crate) fn prepare_make_thread(
     Ok((thread_id, function))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn finish_make_thread_in_eval(
     eval: &mut super::eval::Context,
     thread_id: u64,
@@ -1218,7 +1219,7 @@ pub(crate) fn builtin_make_mutex(
         match v.kind() {
             ValueKind::String => Some(v.as_lisp_string().expect("string").clone()),
             ValueKind::Nil => None,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), *v],
@@ -1346,7 +1347,7 @@ pub(crate) fn builtin_make_condition_variable(
         match args[1].kind() {
             ValueKind::String => Some(args[1].as_lisp_string().expect("string").clone()),
             ValueKind::Nil => None,
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("stringp"), args[1]],
@@ -1509,6 +1510,7 @@ pub(crate) fn builtin_condition_notify(
 /// This is a special form: MUTEX is evaluated, the lock is acquired, BODY is
 /// executed as an implicit progn, and the lock is released on exit
 /// (even if BODY signals an error).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn sf_with_mutex(eval: &mut super::eval::Context, tail: &[Value]) -> EvalResult {
     if tail.is_empty() {
         return Err(signal(

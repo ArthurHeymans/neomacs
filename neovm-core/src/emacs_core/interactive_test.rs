@@ -3,10 +3,7 @@ fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
 use crate::emacs_core::keymap::make_list_keymap;
-use crate::emacs_core::load::{
-    apply_runtime_startup_state, bootstrap_load_path_entries, create_bootstrap_evaluator_cached,
-    create_runtime_startup_evaluator_cached,
-};
+use crate::emacs_core::load::{apply_runtime_startup_state, create_bootstrap_evaluator_cached};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::emacs_core::{Context, format_eval_result};
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};

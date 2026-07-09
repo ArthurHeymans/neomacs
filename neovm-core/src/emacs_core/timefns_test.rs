@@ -1,6 +1,5 @@
 use super::*;
 use crate::emacs_core::Context;
-use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 use crate::test_utils::runtime_startup_eval_all;

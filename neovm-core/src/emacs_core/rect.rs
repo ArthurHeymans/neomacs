@@ -12,7 +12,6 @@
 //! oracle corpora.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::intern;
 use super::value::*;
 use crate::buffer::EmacsByteRange;
 use crate::emacs_core::value::ValueKind;
@@ -22,6 +21,7 @@ use crate::heap_types::LispString;
 // Argument helpers (local copies — same pattern as other modules)
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     if args.len() != n {
         Err(signal(
@@ -33,6 +33,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     if args.len() < min {
         Err(signal(
@@ -44,6 +45,7 @@ fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     if args.len() > max {
         Err(signal(
@@ -55,10 +57,11 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -71,7 +74,7 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload")
             .clone()),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("stringp"), *value],
         )),
@@ -83,15 +86,18 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
 /// observed. See the extended comment on the identical helper in
 /// `builtins/misc_eval.rs` (audit finding #3 in
 /// `drafts/regex-search-audit.md`).
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn rectangle_strings_to_value(rectangle: &[LispString]) -> Value {
     Value::list(rectangle.iter().cloned().map(Value::heap_string).collect())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn rectangle_strings_from_value(value: &Value) -> Result<Vec<LispString>, Flow> {
     let items = list_to_vec(value)
         .ok_or_else(|| signal("wrong-type-argument", vec![Value::symbol("listp"), *value]))?;
@@ -103,7 +109,7 @@ fn rectangle_strings_from_value(value: &Value) -> Result<Vec<LispString>, Flow> 
                     .expect("ValueKind::String must carry LispString payload")
                     .clone(),
             ),
-            other => {
+            _other => {
                 return Err(signal(
                     "wrong-type-argument",
                     vec![Value::symbol("buffer-or-string-p"), item],
@@ -137,14 +143,17 @@ impl Default for RectangleState {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn empty_lisp_string(multibyte: bool) -> LispString {
     super::builtins::lisp_string_from_buffer_bytes(Vec::new(), multibyte)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn space_lisp_string(width: usize, multibyte: bool) -> LispString {
     super::builtins::lisp_string_from_buffer_bytes(vec![b' '; width], multibyte)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn slice_lisp_string_chars(string: &LispString, start: usize, end: usize) -> LispString {
     let start = start.min(string.schars());
     let end = end.min(string.schars());
@@ -161,6 +170,7 @@ fn slice_lisp_string_chars(string: &LispString, start: usize, end: usize) -> Lis
     LispString::from_emacs_bytes(string.as_bytes()[start_byte..end_byte].to_vec())
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn split_lisp_string_lines(text: &LispString) -> Vec<LispString> {
     let mut lines = Vec::new();
     let mut start = 0usize;
@@ -180,6 +190,7 @@ fn split_lisp_string_lines(text: &LispString) -> Vec<LispString> {
     lines
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn join_lisp_string_lines(lines: &[LispString], multibyte: bool) -> LispString {
     let mut out = Vec::new();
     for (idx, line) in lines.iter().enumerate() {
@@ -192,11 +203,13 @@ fn join_lisp_string_lines(lines: &[LispString], multibyte: bool) -> LispString {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 struct LineColumn {
     line: usize,
     column: usize,
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn line_col_for_char_index(text: &LispString, target: usize) -> LineColumn {
     let mut line = 0usize;
     let mut col = 0usize;
@@ -217,6 +230,7 @@ fn line_col_for_char_index(text: &LispString, target: usize) -> LineColumn {
     LineColumn { line, column: col }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn extract_line_columns(line: &LispString, start_col: usize, end_col: usize) -> LispString {
     if start_col >= end_col {
         return empty_lisp_string(line.is_multibyte());
@@ -234,6 +248,7 @@ fn extract_line_columns(line: &LispString, start_col: usize, end_col: usize) -> 
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn rectangle_lines_for_extract(start_line: usize, end_line: usize) -> Vec<usize> {
     if start_line <= end_line {
         (start_line..=end_line).collect()
@@ -242,6 +257,7 @@ fn rectangle_lines_for_extract(start_line: usize, end_line: usize) -> Vec<usize>
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn line_col_to_char_index(text: &LispString, line: usize, col: usize) -> usize {
     let lines = split_lisp_string_lines(text);
     let mut pos = 0usize;
@@ -253,6 +269,7 @@ fn line_col_to_char_index(text: &LispString, line: usize, col: usize) -> usize {
     pos + col.min(line_len)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn extract_rectangle_from_text(
     text: &LispString,
     start_line: usize,
@@ -275,6 +292,7 @@ fn extract_rectangle_from_text(
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_extract_rectangle_from_text(
     text: &LispString,
     start_line: usize,
@@ -323,6 +341,7 @@ fn delete_extract_rectangle_from_text(
     )
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn clamped_rect_inputs(
     eval: &super::eval::Context,
     start: i64,
@@ -423,6 +442,7 @@ pub(crate) fn builtin_extract_rectangle_line(args: Vec<Value>) -> EvalResult {
 /// - deletes extracted text from each affected line
 /// - when rectangle starts past EOL, returns width spaces and leaves line
 ///   unchanged
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_extract_rectangle_eval(
     eval: &mut super::eval::Context,
     start: i64,

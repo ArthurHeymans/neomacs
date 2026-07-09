@@ -441,7 +441,7 @@ fn test_abbrev_get_put() {
         vec![table, Value::string("hw"), Value::string("hello world")],
     )
     .unwrap();
-    let sym = builtin_abbrev_symbol(&mut eval, vec![Value::string("hw"), table]).unwrap();
+    let _sym = builtin_abbrev_symbol(&mut eval, vec![Value::string("hw"), table]).unwrap();
 }
 
 #[test]

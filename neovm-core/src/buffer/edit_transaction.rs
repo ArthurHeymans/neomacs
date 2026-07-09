@@ -1142,6 +1142,7 @@ impl MeasuredInsertEdit {
         self.insertion.extent()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const fn byte_len(self) -> EmacsByteLen {
         self.insertion.extent().emacs_bytes()
     }
@@ -1261,6 +1262,7 @@ impl InsertTextPlan {
         self.edit
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const fn insertion(&self) -> TextInsertion {
         self.edit.insertion()
     }
@@ -1443,6 +1445,7 @@ impl MeasuredReplaceEdit {
         self.replacement.old_range().is_empty() && self.replacement.new_extent().is_empty()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const fn old_range(self) -> TextEditRange {
         self.replacement.old_range()
     }
@@ -1509,6 +1512,7 @@ impl MeasuredSameLenEdit {
         Self::new(range, range)
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) const fn storage_range(self) -> TextEditRange {
         self.storage_range
     }
@@ -1902,6 +1906,7 @@ impl SharedTextSideDataPolicy {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::buffer) enum SameLenModifiedStatePolicy {
     RecordChange,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     PreserveUnmodifiedIfClean,
 }
 

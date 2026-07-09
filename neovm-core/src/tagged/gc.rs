@@ -32,7 +32,6 @@ use super::header::*;
 use super::value::TaggedValue;
 use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashKey, HashTableWeakness};
-use crate::gc_trace::GcTrace;
 use malachite::integer::Integer;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::alloc::{self, Layout};
@@ -1211,6 +1210,7 @@ impl ConsBlock {
     }
 
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn owns_ptr(&self, ptr: *const ConsCell) -> bool {
         Self::block_base_for_ptr(ptr) == self.base_addr() && Self::ptr_is_cell_aligned(ptr)
     }
@@ -1689,6 +1689,7 @@ impl<T: PagedObject> ObjectPage<T> {
     /// Page base for any pointer into a page — valid ONLY because pages are
     /// size-aligned (see `OBJECT_PAGE_ALIGN`).
     #[inline]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn page_base_for_ptr(ptr: *const T) -> usize {
         (ptr as usize) & !(OBJECT_PAGE_ALIGN - 1)
     }
@@ -2303,6 +2304,7 @@ impl DrainKinds {
     }
 
     /// Sum of all buckets — equals the deferred-entry count it was built from.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub fn total(&self) -> usize {
         self.string
             + self.vector
@@ -2347,17 +2349,26 @@ impl std::fmt::Display for DrainKinds {
 /// too so the two sweep paths are comparable.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct SweepStats {
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub sweep_us: u64,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub slice_count: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub cons_blocks_swept: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub noncons_freed: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub lifetime_sweep_us: u64,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub lifetime_slices: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub lifetime_cons_blocks_swept: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub lifetime_noncons_freed: usize,
     /// Values `join_concurrent_mark` folded into the termination gray queue:
     /// the GC thread's parked non-cons buffer and the residual SATB log.
     pub last_termination_deferred: usize,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub max_termination_deferred: usize,
     pub last_termination_satb: usize,
     /// Per-kind breakdown of `last_termination_deferred`, plus the lifetime
@@ -2365,6 +2376,7 @@ pub(crate) struct SweepStats {
     /// crate tests and under `NEOVM_GC_TRACE=1`; zero otherwise — the
     /// classification's header reads are not free STW time.
     pub last_termination_kinds: DrainKinds,
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub max_termination_kinds: DrainKinds,
     /// CONCURRENT STRING MARKING: owned interval-free strings the GC thread
     /// claimed concurrently last cycle — string marks that LEFT the STW drain
@@ -2395,11 +2407,13 @@ pub(crate) struct SweepStats {
     pub last_termination_fold_us: u64,
     /// Lifetime count of concurrent-mark terminations (`join_concurrent_mark`
     /// calls), so a probe polling between eval chunks can detect a new cycle.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub termination_count: usize,
     /// Mark cost of the most recent cycle at `incremental_finish`. For a
     /// concurrent cycle this is exactly the STW termination drain: the counter
     /// resets at `concurrent_begin` and the termination's
     /// `incremental_drain_all` is the only accumulation.
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub mark_us: u64,
 }
 
@@ -7782,6 +7796,7 @@ impl TaggedHeap {
     /// means a root pointed to freed memory that happened to look like a valid
     /// tagged pointer.
     #[cfg(debug_assertions)]
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn verify_marked_objects_owned(&self) {
         // Build a set of all owned non-cons object addresses
         let mut owned_addrs: std::collections::HashSet<usize> = std::collections::HashSet::new();

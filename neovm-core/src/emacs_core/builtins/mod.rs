@@ -15,17 +15,16 @@ use std::sync::{
 static TRACE_ALL_BUILTINS: AtomicBool = AtomicBool::new(false);
 
 /// Check if post-startup tracing is active.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn is_post_startup_tracing() -> bool {
     TRACE_ALL_BUILTINS.load(Ordering::Relaxed)
 }
 
 pub(super) use super::error::{EvalResult, Flow, signal};
-pub(super) use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
+pub(super) use super::intern::{SymId, intern, resolve_sym};
 pub(super) use super::keyboard::pure::{
-    KEY_CHAR_ALT, KEY_CHAR_CODE_MASK, KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_SHIFT,
-    KEY_CHAR_SUPER, basic_char_code, convert_lucid_event_list, describe_single_key_value,
-    event_modifier_bit, event_modifier_prefix, key_sequence_values, resolve_control_code,
-    symbol_has_modifier_prefix,
+    KEY_CHAR_CODE_MASK, KEY_CHAR_META, convert_lucid_event_list, describe_single_key_value,
+    key_sequence_values,
 };
 pub(super) use super::value::*;
 pub(super) use ::regex::Regex;
@@ -118,11 +117,6 @@ pub(crate) fn reset_builtins_thread_locals() {
     symbols::reset_symbols_thread_locals();
 }
 
-pub(crate) use gnutls::{
-    builtin_gnutls_error_fatalp, builtin_gnutls_error_string, builtin_gnutls_format_certificate,
-    builtin_gnutls_hash_digest, builtin_gnutls_hash_mac,
-    builtin_gnutls_peer_status_warning_describe, builtin_gnutls_symmetric_encrypt,
-};
 pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_monitor_info};
 
 /// Expect exactly N arguments.
@@ -181,7 +175,7 @@ pub(super) fn expect_range_args(
 pub(super) fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("integerp"), *value],
         )),
@@ -191,7 +185,7 @@ pub(super) fn expect_int(value: &Value) -> Result<i64, Flow> {
 pub(super) fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        other => Err(signal(
+        _other => Err(signal(
             "wrong-type-argument",
             vec![Value::symbol("fixnump"), *value],
         )),
@@ -213,7 +207,7 @@ pub(super) fn expect_char_table_index(value: &Value) -> Result<i64, Flow> {
 pub(super) fn expect_char_equal_code(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) if (0..=KEY_CHAR_CODE_MASK).contains(&n) => Ok(n),
-        other => {
+        _other => {
             maybe_trace_characterp_nil(value, "expect_char_equal_code");
             Err(signal(
                 "wrong-type-argument",
@@ -226,7 +220,7 @@ pub(super) fn expect_char_equal_code(value: &Value) -> Result<i64, Flow> {
 pub(super) fn expect_character_code(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c as i64),
-        other => {
+        _other => {
             maybe_trace_characterp_nil(value, "expect_character_code");
             Err(signal(
                 "wrong-type-argument",
@@ -425,6 +419,7 @@ pub(super) fn has_float(args: &[Value]) -> bool {
 /// Mirrors GNU `arith_driver` (`src/data.c:3215`), which switches to
 /// `bignum_arith_driver` whenever a non-fixnum integer appears in the
 /// argument stream.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn has_bignum(args: &[Value]) -> bool {
     args.iter().any(|v| v.is_bignum())
 }
@@ -474,6 +469,7 @@ pub(super) fn normalize_string_start_arg(
         .unwrap_or(string.len()))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn string_byte_to_char_index(s: &str, byte_idx: usize) -> Option<usize> {
     s.get(..byte_idx).map(|prefix| prefix.chars().count())
 }
@@ -496,7 +492,6 @@ pub(super) use super::navigation;
 pub(super) use super::print;
 pub(super) use super::regex;
 pub(super) use super::subr_info;
-pub(super) use super::syntax;
 pub(super) use super::terminal;
 pub(super) use super::textprop;
 pub(super) use super::value;
@@ -513,13 +508,13 @@ mod strings;
 mod types;
 
 pub(crate) use arithmetic::*;
-pub(crate) use from_value::*;
 pub(crate) use buffer_text_backend::*;
 pub(crate) use collections::*;
 pub use cons_list::lambda_params_to_value;
 pub use cons_list::lambda_to_closure_vector;
 pub use cons_list::parse_lambda_params_from_value;
 pub(crate) use cons_list::*;
+pub(crate) use from_value::*;
 pub(crate) use misc_pure::*;
 pub(crate) use strings::*;
 pub(crate) use types::*;
@@ -533,7 +528,7 @@ pub(crate) mod buffers;
 mod file_notify;
 pub(crate) mod fringe_bitmap;
 pub(crate) mod fringe_standard_bitmaps;
-mod gnutls;
+pub(crate) mod gnutls;
 pub(crate) mod higher_order;
 mod hooks;
 pub(crate) mod keymaps;
@@ -549,7 +544,6 @@ pub(crate) use file_notify::*;
 pub(crate) use higher_order::*;
 pub(crate) use hooks::*;
 pub(crate) use keymaps::*;
-pub(crate) use lcms::*;
 pub(crate) use misc_eval::*;
 pub(crate) use search::*;
 pub(crate) use stubs::*;
@@ -687,6 +681,7 @@ fn record_builtin_no_eval_policy(name: &str, policy: BuiltinNoEvalPolicy) {
     policies[index] = Some(policy);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn builtin_no_eval_policy(sym_id: SymId) -> BuiltinNoEvalPolicy {
     builtin_no_eval_policies()
         .lock()
@@ -697,6 +692,7 @@ fn builtin_no_eval_policy(sym_id: SymId) -> BuiltinNoEvalPolicy {
         .unwrap_or(BuiltinNoEvalPolicy::Native)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn dispatch_builtin_stateless_placeholder(
     policy: BuiltinNoEvalPolicy,
     args: &[Value],
@@ -1244,8 +1240,6 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
 /// Each registered builtin is called via a direct function pointer,
 /// matching GNU Emacs's defsubr/funcall_subr architecture.
 pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
-    use super::error::*;
-    use super::eval::Context;
     use super::value::*;
     #[cfg(windows)]
     super::windows::register_builtin_subrs(ctx);
@@ -5485,9 +5479,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             let maxdepth = args[2];
 
             use crate::emacs_core::bytecode::ByteCodeFunction;
-            use crate::emacs_core::bytecode::decode::{
-                decode_gnu_bytecode_with_offset_map, string_value_to_bytes,
-            };
+            use crate::emacs_core::bytecode::decode::decode_gnu_bytecode_with_offset_map;
             use crate::emacs_core::value::LambdaParams;
 
             // Bytecode strings are unibyte and may contain non-UTF-8 bytes.

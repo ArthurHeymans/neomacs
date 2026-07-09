@@ -43,6 +43,7 @@ pub(crate) fn builtin_run_hook_wrapped(
     hook_runtime::run_named_hook_wrapped(eval, &args)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_run_hook_query_error_with_timeout(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -539,6 +540,7 @@ pub(super) fn expect_optional_live_window_designator(
 }
 
 const WINDOW_CONFIGURATION_TAG: &str = "window-configuration";
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const SAVE_SELECTED_WINDOW_STATE_TAG: &str = "save-selected-window--state";
 
 #[derive(Clone)]
@@ -769,7 +771,6 @@ fn window_configuration_frame_from_value(value: &Value) -> Option<Value> {
 }
 
 fn next_window_configuration_serial() -> i64 {
-    use crate::emacs_core::value::{ValueKind, VecLikeType};
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT_WINDOW_CONFIGURATION_ID: AtomicU64 = AtomicU64::new(1);
     NEXT_WINDOW_CONFIGURATION_ID.fetch_add(1, Ordering::Relaxed) as i64
@@ -1104,6 +1105,7 @@ pub(crate) fn builtin_set_window_configuration(
     Ok(Value::T)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn save_selected_window_state_from_value(
     value: &Value,
 ) -> Option<(Value, Value, Option<crate::buffer::BufferId>)> {
@@ -1120,6 +1122,7 @@ fn save_selected_window_state_from_value(
     Some((frame, window, buffer_id))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn builtin_internal_before_save_selected_window(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1140,6 +1143,7 @@ pub(super) fn builtin_internal_before_save_selected_window(
     ]))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(super) fn builtin_internal_after_save_selected_window(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -1189,7 +1193,7 @@ pub(crate) fn builtin_run_window_configuration_change_hook(
         ValueKind::Nil => {
             super::window_cmds::selected_frame_impl(&mut eval.frames, &mut eval.buffers, vec![])?
         }
-        value => args.first().copied().unwrap_or(Value::NIL),
+        _value => args.first().copied().unwrap_or(Value::NIL),
     };
     let Some(fid) = frame.as_frame_id() else {
         return Ok(Value::NIL);
@@ -1254,7 +1258,7 @@ pub(crate) fn builtin_run_window_scroll_functions(
 
     let window_arg = match args.first().copied().unwrap_or(Value::NIL).kind() {
         ValueKind::Nil => super::window_cmds::builtin_selected_window(eval, vec![])?,
-        value => args.first().copied().unwrap_or(Value::NIL),
+        _value => args.first().copied().unwrap_or(Value::NIL),
     };
     let Some(wid) = window_arg.as_window_id() else {
         return Ok(Value::NIL);

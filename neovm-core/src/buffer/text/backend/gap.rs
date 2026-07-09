@@ -57,6 +57,7 @@ impl GapTextBackend {
         self.gap.len()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(in crate::buffer) fn is_empty(&self) -> bool {
         self.gap.is_empty()
     }
@@ -77,6 +78,7 @@ impl GapTextBackend {
         self.gap.gpt()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn z(&self) -> usize {
         self.gap.z()
     }
@@ -85,6 +87,7 @@ impl GapTextBackend {
         self.gap.gpt_byte()
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn z_byte(&self) -> usize {
         self.gap.z_byte()
     }

@@ -415,6 +415,7 @@ fn wrong_type(pred: &str, got: &Value) -> Flow {
 }
 
 /// Extract an integer (Int or Char), signal otherwise.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
@@ -539,6 +540,7 @@ pub(crate) fn char_table_ascii_cache_range(vec: &[Value]) -> Option<std::ops::Ra
     ct_ascii_cache_range(vec)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn append_ascii_cache(vec: &mut Vec<Value>, initial_value: Value) {
     vec.push(Value::fixnum(CT_ASCII_CACHE_MAGIC));
     vec.resize(vec.len() + CT_ASCII_CACHE_LEN, initial_value);
@@ -838,6 +840,7 @@ fn uniprop_compressed_runs(value: Value, start: i64, end: i64) -> Option<Vec<Raw
     Some(runs)
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn flatten_uniprop_compressed_string(vec: &mut Vec<Value>, start: i64, codes: &[u32]) {
     match codes.first().copied() {
         Some(1) => {
@@ -881,6 +884,7 @@ fn flatten_uniprop_compressed_string(vec: &mut Vec<Value>, start: i64, codes: &[
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn flatten_char_table_slot(
     vec: &mut Vec<Value>,
     value: Value,
@@ -921,6 +925,7 @@ fn ct_set_range_no_ascii_cache(vec: &mut Vec<Value>, min: i64, max: i64, value: 
     vec.push(value);
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn flatten_sub_char_table(
     vec: &mut Vec<Value>,
     depth: usize,
@@ -937,6 +942,7 @@ fn flatten_sub_char_table(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn maybe_optimize_loaded_char_table_storage(vec: &mut Vec<Value>) {
     let data_start = ct_data_start(vec);
     let old_slots = vec.len().saturating_sub(data_start);
@@ -1568,6 +1574,7 @@ pub(crate) fn translate_char(table: &Value, c: i64) -> i64 {
 ///     today, so we treat this case as identity. Once charsets are
 ///     implemented this branch should re-lookup through
 ///     `Vchar_unify_table` after `load_charset`.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn maybe_unify_char(c: i64, val: &Value) -> i64 {
     if let Some(n) = val.as_fixnum() {
         if (0..=MAX_CHAR).contains(&n) {
@@ -1609,6 +1616,7 @@ struct LocalAtomicRun {
     end: i64,
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn refine_atomic_boundary(start: i64, end: i64, ch: i64, lo: &mut i64, hi: &mut i64) {
     let domain_end = MAX_CHAR.saturating_add(1);
     let start = start.clamp(0, domain_end);
@@ -1622,6 +1630,7 @@ fn refine_atomic_boundary(start: i64, end: i64, ch: i64, lo: &mut i64, hi: &mut 
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ct_lookup_atomic_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), Flow> {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
@@ -1780,6 +1789,7 @@ pub(crate) fn char_table_ref_and_range(table: &Value, ch: i64) -> Result<(Value,
 /// result, but every character in it has the same effective value.  It is for
 /// bulk mutators that only need a correct split point and would otherwise pay to
 /// rebuild the full effective run list for each cursor step.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn char_table_ref_and_atomic_range(
     table: &Value,
     ch: i64,
@@ -1981,6 +1991,7 @@ pub(crate) fn builtin_map_char_table(eval: &mut Context, args: Vec<Value>) -> Ev
 }
 
 /// Resolve a char-table into non-overlapping effective runs, including nil.
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn ct_resolved_entries(table: &Value) -> Vec<(Value, Value)> {
     ct_effective_runs(table)
         .into_iter()

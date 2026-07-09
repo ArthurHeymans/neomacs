@@ -371,6 +371,7 @@ impl TlsStream {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn write_all_process_input(&mut self, bytes: &[u8]) -> std::io::Result<()> {
         self.set_nonblocking(false)?;
         let write_result = match self {
@@ -409,6 +410,7 @@ impl TlsStream {
         }
     }
 
+    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn peer_certificates_pem(&self) -> &[String] {
         match self {
             Self::Rustls(stream) => &stream.peer_certificates_pem,
@@ -451,6 +453,7 @@ fn rustls_read_process_output(
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn rustls_record_error_to_io(err: rustls::Error) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, err)
 }

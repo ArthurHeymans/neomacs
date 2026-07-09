@@ -3,7 +3,6 @@ use crate::buffer::BufferId;
 use crate::emacs_core::intern::{intern, intern_uninterned, resolve_sym};
 use crate::heap_types::LispMarker;
 use crate::tagged::header::CLOSURE_ARGLIST;
-use malachite::base::num::arithmetic::traits::Pow;
 use malachite::integer::Integer;
 use std::str::FromStr;
 
@@ -625,7 +624,7 @@ fn value_is_copy_and_16_bytes() {
 fn float_equality() {
     crate::test_utils::init_test_tracing();
     use super::equal_value;
-    use crate::emacs_core::value::{ValueKind, VecLikeType};
+
     with_test_heap(|| {
         // 1.0 == 1.0
         assert!(equal_value(

@@ -5,7 +5,7 @@
 //! variables from `xfaces.c` being bound before Lisp runs. Keep those
 //! defaults here so Rust startup matches the same ownership boundary.
 
-use crate::emacs_core::error::{EvalResult, signal};
+use crate::emacs_core::error::EvalResult;
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{HashKey, HashTableTest, Value, ValueKind, list_to_vec};
@@ -80,6 +80,7 @@ pub(crate) fn builtin_frame_face_hash_table(
         .unwrap_or(Value::hash_table(HashTableTest::Eq)))
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn unspecified_face_attributes_vector() -> Value {
     Value::vector(vec![Value::symbol("unspecified"); LFACE_VECTOR_SIZE])
 }

@@ -542,6 +542,7 @@ pub(crate) fn event_modifier_prefix(bits: i64) -> String {
     out
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn basic_char_code(mut code: i64) -> i64 {
     code &= KEY_CHAR_CODE_MASK;
     match code {
@@ -553,6 +554,7 @@ pub(crate) fn basic_char_code(mut code: i64) -> i64 {
     }
 }
 
+#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn symbol_has_modifier_prefix(name: &str) -> bool {
     name.starts_with("C-")
         || name.starts_with("M-")
@@ -563,7 +565,7 @@ pub(crate) fn symbol_has_modifier_prefix(name: &str) -> bool {
 }
 
 pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
-    use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
+    use crate::emacs_core::value::Value;
 
     // GNU `src/keyboard.c` defines these with DEFVAR_LISP.
     obarray.set_symbol_value("help-char", Value::fixnum(8));
