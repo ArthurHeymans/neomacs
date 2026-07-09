@@ -6985,6 +6985,66 @@ fn layout_frame_rust_records_row_metrics_for_plain_text_rows() {
 }
 
 #[test]
+fn layout_frame_rust_uses_buffer_default_face_height_for_body_rows() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("scaled default\n");
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("height"), Value::make_float(0.75)]),
+                Value::symbol("default"),
+            ])]),
+        );
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+    }
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-scaled-default-row-metrics",
+        800,
+        160,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("text row");
+
+    assert!(
+        text_row.height_px < state.char_height.max(1.0),
+        "buffer-local default face remapping should shrink body row height below the frame default; frame_char_height={} row={text_row:?}",
+        state.char_height
+    );
+}
+
+#[test]
 fn layout_frame_rust_applies_extra_line_spacing_once_to_newline_rows() {
     let mut eval = Context::new();
     let buf_id = eval

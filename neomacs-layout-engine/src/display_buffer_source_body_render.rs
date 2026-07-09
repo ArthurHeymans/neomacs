@@ -190,7 +190,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             params.bounds.y,
             geometry.line_number_pixel_width,
             geometry.max_rows,
-            default_face.row_metrics_for_extents(geometry.char_width, geometry.char_height),
+            default_face.row_metrics_for_body_width(geometry.char_width),
             params.wrap_mode,
             params.hscroll,
             params.word_wrap,

@@ -352,19 +352,9 @@ impl BufferSourceDefaultFacePlan {
         self.metrics
     }
 
-    pub(crate) fn row_metrics_for_extents(
-        &self,
-        char_width: f32,
-        row_height: f32,
-    ) -> DisplayRowFallbackMetrics {
-        self.metrics.with_extents(char_width, row_height)
-    }
-
-    pub(crate) fn row_metrics_for_default_width(
-        &self,
-        row_height: f32,
-    ) -> DisplayRowFallbackMetrics {
-        self.row_metrics_for_extents(self.metrics.char_width(), row_height)
+    pub(crate) fn row_metrics_for_body_width(&self, char_width: f32) -> DisplayRowFallbackMetrics {
+        self.metrics
+            .with_extents(char_width, self.metrics.row_height())
     }
 
     pub(crate) fn measurement_policy(&self) -> DisplayRowMeasurementPolicy {
@@ -443,19 +433,18 @@ impl BufferSourceOutputSetup {
             window_metrics,
             window_system,
         );
+        let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
             has_overlays,
             output_window_id,
             append_surface,
-            default_face.row_metrics_for_default_width(geometry.char_height),
+            row_fallback_metrics,
             // Overlay-string rows share the body row grid, so they start from the
             // same vscroll-shifted origin (`text_y - vscroll`) as the buffer walk.
             geometry.row_origin_y(),
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         );
-        let row_fallback_metrics =
-            default_face.row_metrics_for_extents(geometry.char_width, geometry.char_height);
         let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
