@@ -15,6 +15,7 @@ use super::super::glyph_atlas::{
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::frame_pass::{BoxSpanSet, FrameParams, FramePassCtx};
+use super::row_reuse;
 use super::glyphs::{
     CHAR_OVERLAP_MIN_AXIS, RenderedCharBounds, build_subpixel_vertices, color_is_grayscale,
     log_cursor_glyph_alignment, log_rendered_char_overlaps, subpixel_background_color,
@@ -63,6 +64,7 @@ impl WgpuRenderer {
                 glyph_atlas,
                 seen_single_keys,
                 seen_composed_keys,
+                stats,
             );
 
             log_rendered_char_overlaps(
@@ -81,28 +83,29 @@ impl WgpuRenderer {
             self.draw_text_decorations(ctx, want_overlay);
             self.draw_box_borders(ctx, want_overlay, spans);
         }
+
+        // Both passes ran: promote this frame's captured rows to the cache.
+        self.row_reuse.commit_frame();
     }
 
-    /// Build the glyph vertex batches for one text pass, rasterizing glyphs
-    /// into the atlas as needed.
+    /// Build the glyph vertex batches for one text pass.
+    ///
+    /// Rows whose layout damage says `Reused`/`ReusedShifted` and whose
+    /// defensive keys all match splice last frame's cached vertex streams;
+    /// everything else tessellates through the atlas as before. Assembly is
+    /// per-row in glyph order, so the output is byte-identical to a full
+    /// tessellation of the same frame.
     fn build_text_glyph_batches(
-        &self,
+        &mut self,
         params: &FrameParams<'_>,
         want_overlay: bool,
         glyph_atlas: &mut WgpuGlyphAtlas,
         seen_single_keys: &mut HashSet<GlyphKey>,
         seen_composed_keys: &mut HashSet<ComposedGlyphKey>,
+        stats: &mut GlyphRenderStats,
     ) -> TextGlyphBatches {
         let frame_glyphs = params.frame_glyphs;
-        let faces = params.faces;
         let face_debug_call_id = params.face_debug_call_id;
-        let cursor_visible = params.cursor_visible;
-        let has_line_anims = params.has_line_anims;
-        let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
-        let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
-        let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
-        let mut rendered_char_bounds: Vec<RenderedCharBounds> = Vec::new();
-        let enable_subpixel = glyph_atlas.subpixel_enabled();
         if trace_face_debug_enabled() {
             tracing::info!(
                 "face-debug call={} milestone=before_glyph_loop overlay={}",
@@ -111,8 +114,90 @@ impl WgpuRenderer {
             );
         }
 
-        let mut glyph_face_cache: Option<(u32, MaterializedFaceData)> = None;
-        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
+        let frame_id = frame_glyphs.frame_id.get();
+        let chunks = row_reuse::chunk_text_rows(&frame_glyphs.glyphs, want_overlay, frame_id);
+        let window_origins = row_reuse::window_origin_bits(frame_glyphs);
+        let cursor_row = frame_glyphs
+            .active_cursor()
+            .map(|cursor| (cursor.window_id.get(), cursor.slot_id.row));
+        // These effects mutate vertex colors/positions per frame; cached rows
+        // would bake stale values in, so reuse and capture shut off entirely.
+        let global_effects_active = params.has_line_anims
+            || !self.fx.text_fade.active.is_empty()
+            || !self.fx.mode_line_fade.active.is_empty();
+        let enable_subpixel = glyph_atlas.subpixel_enabled();
+        let ctx = row_reuse::ReusePassCtx {
+            damage: params.row_damage,
+            scale_bits: self.scale_factor.to_bits(),
+            scale_pow2: row_reuse::scale_is_power_of_two(self.scale_factor),
+            scale_factor: self.scale_factor,
+            atlas_generation: glyph_atlas.eviction_generation(),
+            cursor_row,
+            global_effects_active,
+            window_origins: &window_origins,
+            allow_store: !want_overlay && params.row_damage.is_some(),
+        };
+
+        let (out, captures, reuse_stats) = {
+            let renderer: &WgpuRenderer = self;
+            let cache = &renderer.row_reuse;
+            let mut tessellator = LiveRowTessellator {
+                renderer,
+                atlas: glyph_atlas,
+                params,
+                want_overlay,
+                enable_subpixel,
+                seen_single_keys,
+                seen_composed_keys,
+                glyph_face_cache: None,
+            };
+            row_reuse::assemble_rows_with_reuse(&chunks, &ctx, cache, &mut tessellator)
+        };
+
+        self.row_reuse.stage(captures);
+        stats.rows_tessellated += reuse_stats.rows_tessellated;
+        stats.rows_reused_verbatim += reuse_stats.rows_reused_verbatim;
+        stats.rows_reused_shifted += reuse_stats.rows_reused_shifted;
+        stats.row_reuse_bails += reuse_stats.reuse_bails;
+
+        TextGlyphBatches {
+            mask_data: out.mask,
+            subpixel_data: out.subpixel,
+            color_data: out.color,
+            rendered_char_bounds: out.bounds,
+        }
+    }
+}
+
+/// The production [`row_reuse::RowTessellator`]: the pre-existing per-glyph
+/// atlas tessellation loop, scoped to one row chunk per call.
+struct LiveRowTessellator<'r, 'p> {
+    renderer: &'r WgpuRenderer,
+    atlas: &'r mut WgpuGlyphAtlas,
+    params: &'r FrameParams<'p>,
+    want_overlay: bool,
+    enable_subpixel: bool,
+    seen_single_keys: &'r mut HashSet<GlyphKey>,
+    seen_composed_keys: &'r mut HashSet<ComposedGlyphKey>,
+    glyph_face_cache: Option<(u32, MaterializedFaceData)>,
+}
+
+impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
+    fn revalidate_and_pin(&mut self, entry: AnyAtlasEntry) -> bool {
+        self.atlas.revalidate_and_pin(entry)
+    }
+
+    fn tessellate(&mut self, chunk: &row_reuse::RowChunk, out: &mut row_reuse::RowStreams) {
+        let frame_glyphs = self.params.frame_glyphs;
+        let faces = self.params.faces;
+        let face_debug_call_id = self.params.face_debug_call_id;
+        let cursor_visible = self.params.cursor_visible;
+        let has_line_anims = self.params.has_line_anims;
+        let want_overlay = self.want_overlay;
+        let enable_subpixel = self.enable_subpixel;
+
+        for glyph_index in chunk.glyphs.clone() {
+            let glyph = &frame_glyphs.glyphs[glyph_index];
             if let FrameGlyph::Char {
                 window_id,
                 slot_id,
@@ -137,11 +222,11 @@ impl WgpuRenderer {
                 // Resolve the face-derived attributes that used to be
                 // inlined on the glyph. Glyphs arrive in face-runs, so a
                 // one-entry cache avoids re-resolving per glyph.
-                let rf = match glyph_face_cache {
+                let rf = match self.glyph_face_cache {
                     Some((id, ref data)) if id == *face_id => *data,
                     _ => {
                         let data = frame_glyphs.resolved_face(*face_id);
-                        glyph_face_cache = Some((*face_id, data));
+                        self.glyph_face_cache = Some((*face_id, data));
                         data
                     }
                 };
@@ -155,9 +240,9 @@ impl WgpuRenderer {
                 // Decompose physical-pixel positions into integer + subpixel bin.
                 // The bin is baked into the rasterized bitmap by swash for subpixel
                 // accuracy; vertex positions stay on integer pixels (no Linear blur).
-                let sf = self.scale_factor;
+                let sf = self.renderer.scale_factor;
                 let y_offset = if has_line_anims {
-                    self.line_y_offset(*x, *y)
+                    self.renderer.line_y_offset(*x, *y)
                 } else {
                     0.0
                 };
@@ -174,7 +259,7 @@ impl WgpuRenderer {
                     SubpixelRequest::Disabled
                 };
                 let handle_opt = if let Some(text) = composed {
-                    seen_composed_keys.insert(ComposedGlyphKey {
+                    self.seen_composed_keys.insert(ComposedGlyphKey {
                         text: text.clone(),
                         face_id: *face_id,
                         font_size_bits: font_size.to_bits(),
@@ -182,9 +267,9 @@ impl WgpuRenderer {
                         x_bin,
                         y_bin,
                     });
-                    glyph_atlas.get_or_create_composed_atlas(
-                        &self.device,
-                        &self.queue,
+                    self.atlas.get_or_create_composed_atlas(
+                        &self.renderer.device,
+                        &self.renderer.queue,
                         text,
                         *face_id,
                         font_size.to_bits(),
@@ -202,7 +287,7 @@ impl WgpuRenderer {
                         x_bin,
                         y_bin,
                     };
-                    seen_single_keys.insert(key.clone());
+                    self.seen_single_keys.insert(key.clone());
                     if trace_face_debug_enabled() && !want_overlay && !color_is_grayscale(*fg) {
                         tracing::info!(
                             "face-debug call={} milestone=before_get_or_create char={:?} face={} pos=({:.1},{:.1}) fg=({:.3},{:.3},{:.3},{:.3})",
@@ -217,9 +302,9 @@ impl WgpuRenderer {
                             fg.a
                         );
                     }
-                    glyph_atlas.get_or_create_atlas(
-                        &self.device,
-                        &self.queue,
+                    self.atlas.get_or_create_atlas(
+                        &self.renderer.device,
+                        &self.renderer.queue,
                         &key,
                         face,
                         subpixel_request,
@@ -275,7 +360,7 @@ impl WgpuRenderer {
                     if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
                         let cell_right = *x + *width;
                         let glyph_right = glyph_x + glyph_w;
-                        rendered_char_bounds.push(RenderedCharBounds {
+                        out.bounds.push(RenderedCharBounds {
                             glyph_index,
                             window_id: window_id.get(),
                             row_role: *row_role,
@@ -303,7 +388,7 @@ impl WgpuRenderer {
                     // For the character under a filled box cursor, swap to
                     // cursor_fg (inverse video) when cursor is visible.
                     let mut effective_fg = *fg;
-                    let mut effective_bg = Self::sample_face_background(
+                    let mut effective_bg = WgpuRenderer::sample_face_background(
                         face,
                         bg,
                         *x,
@@ -324,8 +409,8 @@ impl WgpuRenderer {
 
                     // Color glyphs use white vertex color (no tinting),
                     // mask glyphs use foreground color for tinting
-                    let fade_alpha =
-                        self.text_fade_alpha(*x, *y) * self.mode_line_fade_alpha(*x, *y);
+                    let fade_alpha = self.renderer.text_fade_alpha(*x, *y)
+                        * self.renderer.mode_line_fade_alpha(*x, *y);
                     let is_color = matches!(entry, AnyAtlasEntry::Color(_));
                     let color = if is_color {
                         [1.0, 1.0, 1.0, fade_alpha]
@@ -432,7 +517,7 @@ impl WgpuRenderer {
                     // This matches official Emacs behavior when
                     // a bold font variant is unavailable.
                     let overstrike_vertices = if overstrike {
-                        let ox = 1.0 / self.scale_factor;
+                        let ox = 1.0 / self.renderer.scale_factor;
                         Some([
                             GlyphVertex {
                                 position: [glyph_x + ox, glyph_y],
@@ -483,7 +568,7 @@ impl WgpuRenderer {
                     );
 
                     let overstrike_subpixel_vertices = if overstrike {
-                        let ox = 1.0 / self.scale_factor;
+                        let ox = 1.0 / self.renderer.scale_factor;
                         Some(build_subpixel_vertices(
                             glyph_x + ox,
                             glyph_y,
@@ -501,33 +586,28 @@ impl WgpuRenderer {
                     };
 
                     if is_color {
-                        color_data.push((entry, vertices));
+                        out.color.push((entry, vertices));
                         if let Some(ov) = overstrike_vertices {
-                            color_data.push((entry, ov));
+                            out.color.push((entry, ov));
                         }
                     } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
-                        subpixel_data.push((entry, subpixel_vertices));
+                        out.subpixel.push((entry, subpixel_vertices));
                         if let Some(ov) = overstrike_subpixel_vertices {
-                            subpixel_data.push((entry, ov));
+                            out.subpixel.push((entry, ov));
                         }
                     } else {
-                        mask_data.push((entry, vertices));
+                        out.mask.push((entry, vertices));
                         if let Some(ov) = overstrike_vertices {
-                            mask_data.push((entry, ov));
+                            out.mask.push((entry, ov));
                         }
                     }
                 }
             }
         }
-
-        TextGlyphBatches {
-            mask_data,
-            subpixel_data,
-            color_data,
-            rendered_char_bounds,
-        }
     }
+}
 
+impl WgpuRenderer {
     /// Draw one pass's glyph batches: mask glyphs, subpixel glyphs, then
     /// color glyphs, batched by atlas page.
     fn draw_text_glyph_batches(

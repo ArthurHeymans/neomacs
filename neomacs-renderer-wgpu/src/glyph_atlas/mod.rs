@@ -206,6 +206,11 @@ pub struct WgpuGlyphAtlas {
     pub(crate) cache_hits_this_frame: usize,
     pub(crate) cache_misses_this_frame: usize,
     pub(crate) page_evictions_this_frame: usize,
+    /// Monotonic count of UV-invalidating events (page eviction/reset and
+    /// whole-atlas clears). Cached vertices embed atlas UVs, so any consumer
+    /// caching tessellated output MUST key on this and drop its cache when it
+    /// moves (row-reuse's mandatory atlas-generation key).
+    eviction_generation: u64,
     /// Layout-resolved font table for the frames this atlas draws, installed
     /// per frame by the render pass. `Face::default_resolved_font_id` indexes
     /// into it; the exact-font text path reads the answer from here instead
@@ -309,6 +314,7 @@ impl WgpuGlyphAtlas {
             cache_hits_this_frame: 0,
             cache_misses_this_frame: 0,
             page_evictions_this_frame: 0,
+            eviction_generation: 0,
         }
     }
 
@@ -1136,6 +1142,21 @@ impl WgpuGlyphAtlas {
         self.cached_char_width = None;
         self.cached_font_ascent = None;
         self.resolved_fontdb_ids.clear();
+        self.eviction_generation = self.eviction_generation.wrapping_add(1);
+    }
+
+    /// Monotonic generation that advances whenever any atlas UVs may have
+    /// been invalidated (page eviction/reset, atlas clear).
+    pub fn eviction_generation(&self) -> u64 {
+        self.eviction_generation
+    }
+
+    /// Revalidate a previously returned entry and pin its page for this
+    /// frame. Returns false when the entry's page was evicted/reset since the
+    /// entry was created — its UVs are stale and any cached vertices built
+    /// from it must be re-tessellated.
+    pub fn revalidate_and_pin(&mut self, entry: AnyAtlasEntry) -> bool {
+        self.pin_entry_page(entry).is_ok()
     }
 
     /// Map a layout-resolved font identity to this FontSystem's own fontdb
@@ -1460,6 +1481,7 @@ impl WgpuGlyphAtlas {
 
         self.remove_alpha_page_entries(evicted_id);
         self.page_evictions_this_frame += 1;
+        self.eviction_generation = self.eviction_generation.wrapping_add(1);
         self.atlas_pages
             .allocate_alpha(
                 size,
@@ -1507,6 +1529,7 @@ impl WgpuGlyphAtlas {
 
         self.remove_subpixel_page_entries(evicted_id);
         self.page_evictions_this_frame += 1;
+        self.eviction_generation = self.eviction_generation.wrapping_add(1);
         self.atlas_pages
             .allocate_subpixel(
                 size,
@@ -1554,6 +1577,7 @@ impl WgpuGlyphAtlas {
 
         self.remove_color_page_entries(evicted_id);
         self.page_evictions_this_frame += 1;
+        self.eviction_generation = self.eviction_generation.wrapping_add(1);
         self.atlas_pages
             .allocate_color(
                 size,

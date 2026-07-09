@@ -1065,6 +1065,7 @@ impl WgpuRenderer {
     ///
     /// `surface_width` and `surface_height` should be the actual surface dimensions
     /// for correct coordinate transformation.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_frame_glyphs(
         &mut self,
         view: &wgpu::TextureView,
@@ -1076,6 +1077,7 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        row_damage: Option<&super::row_reuse::FrameRowDamage>,
     ) {
         self.arenas.begin_frame();
 
@@ -1156,6 +1158,7 @@ impl WgpuRenderer {
             face_debug_call_id,
             has_line_anims: !self.fx.line_anim.active.is_empty()
                 || !self.fx.scroll_spacing.active.is_empty(),
+            row_damage,
         };
 
         let box_spans = self.collect_box_spans(&params);

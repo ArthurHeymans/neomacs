@@ -32,12 +32,14 @@ mod layer_text;
 mod media;
 mod pattern_effects;
 mod resources;
+mod row_reuse;
 mod stats;
 mod transitions;
 mod ui_overlays;
 mod window_effects;
 
 pub use fx_state::RendererFrameEffects;
+pub use row_reuse::{FrameRowDamage, RowDamageInfo, RowReuseStats, WindowRowDamage};
 pub(crate) use fx_state::*;
 pub(crate) use resources::*;
 pub use stats::*;
@@ -75,6 +77,8 @@ pub struct WgpuRenderer {
     pub(super) durations: EffectDurations,
     /// Ambient clocks shared by every frame context (not transferred)
     pub(super) ambient: AmbientClocks,
+    /// Cached per-row text vertex streams for RowDamage-driven reuse
+    pub(super) row_reuse: row_reuse::RowReuseCache,
     pub glyph_stats: GlyphRenderStats,
 }
 
@@ -951,6 +955,7 @@ impl WgpuRenderer {
             clocks: EffectClocks::default(),
             durations: EffectDurations::default(),
             ambient: AmbientClocks::default(),
+            row_reuse: row_reuse::RowReuseCache::default(),
             glyph_stats: GlyphRenderStats::new(),
         }
     }

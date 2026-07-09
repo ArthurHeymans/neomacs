@@ -18,6 +18,14 @@ pub struct GlyphRenderStats {
     /// GPU vertex-buffer allocations this frame (arena growth events).
     /// Zero in steady state; nonzero only while arenas grow to high water.
     pub buffers_created: usize,
+    /// Text rows tessellated from scratch this frame (includes bailed rows).
+    pub rows_tessellated: usize,
+    /// Text rows spliced verbatim from the row-reuse cache.
+    pub rows_reused_verbatim: usize,
+    /// Text rows spliced with an integral vertical shift.
+    pub rows_reused_shifted: usize,
+    /// Rows whose damage said reusable but a defensive reuse key failed.
+    pub row_reuse_bails: usize,
 }
 
 impl GlyphRenderStats {
@@ -31,7 +39,7 @@ impl GlyphRenderStats {
         }
         tracing::info!(
             "glyph-stats: total={} text={} composed={} unique_single={} unique_composed={} \
-             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={} evictions={} bufs_created={}",
+             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={} evictions={} bufs_created={} rows_tess={} rows_reused={} rows_shifted={} row_bails={}",
             self.total_frame_glyphs,
             self.text_glyphs,
             self.composed_glyphs,
@@ -46,6 +54,10 @@ impl GlyphRenderStats {
             self.cache_misses,
             self.page_evictions,
             self.buffers_created,
+            self.rows_tessellated,
+            self.rows_reused_verbatim,
+            self.rows_reused_shifted,
+            self.row_reuse_bails,
         );
     }
 }
