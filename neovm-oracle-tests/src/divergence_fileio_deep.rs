@@ -128,6 +128,8 @@ fn div_fid_file_newer_than_file_p() {
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (make-temp-file "neo-fid-a-")) (b (make-temp-file "neo-fid-b-")))
+  (set-file-times a 100)
+  (set-file-times b 100)
   (prog1 (list (eq (file-newer-than-file-p a b) nil)
                (eq (file-newer-than-file-p b a) nil))
     (ignore-errors (delete-file a)) (ignore-errors (delete-file b))))
