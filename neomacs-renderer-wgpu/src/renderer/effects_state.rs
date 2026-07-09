@@ -25,24 +25,24 @@ impl WgpuRenderer {
         duration_ms: u32,
     ) {
         // Remove any existing animation for this window region
-        self.active_line_anims.retain(|a| {
+        self.fx.line_anim.active.retain(|a| {
             (a.window_bounds.x - window_bounds.x).abs() > 1.0
                 || (a.window_bounds.y - window_bounds.y).abs() > 1.0
         });
-        self.active_line_anims.push(LineAnimEntry {
+        self.fx.line_anim.active.push(LineAnimEntry {
             window_bounds,
             edit_y,
             initial_offset: offset,
             started: std::time::Instant::now(),
             duration: std::time::Duration::from_millis(duration_ms as u64),
         });
-        self.needs_continuous_redraw = true;
+        self.fx.needs_continuous_redraw = true;
     }
 
     /// Compute Y offset for a glyph due to active line animations
     pub(super) fn line_y_offset(&self, gx: f32, gy: f32) -> f32 {
         let mut offset = 0.0;
-        for anim in &self.active_line_anims {
+        for anim in &self.fx.line_anim.active {
             let b = &anim.window_bounds;
             // Check if glyph is in this window and below the edit point
             if gx >= b.x
@@ -60,7 +60,7 @@ impl WgpuRenderer {
         }
         // Scroll line spacing accordion effect
         let now = std::time::Instant::now();
-        for entry in &self.active_scroll_spacings {
+        for entry in &self.fx.scroll_spacing.active {
             let b = &entry.bounds;
             if gx >= b.x && gx < b.x + b.width && gy >= b.y && gy < b.y + b.height {
                 let elapsed = now.duration_since(entry.started).as_secs_f32();
@@ -120,8 +120,8 @@ impl WgpuRenderer {
         self.effects.typing_heatmap.fade_ms = fade_ms;
         self.effects.typing_heatmap.opacity = opacity;
         if !enabled {
-            self.typing_heatmap_entries.clear();
-            self.typing_heatmap_prev_cursor = None;
+            self.fx.typing_heatmap.entries.clear();
+            self.fx.typing_heatmap.prev_cursor = None;
         }
     }
 
@@ -141,9 +141,9 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         // Replace existing entry for this window
-        self.scroll_velocity_fades
+        self.fx.scroll_velocity.fades
             .retain(|e| e.window_id != window_id);
-        self.scroll_velocity_fades.push(ScrollVelocityFadeEntry {
+        self.fx.scroll_velocity.fades.push(ScrollVelocityFadeEntry {
             window_id,
             bounds,
             velocity: delta,
@@ -159,7 +159,7 @@ impl WgpuRenderer {
 
     /// Get current resize padding amount (eases from max to 0)
     pub(super) fn resize_padding_amount(&self) -> f32 {
-        if let Some(started) = self.resize_padding_started {
+        if let Some(started) = self.fx.resize_padding.started {
             let elapsed = started.elapsed().as_millis() as f32;
             let duration = self.effects.resize_padding.duration_ms as f32;
             if elapsed >= duration {
@@ -270,166 +270,19 @@ impl WgpuRenderer {
 
     fn take_frame_effects(&mut self) -> RendererFrameEffects {
         RendererFrameEffects {
-            needs_continuous_redraw: self.needs_continuous_redraw,
-            has_animated_borders: self.has_animated_borders,
-            per_window_dim: std::mem::take(&mut self.per_window_dim),
-            last_dim_tick: Some(self.last_dim_tick),
-            active_ripples: std::mem::take(&mut self.active_ripples),
-            active_line_anims: std::mem::take(&mut self.active_line_anims),
-            active_window_fades: std::mem::take(&mut self.active_window_fades),
-            active_title_fades: std::mem::take(&mut self.active_title_fades),
-            prev_breadcrumb_text: std::mem::take(&mut self.prev_breadcrumb_text),
-            border_transitions: std::mem::take(&mut self.border_transitions),
-            prev_border_selected: self.prev_border_selected,
-            active_mode_line_fades: std::mem::take(&mut self.active_mode_line_fades),
-            prev_mode_line_hashes: std::mem::take(&mut self.prev_mode_line_hashes),
-            active_text_fades: std::mem::take(&mut self.active_text_fades),
-            active_scroll_spacings: std::mem::take(&mut self.active_scroll_spacings),
-            cursor_trail_positions: std::mem::take(&mut self.cursor_trail_positions),
-            cursor_trail_last_pos: self.cursor_trail_last_pos,
-            idle_dim_alpha: self.idle_dim_alpha,
-            noise_grain_frame: self.noise_grain_frame,
-            cursor_pulse_start: Some(self.cursor_pulse_start),
-            search_pulse_start: Some(self.search_pulse_start),
-            cursor_color_cycle_start: Some(self.cursor_color_cycle_start),
-            focus_ring_start: Some(self.focus_ring_start),
-            cursor_wake_started: self.cursor_wake_started.take(),
-            cursor_magnetism_entries: std::mem::take(&mut self.cursor_magnetism_entries),
-            cursor_comet_positions: std::mem::take(&mut self.cursor_comet_positions),
-            cursor_particles: std::mem::take(&mut self.cursor_particles),
-            cursor_particles_prev_pos: self.cursor_particles_prev_pos.take(),
-            typing_heatmap_entries: std::mem::take(&mut self.typing_heatmap_entries),
-            typing_heatmap_prev_cursor: self.typing_heatmap_prev_cursor.take(),
-            scroll_velocity_fades: std::mem::take(&mut self.scroll_velocity_fades),
-            resize_padding_started: self.resize_padding_started.take(),
-            active_scroll_momentums: std::mem::take(&mut self.active_scroll_momentums),
-            matrix_rain_columns: std::mem::take(&mut self.matrix_rain_columns),
-            cursor_ghost_entries: std::mem::take(&mut self.cursor_ghost_entries),
-            cursor_sonar_ping_entries: std::mem::take(&mut self.cursor_sonar_ping_entries),
-            lightning_bolt_last: Some(self.lightning_bolt_last),
-            lightning_bolt_segments: std::mem::take(&mut self.lightning_bolt_segments),
-            lightning_bolt_age: self.lightning_bolt_age,
-            cursor_pendulum_last_x: self.cursor_pendulum_last_x,
-            cursor_pendulum_last_y: self.cursor_pendulum_last_y,
-            cursor_pendulum_swing_start: self.cursor_pendulum_swing_start.take(),
-            cursor_sparkle_burst_entries: std::mem::take(&mut self.cursor_sparkle_burst_entries),
-            cursor_metronome_last_x: self.cursor_metronome_last_x,
-            cursor_metronome_last_y: self.cursor_metronome_last_y,
-            cursor_metronome_tick_start: self.cursor_metronome_tick_start.take(),
-            cursor_ripple_ring_start: self.cursor_ripple_ring_start.take(),
-            cursor_ripple_ring_last_x: self.cursor_ripple_ring_last_x,
-            cursor_ripple_ring_last_y: self.cursor_ripple_ring_last_y,
-            cursor_shockwave_start: self.cursor_shockwave_start.take(),
-            cursor_shockwave_last_x: self.cursor_shockwave_last_x,
-            cursor_shockwave_last_y: self.cursor_shockwave_last_y,
-            cursor_bubble_spawn_time: self.cursor_bubble_spawn_time.take(),
-            cursor_bubble_last_x: self.cursor_bubble_last_x,
-            cursor_bubble_last_y: self.cursor_bubble_last_y,
-            cursor_firework_start: self.cursor_firework_start.take(),
-            cursor_firework_last_x: self.cursor_firework_last_x,
-            cursor_firework_last_y: self.cursor_firework_last_y,
-            cursor_lightning_start: self.cursor_lightning_start.take(),
-            cursor_lightning_last_x: self.cursor_lightning_last_x,
-            cursor_lightning_last_y: self.cursor_lightning_last_y,
-            cursor_snowflake_start: self.cursor_snowflake_start.take(),
-            cursor_snowflake_last_x: self.cursor_snowflake_last_x,
-            cursor_snowflake_last_y: self.cursor_snowflake_last_y,
-            edge_glow_entries: std::mem::take(&mut self.edge_glow_entries),
-            rain_drops: std::mem::take(&mut self.rain_drops),
-            rain_last_spawn: Some(self.rain_last_spawn),
-            cursor_ripple_waves: std::mem::take(&mut self.cursor_ripple_waves),
-            click_halos: std::mem::take(&mut self.click_halos),
-            edge_snaps: std::mem::take(&mut self.edge_snaps),
-            cursor_error_pulse_started: self.cursor_error_pulse_started.take(),
+            fx: std::mem::take(&mut self.fx),
+            clocks: Some(self.clocks),
         }
     }
 
     fn apply_frame_effects(&mut self, effects: RendererFrameEffects) {
-        self.needs_continuous_redraw = effects.needs_continuous_redraw;
-        self.has_animated_borders = effects.has_animated_borders;
-        self.per_window_dim = effects.per_window_dim;
-        if let Some(last_dim_tick) = effects.last_dim_tick {
-            self.last_dim_tick = last_dim_tick;
+        let RendererFrameEffects { fx, clocks } = effects;
+        self.fx = fx;
+        // A fresh (default) RendererFrameEffects carries no clocks; keep the
+        // renderer's current ones so animation phases stay continuous.
+        if let Some(clocks) = clocks {
+            self.clocks = clocks;
         }
-        self.active_ripples = effects.active_ripples;
-        self.active_line_anims = effects.active_line_anims;
-        self.active_window_fades = effects.active_window_fades;
-        self.active_title_fades = effects.active_title_fades;
-        self.prev_breadcrumb_text = effects.prev_breadcrumb_text;
-        self.border_transitions = effects.border_transitions;
-        self.prev_border_selected = effects.prev_border_selected;
-        self.active_mode_line_fades = effects.active_mode_line_fades;
-        self.prev_mode_line_hashes = effects.prev_mode_line_hashes;
-        self.active_text_fades = effects.active_text_fades;
-        self.active_scroll_spacings = effects.active_scroll_spacings;
-        self.cursor_trail_positions = effects.cursor_trail_positions;
-        self.cursor_trail_last_pos = effects.cursor_trail_last_pos;
-        self.idle_dim_alpha = effects.idle_dim_alpha;
-        self.noise_grain_frame = effects.noise_grain_frame;
-        if let Some(start) = effects.cursor_pulse_start {
-            self.cursor_pulse_start = start;
-        }
-        if let Some(start) = effects.search_pulse_start {
-            self.search_pulse_start = start;
-        }
-        if let Some(start) = effects.cursor_color_cycle_start {
-            self.cursor_color_cycle_start = start;
-        }
-        if let Some(start) = effects.focus_ring_start {
-            self.focus_ring_start = start;
-        }
-        self.cursor_wake_started = effects.cursor_wake_started;
-        self.cursor_magnetism_entries = effects.cursor_magnetism_entries;
-        self.cursor_comet_positions = effects.cursor_comet_positions;
-        self.cursor_particles = effects.cursor_particles;
-        self.cursor_particles_prev_pos = effects.cursor_particles_prev_pos;
-        self.typing_heatmap_entries = effects.typing_heatmap_entries;
-        self.typing_heatmap_prev_cursor = effects.typing_heatmap_prev_cursor;
-        self.scroll_velocity_fades = effects.scroll_velocity_fades;
-        self.resize_padding_started = effects.resize_padding_started;
-        self.active_scroll_momentums = effects.active_scroll_momentums;
-        self.matrix_rain_columns = effects.matrix_rain_columns;
-        self.cursor_ghost_entries = effects.cursor_ghost_entries;
-        self.cursor_sonar_ping_entries = effects.cursor_sonar_ping_entries;
-        if let Some(last) = effects.lightning_bolt_last {
-            self.lightning_bolt_last = last;
-        }
-        self.lightning_bolt_segments = effects.lightning_bolt_segments;
-        self.lightning_bolt_age = effects.lightning_bolt_age;
-        self.cursor_pendulum_last_x = effects.cursor_pendulum_last_x;
-        self.cursor_pendulum_last_y = effects.cursor_pendulum_last_y;
-        self.cursor_pendulum_swing_start = effects.cursor_pendulum_swing_start;
-        self.cursor_sparkle_burst_entries = effects.cursor_sparkle_burst_entries;
-        self.cursor_metronome_last_x = effects.cursor_metronome_last_x;
-        self.cursor_metronome_last_y = effects.cursor_metronome_last_y;
-        self.cursor_metronome_tick_start = effects.cursor_metronome_tick_start;
-        self.cursor_ripple_ring_start = effects.cursor_ripple_ring_start;
-        self.cursor_ripple_ring_last_x = effects.cursor_ripple_ring_last_x;
-        self.cursor_ripple_ring_last_y = effects.cursor_ripple_ring_last_y;
-        self.cursor_shockwave_start = effects.cursor_shockwave_start;
-        self.cursor_shockwave_last_x = effects.cursor_shockwave_last_x;
-        self.cursor_shockwave_last_y = effects.cursor_shockwave_last_y;
-        self.cursor_bubble_spawn_time = effects.cursor_bubble_spawn_time;
-        self.cursor_bubble_last_x = effects.cursor_bubble_last_x;
-        self.cursor_bubble_last_y = effects.cursor_bubble_last_y;
-        self.cursor_firework_start = effects.cursor_firework_start;
-        self.cursor_firework_last_x = effects.cursor_firework_last_x;
-        self.cursor_firework_last_y = effects.cursor_firework_last_y;
-        self.cursor_lightning_start = effects.cursor_lightning_start;
-        self.cursor_lightning_last_x = effects.cursor_lightning_last_x;
-        self.cursor_lightning_last_y = effects.cursor_lightning_last_y;
-        self.cursor_snowflake_start = effects.cursor_snowflake_start;
-        self.cursor_snowflake_last_x = effects.cursor_snowflake_last_x;
-        self.cursor_snowflake_last_y = effects.cursor_snowflake_last_y;
-        self.edge_glow_entries = effects.edge_glow_entries;
-        self.rain_drops = effects.rain_drops;
-        if let Some(last_spawn) = effects.rain_last_spawn {
-            self.rain_last_spawn = last_spawn;
-        }
-        self.cursor_ripple_waves = effects.cursor_ripple_waves;
-        self.click_halos = effects.click_halos;
-        self.edge_snaps = effects.edge_snaps;
-        self.cursor_error_pulse_started = effects.cursor_error_pulse_started;
     }
 
     /// Get the cursor error pulse color override, if active
@@ -437,7 +290,7 @@ impl WgpuRenderer {
         if !self.effects.cursor_error_pulse.enabled {
             return None;
         }
-        if let Some(started) = self.cursor_error_pulse_started {
+        if let Some(started) = self.fx.error_pulse.started {
             let elapsed = started.elapsed().as_millis() as f32;
             let duration = self.effects.cursor_error_pulse.duration_ms as f32;
             if elapsed >= duration {
@@ -461,9 +314,9 @@ impl WgpuRenderer {
         direction: i32,
         now: std::time::Instant,
     ) {
-        self.active_scroll_momentums
+        self.fx.scroll_momentum.active
             .retain(|e| e.window_id != window_id);
-        self.active_scroll_momentums.push(ScrollMomentumEntry {
+        self.fx.scroll_momentum.active.push(ScrollMomentumEntry {
             window_id,
             bounds,
             direction,
@@ -487,7 +340,7 @@ impl WgpuRenderer {
         self.effects.matrix_rain.speed = speed;
         self.effects.matrix_rain.opacity = opacity;
         if !enabled {
-            self.matrix_rain_columns.clear();
+            self.fx.matrix_rain.columns.clear();
         }
     }
 
@@ -513,9 +366,9 @@ impl WgpuRenderer {
         at_top: bool,
         now: std::time::Instant,
     ) {
-        self.edge_glow_entries
+        self.fx.edge_glow.entries
             .retain(|e| e.window_id != window_id || e.at_top != at_top);
-        self.edge_glow_entries.push(EdgeGlowEntry {
+        self.fx.edge_glow.entries.push(EdgeGlowEntry {
             window_id,
             bounds,
             at_top,
@@ -526,7 +379,7 @@ impl WgpuRenderer {
 
     /// Trigger a sonar ping at cursor position
     pub fn trigger_sonar_ping(&mut self, cx: f32, cy: f32, now: std::time::Instant) {
-        self.cursor_sonar_ping_entries.push(SonarPingEntry {
+        self.fx.sonar_ping.entries.push(SonarPingEntry {
             cx,
             cy,
             started: now,
@@ -538,11 +391,11 @@ impl WgpuRenderer {
 
     /// Get the mode-line transition alpha for a glyph at (x, y)
     pub(super) fn mode_line_fade_alpha(&self, gx: f32, gy: f32) -> f32 {
-        if !self.effects.mode_line_transition.enabled || self.active_mode_line_fades.is_empty() {
+        if !self.effects.mode_line_transition.enabled || self.fx.mode_line_fade.active.is_empty() {
             return 1.0;
         }
         let now = std::time::Instant::now();
-        for entry in &self.active_mode_line_fades {
+        for entry in &self.fx.mode_line_fade.active {
             if gx >= entry.bounds_x
                 && gx < entry.bounds_x + entry.bounds_w
                 && gy >= entry.mode_line_y
@@ -562,8 +415,8 @@ impl WgpuRenderer {
     /// Trigger a text fade-in animation for a window
     pub fn trigger_text_fade_in(&mut self, window_id: i64, bounds: Rect, now: std::time::Instant) {
         // Replace existing animation for this window
-        self.active_text_fades.retain(|e| e.window_id != window_id);
-        self.active_text_fades.push(TextFadeEntry {
+        self.fx.text_fade.active.retain(|e| e.window_id != window_id);
+        self.fx.text_fade.active.push(TextFadeEntry {
             window_id,
             bounds,
             started: now,
@@ -571,17 +424,17 @@ impl WgpuRenderer {
                 self.effects.text_fade_in.duration_ms as u64,
             ),
         });
-        self.needs_continuous_redraw = true;
+        self.fx.needs_continuous_redraw = true;
     }
 
     /// Get the text fade-in alpha multiplier for a glyph at (x, y).
     /// Returns 1.0 if no fade is active, or 0.0-1.0 during fade-in.
     pub(super) fn text_fade_alpha(&self, gx: f32, gy: f32) -> f32 {
-        if !self.effects.text_fade_in.enabled || self.active_text_fades.is_empty() {
+        if !self.effects.text_fade_in.enabled || self.fx.text_fade.active.is_empty() {
             return 1.0;
         }
         let now = std::time::Instant::now();
-        for entry in &self.active_text_fades {
+        for entry in &self.fx.text_fade.active {
             let b = &entry.bounds;
             if gx >= b.x && gx < b.x + b.width && gy >= b.y && gy < b.y + b.height {
                 let elapsed = now.duration_since(entry.started).as_secs_f32();
@@ -605,16 +458,16 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         // Replace existing animation for this window
-        self.active_scroll_spacings
+        self.fx.scroll_spacing.active
             .retain(|e| e.window_id != window_id);
-        self.active_scroll_spacings.push(ScrollSpacingEntry {
+        self.fx.scroll_spacing.active.push(ScrollSpacingEntry {
             window_id,
             bounds,
             direction,
             started: now,
             duration: std::time::Duration::from_millis(self.scroll_line_spacing_duration_ms as u64),
         });
-        self.needs_continuous_redraw = true;
+        self.fx.needs_continuous_redraw = true;
     }
 
     /// Record a new cursor position for the trail
@@ -629,15 +482,15 @@ impl WgpuRenderer {
 
     /// Update idle dim alpha
     pub fn set_idle_dim_alpha(&mut self, alpha: f32) {
-        self.idle_dim_alpha = alpha;
+        self.fx.dim.idle_alpha = alpha;
     }
 
     /// Start a window switch fade for a specific window
     pub fn start_window_fade(&mut self, window_id: i64, bounds: Rect) {
         // Remove any existing fade for this window
-        self.active_window_fades
+        self.fx.window_fade.active
             .retain(|f| f.window_id != window_id);
-        self.active_window_fades.push(WindowFadeEntry {
+        self.fx.window_fade.active.push(WindowFadeEntry {
             window_id,
             bounds,
             started: std::time::Instant::now(),
@@ -710,7 +563,7 @@ struct RendererFrameEffectsRef<'a> {
 
 impl RendererFrameEffectsRef<'_> {
     fn trigger_click_halo(&mut self, x: f32, y: f32, now: std::time::Instant, duration_ms: u32) {
-        self.renderer.click_halos.push(ClickHaloEntry {
+        self.renderer.fx.click_halo.halos.push(ClickHaloEntry {
             x,
             y,
             started: now,
@@ -727,7 +580,7 @@ impl RendererFrameEffectsRef<'_> {
         now: std::time::Instant,
         duration_ms: u32,
     ) {
-        self.renderer.edge_snaps.push(EdgeSnapEntry {
+        self.renderer.fx.edge_snap.snaps.push(EdgeSnapEntry {
             bounds,
             mode_line_height,
             at_top,
@@ -738,36 +591,36 @@ impl RendererFrameEffectsRef<'_> {
     }
 
     fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
-        self.renderer.cursor_error_pulse_started = Some(now);
+        self.renderer.fx.error_pulse.started = Some(now);
     }
 
     fn trigger_cursor_wake(&mut self, now: std::time::Instant) {
-        self.renderer.cursor_wake_started = Some(now);
+        self.renderer.fx.cursor_wake.started = Some(now);
     }
 
     fn trigger_resize_padding(&mut self, now: std::time::Instant) {
-        self.renderer.resize_padding_started = Some(now);
+        self.renderer.fx.resize_padding.started = Some(now);
     }
 
     fn spawn_ripple(&mut self, cx: f32, cy: f32) {
         self.renderer
-            .active_ripples
+            .fx
+            .typing_ripple
+            .active
             .push((cx, cy, std::time::Instant::now()));
     }
 
     fn record_cursor_trail(&mut self, x: f32, y: f32, w: f32, h: f32, length: usize) {
-        let dist = ((x - self.renderer.cursor_trail_last_pos.0).powi(2)
-            + (y - self.renderer.cursor_trail_last_pos.1).powi(2))
-        .sqrt();
+        let trail = &mut self.renderer.fx.cursor_trail;
+        let dist =
+            ((x - trail.last_pos.0).powi(2) + (y - trail.last_pos.1).powi(2)).sqrt();
         if dist < 2.0 {
             return;
         }
-        self.renderer
-            .cursor_trail_positions
-            .push((x, y, w, h, std::time::Instant::now()));
-        self.renderer.cursor_trail_last_pos = (x, y);
-        while self.renderer.cursor_trail_positions.len() > length {
-            self.renderer.cursor_trail_positions.remove(0);
+        trail.positions.push((x, y, w, h, std::time::Instant::now()));
+        trail.last_pos = (x, y);
+        while trail.positions.len() > length {
+            trail.positions.remove(0);
         }
     }
 }

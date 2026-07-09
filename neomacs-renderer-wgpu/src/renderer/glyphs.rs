@@ -51,7 +51,7 @@ macro_rules! draw_effect {
     ($self:ident, $rp:ident, $label:expr, $verts:expr, continuous) => {{
         let verts = $verts;
         if !verts.is_empty() {
-            $self.needs_continuous_redraw = true;
+            $self.fx.needs_continuous_redraw = true;
             let buf = $self
                 .device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -72,7 +72,7 @@ macro_rules! draw_stateful {
     ($self:ident, $rp:ident, $label:expr, $result:expr) => {{
         let (verts, needs_redraw) = $result;
         if needs_redraw {
-            $self.needs_continuous_redraw = true;
+            $self.fx.needs_continuous_redraw = true;
         }
         if !verts.is_empty() {
             let buf = $self
@@ -723,7 +723,7 @@ impl WgpuRenderer {
         if !effects.cursor_wake.enabled {
             return 1.0;
         }
-        if let Some(started) = self.cursor_wake_started {
+        if let Some(started) = self.fx.cursor_wake.started {
             let elapsed = started.elapsed().as_millis() as f32;
             let duration = effects.cursor_wake.duration_ms as f32;
             if elapsed >= duration {
@@ -752,14 +752,14 @@ impl WgpuRenderer {
     ) {
         let cycle_color;
         let effective_color = if effects.cursor_color_cycle.enabled && !style.is_hollow() {
-            let elapsed = self.cursor_color_cycle_start.elapsed().as_secs_f32();
+            let elapsed = self.clocks.cursor_color_cycle_start.elapsed().as_secs_f32();
             let hue = (elapsed * effects.cursor_color_cycle.speed) % 1.0;
             cycle_color = Self::hsl_to_color(
                 hue,
                 effects.cursor_color_cycle.saturation,
                 effects.cursor_color_cycle.lightness,
             );
-            self.needs_continuous_redraw = true;
+            self.fx.needs_continuous_redraw = true;
             &cycle_color
         } else {
             color
@@ -769,7 +769,7 @@ impl WgpuRenderer {
         let effective_color = if let Some(pulse) = self.cursor_error_pulse_override() {
             if !style.is_hollow() {
                 error_pulse_color = pulse;
-                self.needs_continuous_redraw = true;
+                self.fx.needs_continuous_redraw = true;
                 &error_pulse_color
             } else {
                 effective_color
@@ -781,7 +781,7 @@ impl WgpuRenderer {
         let wake = self.cursor_wake_factor_for(effects);
         let wake_active = wake != 1.0 && !style.is_hollow();
         if wake_active {
-            self.needs_continuous_redraw = true;
+            self.fx.needs_continuous_redraw = true;
         }
 
         // Compose the slide animation at draw time, never by mutating the
@@ -1388,7 +1388,7 @@ impl WgpuRenderer {
         }
         // Non-overlay stretches (skip those inside a box span)
         let has_line_anims =
-            !self.active_line_anims.is_empty() || !self.active_scroll_spacings.is_empty();
+            !self.fx.line_anim.active.is_empty() || !self.fx.scroll_spacing.active.is_empty();
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Stretch {
                 x,
@@ -3201,7 +3201,7 @@ impl WgpuRenderer {
                                     color2,
                                 );
                                 if face.box_border_style > 0 {
-                                    self.has_animated_borders = true;
+                                    self.fx.has_animated_borders = true;
                                 }
                             } else {
                                 // Sharp border — for overlay spans (mode-line), suppress
@@ -3770,9 +3770,9 @@ impl WgpuRenderer {
 
     fn refresh_frame_animation_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
         // Reset continuous redraw flag (will be set by dim fade or other animations).
-        self.needs_continuous_redraw = false;
+        self.fx.needs_continuous_redraw = false;
         // Reset animated borders flag (set during box rendering if any fancy style is used).
-        self.has_animated_borders = false;
+        self.fx.has_animated_borders = false;
 
         self.refresh_line_animation_state();
         self.refresh_mode_line_transition_state(frame_glyphs);
@@ -3784,15 +3784,15 @@ impl WgpuRenderer {
     }
 
     fn refresh_line_animation_state(&mut self) {
-        self.active_line_anims
+        self.fx.line_anim.active
             .retain(|a| a.started.elapsed() < a.duration);
-        self.mark_continuous_redraw_if(!self.active_line_anims.is_empty());
+        self.mark_continuous_redraw_if(!self.fx.line_anim.active.is_empty());
     }
 
     fn refresh_mode_line_transition_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
-        self.active_mode_line_fades
+        self.fx.mode_line_fade.active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.active_mode_line_fades.is_empty());
+        self.mark_continuous_redraw_if(!self.fx.mode_line_fade.active.is_empty());
 
         if !self.effects.mode_line_transition.enabled {
             return;
@@ -3832,14 +3832,14 @@ impl WgpuRenderer {
             }
             let hash = hasher.finish();
             let prev = self
-                .prev_mode_line_hashes
+                .fx.mode_line_fade.prev_hashes
                 .insert(info.window_id.get(), hash);
             if let Some(prev_hash) = prev
                 && prev_hash != hash
             {
-                self.active_mode_line_fades
+                self.fx.mode_line_fade.active
                     .retain(|e| e.window_id != info.window_id.get());
-                self.active_mode_line_fades.push(ModeLineFadeEntry {
+                self.fx.mode_line_fade.active.push(ModeLineFadeEntry {
                     window_id: info.window_id.get(),
                     mode_line_y: ml_y,
                     mode_line_h: info.mode_line_height,
@@ -3850,57 +3850,57 @@ impl WgpuRenderer {
                         self.effects.mode_line_transition.duration_ms as u64,
                     ),
                 });
-                self.needs_continuous_redraw = true;
+                self.fx.needs_continuous_redraw = true;
             }
         }
     }
 
     fn refresh_text_fade_state(&mut self) {
-        self.active_text_fades
+        self.fx.text_fade.active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.active_text_fades.is_empty());
+        self.mark_continuous_redraw_if(!self.fx.text_fade.active.is_empty());
     }
 
     fn refresh_scroll_spacing_state(&mut self) {
         let now_spacing = std::time::Instant::now();
-        self.active_scroll_spacings
+        self.fx.scroll_spacing.active
             .retain(|e| now_spacing.duration_since(e.started) < e.duration);
-        self.mark_continuous_redraw_if(!self.active_scroll_spacings.is_empty());
+        self.mark_continuous_redraw_if(!self.fx.scroll_spacing.active.is_empty());
     }
 
     fn refresh_cursor_wake_state(&mut self) {
-        if let Some(started) = self.cursor_wake_started {
+        if let Some(started) = self.fx.cursor_wake.started {
             let dur = std::time::Duration::from_millis(self.effects.cursor_wake.duration_ms as u64);
             if started.elapsed() >= dur {
-                self.cursor_wake_started = None;
+                self.fx.cursor_wake.started = None;
             } else {
-                self.needs_continuous_redraw = true;
+                self.fx.needs_continuous_redraw = true;
             }
         }
     }
 
     fn refresh_cursor_error_pulse_state(&mut self) {
-        if let Some(started) = self.cursor_error_pulse_started {
+        if let Some(started) = self.fx.error_pulse.started {
             let dur = std::time::Duration::from_millis(
                 self.effects.cursor_error_pulse.duration_ms as u64,
             );
             if started.elapsed() >= dur {
-                self.cursor_error_pulse_started = None;
+                self.fx.error_pulse.started = None;
             } else {
-                self.needs_continuous_redraw = true;
+                self.fx.needs_continuous_redraw = true;
             }
         }
     }
 
     fn refresh_scroll_momentum_state(&mut self) {
-        self.active_scroll_momentums
+        self.fx.scroll_momentum.active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.active_scroll_momentums.is_empty());
+        self.mark_continuous_redraw_if(!self.fx.scroll_momentum.active.is_empty());
     }
 
     fn mark_continuous_redraw_if(&mut self, active: bool) {
         if active {
-            self.needs_continuous_redraw = true;
+            self.fx.needs_continuous_redraw = true;
         }
     }
 
@@ -4115,7 +4115,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Glow",
-            super::cursor_effects::emit_cursor_glow(&ctx, &self.cursor_pulse_start)
+            super::cursor_effects::emit_cursor_glow(&ctx, &self.clocks.cursor_pulse_start)
         );
 
         // === Step 1d: Draw cursor crosshair guide lines ===
@@ -4141,8 +4141,8 @@ impl WgpuRenderer {
             "Heat Map",
             super::window_effects::emit_typing_heatmap(
                 &ctx,
-                &mut self.typing_heatmap_entries,
-                &mut self.typing_heatmap_prev_cursor
+                &mut self.fx.typing_heatmap.entries,
+                &mut self.fx.typing_heatmap.prev_cursor
             )
         );
 
@@ -4192,7 +4192,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Magnetism",
-            super::cursor_effects::emit_cursor_magnetism(&ctx, &mut self.cursor_magnetism_entries)
+            super::cursor_effects::emit_cursor_magnetism(&ctx, &mut self.fx.cursor_magnetism.entries)
         );
 
         // === Step 1i2: Window corner fold effect ===
@@ -4254,7 +4254,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Comet",
-            super::cursor_effects::emit_cursor_comet(&ctx, &mut self.cursor_comet_positions)
+            super::cursor_effects::emit_cursor_comet(&ctx, &mut self.fx.cursor_comet.positions)
         );
 
         // === Step 1l: Cursor particle trail effect ===
@@ -4264,8 +4264,8 @@ impl WgpuRenderer {
             "Cursor Particles",
             super::cursor_effects::emit_cursor_particles(
                 &ctx,
-                &mut self.cursor_particles,
-                &mut self.cursor_particles_prev_pos
+                &mut self.fx.cursor_particles.entries,
+                &mut self.fx.cursor_particles.prev_pos
             )
         );
 
@@ -4274,7 +4274,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Matrix Rain",
-            super::cursor_effects::emit_matrix_rain(&ctx, &mut self.matrix_rain_columns)
+            super::cursor_effects::emit_matrix_rain(&ctx, &mut self.fx.matrix_rain.columns)
         );
 
         // Frost/ice border effect
@@ -4290,7 +4290,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Ghost",
-            super::window_effects::emit_cursor_ghost(&ctx, &mut self.cursor_ghost_entries)
+            super::window_effects::emit_cursor_ghost(&ctx, &mut self.fx.cursor_ghost.entries)
         );
 
         // Edge glow on scroll boundaries
@@ -4298,7 +4298,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Edge Glow",
-            super::window_effects::emit_edge_glow(&ctx, &mut self.edge_glow_entries)
+            super::window_effects::emit_edge_glow(&ctx, &mut self.fx.edge_glow.entries)
         );
 
         // Rain/drip ambient effect
@@ -4306,7 +4306,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Rain",
-            super::window_effects::emit_rain_effect(&ctx, &mut self.rain_drops)
+            super::window_effects::emit_rain_effect(&ctx, &mut self.fx.rain.drops)
         );
 
         // Cursor ripple wave effect
@@ -4314,7 +4314,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Ripple",
-            super::cursor_effects::emit_cursor_ripple_wave(&ctx, &mut self.cursor_ripple_waves)
+            super::cursor_effects::emit_cursor_ripple_wave(&ctx, &mut self.fx.ripple_wave.waves)
         );
     }
 
@@ -4433,7 +4433,7 @@ impl WgpuRenderer {
             "Sonar Ping Buffer",
             super::cursor_effects::emit_cursor_sonar_ping(
                 &ctx,
-                &mut self.cursor_sonar_ping_entries
+                &mut self.fx.sonar_ping.entries
             )
         );
 
@@ -4444,9 +4444,9 @@ impl WgpuRenderer {
             "Lightning Bolt Buffer",
             super::cursor_effects::emit_lightning_bolt(
                 &ctx,
-                &mut self.lightning_bolt_last,
-                &mut self.lightning_bolt_segments,
-                &mut self.lightning_bolt_age
+                &mut self.clocks.lightning_bolt_last,
+                &mut self.fx.lightning_bolt.segments,
+                &mut self.fx.lightning_bolt.age
             )
         );
 
@@ -4493,9 +4493,9 @@ impl WgpuRenderer {
             "Metronome Tick Buffer",
             super::cursor_effects::emit_cursor_metronome_tick(
                 &ctx,
-                &mut self.cursor_metronome_last_x,
-                &mut self.cursor_metronome_last_y,
-                &mut self.cursor_metronome_tick_start
+                &mut self.fx.metronome.last_x,
+                &mut self.fx.metronome.last_y,
+                &mut self.fx.metronome.tick_start
             )
         );
 
@@ -4539,9 +4539,9 @@ impl WgpuRenderer {
             "Ripple Ring Buffer",
             super::cursor_effects::emit_cursor_ripple_ring(
                 &ctx,
-                &mut self.cursor_ripple_ring_start,
-                &mut self.cursor_ripple_ring_last_x,
-                &mut self.cursor_ripple_ring_last_y
+                &mut self.fx.ripple_ring.start,
+                &mut self.fx.ripple_ring.last_x,
+                &mut self.fx.ripple_ring.last_y
             )
         );
 
@@ -4579,9 +4579,9 @@ impl WgpuRenderer {
             "Shockwave Buffer",
             super::cursor_effects::emit_cursor_shockwave(
                 &ctx,
-                &mut self.cursor_shockwave_start,
-                &mut self.cursor_shockwave_last_x,
-                &mut self.cursor_shockwave_last_y
+                &mut self.fx.shockwave.start,
+                &mut self.fx.shockwave.last_x,
+                &mut self.fx.shockwave.last_y
             )
         );
 
@@ -4637,9 +4637,9 @@ impl WgpuRenderer {
             "Cursor Bubble Buffer",
             super::cursor_effects::emit_cursor_bubble(
                 &ctx,
-                &mut self.cursor_bubble_spawn_time,
-                &mut self.cursor_bubble_last_x,
-                &mut self.cursor_bubble_last_y
+                &mut self.fx.bubble.spawn_time,
+                &mut self.fx.bubble.last_x,
+                &mut self.fx.bubble.last_y
             )
         );
     }
@@ -4674,9 +4674,9 @@ impl WgpuRenderer {
             "cursor_firework_vb",
             super::cursor_effects::emit_cursor_firework(
                 &ctx,
-                &mut self.cursor_firework_start,
-                &mut self.cursor_firework_last_x,
-                &mut self.cursor_firework_last_y
+                &mut self.fx.firework.start,
+                &mut self.fx.firework.last_x,
+                &mut self.fx.firework.last_y
             )
         );
 
@@ -4714,9 +4714,9 @@ impl WgpuRenderer {
             "cursor_lightning_vb",
             super::cursor_effects::emit_cursor_lightning(
                 &ctx,
-                &mut self.cursor_lightning_start,
-                &mut self.cursor_lightning_last_x,
-                &mut self.cursor_lightning_last_y
+                &mut self.fx.cursor_lightning.start,
+                &mut self.fx.cursor_lightning.last_x,
+                &mut self.fx.cursor_lightning.last_y
             )
         );
 
@@ -4736,9 +4736,9 @@ impl WgpuRenderer {
             "cursor_snowflake_vb",
             super::cursor_effects::emit_cursor_snowflake(
                 &ctx,
-                &mut self.cursor_snowflake_start,
-                &mut self.cursor_snowflake_last_x,
-                &mut self.cursor_snowflake_last_y
+                &mut self.fx.snowflake.start,
+                &mut self.fx.snowflake.last_x,
+                &mut self.fx.snowflake.last_y
             )
         );
 
@@ -5066,7 +5066,7 @@ impl WgpuRenderer {
             "Sparkle Burst Buffer",
             super::cursor_effects::emit_cursor_sparkle_burst(
                 &ctx,
-                &mut self.cursor_sparkle_burst_entries
+                &mut self.fx.sparkle_burst.entries
             )
         );
 
@@ -5122,9 +5122,9 @@ impl WgpuRenderer {
             "Pendulum Buffer",
             super::cursor_effects::emit_cursor_pendulum(
                 &ctx,
-                &mut self.cursor_pendulum_last_x,
-                &mut self.cursor_pendulum_last_y,
-                &mut self.cursor_pendulum_swing_start
+                &mut self.fx.pendulum.last_x,
+                &mut self.fx.pendulum.last_y,
+                &mut self.fx.pendulum.swing_start
             )
         );
 
@@ -5212,7 +5212,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Focus Ring Buffer",
-            super::window_effects::emit_focus_ring(ctx, self.focus_ring_start)
+            super::window_effects::emit_focus_ring(ctx, self.clocks.focus_ring_start)
         );
 
         // === Window padding gradient (inner edge shading for depth) ===
@@ -5230,8 +5230,8 @@ impl WgpuRenderer {
             "Border Transition Buffer",
             super::window_effects::emit_border_transition(
                 ctx,
-                &mut self.border_transitions,
-                &mut self.prev_border_selected,
+                &mut self.fx.border_transition.transitions,
+                &mut self.fx.border_transition.prev_selected,
                 self.border_transition_duration,
             )
         );
@@ -5255,7 +5255,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Noise Grain Buffer",
-            super::window_effects::emit_noise_grain(ctx, &mut self.noise_grain_frame)
+            super::window_effects::emit_noise_grain(ctx, &mut self.fx.noise_grain.frame)
         );
 
         // === Idle screen dimming ===
@@ -5263,7 +5263,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Idle Dim Buffer",
-            super::window_effects::emit_idle_dimming(ctx, self.idle_dim_alpha)
+            super::window_effects::emit_idle_dimming(ctx, self.fx.dim.idle_alpha)
         );
 
         // === Focus mode: dim lines outside current paragraph ===
@@ -5281,8 +5281,8 @@ impl WgpuRenderer {
             "Inactive Dim Buffer",
             super::window_effects::emit_inactive_window_dimming(
                 ctx,
-                &mut self.per_window_dim,
-                &mut self.last_dim_tick,
+                &mut self.fx.dim.per_window,
+                &mut self.clocks.last_dim_tick,
             )
         );
 
@@ -5326,7 +5326,7 @@ impl WgpuRenderer {
             "Cursor Trail Buffer",
             super::cursor_effects::emit_cursor_trail_fade(
                 ctx,
-                &mut self.cursor_trail_positions,
+                &mut self.fx.cursor_trail.positions,
                 &self.cursor_trail_fade_duration,
             )
         );
@@ -5336,7 +5336,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Search Pulse Buffer",
-            super::window_effects::emit_search_highlight(ctx, self.search_pulse_start)
+            super::window_effects::emit_search_highlight(ctx, self.clocks.search_pulse_start)
         );
 
         // === Selection region glow highlight ===
@@ -5354,7 +5354,7 @@ impl WgpuRenderer {
             "Ripple Buffer",
             super::window_effects::emit_typing_ripple(
                 ctx,
-                &mut self.active_ripples,
+                &mut self.fx.typing_ripple.active,
                 self.typing_ripple_duration,
             )
         );
@@ -5429,9 +5429,9 @@ impl WgpuRenderer {
                 "Resize Padding Buffer",
                 super::window_effects::emit_resize_padding(ctx, pad)
             );
-            if pad <= 0.5 && self.resize_padding_started.is_some() {
+            if pad <= 0.5 && self.fx.resize_padding.started.is_some() {
                 // Animation complete, clean up
-                self.resize_padding_started = None;
+                self.fx.resize_padding.started = None;
             }
         }
 
@@ -5448,7 +5448,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Scroll Velocity Fade Buffer",
-            super::window_effects::emit_scroll_velocity_fade(ctx, &mut self.scroll_velocity_fades,)
+            super::window_effects::emit_scroll_velocity_fade(ctx, &mut self.fx.scroll_velocity.fades,)
         );
 
         // === Click halo effect ===
@@ -5456,7 +5456,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Click Halo Buffer",
-            super::window_effects::emit_click_halo(ctx, &mut self.click_halos,)
+            super::window_effects::emit_click_halo(ctx, &mut self.fx.click_halo.halos,)
         );
 
         // === Window edge snap indicator ===
@@ -5464,7 +5464,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Edge Snap Buffer",
-            super::window_effects::emit_edge_snap(ctx, &mut self.edge_snaps,)
+            super::window_effects::emit_edge_snap(ctx, &mut self.fx.edge_snap.snaps,)
         );
     }
 
@@ -5486,7 +5486,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Scroll Momentum Buffer",
-            super::window_effects::emit_scroll_momentum(ctx, &self.active_scroll_momentums,)
+            super::window_effects::emit_scroll_momentum(ctx, &self.fx.scroll_momentum.active,)
         );
 
         // === Vignette effect: darken edges of the frame ===
@@ -5502,7 +5502,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Window Switch Fade Buffer",
-            super::window_effects::emit_window_switch_fade(ctx, &mut self.active_window_fades,)
+            super::window_effects::emit_window_switch_fade(ctx, &mut self.fx.window_fade.active,)
         );
     }
 }

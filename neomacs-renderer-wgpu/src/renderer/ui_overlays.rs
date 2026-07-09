@@ -1549,19 +1549,19 @@ impl WgpuRenderer {
                 }
                 let wid = info.window_id.get();
                 let new_text = &info.buffer_file_name;
-                let changed = match self.prev_breadcrumb_text.get(&wid) {
+                let changed = match self.fx.title_fade.prev_breadcrumb_text.get(&wid) {
                     Some(old) => old != new_text,
                     None => false, // first time seeing this window, no fade
                 };
                 if changed {
                     let old_text = self
-                        .prev_breadcrumb_text
+                        .fx.title_fade.prev_breadcrumb_text
                         .get(&wid)
                         .cloned()
                         .unwrap_or_default();
                     // Remove any existing fade for this window
-                    self.active_title_fades.retain(|f| f.window_id != wid);
-                    self.active_title_fades.push(TitleFadeEntry {
+                    self.fx.title_fade.active.retain(|f| f.window_id != wid);
+                    self.fx.title_fade.active.push(TitleFadeEntry {
                         window_id: wid,
                         bounds: info.bounds,
                         old_text,
@@ -1572,13 +1572,13 @@ impl WgpuRenderer {
                         ),
                     });
                 }
-                self.prev_breadcrumb_text.insert(wid, new_text.clone());
+                self.fx.title_fade.prev_breadcrumb_text.insert(wid, new_text.clone());
             }
             // Clean up expired fades
-            self.active_title_fades
+            self.fx.title_fade.active
                 .retain(|f| f.started.elapsed() < f.duration);
-            if !self.active_title_fades.is_empty() {
-                self.needs_continuous_redraw = true;
+            if !self.fx.title_fade.active.is_empty() {
+                self.fx.needs_continuous_redraw = true;
             }
         }
 
@@ -1597,7 +1597,7 @@ impl WgpuRenderer {
 
             // Check if this window has an active title fade
             let active_fade = self
-                .active_title_fades
+                .fx.title_fade.active
                 .iter()
                 .find(|f| f.window_id == info.window_id.get());
 

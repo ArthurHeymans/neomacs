@@ -6,7 +6,7 @@ use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::frame_glyphs::{FringeBitmapData, StipplePattern};
 use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::types::Color;
 
 use super::image_cache::ImageCache;
 use super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex, Uniforms};
@@ -22,6 +22,7 @@ mod cursor_effects;
 mod dynamic_buffer;
 mod effect_common;
 mod effects_state;
+mod fx_state;
 mod glyphs;
 mod media;
 mod pattern_effects;
@@ -30,6 +31,8 @@ mod transitions;
 mod ui_overlays;
 mod window_effects;
 
+pub use fx_state::RendererFrameEffects;
+pub(crate) use fx_state::*;
 pub use stats::*;
 
 /// GPU-accelerated renderer using wgpu.
@@ -61,105 +64,18 @@ pub struct WgpuRenderer {
 
     // All visual effect configurations
     pub effects: crate::effect_config::EffectsConfig,
-    /// Per-window dim opacity for smooth fade transitions
-    pub(super) per_window_dim: std::collections::HashMap<i64, f32>,
-    /// Last dim update time for smooth interpolation
-    pub(super) last_dim_tick: std::time::Instant,
-    /// Flag: renderer needs continuous redraws (e.g. dim fade in progress)
-    pub needs_continuous_redraw: bool,
-    /// Start time for pulse phase calculation
-    pub(super) cursor_pulse_start: std::time::Instant,
+    /// Grouped per-effect animation state (transferred by frame-effects swaps)
+    pub(super) fx: EffectsState,
+    /// Free-running animation clocks (transferred with preserve-if-unset semantics)
+    pub(super) clocks: EffectClocks,
     /// Ripple duration in seconds
     pub(super) typing_ripple_duration: f32,
-    /// Active ripples: (center_x, center_y, spawn_instant)
-    pub(super) active_ripples: Vec<(f32, f32, std::time::Instant)>,
-    /// Pulse start time
-    pub(super) search_pulse_start: std::time::Instant,
-    pub(super) active_line_anims: Vec<LineAnimEntry>,
-    pub(super) cursor_color_cycle_start: std::time::Instant,
-    /// Active window switch fades: (window_id, bounds, started, duration, intensity)
-    pub(super) active_window_fades: Vec<WindowFadeEntry>,
     pub(super) border_transition_duration: std::time::Duration,
-    /// Per-window border transition state: (window_id, is_becoming_active, start_time)
-    pub(super) border_transitions: Vec<(i64, bool, std::time::Instant)>,
-    /// Previous selected window for border transition detection
-    pub(super) prev_border_selected: i64,
     pub(super) cursor_trail_fade_duration: std::time::Duration,
-    pub(super) cursor_trail_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
-    pub(super) cursor_trail_last_pos: (f32, f32),
-    pub(super) focus_ring_start: std::time::Instant,
-    /// Idle screen dimming alpha (0.0 = no dim, >0 = overlay)
-    pub(super) idle_dim_alpha: f32,
-    pub(super) noise_grain_frame: u32,
-    /// Previous breadcrumb text per window (window_id -> file_name)
-    pub(super) prev_breadcrumb_text: std::collections::HashMap<i64, String>,
-    /// Active title fades (window_id -> (old_text, new_text, start_time))
-    pub(super) active_title_fades: Vec<TitleFadeEntry>,
-    /// Per-window mode-line content hash for change detection
-    pub(super) prev_mode_line_hashes: std::collections::HashMap<i64, u64>,
-    /// Active mode-line transition fades
-    pub(super) active_mode_line_fades: Vec<ModeLineFadeEntry>,
-    /// Active text fade-in animations per window
-    pub(super) active_text_fades: Vec<TextFadeEntry>,
     pub(super) scroll_line_spacing_duration_ms: u32,
-    /// Active scroll line spacing animations: (window_id, bounds, direction, started)
-    pub(super) active_scroll_spacings: Vec<ScrollSpacingEntry>,
-    /// Timestamp of last cursor wake trigger
-    pub(super) cursor_wake_started: Option<std::time::Instant>,
-    pub(super) click_halos: Vec<ClickHaloEntry>,
-    pub(super) edge_snaps: Vec<EdgeSnapEntry>,
-    pub(super) cursor_magnetism_entries: Vec<(f32, f32, std::time::Instant)>, // x, y, time
-    pub(super) cursor_comet_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>, // x, y, w, h, time
-    pub(super) cursor_particles: Vec<CursorParticle>,
-    pub(super) cursor_particles_prev_pos: Option<(f32, f32)>,
-    pub(super) typing_heatmap_entries: Vec<HeatMapEntry>,
-    pub(super) typing_heatmap_prev_cursor: Option<(f32, f32)>,
-    pub(super) scroll_velocity_fades: Vec<ScrollVelocityFadeEntry>,
-    pub(super) resize_padding_started: Option<std::time::Instant>,
-    pub(super) cursor_error_pulse_started: Option<std::time::Instant>,
-    /// Active scroll momentum entries
-    pub(super) active_scroll_momentums: Vec<ScrollMomentumEntry>,
-    pub(super) matrix_rain_columns: Vec<MatrixColumn>,
-    pub(super) cursor_ghost_entries: Vec<CursorGhostEntry>,
-    pub(super) cursor_sonar_ping_entries: Vec<SonarPingEntry>,
-    pub(super) lightning_bolt_last: std::time::Instant,
-    pub(super) lightning_bolt_segments: Vec<(f32, f32, f32, f32)>, // (x1, y1, x2, y2)
-    pub(super) lightning_bolt_age: f32,
-    pub(super) cursor_pendulum_last_x: f32,
-    pub(super) cursor_pendulum_last_y: f32,
-    pub(super) cursor_pendulum_swing_start: Option<std::time::Instant>,
-    pub(super) cursor_sparkle_burst_entries: Vec<SparkleBurstEntry>,
-    pub(super) cursor_metronome_last_x: f32,
-    pub(super) cursor_metronome_last_y: f32,
-    pub(super) cursor_metronome_tick_start: Option<std::time::Instant>,
-    pub(super) cursor_ripple_ring_start: Option<std::time::Instant>,
-    pub(super) cursor_ripple_ring_last_x: f32,
-    pub(super) cursor_ripple_ring_last_y: f32,
-    pub(super) cursor_shockwave_start: Option<std::time::Instant>,
-    pub(super) cursor_shockwave_last_x: f32,
-    pub(super) cursor_shockwave_last_y: f32,
-    pub(super) cursor_bubble_spawn_time: Option<std::time::Instant>,
-    pub(super) cursor_bubble_last_x: f32,
-    pub(super) cursor_bubble_last_y: f32,
-    pub(super) cursor_firework_start: Option<std::time::Instant>,
-    pub(super) cursor_firework_last_x: f32,
-    pub(super) cursor_firework_last_y: f32,
-    pub(super) cursor_lightning_start: Option<std::time::Instant>,
-    pub(super) cursor_lightning_last_x: f32,
-    pub(super) cursor_lightning_last_y: f32,
-    pub(super) cursor_snowflake_start: Option<std::time::Instant>,
-    pub(super) cursor_snowflake_last_x: f32,
-    pub(super) cursor_snowflake_last_y: f32,
-    pub(super) edge_glow_entries: Vec<EdgeGlowEntry>,
-    pub(super) rain_drops: Vec<RainDrop>,
-    #[allow(dead_code)]
-    pub(super) rain_last_spawn: std::time::Instant,
-    pub(super) cursor_ripple_waves: Vec<RippleWaveEntry>,
     pub(super) aurora_start: std::time::Instant,
     /// Start time for elapsed time calculation (used by fancy border effects)
     pub(super) render_start_time: std::time::Instant,
-    /// Whether any fancy (animated) border styles are present in the current frame
-    pub has_animated_borders: bool,
     pub glyph_stats: GlyphRenderStats,
     pub(super) glyph_vertex_arena: FrameVertexArena<GlyphVertex>,
     pub(super) subpixel_vertex_arena: FrameVertexArena<SubpixelGlyphVertex>,
@@ -174,409 +90,6 @@ pub struct WgpuRenderer {
     pub(super) stencil_image_pipeline: wgpu::RenderPipeline,
     pub(super) stencil_opaque_image_pipeline: wgpu::RenderPipeline,
     pub(super) stencil_write_pipeline: wgpu::RenderPipeline,
-}
-
-/// Entry for an active scroll momentum indicator
-pub(super) struct ScrollMomentumEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    pub(super) direction: i32, // 1 = down, -1 = up
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for matrix rain column
-pub(super) struct MatrixColumn {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) speed: f32,
-    pub(super) length: f32,
-}
-
-/// Entry for cursor ghost afterimage
-pub(super) struct CursorGhostEntry {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) width: f32,
-    pub(super) height: f32,
-    pub(super) started: std::time::Instant,
-}
-
-/// Entry for cursor sonar ping
-pub(super) struct SonarPingEntry {
-    pub(super) cx: f32,
-    pub(super) cy: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-pub(super) struct SparkleBurstEntry {
-    pub(super) cx: f32,
-    pub(super) cy: f32,
-    pub(super) started: std::time::Instant,
-    /// Random seed for particle directions
-    pub(super) seed: u32,
-}
-
-/// Entry for window edge glow (scroll boundary indicator)
-pub(super) struct EdgeGlowEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    pub(super) at_top: bool,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for rain drop
-pub(super) struct RainDrop {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) speed: f32,
-    pub(super) length: f32,
-    pub(super) opacity: f32,
-}
-
-/// Entry for cursor ripple wave
-pub(super) struct RippleWaveEntry {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for window edge snap indicator
-/// Entry for cursor particle effect
-pub(super) struct CursorParticle {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) vx: f32,
-    pub(super) vy: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) lifetime: std::time::Duration,
-}
-
-/// Entry for typing heat map (records where cursor was during edits)
-pub(super) struct HeatMapEntry {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) width: f32,
-    pub(super) height: f32,
-    pub(super) started: std::time::Instant,
-}
-
-pub(super) struct EdgeSnapEntry {
-    pub(super) bounds: Rect,
-    pub(super) mode_line_height: f32,
-    pub(super) at_top: bool,
-    pub(super) at_bottom: bool,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for click halo effect
-pub(super) struct ClickHaloEntry {
-    pub(super) x: f32,
-    pub(super) y: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Frame-local renderer effect queues that are rendered through `WgpuRenderer`.
-#[derive(Default)]
-pub struct RendererFrameEffects {
-    needs_continuous_redraw: bool,
-    has_animated_borders: bool,
-    per_window_dim: std::collections::HashMap<i64, f32>,
-    last_dim_tick: Option<std::time::Instant>,
-    active_ripples: Vec<(f32, f32, std::time::Instant)>,
-    active_line_anims: Vec<LineAnimEntry>,
-    active_window_fades: Vec<WindowFadeEntry>,
-    active_title_fades: Vec<TitleFadeEntry>,
-    prev_breadcrumb_text: std::collections::HashMap<i64, String>,
-    border_transitions: Vec<(i64, bool, std::time::Instant)>,
-    prev_border_selected: i64,
-    active_mode_line_fades: Vec<ModeLineFadeEntry>,
-    prev_mode_line_hashes: std::collections::HashMap<i64, u64>,
-    active_text_fades: Vec<TextFadeEntry>,
-    active_scroll_spacings: Vec<ScrollSpacingEntry>,
-    cursor_trail_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
-    cursor_trail_last_pos: (f32, f32),
-    idle_dim_alpha: f32,
-    noise_grain_frame: u32,
-    cursor_pulse_start: Option<std::time::Instant>,
-    search_pulse_start: Option<std::time::Instant>,
-    cursor_color_cycle_start: Option<std::time::Instant>,
-    focus_ring_start: Option<std::time::Instant>,
-    cursor_wake_started: Option<std::time::Instant>,
-    cursor_magnetism_entries: Vec<(f32, f32, std::time::Instant)>,
-    cursor_comet_positions: Vec<(f32, f32, f32, f32, std::time::Instant)>,
-    cursor_particles: Vec<CursorParticle>,
-    cursor_particles_prev_pos: Option<(f32, f32)>,
-    typing_heatmap_entries: Vec<HeatMapEntry>,
-    typing_heatmap_prev_cursor: Option<(f32, f32)>,
-    scroll_velocity_fades: Vec<ScrollVelocityFadeEntry>,
-    resize_padding_started: Option<std::time::Instant>,
-    active_scroll_momentums: Vec<ScrollMomentumEntry>,
-    matrix_rain_columns: Vec<MatrixColumn>,
-    cursor_ghost_entries: Vec<CursorGhostEntry>,
-    cursor_sonar_ping_entries: Vec<SonarPingEntry>,
-    lightning_bolt_last: Option<std::time::Instant>,
-    lightning_bolt_segments: Vec<(f32, f32, f32, f32)>,
-    lightning_bolt_age: f32,
-    cursor_pendulum_last_x: f32,
-    cursor_pendulum_last_y: f32,
-    cursor_pendulum_swing_start: Option<std::time::Instant>,
-    cursor_sparkle_burst_entries: Vec<SparkleBurstEntry>,
-    cursor_metronome_last_x: f32,
-    cursor_metronome_last_y: f32,
-    cursor_metronome_tick_start: Option<std::time::Instant>,
-    cursor_ripple_ring_start: Option<std::time::Instant>,
-    cursor_ripple_ring_last_x: f32,
-    cursor_ripple_ring_last_y: f32,
-    cursor_shockwave_start: Option<std::time::Instant>,
-    cursor_shockwave_last_x: f32,
-    cursor_shockwave_last_y: f32,
-    cursor_bubble_spawn_time: Option<std::time::Instant>,
-    cursor_bubble_last_x: f32,
-    cursor_bubble_last_y: f32,
-    cursor_firework_start: Option<std::time::Instant>,
-    cursor_firework_last_x: f32,
-    cursor_firework_last_y: f32,
-    cursor_lightning_start: Option<std::time::Instant>,
-    cursor_lightning_last_x: f32,
-    cursor_lightning_last_y: f32,
-    cursor_snowflake_start: Option<std::time::Instant>,
-    cursor_snowflake_last_x: f32,
-    cursor_snowflake_last_y: f32,
-    edge_glow_entries: Vec<EdgeGlowEntry>,
-    rain_drops: Vec<RainDrop>,
-    rain_last_spawn: Option<std::time::Instant>,
-    cursor_ripple_waves: Vec<RippleWaveEntry>,
-    click_halos: Vec<ClickHaloEntry>,
-    edge_snaps: Vec<EdgeSnapEntry>,
-    cursor_error_pulse_started: Option<std::time::Instant>,
-}
-
-impl RendererFrameEffects {
-    pub fn needs_redraw(&self) -> bool {
-        self.needs_continuous_redraw
-            || self.has_animated_borders
-            || !self.active_line_anims.is_empty()
-            || !self.active_window_fades.is_empty()
-            || !self.active_title_fades.is_empty()
-            || !self.border_transitions.is_empty()
-            || !self.active_mode_line_fades.is_empty()
-            || !self.active_text_fades.is_empty()
-            || !self.active_scroll_spacings.is_empty()
-            || self.cursor_wake_started.is_some()
-            || !self.cursor_magnetism_entries.is_empty()
-            || !self.cursor_comet_positions.is_empty()
-            || !self.cursor_particles.is_empty()
-            || !self.typing_heatmap_entries.is_empty()
-            || !self.scroll_velocity_fades.is_empty()
-            || self.resize_padding_started.is_some()
-            || !self.active_scroll_momentums.is_empty()
-            || !self.cursor_ghost_entries.is_empty()
-            || !self.cursor_sonar_ping_entries.is_empty()
-            || !self.lightning_bolt_segments.is_empty()
-            || self.cursor_pendulum_swing_start.is_some()
-            || !self.cursor_sparkle_burst_entries.is_empty()
-            || self.cursor_metronome_tick_start.is_some()
-            || self.cursor_ripple_ring_start.is_some()
-            || self.cursor_shockwave_start.is_some()
-            || self.cursor_bubble_spawn_time.is_some()
-            || self.cursor_firework_start.is_some()
-            || self.cursor_lightning_start.is_some()
-            || self.cursor_snowflake_start.is_some()
-            || !self.edge_glow_entries.is_empty()
-            || !self.cursor_ripple_waves.is_empty()
-            || self.has_transient_effects()
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.needs_redraw()
-            || !self.active_ripples.is_empty()
-            || !self.active_line_anims.is_empty()
-            || !self.active_window_fades.is_empty()
-            || !self.active_title_fades.is_empty()
-            || !self.border_transitions.is_empty()
-            || !self.active_mode_line_fades.is_empty()
-            || !self.active_text_fades.is_empty()
-            || !self.active_scroll_spacings.is_empty()
-            || self.cursor_wake_started.is_some()
-            || !self.cursor_trail_positions.is_empty()
-            || !self.cursor_magnetism_entries.is_empty()
-            || !self.cursor_comet_positions.is_empty()
-            || !self.cursor_particles.is_empty()
-            || !self.typing_heatmap_entries.is_empty()
-            || !self.scroll_velocity_fades.is_empty()
-            || self.resize_padding_started.is_some()
-            || !self.active_scroll_momentums.is_empty()
-            || !self.matrix_rain_columns.is_empty()
-            || !self.cursor_ghost_entries.is_empty()
-            || !self.cursor_sonar_ping_entries.is_empty()
-            || !self.lightning_bolt_segments.is_empty()
-            || self.cursor_pendulum_swing_start.is_some()
-            || !self.cursor_sparkle_burst_entries.is_empty()
-            || self.cursor_metronome_tick_start.is_some()
-            || self.cursor_ripple_ring_start.is_some()
-            || self.cursor_shockwave_start.is_some()
-            || self.cursor_bubble_spawn_time.is_some()
-            || self.cursor_firework_start.is_some()
-            || self.cursor_lightning_start.is_some()
-            || self.cursor_snowflake_start.is_some()
-            || !self.edge_glow_entries.is_empty()
-            || !self.rain_drops.is_empty()
-            || !self.cursor_ripple_waves.is_empty()
-            || self.has_transient_effects()
-    }
-
-    pub fn has_transient_effects(&self) -> bool {
-        !self.click_halos.is_empty()
-            || !self.edge_snaps.is_empty()
-            || self.cursor_error_pulse_started.is_some()
-    }
-
-    pub fn trigger_click_halo(
-        &mut self,
-        x: f32,
-        y: f32,
-        now: std::time::Instant,
-        duration_ms: u32,
-    ) {
-        self.click_halos.push(ClickHaloEntry {
-            x,
-            y,
-            started: now,
-            duration: std::time::Duration::from_millis(duration_ms as u64),
-        });
-    }
-
-    pub fn trigger_cursor_wake(&mut self, now: std::time::Instant) {
-        self.cursor_wake_started = Some(now);
-    }
-
-    pub fn trigger_resize_padding(&mut self, now: std::time::Instant) {
-        self.resize_padding_started = Some(now);
-    }
-
-    pub fn spawn_ripple(&mut self, cx: f32, cy: f32) {
-        self.active_ripples
-            .push((cx, cy, std::time::Instant::now()));
-    }
-
-    pub fn record_cursor_trail(&mut self, x: f32, y: f32, w: f32, h: f32, length: usize) {
-        let dist = ((x - self.cursor_trail_last_pos.0).powi(2)
-            + (y - self.cursor_trail_last_pos.1).powi(2))
-        .sqrt();
-        if dist < 2.0 {
-            return;
-        }
-        self.cursor_trail_positions
-            .push((x, y, w, h, std::time::Instant::now()));
-        self.cursor_trail_last_pos = (x, y);
-        while self.cursor_trail_positions.len() > length {
-            self.cursor_trail_positions.remove(0);
-        }
-    }
-
-    pub fn trigger_edge_snap(
-        &mut self,
-        bounds: Rect,
-        mode_line_height: f32,
-        at_top: bool,
-        at_bottom: bool,
-        now: std::time::Instant,
-        duration_ms: u32,
-    ) {
-        self.edge_snaps.push(EdgeSnapEntry {
-            bounds,
-            mode_line_height,
-            at_top,
-            at_bottom,
-            started: now,
-            duration: std::time::Duration::from_millis(duration_ms as u64),
-        });
-    }
-
-    pub fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
-        self.cursor_error_pulse_started = Some(now);
-    }
-}
-
-/// Entry for scroll velocity fade overlay
-pub(super) struct ScrollVelocityFadeEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    /// Scroll delta magnitude (characters scrolled)
-    pub(super) velocity: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for an active window switch highlight fade
-pub(super) struct WindowFadeEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-    pub(super) intensity: f32,
-}
-
-/// Entry for an active title/breadcrumb crossfade animation
-pub(super) struct TitleFadeEntry {
-    pub(super) window_id: i64,
-    #[allow(dead_code)]
-    pub(super) bounds: Rect,
-    pub(super) old_text: String,
-    #[allow(dead_code)]
-    pub(super) new_text: String,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for an active line insertion/deletion animation
-pub(super) struct LineAnimEntry {
-    /// Window bounds where the animation is active
-    pub(super) window_bounds: Rect,
-    /// Y position below which glyphs are displaced
-    pub(super) edit_y: f32,
-    /// Initial Y offset (negative=insertion slide-down, positive=deletion slide-up)
-    pub(super) initial_offset: f32,
-    /// When the animation started
-    pub(super) started: std::time::Instant,
-    /// Duration of the animation
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for an active mode-line content transition
-pub(super) struct ModeLineFadeEntry {
-    pub(super) window_id: i64,
-    /// Mode-line area (y, height) within the window
-    pub(super) mode_line_y: f32,
-    pub(super) mode_line_h: f32,
-    pub(super) bounds_x: f32,
-    pub(super) bounds_w: f32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for an active text fade-in animation
-pub(super) struct TextFadeEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
-}
-
-/// Entry for an active scroll line spacing animation
-pub(super) struct ScrollSpacingEntry {
-    pub(super) window_id: i64,
-    pub(super) bounds: Rect,
-    /// +1 = scroll down (content moves up), -1 = scroll up
-    pub(super) direction: i32,
-    pub(super) started: std::time::Instant,
-    pub(super) duration: std::time::Duration,
 }
 
 impl WgpuRenderer {
@@ -1432,83 +945,14 @@ impl WgpuRenderer {
             height,
             scale_factor,
             effects: crate::effect_config::EffectsConfig::default(),
-            per_window_dim: std::collections::HashMap::new(),
-            last_dim_tick: std::time::Instant::now(),
-            needs_continuous_redraw: false,
-            cursor_pulse_start: std::time::Instant::now(),
+            fx: EffectsState::default(),
+            clocks: EffectClocks::default(),
             typing_ripple_duration: 0.3,
-            active_ripples: Vec::new(),
-            search_pulse_start: std::time::Instant::now(),
-            active_line_anims: Vec::new(),
-            cursor_color_cycle_start: std::time::Instant::now(),
-            active_window_fades: Vec::new(),
             border_transition_duration: std::time::Duration::from_millis(200),
-            border_transitions: Vec::new(),
-            prev_border_selected: 0,
             cursor_trail_fade_duration: std::time::Duration::from_millis(300),
-            cursor_trail_positions: Vec::new(),
-            cursor_trail_last_pos: (0.0, 0.0),
-            focus_ring_start: std::time::Instant::now(),
-            idle_dim_alpha: 0.0,
-            noise_grain_frame: 0,
-            prev_breadcrumb_text: std::collections::HashMap::new(),
-            active_title_fades: Vec::new(),
-            prev_mode_line_hashes: std::collections::HashMap::new(),
-            active_mode_line_fades: Vec::new(),
-            active_text_fades: Vec::new(),
             scroll_line_spacing_duration_ms: 200,
-            active_scroll_spacings: Vec::new(),
-            cursor_wake_started: None,
-            click_halos: Vec::new(),
-            edge_snaps: Vec::new(),
-            cursor_magnetism_entries: Vec::new(),
-            cursor_comet_positions: Vec::new(),
-            cursor_particles: Vec::new(),
-            cursor_particles_prev_pos: None,
-            typing_heatmap_entries: Vec::new(),
-            typing_heatmap_prev_cursor: None,
-            scroll_velocity_fades: Vec::new(),
-            resize_padding_started: None,
-            cursor_error_pulse_started: None,
-            active_scroll_momentums: Vec::new(),
-            matrix_rain_columns: Vec::new(),
-            cursor_ghost_entries: Vec::new(),
-            cursor_sonar_ping_entries: Vec::new(),
-            lightning_bolt_last: std::time::Instant::now(),
-            lightning_bolt_segments: Vec::new(),
-            lightning_bolt_age: 0.0,
-            cursor_pendulum_last_x: 0.0,
-            cursor_pendulum_last_y: 0.0,
-            cursor_pendulum_swing_start: None,
-            cursor_sparkle_burst_entries: Vec::new(),
-            cursor_metronome_last_x: 0.0,
-            cursor_metronome_last_y: 0.0,
-            cursor_metronome_tick_start: None,
-            cursor_ripple_ring_start: None,
-            cursor_ripple_ring_last_x: 0.0,
-            cursor_ripple_ring_last_y: 0.0,
-            cursor_shockwave_start: None,
-            cursor_shockwave_last_x: 0.0,
-            cursor_shockwave_last_y: 0.0,
-            cursor_bubble_spawn_time: None,
-            cursor_bubble_last_x: 0.0,
-            cursor_bubble_last_y: 0.0,
-            cursor_firework_start: None,
-            cursor_firework_last_x: 0.0,
-            cursor_firework_last_y: 0.0,
-            cursor_lightning_start: None,
-            cursor_lightning_last_x: 0.0,
-            cursor_lightning_last_y: 0.0,
-            cursor_snowflake_start: None,
-            cursor_snowflake_last_x: 0.0,
-            cursor_snowflake_last_y: 0.0,
-            edge_glow_entries: Vec::new(),
-            rain_drops: Vec::new(),
-            rain_last_spawn: std::time::Instant::now(),
-            cursor_ripple_waves: Vec::new(),
             aurora_start: std::time::Instant::now(),
             render_start_time: std::time::Instant::now(),
-            has_animated_borders: false,
             glyph_stats: GlyphRenderStats::new(),
             glyph_vertex_arena: FrameVertexArena::new("Glyph Vertex Arena"),
             subpixel_vertex_arena: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
