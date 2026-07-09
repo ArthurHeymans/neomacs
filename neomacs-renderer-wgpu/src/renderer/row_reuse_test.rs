@@ -9,6 +9,7 @@
 //! fresh tessellation.
 
 use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::Px;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 
@@ -532,7 +533,7 @@ fn golden_shifted_rows_splice_byte_identical_to_full_tessellation() {
     // (integral physical shift at scale 1.0).
     let dvpos = 3.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
 
     let shifted = run_pass(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, false);
     assert_eq!(shifted.stats.rows_reused_shifted, 4);
@@ -555,7 +556,7 @@ fn spliced_rows_rebase_so_next_frame_reuses_them_again() {
 
     let dvpos = 14.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage_b = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage_b = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
     let ran_b = run_pass(
         &glyphs_b,
         &base_ctx(Some(&damage_b), &origins),
@@ -671,7 +672,7 @@ fn adversarial_non_integral_shift_bails() {
 
     let dvpos = 1.5f32; // 1.5 physical px at scale 1.0 — not integral
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
     let ran = run_pass(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, false);
     assert_eq!(ran.stats.rows_reused_shifted, 0);
     assert_eq!(ran.stats.rows_tessellated, 4);
@@ -705,7 +706,7 @@ fn adversarial_non_power_of_two_scale_never_splices_shifted() {
     // fresh tessellation would not be bit-exact against `pos + dvpos`.
     let dvpos = 2.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
     let mut ctx = base_ctx(Some(&damage), &origins);
     ctx.scale_factor = 3.0;
     ctx.scale_bits = 3.0f32.to_bits();
@@ -878,7 +879,7 @@ fn gradient_face_rows_never_splice_shifted_but_splice_verbatim() {
     // Integral shift that would otherwise splice: must bail on every row.
     let dvpos = 3.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
     let shifted = run_pass_with(
         &glyphs_b,
         &base_ctx(Some(&damage), &origins),
@@ -931,7 +932,7 @@ fn band_edge_rows_never_splice_shifted() {
 
     let dvpos = 2.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
-    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos: Px(dvpos) });
     let ran = run_pass_with(
         &glyphs_b,
         &base_ctx(Some(&damage), &origins),

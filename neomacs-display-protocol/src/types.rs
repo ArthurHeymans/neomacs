@@ -50,6 +50,116 @@ display_id_type!(XwidgetId, u32);
 // neovm bridge boundary, which wrap into `FaceId` immediately.
 display_id_type!(FaceId, u32);
 
+/// A physical-pixel quantity.
+///
+/// Introduced at protocol conversion seams (e.g.
+/// [`crate::frame_glyphs::DisplaySlotId::from_pixels`] and the row-damage
+/// `dvpos` shift) so pixel-space and cell-grid-space values cannot be mixed
+/// silently at the boundaries where they convert. Scoped on purpose: the
+/// bulk of raw `f32` pixel fields across layout/render structs migrates
+/// separately (see the 4d follow-up note).
+///
+/// Serializes as a plain `f32` (serde newtype semantics), so adopting it on
+/// serialized fields does not change snapshot shape.
+#[repr(transparent)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, PartialOrd, Default, serde::Serialize, serde::Deserialize,
+)]
+pub struct Px(pub f32);
+
+impl Px {
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+
+    /// Whole-cell index covered by this pixel offset when one cell spans
+    /// `cell` pixels: round to nearest, clamp below zero. This is the
+    /// rounding contract of [`crate::frame_glyphs::DisplaySlotId::from_pixels`].
+    /// A non-positive cell size yields cell 0 (degenerate geometry guard).
+    #[must_use]
+    pub fn cells_rounded(self, cell: Px) -> Cell {
+        if cell.0 > 0.0 {
+            Cell((self.0 / cell.0).round().max(0.0) as u32)
+        } else {
+            Cell(0)
+        }
+    }
+}
+
+impl Add for Px {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+impl Sub for Px {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0)
+    }
+}
+
+impl std::ops::Mul<f32> for Px {
+    type Output = Self;
+    fn mul(self, factor: f32) -> Self {
+        Self(self.0 * factor)
+    }
+}
+
+impl std::fmt::Display for Px {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}px", self.0)
+    }
+}
+
+/// An integral cell-grid coordinate (visual row or column index).
+///
+/// The typed result of a pixel→grid conversion; see [`Px::cells_rounded`].
+#[repr(transparent)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct Cell(pub u32);
+
+impl Cell {
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl Add for Cell {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+
+impl Sub for Cell {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+}
+
+impl std::fmt::Display for Cell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// RGBA color with f32 components (0.0 - 1.0)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -4,7 +4,7 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{FaceId, Px};
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
@@ -1157,7 +1157,7 @@ impl LayoutEngine {
                             RowDamage::Reused
                         } else if let Some((reused, dvpos)) = scroll_reused {
                             if body_seen < reused {
-                                RowDamage::ReusedShifted { dvpos }
+                                RowDamage::ReusedShifted { dvpos: Px(dvpos) }
                             } else {
                                 RowDamage::New
                             }

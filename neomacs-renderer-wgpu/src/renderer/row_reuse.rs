@@ -411,7 +411,7 @@ fn classify(chunk: &RowChunk, ctx: &ReusePassCtx<'_>, cache: &RowReuseCache) -> 
     let dvpos = match info.damage {
         RowDamage::New => return tess(false),
         RowDamage::Reused => 0.0f32,
-        RowDamage::ReusedShifted { dvpos } => dvpos,
+        RowDamage::ReusedShifted { dvpos } => dvpos.get(),
     };
 
     // From here on the layout says the row is reusable; every early return is

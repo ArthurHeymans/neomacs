@@ -132,10 +132,10 @@ fn clear_all_resets_glyphs_and_metadata() {
         col: 2,
         slot_id: DisplaySlotId::from_pixels(
             DisplayWindowId::new(1),
-            10.0,
-            20.0,
-            buf.char_width,
-            buf.char_height,
+            Px(10.0),
+            Px(20.0),
+            Px(buf.char_width),
+            Px(buf.char_height),
         ),
         x: 10.0,
         y: 20.0,
@@ -612,7 +612,7 @@ fn add_cursor_appends_window_cursor_visual() {
     assert_eq!(cursor.window_id.get(), 42);
     assert_eq!(
         cursor.slot_id,
-        DisplaySlotId::from_pixels(DisplayWindowId::new(42), 100.0, 200.0, 8.0, 16.0)
+        DisplaySlotId::from_pixels(DisplayWindowId::new(42), Px(100.0), Px(200.0), Px(8.0), Px(16.0))
     );
     assert_eq!(cursor.x, 100.0);
     assert_eq!(cursor.y, 200.0);
@@ -1228,10 +1228,10 @@ fn set_phys_cursor_stores_info() {
         col: 4,
         slot_id: DisplaySlotId::from_pixels(
             DisplayWindowId::new(2),
-            50.0,
-            100.0,
-            buf.char_width,
-            buf.char_height,
+            Px(50.0),
+            Px(100.0),
+            Px(buf.char_width),
+            Px(buf.char_height),
         ),
         x: 50.0,
         y: 100.0,
@@ -1364,10 +1364,10 @@ fn add_image_appends_image_glyph() {
                 *slot_id,
                 Some(DisplaySlotId::from_pixels(
                     DisplayWindowId::new(0),
-                    100.0,
-                    200.0,
-                    buf.char_width,
-                    buf.char_height
+                    Px(100.0),
+                    Px(200.0),
+                    Px(buf.char_width),
+                    Px(buf.char_height)
                 ))
             );
             assert_eq!(image_id.get(), 42);
@@ -1570,10 +1570,10 @@ fn full_frame_simulation() {
         col: 15,
         slot_id: DisplaySlotId::from_pixels(
             DisplayWindowId::new(1),
-            15.0 * 8.0,
-            0.0,
-            buf.char_width,
-            buf.char_height,
+            Px(15.0 * 8.0),
+            Px(0.0),
+            Px(buf.char_width),
+            Px(buf.char_height),
         ),
         x: 15.0 * 8.0,
         y: 0.0,

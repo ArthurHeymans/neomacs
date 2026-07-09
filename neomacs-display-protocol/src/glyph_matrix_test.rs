@@ -462,7 +462,7 @@ fn materialize_includes_cursors() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     state.cursors.push(CursorItem {
         window_id: DisplayWindowId::new(7),
-        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(7), 40.0, 0.0, 8.0, 16.0),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(7), Px(40.0), Px(0.0), Px(8.0), Px(16.0)),
         x: 40.0,
         y: 0.0,
         width: 8.0,
@@ -1312,7 +1312,7 @@ fn materialize_mixed_grid_and_nongrid_items() {
     });
     state.cursors.push(CursorItem {
         window_id: DisplayWindowId::new(1),
-        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(1), 0.0, 0.0, 8.0, 16.0),
+        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(1), Px(0.0), Px(0.0), Px(8.0), Px(16.0)),
         x: 0.0,
         y: 0.0,
         width: 8.0,

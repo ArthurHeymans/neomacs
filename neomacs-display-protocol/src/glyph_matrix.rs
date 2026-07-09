@@ -16,7 +16,7 @@ use super::frame_glyphs::{
     WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use super::types::{
-    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Rect, VideoId, XwidgetId,
+    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
 };
 use super::ui_types::{MenuBarItem, ToolBarItem};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -508,7 +508,7 @@ pub enum RowDamage {
     /// Row was reused verbatim from the retained matrix at the same `pixel_y`.
     Reused,
     /// Row was reused but shifted by a uniform vertical delta (scroll).
-    ReusedShifted { dvpos: f32 },
+    ReusedShifted { dvpos: Px },
 }
 
 impl RowDamage {
@@ -1250,10 +1250,10 @@ impl FrameDisplayState {
                 clip_rect: fill.clip_rect,
                 slot_id: DisplaySlotId::from_pixels(
                     fill.window_id,
-                    fill.bounds.x,
-                    fill.bounds.y,
-                    self.char_width,
-                    self.char_height,
+                    Px(fill.bounds.x),
+                    Px(fill.bounds.y),
+                    Px(self.char_width),
+                    Px(self.char_height),
                 ),
                 bidi_level: 0,
                 x: fill.bounds.x,

@@ -14405,7 +14405,7 @@ fn phase5_fast_paths_emit_row_damage() {
     assert!(
         damage2
             .iter()
-            .any(|d| matches!(d, RowDamage::ReusedShifted { dvpos } if *dvpos != 0.0)),
+            .any(|d| matches!(d, RowDamage::ReusedShifted { dvpos } if dvpos.get() != 0.0)),
         "scroll emits ReusedShifted rows with a nonzero dvpos"
     );
 }

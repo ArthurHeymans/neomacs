@@ -8,7 +8,7 @@ use crate::effect_config::EffectsConfig;
 use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
-    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Rect, VideoId, XwidgetId,
+    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
 };
 use crate::ui_types::TabBarItem;
 use std::collections::HashMap;
@@ -77,21 +77,13 @@ impl DisplaySlotId {
     /// direct frame-space emission paths that have not been matrix-ified yet.
     pub fn from_pixels(
         window_id: DisplayWindowId,
-        x: f32,
-        y: f32,
-        char_width: f32,
-        char_height: f32,
+        x: Px,
+        y: Px,
+        char_width: Px,
+        char_height: Px,
     ) -> Self {
-        let row = if char_height > 0.0 {
-            (y / char_height).round().max(0.0) as u32
-        } else {
-            0
-        };
-        let col = if char_width > 0.0 {
-            (x / char_width).round().max(0.0) as u16
-        } else {
-            0
-        };
+        let row = y.cells_rounded(char_height).get();
+        let col = x.cells_rounded(char_width).get().min(u16::MAX as u32) as u16;
         Self {
             window_id,
             row,
@@ -1098,10 +1090,10 @@ impl FrameGlyphBuffer {
     fn current_slot_id(&self, x: f32, y: f32) -> DisplaySlotId {
         DisplaySlotId::from_pixels(
             self.current_window_id,
-            x,
-            y,
-            self.char_width,
-            self.char_height,
+            Px(x),
+            Px(y),
+            Px(self.char_width),
+            Px(self.char_height),
         )
     }
 
@@ -1565,7 +1557,13 @@ impl FrameGlyphBuffer {
     ) {
         self.window_cursors.push(WindowCursor {
             window_id,
-            slot_id: DisplaySlotId::from_pixels(window_id, x, y, self.char_width, self.char_height),
+            slot_id: DisplaySlotId::from_pixels(
+                window_id,
+                Px(x),
+                Px(y),
+                Px(self.char_width),
+                Px(self.char_height),
+            ),
             x,
             y,
             width,

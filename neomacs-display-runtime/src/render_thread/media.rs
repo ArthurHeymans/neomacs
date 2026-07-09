@@ -6,7 +6,7 @@ use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 #[cfg(feature = "neo-term")]
-use crate::core::types::{Color, FaceId};
+use crate::core::types::{Color, FaceId, Px};
 #[cfg(feature = "neo-term")]
 use crate::core::types::DisplayWindowId;
 #[cfg(any(
@@ -58,10 +58,10 @@ impl RenderApp {
                 clip_rect: None,
                 slot_id: DisplaySlotId::from_pixels(
                     DisplayWindowId::new(0),
-                    *x,
-                    *y,
-                    cell_w,
-                    cell_h,
+                    Px(*x),
+                    Px(*y),
+                    Px(cell_w),
+                    Px(cell_h),
                 ),
                 bidi_level: 0,
                 x: *x,
@@ -485,10 +485,10 @@ impl RenderApp {
                         clip_rect: None,
                         slot_id: DisplaySlotId::from_pixels(
                             DisplayWindowId::new(0),
-                            x,
-                            y,
-                            cell_w,
-                            cell_h,
+                            Px(x),
+                            Px(y),
+                            Px(cell_w),
+                            Px(cell_h),
                         ),
                         bidi_level: 0,
                         x,
@@ -548,10 +548,10 @@ impl RenderApp {
                         clip_rect: None,
                         slot_id: DisplaySlotId::from_pixels(
                             DisplayWindowId::new(0),
-                            x,
-                            y,
-                            cell_w,
-                            cell_h,
+                            Px(x),
+                            Px(y),
+                            Px(cell_w),
+                            Px(cell_h),
                         ),
                         bidi_level: 0,
                         x,
@@ -634,10 +634,10 @@ impl RenderApp {
                     clip_rect: None,
                     slot_id: DisplaySlotId::from_pixels(
                         DisplayWindowId::new(0),
-                        cx,
-                        cy,
-                        cell_w,
-                        cell_h,
+                        Px(cx),
+                        Px(cy),
+                        Px(cell_w),
+                        Px(cell_h),
                     ),
                     bidi_level: 0,
                     x: cx,
@@ -668,10 +668,10 @@ impl RenderApp {
                     clip_rect: None,
                     slot_id: DisplaySlotId::from_pixels(
                         DisplayWindowId::new(0),
-                        cx,
-                        cy,
-                        cell_w,
-                        cell_h,
+                        Px(cx),
+                        Px(cy),
+                        Px(cell_w),
+                        Px(cell_h),
                     ),
                     bidi_level: 0,
                     char: cell.c,
@@ -803,7 +803,7 @@ fn terminal_cell_face(
 mod tests {
     use super::*;
     use crate::core::frame_glyphs::FrameGlyphBuffer;
-    use crate::core::types::{Color, FaceId};
+    use crate::core::types::{Color, FaceId, Px};
     use crate::terminal::content::{RenderCell, RenderCursor, TerminalContent};
     use alacritty_terminal::term::cell::Flags as CellFlags;
 
