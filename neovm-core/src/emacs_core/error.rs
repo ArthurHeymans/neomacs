@@ -60,7 +60,14 @@ impl Error for EvalError {}
 #[derive(Clone, Debug)]
 pub enum Flow {
     Signal(Box<SignalData>),
-    Throw { tag: Value, value: Value },
+    Throw {
+        tag: Value,
+        value: Value,
+    },
+    ThreadBlocked {
+        blocker: Value,
+        remaining_forms: Value,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -169,6 +176,14 @@ pub fn map_flow(flow: Flow) -> EvalError {
             }
         }
         Flow::Throw { tag, value } => EvalError::UncaughtThrow { tag, value },
+        Flow::ThreadBlocked { blocker, .. } => EvalError::Signal {
+            symbol: intern("error"),
+            data: vec![Value::string(format!(
+                "Thread blocked on {}",
+                super::print::print_value(&blocker)
+            ))],
+            raw_data: None,
+        },
     }
 }
 
@@ -1182,6 +1197,9 @@ pub(crate) fn format_flow_with_eval(eval: &super::eval::Context, flow: &Flow) ->
             print_value_with_eval(eval, tag),
             print_value_with_eval(eval, value)
         ),
+        Flow::ThreadBlocked { blocker, .. } => {
+            format!("(thread-blocked {})", print_value_with_eval(eval, blocker))
+        }
     }
 }
 

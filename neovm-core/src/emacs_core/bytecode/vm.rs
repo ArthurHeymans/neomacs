@@ -537,6 +537,13 @@ impl<'a> Vm<'a> {
                 out.push(*tag);
                 out.push(*value);
             }
+            Flow::ThreadBlocked {
+                blocker,
+                remaining_forms,
+            } => {
+                out.push(*blocker);
+                out.push(*remaining_forms);
+            }
         }
     }
 
@@ -5291,6 +5298,7 @@ impl<'a> Vm<'a> {
         flow: Flow,
     ) -> Result<(), Flow> {
         match flow {
+            Flow::ThreadBlocked { .. } => Err(flow),
             Flow::Throw { tag, value } => {
                 let selected_resume = self.ctx.matching_catch_resume(&tag);
                 if let Some(ResumeTarget::VmCatch {

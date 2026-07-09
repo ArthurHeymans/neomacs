@@ -36,6 +36,8 @@ pub enum ThreadStatus {
     Created,
     /// Thread is currently running (in our model, at most one can be Running).
     Running,
+    /// Thread is suspended at a cooperative blocking primitive.
+    Blocked,
     /// Thread has finished successfully.
     Finished,
     /// Thread was terminated by an error / signal.
@@ -69,6 +71,8 @@ pub struct ThreadState {
     pub error_symbol: Value,
     /// Pending or terminal signal data for this thread.
     pub error_data: Value,
+    /// Resume thunk or remaining top-level forms for a cooperative block.
+    pub blocked_remaining_forms: Value,
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +148,7 @@ impl ThreadManager {
                 event_object: Value::NIL,
                 error_symbol: Value::NIL,
                 error_data: Value::NIL,
+                blocked_remaining_forms: Value::NIL,
             },
         );
         let mut thread_handles = HashMap::new();
@@ -184,6 +189,7 @@ impl ThreadManager {
                 event_object: Value::NIL,
                 error_symbol: Value::NIL,
                 error_data: Value::NIL,
+                blocked_remaining_forms: Value::NIL,
             },
         );
         self.thread_handles
@@ -282,7 +288,7 @@ impl ThreadManager {
     /// Check if a thread is alive from Elisp's point of view.
     pub fn thread_alive_p(&self, id: u64) -> bool {
         self.threads.get(&id).is_some_and(|t| match t.status {
-            ThreadStatus::Created | ThreadStatus::Running => true,
+            ThreadStatus::Created | ThreadStatus::Running | ThreadStatus::Blocked => true,
             ThreadStatus::Finished => !t.joined,
             ThreadStatus::Signaled => false,
         })
@@ -329,6 +335,39 @@ impl ThreadManager {
         let thread = self.threads.get_mut(&id)?;
         thread.joined = true;
         thread.last_error
+    }
+
+    pub fn block_thread(&mut self, id: u64, blocker: Value, remaining_forms: Value) {
+        if let Some(thread) = self.threads.get_mut(&id) {
+            thread.status = ThreadStatus::Blocked;
+            thread.event_object = blocker;
+            thread.blocked_remaining_forms = remaining_forms;
+        }
+    }
+
+    pub fn wake_threads_blocked_on(&mut self, blocker: Value) {
+        for thread in self.threads.values_mut() {
+            if thread.status == ThreadStatus::Blocked && eq_value(&thread.event_object, &blocker) {
+                thread.event_object = Value::NIL;
+            }
+        }
+    }
+
+    pub fn thread_ready_to_resume(&self, id: u64) -> bool {
+        self.threads.get(&id).is_some_and(|thread| {
+            thread.status == ThreadStatus::Blocked && thread.event_object.is_nil()
+        })
+    }
+
+    pub fn take_blocked_remaining_forms(&mut self, id: u64) -> Option<Value> {
+        let thread = self.threads.get_mut(&id)?;
+        if thread.status != ThreadStatus::Blocked || !thread.event_object.is_nil() {
+            return None;
+        }
+        let remaining = thread.blocked_remaining_forms;
+        thread.blocked_remaining_forms = Value::NIL;
+        thread.status = ThreadStatus::Running;
+        Some(remaining)
     }
 
     /// Get and optionally clear the global last-error.
@@ -541,6 +580,7 @@ impl GcTrace for ThreadManager {
             roots.push(thread.event_object);
             roots.push(thread.error_symbol);
             roots.push(thread.error_data);
+            roots.push(thread.blocked_remaining_forms);
             if let Some(buffer_id) = thread.current_buffer {
                 roots.push(Value::make_buffer(buffer_id));
             }
@@ -809,6 +849,12 @@ pub(crate) fn finish_make_thread_result(
             threads.record_thread_internal_error(thread_id, error_val);
             threads.record_last_error(error_val);
         }
+        Err(Flow::ThreadBlocked {
+            blocker,
+            remaining_forms,
+        }) => {
+            threads.block_thread(thread_id, blocker, remaining_forms);
+        }
     }
 
     Ok(threads
@@ -839,6 +885,9 @@ pub(crate) fn builtin_thread_join(
             vec![Value::string("Cannot join current thread")],
         ));
     }
+    if ctx.threads.thread_ready_to_resume(id) {
+        resume_blocked_thread(ctx, id)?;
+    }
     // GNU `Fthread_join` (thread.c:1118-1144) re-raises only an error injected
     // into this thread by `thread-signal` (recorded in `error_symbol`); an
     // error signalled *inside* the thread function is surfaced via
@@ -848,6 +897,24 @@ pub(crate) fn builtin_thread_join(
         return Err(flow);
     }
     Ok(ctx.threads.thread_result(id))
+}
+
+fn resume_blocked_thread(ctx: &mut crate::emacs_core::eval::Context, thread_id: u64) -> EvalResult {
+    let Some(remaining_forms) = ctx.threads.take_blocked_remaining_forms(thread_id) else {
+        return Ok(Value::NIL);
+    };
+    let runtime_state = enter_thread_runtime(ctx, thread_id)?;
+    let result = if remaining_forms
+        .closure_slot(crate::tagged::header::CLOSURE_ARGLIST)
+        .is_some()
+    {
+        ctx.apply(remaining_forms, vec![])
+    } else {
+        ctx.eval_lambda_body_value(remaining_forms)
+    };
+    exit_thread_runtime(ctx, thread_id, runtime_state);
+    finish_make_thread_result(&mut ctx.threads, thread_id, result)?;
+    Ok(Value::NIL)
 }
 
 /// `(thread-yield)` -- yield the current thread.
@@ -1117,7 +1184,12 @@ pub(crate) fn builtin_mutex_lock(
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
-    ctx.threads.mutex_lock(id);
+    if !ctx.threads.mutex_lock(id) {
+        return Err(Flow::ThreadBlocked {
+            blocker: args[0],
+            remaining_forms: Value::NIL,
+        });
+    }
     Ok(Value::NIL)
 }
 
@@ -1144,6 +1216,7 @@ pub(crate) fn builtin_mutex_unlock(
         ));
     }
     ctx.threads.mutex_unlock(id);
+    ctx.threads.wake_threads_blocked_on(args[0]);
     Ok(Value::NIL)
 }
 

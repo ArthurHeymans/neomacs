@@ -3041,6 +3041,11 @@ impl Context {
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return Err(flow);
                         }
+                        Err(flow @ Flow::ThreadBlocked { .. }) => {
+                            self.pop_condition_frame();
+                            self.restore_specpdl_roots(specpdl_root_scope);
+                            return Err(flow);
+                        }
                     }
                 }
             }
@@ -6150,6 +6155,7 @@ impl Context {
                     // another key instead of unwinding like GNU Emacs.
                     return Err(flow);
                 }
+                Err(flow @ Flow::ThreadBlocked { .. }) => return Err(flow),
                 Err(flow @ Flow::Signal(_))
                     if self
                         .command_loop
@@ -6472,7 +6478,7 @@ impl Context {
 
             if let Err(ref flow) = exec_result {
                 match flow {
-                    Flow::Throw { .. } => return exec_result,
+                    Flow::Throw { .. } | Flow::ThreadBlocked { .. } => return exec_result,
                     Flow::Signal(_)
                         if self
                             .command_loop
@@ -8442,7 +8448,24 @@ impl Context {
             let mut cursor = body;
             let mut last = Value::NIL;
             while cursor.is_cons() {
-                last = ctx.eval_sub(cursor.cons_car())?;
+                match ctx.eval_sub(cursor.cons_car()) {
+                    Ok(value) => last = value,
+                    Err(Flow::ThreadBlocked {
+                        blocker,
+                        remaining_forms,
+                    }) => {
+                        let remaining_forms = if remaining_forms.is_nil() {
+                            cursor.cons_cdr()
+                        } else {
+                            remaining_forms
+                        };
+                        return Err(Flow::ThreadBlocked {
+                            blocker,
+                            remaining_forms,
+                        });
+                    }
+                    Err(flow) => return Err(flow),
+                }
                 cursor = cursor.cons_cdr();
             }
             Ok(last)
@@ -11266,6 +11289,10 @@ impl Context {
                 }
                 Err(Flow::Signal(sig))
             }
+            Err(flow @ Flow::ThreadBlocked { .. }) => {
+                self.truncate_condition_stack(condition_stack_base);
+                Err(flow)
+            }
             Err(flow @ Flow::Throw { .. }) => {
                 self.truncate_condition_stack(condition_stack_base);
                 Err(flow)
@@ -11777,6 +11804,7 @@ impl Context {
         match flow {
             Flow::Signal(sig) => self.has_active_condition_handler_for_signal(sig),
             Flow::Throw { tag, .. } => self.has_active_catch(tag),
+            Flow::ThreadBlocked { .. } => false,
         }
     }
 
@@ -12352,6 +12380,13 @@ impl Context {
             Err(Flow::Throw { tag, value }) => {
                 self.push_vm_frame_root(*tag);
                 self.push_vm_frame_root(*value);
+            }
+            Err(Flow::ThreadBlocked {
+                blocker,
+                remaining_forms,
+            }) => {
+                self.push_vm_frame_root(*blocker);
+                self.push_vm_frame_root(*remaining_forms);
             }
         }
     }
@@ -13514,7 +13549,25 @@ impl Context {
                 return Err(err);
             }
         };
-        let result = self.eval_lambda_body_value(body);
+        let result = match self.eval_lambda_body_value(body) {
+            Err(Flow::ThreadBlocked {
+                blocker,
+                remaining_forms,
+            }) if !remaining_forms.is_nil() => {
+                let resume_function = builtins::symbols::make_interpreted_closure_from_parts(
+                    &Value::NIL,
+                    &remaining_forms,
+                    &self.lexenv,
+                    None,
+                    None,
+                )?;
+                Err(Flow::ThreadBlocked {
+                    blocker,
+                    remaining_forms: resume_function,
+                })
+            }
+            other => other,
+        };
         self.finish_lambda_call(call_state);
         self.unbind_to(root_count);
         result

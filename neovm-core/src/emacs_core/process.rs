@@ -6156,15 +6156,14 @@ impl super::eval::Context {
     /// caught (and logged), but a non-local `throw` is NOT an error, so it
     /// propagates past the callback boundary to the matching outer `catch`.
     ///
-    /// Mirroring that, a `Flow::Signal` is caught and logged here, while a
-    /// `Flow::Throw` is propagated to the caller so it can reach the `catch`
-    /// that surrounds the wait (e.g. `jsonrpc-request`'s catch tag, completed by
-    /// a zero-delay `run-at-time` timer).  A throw to a tag with no live catch
-    /// still becomes a `no-catch` error at the eval/thread boundary, as in GNU.
+    /// Mirroring that, a `Flow::Signal` is caught and logged here, while
+    /// non-local control flow is propagated to the caller so it can reach the
+    /// matching wait/catch boundary.  A throw to a tag with no live catch still
+    /// becomes a `no-catch` error at the eval/thread boundary, as in GNU.
     fn finish_callback_flow(&mut self, result: EvalResult, label: &str) -> Result<(), Flow> {
         match result {
             Ok(_) => Ok(()),
-            Err(err @ Flow::Throw { .. }) => Err(err),
+            Err(err @ (Flow::Throw { .. } | Flow::ThreadBlocked { .. })) => Err(err),
             Err(err @ Flow::Signal(_)) => {
                 let rendered = super::error::format_flow_with_eval(self, &err);
                 tracing::warn!("{label} callback error: {}", rendered);

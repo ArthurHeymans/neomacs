@@ -527,6 +527,12 @@ unsafe fn module_handle_nonlocal_exit(env: *mut emacs_env, flow: Flow) {
                 priv_.non_local_exit_symbol = tag;
                 priv_.non_local_exit_data = value;
             }
+            Flow::ThreadBlocked { .. } => {
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::symbol("error");
+                priv_.non_local_exit_data =
+                    Value::list(vec![Value::string("Thread blocked inside module call")]);
+            }
         }
     }
 }

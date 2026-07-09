@@ -1797,6 +1797,10 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
     let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
     loop {
         match flow {
+            Flow::ThreadBlocked { .. } => {
+                stash_pending_flow(flow);
+                return -1;
+            }
             Flow::Throw { tag, value } => {
                 let Some(selected) = ctx.matching_catch_resume(&tag) else {
                     // No matching catch anywhere: unwind all our frames and
