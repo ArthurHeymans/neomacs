@@ -241,7 +241,7 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; mapconcat, while GNU reuses uninitialised stack memory.  Both are
          ;; non-deterministic across builds, so squash them to 0 for parity.
          ((fixnump v) (if (> (abs v) 1000000000000) 0 v))
-         ;; Org clock and archive output embed the wall-clock time of the run.
+         ;; Org clock, archive, and export output embed the wall-clock time of the run.
          ;; The Neomacs and GNU oracle processes start seconds apart, so
          ;; timestamps can differ even when the resulting structure matches.
          ;; Replace wall-clock timestamps with canonical placeholders while
@@ -261,7 +261,16 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
              (replace-regexp-in-string
               "CLOCK: \\[[^]]+\\]--\\[[^]]+\\] => \\( *[0-9]+:[0-9][0-9]\\)"
               "CLOCK: [FIXED-CLOCK] => \\1"
-              caption-normalized))))
+              (replace-regexp-in-string
+               "Created: [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
+               "Created: [FIXED-EXPORT-TIME]"
+               (replace-regexp-in-string
+                "<!-- [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\} -->"
+                "<!-- [FIXED-EXPORT-TIME] -->"
+                (replace-regexp-in-string
+                 "% Created [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
+                 "% Created [FIXED-EXPORT-TIME]"
+                 caption-normalized)))))))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
