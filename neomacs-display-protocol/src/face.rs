@@ -108,6 +108,54 @@ impl BoxType {
     }
 }
 
+/// Fancy box border style — a Neomacs extension to GNU's box faces.
+///
+/// The numeric codes are the wire values used by the C-side
+/// `fill_face_data()` (`FaceDataFFI::box_border_style`) and by the
+/// GPU border shader's style id.
+#[repr(u32)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    IntoPrimitive,
+    TryFromPrimitive,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum BoxBorderStyle {
+    #[default]
+    Solid = 0,
+    Rainbow = 1,
+    AnimatedRainbow = 2,
+    Gradient = 3,
+    Glow = 4,
+    Neon = 5,
+    Dashed = 6,
+    Comet = 7,
+    Iridescent = 8,
+    Fire = 9,
+    Heartbeat = 10,
+}
+
+impl BoxBorderStyle {
+    pub fn from_gnu_code(code: u32) -> Option<Self> {
+        Self::try_from(code).ok()
+    }
+
+    pub fn gnu_code(self) -> u32 {
+        self.into()
+    }
+
+    /// True for any animated/fancy style (everything except plain solid).
+    pub fn is_fancy(self) -> bool {
+        self != Self::Solid
+    }
+}
+
 /// Basic face IDs — fixed cache slots matching GNU's `enum face_id`.
 ///
 /// Realized at frame creation via `realize_basic_faces()` in GNU
@@ -238,9 +286,8 @@ pub struct Face {
     /// Box corner radius (0 = sharp corners)
     pub box_corner_radius: i32,
 
-    /// Fancy border style (0=solid, 1=rainbow, 2=animated-rainbow, 3=gradient,
-    /// 4=glow, 5=neon, 6=dashed, 7=comet, 8=iridescent, 9=fire, 10=heartbeat)
-    pub box_border_style: u32,
+    /// Fancy border style; see [`BoxBorderStyle`].
+    pub box_border_style: BoxBorderStyle,
 
     /// Animation speed multiplier for fancy border effects (default 1.0)
     pub box_border_speed: f32,
@@ -303,7 +350,7 @@ impl Default for Face {
             box_type: BoxType::None,
             box_line_width: 0,
             box_corner_radius: 0,
-            box_border_style: 0,
+            box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
             box_color2: None,
             font_file_path: None,
@@ -521,7 +568,10 @@ impl FaceDataFFI {
             box_type,
             box_line_width: self.box_line_width,
             box_corner_radius: self.box_corner_radius,
-            box_border_style: self.box_border_style.max(0) as u32,
+            // FFI edge: decode the raw C style code; unknown codes fall back
+            // to the solid border rather than propagating garbage.
+            box_border_style: BoxBorderStyle::from_gnu_code(self.box_border_style.max(0) as u32)
+                .unwrap_or_default(),
             box_border_speed: self.box_border_speed as f32 / 100.0,
             box_color2: (self.box_color2 != 0).then(|| Color::from_pixel(self.box_color2)),
             font_file_path,

@@ -224,7 +224,7 @@ fn frame_display_state_add_window_matrix() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
     let matrix = GlyphMatrix::new(20, 80);
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
@@ -232,7 +232,7 @@ fn frame_display_state_add_window_matrix() {
         selected: true,
     });
     assert_eq!(state.window_matrices.len(), 1);
-    assert_eq!(state.window_matrices[0].window_id, 1);
+    assert_eq!(state.window_matrices[0].window_id, DisplayWindowId::new(1));
     assert_eq!(state.window_matrices[0].matrix.nrows, 20);
 }
 
@@ -258,7 +258,7 @@ fn state_with_text(text: &str) -> FrameDisplayState {
     }
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
@@ -307,7 +307,7 @@ fn materialize_emits_tab_line_row_at_window_top() {
     matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: win,
@@ -378,7 +378,7 @@ fn materialize_right_aligns_reversed_row() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d0}', FaceId::new(0), 0));
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d1}', FaceId::new(0), 1));
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
@@ -565,7 +565,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(2, FaceId::new(0)));
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
@@ -643,7 +643,7 @@ fn materialize_pixel_positions_from_grid() {
     let win_x = 5.0f32;
     let win_y = 3.0f32;
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
@@ -706,7 +706,7 @@ fn materialize_preserves_char_bidi_level() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(glyph);
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
@@ -741,7 +741,7 @@ fn materialize_preserves_stretch_bidi_level() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(glyph);
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
@@ -777,7 +777,7 @@ fn materialize_uses_explicit_row_metrics() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
@@ -819,7 +819,7 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
         .push(Glyph::char('A', FaceId::new(0), 0).with_vertical_offset(-4.0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
@@ -874,7 +874,7 @@ fn materialize_disabled_rows_are_skipped() {
     matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
@@ -906,7 +906,7 @@ fn materialize_padding_glyphs_are_skipped() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
@@ -949,7 +949,7 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
         .push(Glyph::char('E', FaceId::new(0), 1).with_pixel_width(12.0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
@@ -998,7 +998,7 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
     }
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
@@ -1046,7 +1046,7 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
     matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
@@ -1105,7 +1105,7 @@ fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
     matrix.rows[2].height_px = 20.0;
 
     let entry = WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
@@ -1135,7 +1135,7 @@ fn text_area_clip_rect_equals_text_pixel_bounds_without_chrome() {
     // y == window top; only x/width are inset by fringes/margins.
     let text_pixel_bounds = Rect::new(8.0, 0.0, 64.0, 32.0);
     let entry = WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
@@ -1174,7 +1174,7 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
     matrix.rows[2].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
@@ -1234,7 +1234,7 @@ fn materialize_stretch_glyph() {
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
@@ -1266,7 +1266,7 @@ fn materialize_uses_explicit_stretch_geometry() {
         .push(Glyph::stretch(4, FaceId::new(0)).with_pixel_geometry(24.0, 12.0, 5.0));
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
@@ -1377,7 +1377,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     });
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: win,
@@ -1522,26 +1522,26 @@ fn char_fonts_survive_materialize_and_serde() {
     let mut state = state_with_text("x");
     state
         .char_fonts
-        .entry(7)
+        .entry(FaceId::new(7))
         .or_default()
         .insert('好', ResolvedFontId(3));
 
     let buf = state.materialize();
     assert_eq!(
-        buf.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        buf.char_fonts.get(&FaceId::new(7)).and_then(|m| m.get(&'好')),
         Some(&ResolvedFontId(3))
     );
 
     let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
     assert_eq!(
-        back.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        back.char_fonts.get(&FaceId::new(7)).and_then(|m| m.get(&'好')),
         Some(&ResolvedFontId(3))
     );
 
     let json = serde_json::to_string(&state).expect("serialize");
     let parsed: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(
-        parsed.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        parsed.char_fonts.get(&FaceId::new(7)).and_then(|m| m.get(&'好')),
         Some(&ResolvedFontId(3))
     );
 }
@@ -1564,18 +1564,18 @@ fn shaped_clusters_survive_materialize_and_serde() {
     let mut state = state_with_text("x");
     state
         .shaped_clusters
-        .entry(2)
+        .entry(FaceId::new(2))
         .or_default()
         .insert("e\u{301}".into(), glyphs.clone());
 
     let buf = state.materialize();
     assert_eq!(
-        buf.shaped_clusters.get(&2).and_then(|m| m.get("e\u{301}")),
+        buf.shaped_clusters.get(&FaceId::new(2)).and_then(|m| m.get("e\u{301}")),
         Some(&glyphs)
     );
     let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
     assert_eq!(
-        back.shaped_clusters.get(&2).and_then(|m| m.get("e\u{301}")),
+        back.shaped_clusters.get(&FaceId::new(2)).and_then(|m| m.get("e\u{301}")),
         Some(&glyphs)
     );
     let json = serde_json::to_string(&state).expect("serialize");
@@ -1583,7 +1583,7 @@ fn shaped_clusters_survive_materialize_and_serde() {
     assert_eq!(
         parsed
             .shaped_clusters
-            .get(&2)
+            .get(&FaceId::new(2))
             .and_then(|m| m.get("e\u{301}")),
         Some(&glyphs)
     );

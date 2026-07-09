@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::DisplayWindowId;
 use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_buffer_display_property_render::{
@@ -7625,7 +7626,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
     let state = builder.finish(8, 4, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);
     let window = &state.window_matrices[0];
-    assert_eq!(window.window_id, 41);
+    assert_eq!(window.window_id, DisplayWindowId::new(41));
     assert!(window.selected);
     assert_eq!(window.pixel_bounds, Rect::new(3.0, 5.0, 80.0, 64.0));
     assert_eq!(window.text_pixel_bounds, Rect::new(10.0, 9.0, 64.0, 48.0));
@@ -7864,7 +7865,7 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
 
     let state = builder.finish(5, 1, 8.0, 16.0);
     assert_eq!(state.window_matrices.len(), 1);
-    assert_eq!(state.window_matrices[0].window_id, 41);
+    assert_eq!(state.window_matrices[0].window_id, DisplayWindowId::new(41));
 }
 
 #[test]

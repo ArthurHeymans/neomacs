@@ -9,7 +9,7 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::types::Color;
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {
@@ -39,7 +39,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) box_color: Option<Color>,
     pub(crate) box_line_width: i32,
     pub(crate) box_corner_radius: i32,
-    pub(crate) box_border_style: u32,
+    pub(crate) box_border_style: BoxBorderStyle,
     pub(crate) box_border_speed: f32,
     pub(crate) box_color2: Option<Color>,
     pub(crate) box_h_line_width: i32,
@@ -175,7 +175,7 @@ impl DisplayRowFace {
                 .then(|| Color::from_pixel(face.box_color)),
             box_line_width: face.box_line_width,
             box_corner_radius: 0,
-            box_border_style: 0,
+            box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
             box_color2: None,
             box_h_line_width: face.box_line_width,

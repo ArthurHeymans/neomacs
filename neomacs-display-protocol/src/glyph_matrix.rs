@@ -9,7 +9,7 @@
 //! glyph as one frame column.
 
 use super::effect_config::EffectsConfig;
-use super::face::{Face, FaceAttributes};
+use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, FringeBitmapData,
     FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
@@ -520,7 +520,7 @@ impl RowDamage {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WindowMatrixEntry {
-    pub window_id: u64,
+    pub window_id: DisplayWindowId,
     pub matrix: GlyphMatrix,
     /// Per-row damage parallel to `matrix.rows` (spec §4.6 / Phase 5). Empty
     /// when not computed; otherwise one entry per row.
@@ -815,8 +815,8 @@ pub struct TtyMenuBarState {
 pub struct GuiMenuBarState {
     pub items: Vec<MenuBarItem>,
     pub height: f32,
-    pub fg: (f32, f32, f32),
-    pub bg: (f32, f32, f32),
+    pub fg: Color,
+    pub bg: Color,
 }
 
 /// GUI tool-bar overlay state carried in a frame snapshot.
@@ -824,8 +824,8 @@ pub struct GuiMenuBarState {
 pub struct GuiToolBarState {
     pub items: Vec<ToolBarItem>,
     pub height: f32,
-    pub fg: (f32, f32, f32),
-    pub bg: (f32, f32, f32),
+    pub fg: Color,
+    pub bg: Color,
 }
 
 /// GUI compact-bar overlay state carried in a frame snapshot.
@@ -834,10 +834,10 @@ pub struct GuiCompactBarState {
     pub menu_items: Vec<MenuBarItem>,
     pub tool_items: Vec<ToolBarItem>,
     pub height: f32,
-    pub menu_fg: (f32, f32, f32),
-    pub menu_bg: (f32, f32, f32),
-    pub tool_fg: (f32, f32, f32),
-    pub tool_bg: (f32, f32, f32),
+    pub menu_fg: Color,
+    pub menu_bg: Color,
+    pub tool_fg: Color,
+    pub tool_bg: Color,
 }
 
 impl FrameDisplayState {
@@ -1272,7 +1272,7 @@ impl FrameDisplayState {
                     self.char_width
                 };
                 self.for_each_grid_row_glyph(
-                    DisplayWindowId::new(entry.window_id as i64),
+                    entry.window_id,
                     row_idx as u32,
                     glyph_row,
                     row_bounds,
@@ -1292,7 +1292,7 @@ impl FrameDisplayState {
         // magit-first scope (no left margin) this is exactly the fringe. The
         // right fringe path is parsed but not emitted yet.
         for entry in &self.window_matrices {
-            let window_id = DisplayWindowId::new(entry.window_id as i64);
+            let window_id = entry.window_id;
             let text_area_clip = entry.text_area_clip_rect();
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
                 if !glyph_row.enabled {
@@ -1455,7 +1455,6 @@ impl FrameDisplayState {
     /// decoration flags needed by `FrameGlyph::Char` and `FrameGlyph::Stretch`.
     fn resolve_face_for_materialize(&self, face_id: FaceId) -> MaterializedFaceData {
         if let Some(face) = self.faces.get(&face_id) {
-            let underline = face.underline_style.gnu_code();
             MaterializedFaceData {
                 fg: face.foreground,
                 bg: face.background,
@@ -1463,19 +1462,11 @@ impl FrameDisplayState {
                 font_weight: face.font_weight,
                 italic: face.attributes.contains(FaceAttributes::ITALIC),
                 font_size: face.font_size,
-                underline,
+                underline: face.underline_style,
                 underline_color: face.underline_color,
-                strike_through: if face.attributes.contains(FaceAttributes::STRIKE_THROUGH) {
-                    1
-                } else {
-                    0
-                },
+                strike_through: face.attributes.contains(FaceAttributes::STRIKE_THROUGH),
                 strike_through_color: face.strike_through_color,
-                overline: if face.attributes.contains(FaceAttributes::OVERLINE) {
-                    1
-                } else {
-                    0
-                },
+                overline: face.attributes.contains(FaceAttributes::OVERLINE),
                 overline_color: face.overline_color,
                 overstrike: false,
             }
@@ -1487,11 +1478,11 @@ impl FrameDisplayState {
                 font_weight: 400,
                 italic: false,
                 font_size: self.font_pixel_size,
-                underline: 0,
+                underline: UnderlineStyle::None,
                 underline_color: None,
-                strike_through: 0,
+                strike_through: false,
                 strike_through_color: None,
-                overline: 0,
+                overline: false,
                 overline_color: None,
                 overstrike: false,
             }

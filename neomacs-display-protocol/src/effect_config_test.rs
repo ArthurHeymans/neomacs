@@ -1,3 +1,4 @@
+use crate::types::FaceId;
 use super::*;
 use std::time::Duration;
 
@@ -1300,7 +1301,7 @@ fn rain_effect_defaults() {
 fn region_glow_defaults() {
     let c = RegionGlowConfig::default();
     assert_eq!(c.enabled, false);
-    assert_eq!(c.face_id, 0);
+    assert_eq!(c.face_id, FaceId::new(0));
     assert_eq!(c.radius, 6.0);
     assert_eq!(c.opacity, 0.3);
     assert_clone_debug(&c);
@@ -1396,7 +1397,7 @@ fn scroll_velocity_fade_defaults() {
 fn search_pulse_defaults() {
     let c = SearchPulseConfig::default();
     assert_eq!(c.enabled, false);
-    assert_eq!(c.face_id, 0);
+    assert_eq!(c.face_id, FaceId::new(0));
     assert_clone_debug(&c);
 }
 
@@ -1821,7 +1822,7 @@ fn effects_config_default_creates_all_sub_defaults() {
     assert_eq!(ec.scroll_momentum.fade_ms, 300);
     assert_eq!(ec.scroll_progress.height, 2.0);
     assert_eq!(ec.scroll_velocity_fade.max_opacity, 0.15);
-    assert_eq!(ec.search_pulse.face_id, 0);
+    assert_eq!(ec.search_pulse.face_id, FaceId::new(0));
     assert_eq!(ec.show_whitespace.color, (0.4, 0.4, 0.4, 0.3));
     assert_eq!(ec.sine_wave.amplitude, 20.0);
     assert_eq!(ec.spiral_vortex.arms, 4);

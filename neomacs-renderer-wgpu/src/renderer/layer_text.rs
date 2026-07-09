@@ -923,12 +923,12 @@ impl WgpuRenderer {
                         .unwrap_or((1.0, 1.0));
 
                     // --- Underline ---
-                    if *underline > 0 {
+                    if *underline != UnderlineStyle::None {
                         let ul_color = underline_color.as_ref().unwrap_or(fg);
                         let ul_y = baseline_y + ul_pos;
                         let line_thickness = ul_thick.max(1.0);
 
-                        match UnderlineStyle::from_gnu_code(*underline).unwrap_or_default() {
+                        match *underline {
                             UnderlineStyle::Line => {
                                 // Single solid line
                                 self.add_rect(
@@ -1029,7 +1029,7 @@ impl WgpuRenderer {
                     }
 
                     // --- Overline ---
-                    if *overline > 0 {
+                    if *overline {
                         let ol_color = overline_color.as_ref().unwrap_or(fg);
                         self.add_rect(
                             &mut decoration_vertices,
@@ -1042,7 +1042,7 @@ impl WgpuRenderer {
                     }
 
                     // --- Strike-through ---
-                    if *strike_through > 0 {
+                    if *strike_through {
                         let st_color = strike_through_color.as_ref().unwrap_or(fg);
                         // Position at ~1/3 of ascent above baseline (standard typographic position)
                         let st_y = baseline_y - *ascent / 3.0;
@@ -1277,11 +1277,11 @@ impl WgpuRenderer {
                             bw,
                             radius,
                             bx_color,
-                            face.box_border_style,
+                            face.box_border_style.gnu_code(),
                             face.box_border_speed,
                             color2,
                         );
-                        if face.box_border_style > 0 {
+                        if face.box_border_style.is_fancy() {
                             self.fx.has_animated_borders = true;
                         }
                     } else {

@@ -1,5 +1,6 @@
 //! UI overlay, animation, and effect render commands.
 
+use crate::core::types::Color;
 use super::{PopupMenuState, RenderApp, TooltipState};
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
 use neomacs_display_protocol::ToolBarImageSource;
@@ -250,8 +251,8 @@ impl RenderApp {
                 let tool_bar = GuiToolBarState {
                     items,
                     height,
-                    fg: (fg_r, fg_g, fg_b),
-                    bg: (bg_r, bg_g, bg_b),
+                    fg: Color::rgb(fg_r, fg_g, fg_b),
+                    bg: Color::rgb(bg_r, bg_g, bg_b),
                 };
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.set_tool_bar(Some(tool_bar))
@@ -285,8 +286,8 @@ impl RenderApp {
                 let menu_bar = GuiMenuBarState {
                     items,
                     height,
-                    fg: (fg_r, fg_g, fg_b),
-                    bg: (bg_r, bg_g, bg_b),
+                    fg: Color::rgb(fg_r, fg_g, fg_b),
+                    bg: Color::rgb(bg_r, bg_g, bg_b),
                 };
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.set_menu_bar(Some(menu_bar))

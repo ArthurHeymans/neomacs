@@ -5,7 +5,7 @@
 //! incremental overlap tracking is needed.
 
 use crate::effect_config::EffectsConfig;
-use crate::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Rect, VideoId, XwidgetId,
@@ -122,11 +122,11 @@ pub struct MaterializedFaceData {
     pub font_weight: u16,
     pub italic: bool,
     pub font_size: f32,
-    pub underline: u8,
+    pub underline: UnderlineStyle,
     pub underline_color: Option<Color>,
-    pub strike_through: u8,
+    pub strike_through: bool,
     pub strike_through_color: Option<Color>,
-    pub overline: u8,
+    pub overline: bool,
     pub overline_color: Option<Color>,
     pub overstrike: bool,
 }
@@ -1009,7 +1009,7 @@ impl FrameGlyphBuffer {
             box_type: BoxType::None,
             box_line_width: 0,
             box_corner_radius: 0,
-            box_border_style: 0,
+            box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
             box_color2: None,
             font_file_path: None,
@@ -1270,7 +1270,6 @@ impl FrameGlyphBuffer {
     /// font weight 400, the frame font pixel size, and no decorations.
     pub fn resolved_face(&self, face_id: FaceId) -> MaterializedFaceData {
         if let Some(face) = self.faces.get(&face_id) {
-            let underline = face.underline_style.gnu_code();
             MaterializedFaceData {
                 fg: face.foreground,
                 bg: face.background,
@@ -1278,19 +1277,11 @@ impl FrameGlyphBuffer {
                 font_weight: face.font_weight,
                 italic: face.attributes.contains(FaceAttributes::ITALIC),
                 font_size: face.font_size,
-                underline,
+                underline: face.underline_style,
                 underline_color: face.underline_color,
-                strike_through: if face.attributes.contains(FaceAttributes::STRIKE_THROUGH) {
-                    1
-                } else {
-                    0
-                },
+                strike_through: face.attributes.contains(FaceAttributes::STRIKE_THROUGH),
                 strike_through_color: face.strike_through_color,
-                overline: if face.attributes.contains(FaceAttributes::OVERLINE) {
-                    1
-                } else {
-                    0
-                },
+                overline: face.attributes.contains(FaceAttributes::OVERLINE),
                 overline_color: face.overline_color,
                 overstrike: false,
             }
@@ -1302,11 +1293,11 @@ impl FrameGlyphBuffer {
                 font_weight: 400,
                 italic: false,
                 font_size: self.font_pixel_size,
-                underline: 0,
+                underline: UnderlineStyle::None,
                 underline_color: None,
-                strike_through: 0,
+                strike_through: false,
                 strike_through_color: None,
-                overline: 0,
+                overline: false,
                 overline_color: None,
                 overstrike: false,
             }

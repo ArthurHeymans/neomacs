@@ -82,7 +82,7 @@ impl FrameDisplayState {
             let info = self
                 .window_infos
                 .iter()
-                .find(|info| info.window_id.get() == entry.window_id as i64);
+                .find(|info| info.window_id == entry.window_id);
             match info {
                 Some(info) => {
                     let _ = write!(

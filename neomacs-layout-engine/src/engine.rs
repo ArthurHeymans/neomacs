@@ -986,8 +986,11 @@ impl LayoutEngine {
                 window_system.clone(),
                 self.font_sizing,
             );
-            let pixel_to_tuple = |pixel: u32| -> (f32, f32, f32) {
-                (
+            // sRGB-space Color (NO linear conversion): the GUI chrome renderer
+            // applies srgb_to_linear itself at draw time, mirroring the
+            // pre-Color tuple contract.
+            let pixel_to_color = |pixel: u32| -> Color {
+                Color::rgb(
                     ((pixel >> 16) & 0xFF) as f32 / 255.0,
                     ((pixel >> 8) & 0xFF) as f32 / 255.0,
                     (pixel & 0xFF) as f32 / 255.0,
@@ -1000,8 +1003,8 @@ impl LayoutEngine {
                     Some(neomacs_display_protocol::glyph_matrix::GuiMenuBarState {
                         items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
                         height: frame_params.menu_bar_height,
-                        fg: pixel_to_tuple(menu_face.fg),
-                        bg: pixel_to_tuple(menu_face.bg),
+                        fg: pixel_to_color(menu_face.fg),
+                        bg: pixel_to_color(menu_face.bg),
                     });
             }
 
@@ -1011,8 +1014,8 @@ impl LayoutEngine {
                     Some(neomacs_display_protocol::glyph_matrix::GuiToolBarState {
                         items: collect_gui_tool_bar_items(evaluator),
                         height: frame_params.tool_bar_height,
-                        fg: pixel_to_tuple(tool_bar_face.fg),
-                        bg: pixel_to_tuple(tool_bar_face.bg),
+                        fg: pixel_to_color(tool_bar_face.fg),
+                        bg: pixel_to_color(tool_bar_face.bg),
                     });
             }
 
@@ -1024,10 +1027,10 @@ impl LayoutEngine {
                         menu_items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
                         tool_items: collect_gui_tool_bar_items(evaluator),
                         height: frame_params.compact_bar_height,
-                        menu_fg: pixel_to_tuple(menu_face.fg),
-                        menu_bg: pixel_to_tuple(menu_face.bg),
-                        tool_fg: pixel_to_tuple(tool_bar_face.fg),
-                        tool_bg: pixel_to_tuple(tool_bar_face.bg),
+                        menu_fg: pixel_to_color(menu_face.fg),
+                        menu_bg: pixel_to_color(menu_face.bg),
+                        tool_fg: pixel_to_color(tool_bar_face.fg),
+                        tool_bg: pixel_to_color(tool_bar_face.bg),
                     });
             }
         }
@@ -1065,7 +1068,7 @@ impl LayoutEngine {
                 .window_matrices
                 .iter()
                 .map(|entry| {
-                    let wid = DisplayWindowId::new(entry.window_id as i64);
+                    let wid = entry.window_id;
                     let mut faces = std::collections::HashMap::new();
                     for row in &entry.matrix.rows {
                         for area in &row.glyphs {
@@ -1084,7 +1087,7 @@ impl LayoutEngine {
                 })
                 .collect();
             for entry in &mut frame_state.window_matrices {
-                let window_id = DisplayWindowId::new(entry.window_id as i64);
+                let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
                 let scroll_reused = self.scroll_window_ids.get(&window_id).copied();
                 let edit_reused = self.edit_window_ids.get(&window_id).copied();
@@ -1187,7 +1190,7 @@ impl LayoutEngine {
                     let Some(display_snapshot) = self
                         .display_snapshots
                         .iter()
-                        .find(|snapshot| snapshot.window_id.0 == entry.window_id)
+                        .find(|snapshot| snapshot.window_id.0 as i64 == entry.window_id.get())
                         .cloned()
                     else {
                         continue;

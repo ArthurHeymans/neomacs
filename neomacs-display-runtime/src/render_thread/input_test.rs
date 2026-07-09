@@ -1,3 +1,4 @@
+use crate::core::types::Color;
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
@@ -112,14 +113,14 @@ fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
     primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
     primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
 
     assert_eq!(app.toolbar_y_origin(), 33.0);
@@ -134,8 +135,8 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
     primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
     let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
     frame.tab_bar = Some(FrameTabBarState {
@@ -147,8 +148,8 @@ fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
     primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: Vec::new(),
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
 
     assert_eq!(app.toolbar_y_origin(), 66.0);
@@ -163,14 +164,14 @@ fn toolbar_hit_test_uses_toolbar_local_y() {
     primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
         items: Vec::new(),
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
     primary_frame.chrome.tool_bar = Some(GuiToolBarState {
         items: vec![toolbar_item(7)],
         height: 33.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
 
     assert_eq!(app.toolbar_hit_test(7.0, 16.0), Some(7));
@@ -200,8 +201,8 @@ fn menu_bar_hit_test_uses_shared_item_geometry() {
             },
         ],
         height: 24.0,
-        fg: (0.0, 0.0, 0.0),
-        bg: (0.0, 0.0, 0.0),
+        fg: Color::rgb(0.0, 0.0, 0.0),
+        bg: Color::rgb(0.0, 0.0, 0.0),
     });
 
     let hit = app.menu_bar_hit_test(12.0, 12.0).expect("menu hit");
@@ -257,10 +258,10 @@ fn compact_bar_tool_hit_test_offsets_after_menu_items() {
             }],
             tool_items: vec![toolbar_item(9)],
             height: 30.0,
-            menu_fg: (0.0, 0.0, 0.0),
-            menu_bg: (0.0, 0.0, 0.0),
-            tool_fg: (0.0, 0.0, 0.0),
-            tool_bg: (0.0, 0.0, 0.0),
+            menu_fg: Color::rgb(0.0, 0.0, 0.0),
+            menu_bg: Color::rgb(0.0, 0.0, 0.0),
+            tool_fg: Color::rgb(0.0, 0.0, 0.0),
+            tool_bg: Color::rgb(0.0, 0.0, 0.0),
         });
     let x = app.compact_bar_menu_width() + app.toolbar.padding as f32 + 1.0;
 

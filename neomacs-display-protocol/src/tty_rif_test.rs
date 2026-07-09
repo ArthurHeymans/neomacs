@@ -211,7 +211,7 @@ fn make_simple_state(text: &str) -> FrameDisplayState {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),
@@ -247,7 +247,7 @@ fn make_grid_state(
     }
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: frame_id + 100,
+        window_id: DisplayWindowId::new((frame_id + 100) as i64),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
@@ -289,7 +289,7 @@ fn rasterize_respects_matrix_position() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(40.0, 32.0, 80.0, 48.0),
@@ -330,7 +330,7 @@ fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', FaceId::new(8), 0));
     matrix.rows[0] = row;
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 8.0, 1.0),
@@ -366,7 +366,7 @@ fn rasterize_uses_grid_rows_not_pixel_row_metrics() {
     }
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 12.0, 5.0),
@@ -398,7 +398,7 @@ fn rasterize_text_rows_use_text_pixel_bounds_but_chrome_rows_do_not() {
     matrix.rows[1] = mode_line_row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 96.0, 48.0),
@@ -470,7 +470,7 @@ fn rasterize_disabled_rows_are_skipped() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -505,7 +505,7 @@ fn rasterize_wide_char_creates_padding() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -541,7 +541,7 @@ fn rasterize_explicit_padding_glyph_is_not_duplicated() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -571,7 +571,7 @@ fn rasterize_stretch_glyph_uses_declared_width() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -608,7 +608,7 @@ fn rasterize_tracks_phys_cursor_position() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -661,7 +661,7 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
     matrix.rows[1] = row1;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -736,7 +736,7 @@ fn rasterize_ignores_matrix_cursor_columns_without_phys_cursor() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -766,7 +766,7 @@ fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -819,7 +819,7 @@ fn rasterize_ignores_nonselected_hollow_cursor_visual_on_tty() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 9,
+        window_id: DisplayWindowId::new(9),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 16.0, 80.0, 32.0),
@@ -848,7 +848,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 80.0),
@@ -930,7 +930,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     top_matrix.rows[0] = top_row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix: top_matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
@@ -952,7 +952,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     bot_matrix.rows[0] = bot_row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 2,
+        window_id: DisplayWindowId::new(2),
         matrix: bot_matrix,
         // Bottom half of the screen.
         damage: Vec::new(),
@@ -1022,7 +1022,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     w1_matrix.rows[0] = w1_row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix: w1_matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
@@ -1041,7 +1041,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     w2_matrix.rows[0] = w2_row;
 
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 2,
+        window_id: DisplayWindowId::new(2),
         matrix: w2_matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 32.0, 80.0, 32.0),
@@ -1460,7 +1460,7 @@ fn state_with_text_glyphs(cols: usize, glyphs: Vec<Glyph>) -> FrameDisplayState 
     row.glyphs[GlyphArea::Text as usize] = glyphs;
     matrix.rows[0] = row;
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * 8.0, 5.0 * 16.0),

@@ -1700,7 +1700,7 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
         matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
@@ -1797,7 +1797,7 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
     };
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(composite);
     state.window_matrices.push(WindowMatrixEntry {
-        window_id: 1,
+        window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         matrix,
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),

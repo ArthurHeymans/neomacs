@@ -483,9 +483,9 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                         bg: bg_rgb,
                         bold: font_weight >= 700,
                         italic,
-                        underline,
+                        underline: underline.gnu_code(),
                         underline_color: ul_color,
-                        strikethrough: strike_through > 0,
+                        strikethrough: strike_through,
                         inverse: false,
                     },
                 };

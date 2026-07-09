@@ -10,7 +10,7 @@ use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow, WindowMatrixEntry};
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{DisplayWindowId, Rect};
 
 pub(crate) struct OutputWindowBuildState {
     windows: Vec<OutputWindowGridEntry>,
@@ -506,7 +506,9 @@ impl OutputWindowGridEntry {
     pub(crate) fn into_window_matrix_entry(mut self) -> WindowMatrixEntry {
         self.grid.ensure_hashes();
         WindowMatrixEntry {
-            window_id: self.window_id,
+            // Single u64→DisplayWindowId conversion point for the published
+            // matrix entry; the output pipeline's internal ids stay u64.
+            window_id: DisplayWindowId::new(self.window_id as i64),
             matrix: self.grid.into_matrix(),
             pixel_bounds: self.pixel_bounds,
             text_pixel_bounds: self.text_pixel_bounds,

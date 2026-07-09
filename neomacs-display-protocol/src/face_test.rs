@@ -81,6 +81,32 @@ fn box_type_codes_match_gnu_face_box_type() {
 }
 
 #[test]
+fn box_border_style_codes_round_trip_fill_face_data_values() {
+    let styles = [
+        (BoxBorderStyle::Solid, 0),
+        (BoxBorderStyle::Rainbow, 1),
+        (BoxBorderStyle::AnimatedRainbow, 2),
+        (BoxBorderStyle::Gradient, 3),
+        (BoxBorderStyle::Glow, 4),
+        (BoxBorderStyle::Neon, 5),
+        (BoxBorderStyle::Dashed, 6),
+        (BoxBorderStyle::Comet, 7),
+        (BoxBorderStyle::Iridescent, 8),
+        (BoxBorderStyle::Fire, 9),
+        (BoxBorderStyle::Heartbeat, 10),
+    ];
+
+    for (style, code) in styles {
+        assert_eq!(style.gnu_code(), code);
+        assert_eq!(BoxBorderStyle::from_gnu_code(code), Some(style));
+    }
+
+    assert_eq!(BoxBorderStyle::from_gnu_code(11), None);
+    assert!(!BoxBorderStyle::Solid.is_fancy());
+    assert!(BoxBorderStyle::Rainbow.is_fancy());
+}
+
+#[test]
 fn basic_face_id_rejects_fringe_area_symbols() {
     assert_eq!(BasicFaceId::from_name("fringe"), Some(BasicFaceId::Fringe));
     assert_eq!(BasicFaceId::from_name("left-fringe"), None);

@@ -102,7 +102,7 @@ impl FrameRowDamage {
                     row_hash: row.hash,
                 })
                 .collect();
-            windows.insert(entry.window_id as i64, WindowRowDamage { rows });
+            windows.insert(entry.window_id.get(), WindowRowDamage { rows });
         }
         Self { windows }
     }

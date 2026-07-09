@@ -15,6 +15,14 @@ use crate::core::types::DisplayFrameId;
 use crate::thread_comm::{MenuBarItem, ToolBarItem};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRenderer};
 
+/// Flatten a protocol [`Color`] into the legacy `(r, g, b)` tuple the
+/// renderer's chrome-overlay draw fns still take. Alpha is dropped: GUI
+/// chrome colors are opaque sRGB. Follow-up: migrate the overlay draw
+/// fns themselves to `Color` and delete this.
+fn color_rgb_tuple(color: neomacs_display_protocol::types::Color) -> (f32, f32, f32) {
+    (color.r, color.g, color.b)
+}
+
 struct GuiFrameMenuBarOverlay<'a> {
     items: &'a [MenuBarItem],
     height: f32,
@@ -658,8 +666,8 @@ impl RenderApp {
                     .map(|menu_bar| GuiFrameMenuBarOverlay {
                         items: &menu_bar.items,
                         height: menu_bar.height,
-                        fg: menu_bar.fg,
-                        bg: menu_bar.bg,
+                        fg: color_rgb_tuple(menu_bar.fg),
+                        bg: color_rgb_tuple(menu_bar.bg),
                     }),
                 tool_bar: render
                     .chrome
@@ -673,8 +681,8 @@ impl RenderApp {
                             compact_bar_height,
                         ),
                         height: tool_bar.height,
-                        fg: tool_bar.fg,
-                        bg: tool_bar.bg,
+                        fg: color_rgb_tuple(tool_bar.fg),
+                        bg: color_rgb_tuple(tool_bar.bg),
                         toolbar,
                     }),
                 compact_bar: render.chrome.compact_bar.as_ref().map(|compact_bar| {
@@ -682,10 +690,10 @@ impl RenderApp {
                         menu_items: &compact_bar.menu_items,
                         tool_items: &compact_bar.tool_items,
                         height: compact_bar.height,
-                        menu_fg: compact_bar.menu_fg,
-                        menu_bg: compact_bar.menu_bg,
-                        tool_fg: compact_bar.tool_fg,
-                        tool_bg: compact_bar.tool_bg,
+                        menu_fg: color_rgb_tuple(compact_bar.menu_fg),
+                        menu_bg: color_rgb_tuple(compact_bar.menu_bg),
+                        tool_fg: color_rgb_tuple(compact_bar.tool_fg),
+                        tool_bg: color_rgb_tuple(compact_bar.tool_bg),
                         toolbar,
                     }
                 }),

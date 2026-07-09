@@ -1943,7 +1943,7 @@ fn window_layout_trace(
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let display_snapshot = frame
         .window_display_snapshot(selected_window)
@@ -3122,7 +3122,7 @@ fn layout_frame_rust_truncated_row_sets_right_arrow_fringe() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
 
     let right_arrow_rows = entry
@@ -3196,7 +3196,7 @@ fn layout_frame_rust_continued_row_sets_curly_arrow_fringe() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
 
     let right_curly_rows = entry
@@ -3307,7 +3307,7 @@ fn layout_frame_rust_list_wrapped_left_fringe_spec_draws_in_fringe_not_inline() 
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
 
     // Gap 1: the list-wrapped `(left-fringe …)` is classified + recorded, so
@@ -4192,7 +4192,7 @@ fn line_break_extend_fill_reaches_tty_reserved_right_column() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let row = entry
         .matrix
@@ -4824,12 +4824,12 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
     let minibuffer_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id as i64)
         .expect("minibuffer matrix");
     let root_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == root_window_id)
+        .find(|entry| entry.window_id.get() == root_window_id as i64)
         .expect("root matrix");
 
     let minibuffer_text = window_matrix_text(minibuffer_entry);
@@ -4905,7 +4905,7 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
     let minibuffer_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id as i64)
         .expect("minibuffer echo matrix");
     let echo_glyphs = minibuffer_entry
         .matrix
@@ -4976,7 +4976,7 @@ fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) 
     let minibuffer_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id as i64)
         .expect("minibuffer matrix");
     let row_texts = enabled_window_row_texts(minibuffer_entry);
 
@@ -5265,7 +5265,7 @@ fn layout_frame_rust_renders_invisible_ellipsis_through_row_builder() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5461,7 +5461,7 @@ fn layout_frame_rust_renders_buffer_glyphless_chars_as_glyphless() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5511,7 +5511,7 @@ fn layout_frame_rust_renders_buffer_control_chars_with_caret_notation() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5585,7 +5585,7 @@ fn layout_frame_rust_control_char_caret_uses_escape_glyph_foreground() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5703,7 +5703,7 @@ fn layout_frame_rust_normal_text_keeps_base_face_not_escape_glyph() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5811,7 +5811,7 @@ fn layout_frame_rust_nbsp_uses_nobreak_space_foreground() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -5947,7 +5947,7 @@ fn layout_frame_rust_nobreak_hyphen_uses_nobreak_hyphen_foreground() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -6034,7 +6034,7 @@ fn layout_frame_rust_renders_line_prefix_through_row_builder() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -6099,7 +6099,7 @@ fn layout_frame_rust_renders_nobreak_chars_as_mapped_text() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -6148,7 +6148,7 @@ fn layout_frame_rust_renders_nobreak_chars_in_escape_mode_as_mapped_text() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7029,7 +7029,7 @@ fn layout_frame_rust_uses_buffer_default_face_height_for_body_rows() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7122,7 +7122,7 @@ fn layout_frame_rust_applies_display_height_to_buffer_text_faces() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7224,7 +7224,7 @@ fn layout_frame_rust_applies_display_height_to_overlay_strings() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7303,7 +7303,7 @@ fn layout_frame_rust_advances_overlay_newline_by_measured_row_height() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_rows = entry
         .matrix
@@ -7751,7 +7751,7 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = window_entry
         .matrix
@@ -7804,7 +7804,7 @@ fn layout_frame_rust_renders_display_replacement_tabs_as_stretches() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7883,7 +7883,7 @@ fn layout_frame_rust_honors_display_replacement_string_display_properties() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -7950,7 +7950,7 @@ fn layout_frame_rust_honors_display_replacement_string_face_properties() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -8091,13 +8091,13 @@ fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_buil
         .window_matrices
         .iter()
         .find(|entry| {
-            entry.window_id
+            entry.window_id.get()
                 == eval
                     .frame_manager()
                     .get(frame_id)
                     .expect("frame")
                     .selected_window
-                    .0
+                    .0 as i64
         })
         .expect("selected window matrix");
     assert!(
@@ -8478,7 +8478,7 @@ fn layout_frame_rust_emits_buffer_tab_as_stretch_glyph() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = window_entry
         .matrix
@@ -8554,7 +8554,7 @@ fn layout_frame_rust_tab_stops_are_window_relative_in_split_windows() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == right_window.0)
+        .find(|entry| entry.window_id.get() == right_window.0 as i64)
         .expect("right window matrix");
     let text_row = window_entry
         .matrix
@@ -8652,7 +8652,7 @@ fn layout_frame_rust_display_space_align_keeps_suffix_text_in_split_windows() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == right_window.0)
+        .find(|entry| entry.window_id.get() == right_window.0 as i64)
         .expect("right window matrix");
     let rows = enabled_window_row_texts_expanding_stretches(window_entry);
 
@@ -8729,7 +8729,7 @@ fn layout_frame_rust_tty_display_space_align_stays_one_cell_high() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == window_id)
+        .find(|entry| entry.window_id.get() == window_id as i64)
         .expect("selected window matrix");
     let rows = enabled_window_row_texts_expanding_stretches(window_entry);
 
@@ -8828,7 +8828,7 @@ fn layout_frame_rust_emits_pixel_window_divider_geometry() {
     let left_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("left window matrix");
     assert!(
         left_entry.matrix.rows.iter().all(|row| {
@@ -8898,7 +8898,7 @@ fn layout_frame_rust_gui_zero_width_divider_uses_pixel_vertical_border() {
     let left_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("left window matrix");
     assert!(
         left_entry.matrix.rows.iter().all(|row| {
@@ -8988,7 +8988,7 @@ fn layout_frame_rust_emits_display_space_as_stretch_glyph() {
     let window_entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = window_entry
         .matrix
@@ -11591,7 +11591,7 @@ fn layout_frame_rust_tab_line_unicode_uses_shared_display_row_builder() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let tab_row = entry
         .matrix
@@ -11653,7 +11653,7 @@ fn layout_frame_rust_baseline_buffer_text_uses_main_buffer_wide_and_cluster_glyp
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_glyphs = entry
         .matrix
@@ -11712,7 +11712,7 @@ fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let main_row = entry
         .matrix
@@ -11786,7 +11786,7 @@ fn buffer_text_source_shadow_matches_main_buffer_tab_row() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let main_row = entry
         .matrix
@@ -11977,7 +11977,7 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -12052,7 +12052,7 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let text_row = entry
         .matrix
@@ -12185,7 +12185,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rows = enabled_window_row_texts(entry);
 
@@ -12255,7 +12255,7 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rows = enabled_window_row_texts(entry);
     let first_row = rows.first().cloned().unwrap_or_default();
@@ -12347,7 +12347,7 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rows = enabled_window_row_texts(entry);
 
@@ -12444,7 +12444,7 @@ fn layout_frame_rust_resolves_standard_fringe_bitmap_spec() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rows = enabled_window_row_texts(entry);
 
@@ -12526,7 +12526,7 @@ fn layout_frame_rust_fills_empty_line_fringe_below_buffer_end() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
 
     // The real buffer line still renders — the filler rows must NOT overwrite or
@@ -12617,7 +12617,7 @@ fn layout_frame_rust_omits_empty_line_fringe_when_indicator_off() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     assert!(
         entry
@@ -12699,7 +12699,7 @@ fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rendered = enabled_window_row_texts(entry).join("\n");
 
@@ -12771,7 +12771,7 @@ fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let default_bg = state
         .faces
@@ -12882,7 +12882,7 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let default_face = state
         .faces
@@ -12976,7 +12976,7 @@ fn layout_frame_rust_applies_face_only_overlay_starting_mid_run() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let bg_of = |ch: char| {
         let face_id = entry
@@ -13074,7 +13074,7 @@ fn layout_frame_rust_continues_eob_before_string_after_overlong_line() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rows = enabled_window_row_texts(entry);
 
@@ -13156,7 +13156,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == selected_window.0)
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("window matrix entry");
     let rendered_rows: Vec<String> = entry
         .matrix
@@ -13259,7 +13259,7 @@ fn layout_frame_rust_grows_minibuffer_for_eob_before_string_like_gnu() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id.0 as i64)
         .expect("minibuffer matrix entry");
     let rows = enabled_window_row_texts(entry);
 
@@ -13345,7 +13345,7 @@ fn layout_active_minibuffer_rows(
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id.0 as i64)
         .expect("minibuffer matrix entry");
     enabled_window_row_texts(entry)
 }
@@ -13441,7 +13441,7 @@ fn active_minibuffer_resize_uses_buffer_local_max_mini_window_height() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|entry| entry.window_id == minibuffer_window_id.0)
+        .find(|entry| entry.window_id.get() == minibuffer_window_id.0 as i64)
         .expect("minibuffer matrix entry");
     let rows = enabled_window_row_texts(entry);
     let content_rows = rows.iter().filter(|row| !row.trim().is_empty()).count();
@@ -14351,7 +14351,7 @@ fn phase5_fast_paths_emit_row_damage() {
         let entry = state
             .window_matrices
             .iter()
-            .find(|e| e.window_id == win.0)
+            .find(|e| e.window_id.get() == win.0 as i64)
             .expect("selected window matrix");
         assert_eq!(
             entry.damage.len(),
@@ -14719,7 +14719,7 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|e| e.window_id == win.0)
+        .find(|e| e.window_id.get() == win.0 as i64)
         .expect("window");
     let mut missing: Vec<FaceId> = Vec::new();
     for row in entry.matrix.rows.iter().filter(|r| r.enabled) {
@@ -14786,7 +14786,7 @@ fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
     let entry = state
         .window_matrices
         .iter()
-        .find(|e| e.window_id == win.0)
+        .find(|e| e.window_id.get() == win.0 as i64)
         .expect("window");
     let mut missing: std::collections::BTreeSet<FaceId> = std::collections::BTreeSet::new();
     let mut total = 0usize;

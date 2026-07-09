@@ -784,7 +784,7 @@ fn terminal_cell_face(
         box_type: BoxType::None,
         box_line_width: 0,
         box_corner_radius: 0,
-        box_border_style: 0,
+        box_border_style: neomacs_display_protocol::face::BoxBorderStyle::Solid,
         box_border_speed: 1.0,
         box_color2: None,
         font_file_path: None,

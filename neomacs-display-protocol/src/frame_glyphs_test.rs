@@ -488,11 +488,11 @@ fn add_char_uses_current_face_attributes() {
             assert_eq!(rf.bg, bg);
             assert_eq!(rf.font_weight, 700);
             assert!(rf.italic);
-            assert_eq!(rf.underline, 1);
+            assert_eq!(rf.underline, UnderlineStyle::Line);
             assert_eq!(rf.underline_color, Some(Color::GREEN));
-            assert_eq!(rf.strike_through, 1);
+            assert!(rf.strike_through);
             assert_eq!(rf.strike_through_color, Some(Color::RED));
-            assert_eq!(rf.overline, 1);
+            assert!(rf.overline);
             assert_eq!(rf.overline_color, Some(Color::BLUE));
             assert!(buf.glyphs[0].is_overlay());
         }
@@ -1093,11 +1093,11 @@ fn set_face_with_font_decoration_attributes() {
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
             let rf = buf.resolved_face(*face_id);
-            assert_eq!(rf.underline, 3);
+            assert_eq!(rf.underline, UnderlineStyle::Wave);
             assert_eq!(rf.underline_color, Some(ul_color));
-            assert_eq!(rf.strike_through, 1);
+            assert!(rf.strike_through);
             assert_eq!(rf.strike_through_color, Some(st_color));
-            assert_eq!(rf.overline, 1);
+            assert!(rf.overline);
             assert_eq!(rf.overline_color, Some(ol_color));
         }
         _ => panic!("Expected Char"),
