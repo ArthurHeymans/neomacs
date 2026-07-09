@@ -10125,28 +10125,27 @@ fn dispatch_builtin_pure_handles_inotify_watch_lifecycle() {
 }
 
 #[test]
-fn dispatch_builtin_pure_handles_sqlite_lifecycle_and_closed_handle_guard() {
+fn dispatch_builtin_pure_matches_gnu_without_sqlite3_surface() {
     crate::test_utils::init_test_tracing();
-    let db = dispatch_builtin_pure("sqlite-open", vec![])
-        .expect("sqlite-open should resolve")
-        .expect("sqlite-open should evaluate");
-    let sqlitep = dispatch_builtin_pure("sqlitep", vec![db])
+    let available = dispatch_builtin_pure("sqlite-available-p", vec![])
+        .expect("sqlite-available-p should resolve")
+        .expect("sqlite-available-p should evaluate");
+    assert_eq!(available, Value::NIL);
+
+    let sqlitep = dispatch_builtin_pure("sqlitep", vec![Value::symbol("not-a-db")])
         .expect("sqlitep should resolve")
         .expect("sqlitep should evaluate");
-    assert_eq!(sqlitep, Value::T);
+    assert_eq!(sqlitep, Value::NIL);
 
-    let closed = dispatch_builtin_pure("sqlite-close", vec![db])
-        .expect("sqlite-close should resolve")
-        .expect("sqlite-close should evaluate");
-    assert_eq!(closed, Value::T);
-
-    let err = dispatch_builtin_pure("sqlite-execute", vec![db, Value::string("select 1")])
-        .expect("sqlite-execute should resolve")
-        .unwrap_err();
-    match err {
-        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "sqlite-error"),
-        other => panic!("expected signal, got {other:?}"),
-    }
+    assert!(dispatch_builtin_pure("sqlite-open", vec![]).is_none());
+    assert!(dispatch_builtin_pure("sqlite-close", vec![Value::NIL]).is_none());
+    assert!(
+        dispatch_builtin_pure(
+            "sqlite-execute",
+            vec![Value::NIL, Value::string("select 1")]
+        )
+        .is_none()
+    );
 }
 
 #[test]
