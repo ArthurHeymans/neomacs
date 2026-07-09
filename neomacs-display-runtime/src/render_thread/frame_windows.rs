@@ -22,9 +22,9 @@ use super::state::{
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
-use crate::core::frame_glyphs::FrameGlyphBuffer;
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::FrameGlyph;
+use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 use neomacs_display_protocol::glyph_matrix::{
@@ -155,7 +155,6 @@ impl ChromeState {
             }
         }
     }
-
 }
 
 /// Result of a chrome interaction press.
@@ -1153,7 +1152,6 @@ impl GuiFrameWindowState {
     pub fn window(&self) -> Option<&Arc<Window>> {
         self.lifecycle.window()
     }
-
 }
 
 /// Key for frame-window lookup in the manager's `windows` HashMap.
