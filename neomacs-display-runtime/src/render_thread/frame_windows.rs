@@ -353,6 +353,13 @@ impl GuiFrameRenderState {
         };
         frame.glyphs.extend(glyphs);
         frame.faces.extend(faces);
+        // The frame no longer matches the layout state its row-damage summary
+        // was built from, so drop the pairing — the renderer then tessellates
+        // this frame fully instead of splicing cached rows. (Today the
+        // appended terminal glyphs use the sentinel DisplayWindowId 0, which
+        // never appears in damage summaries, but that is an accident of the
+        // terminal expansion, not a guarantee worth betting reuse on.)
+        self.compositor.current_row_damage = None;
         self.compositor.dirty = true;
         true
     }
