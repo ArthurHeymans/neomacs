@@ -85,6 +85,7 @@ struct DisplayRowCurrentTextSourceState<'face, 'emit> {
     row_output: DisplayRowCurrentRowOutput<'emit>,
     evaluator: &'emit mut Context,
     font_metrics: &'emit mut Option<FontMetricsService>,
+    window_system: bool,
     face_resolver: &'face FaceResolver,
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
@@ -92,6 +93,7 @@ struct DisplayRowCurrentTextSourceState<'face, 'emit> {
 struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
     row_output: DisplayRowCurrentRowOutput<'emit>,
     font_metrics: &'emit mut Option<FontMetricsService>,
+    window_system: bool,
     face_resolver: &'face FaceResolver,
     display_host: Option<&'emit dyn DisplayHost>,
     face_ids: &'emit mut FrameFaceIdAllocator,
@@ -277,6 +279,7 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         row_output: DisplayRowCurrentRowOutput<'emit>,
         evaluator: &'emit mut Context,
         font_metrics: &'emit mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'face FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> Self {
@@ -284,6 +287,7 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
             row_output,
             evaluator,
             font_metrics,
+            window_system,
             face_resolver,
             face_ids,
         }
@@ -303,7 +307,7 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         let role = row_request.role();
         let mutation = DisplayRowCurrentSourceStepMutation {
             row_request,
-            renderer: DisplayRowRenderer::new(self.font_metrics),
+            renderer: DisplayRowRenderer::new_for_frame(self.font_metrics, self.window_system),
             source,
             source_state,
             context: DisplayRowRenderContext::new(
@@ -336,7 +340,7 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         let role = row_request.role();
         let mutation = DisplayRowCurrentSourceStepMutation {
             row_request,
-            renderer: DisplayRowRenderer::new(self.font_metrics),
+            renderer: DisplayRowRenderer::new_for_frame(self.font_metrics, self.window_system),
             source,
             source_state,
             context: DisplayRowRenderContext::new(
@@ -362,6 +366,7 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
     fn new(
         row_output: DisplayRowCurrentRowOutput<'emit>,
         font_metrics: &'emit mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'face FaceResolver,
         display_host: Option<&'emit dyn DisplayHost>,
         face_ids: &'emit mut FrameFaceIdAllocator,
@@ -369,6 +374,7 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
         Self {
             row_output,
             font_metrics,
+            window_system,
             face_resolver,
             display_host,
             face_ids,
@@ -381,8 +387,9 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
         source: &mut S,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<DisplayRowRenderIntoRowResult> {
-        let mut render_executor = DisplayRowRenderExecutor::new(
+        let mut render_executor = DisplayRowRenderExecutor::new_for_frame(
             self.font_metrics,
+            self.window_system,
             self.face_resolver,
             self.display_host,
             self.face_ids,
@@ -540,12 +547,14 @@ impl<'a> TextRowOutputRenderState<'a> {
     fn measure_state<'emit>(
         &'emit mut self,
         font_metrics: &'emit mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'emit FaceResolver,
     ) -> TextRowSourceMeasureState<'emit> {
         TextRowSourceMeasureState {
             row_output: self.output.current_row_output(),
             evaluator: self.evaluator,
             font_metrics,
+            window_system,
             face_resolver,
         }
     }
@@ -553,6 +562,7 @@ impl<'a> TextRowOutputRenderState<'a> {
     fn current_text_render_state<'emit>(
         &'emit mut self,
         font_metrics: &'emit mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
@@ -560,6 +570,7 @@ impl<'a> TextRowOutputRenderState<'a> {
             self.output.current_row_output(),
             self.evaluator,
             font_metrics,
+            window_system,
             face_resolver,
             face_ids,
         )
@@ -568,12 +579,14 @@ impl<'a> TextRowOutputRenderState<'a> {
     fn current_source_fragment_render_state<'emit>(
         &'emit mut self,
         font_metrics: &'emit mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'emit FaceResolver,
         face_ids: &'emit mut FrameFaceIdAllocator,
     ) -> DisplayRowCurrentSourceFragmentRenderState<'emit, 'emit> {
         DisplayRowCurrentSourceFragmentRenderState::new(
             self.output.current_row_output(),
             font_metrics,
+            window_system,
             face_resolver,
             self.evaluator.display_host.as_deref(),
             face_ids,
@@ -627,6 +640,7 @@ impl<'a> TextRowOutputRenderState<'a> {
 pub(crate) struct TextRowSourceRenderState<'a> {
     output_render: TextRowOutputRenderState<'a>,
     font_metrics: &'a mut Option<FontMetricsService>,
+    window_system: bool,
     face_resolver: &'a FaceResolver,
 }
 
@@ -634,11 +648,13 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn from_output_render(
         output_render: TextRowOutputRenderState<'a>,
         font_metrics: &'a mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'a FaceResolver,
     ) -> Self {
         Self {
             output_render,
             font_metrics,
+            window_system,
             face_resolver,
         }
     }
@@ -647,6 +663,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         TextRowSourceRenderState {
             output_render: self.output_render.reborrow(),
             font_metrics: self.font_metrics,
+            window_system: self.window_system,
             face_resolver: self.face_resolver,
         }
     }
@@ -657,7 +674,7 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
         self.output_render
-            .measure_state(self.font_metrics, self.face_resolver)
+            .measure_state(self.font_metrics, self.window_system, self.face_resolver)
     }
 
     pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
@@ -823,7 +840,12 @@ impl<'a> TextRowSourceRenderState<'a> {
         face_ids: &mut FrameFaceIdAllocator,
     ) -> Option<DisplayRowRenderIntoRowResult> {
         self.output_render
-            .current_source_fragment_render_state(self.font_metrics, self.face_resolver, face_ids)
+            .current_source_fragment_render_state(
+                self.font_metrics,
+                self.window_system,
+                self.face_resolver,
+                face_ids,
+            )
             .render_natural_fragment_into_current_row(request, source, source_state)
     }
 
@@ -1083,15 +1105,19 @@ fn current_text_render_state<'emit>(
     state: &'emit mut TextRowSourceRenderState<'_>,
     face_ids: &'emit mut FrameFaceIdAllocator,
 ) -> DisplayRowCurrentTextSourceState<'emit, 'emit> {
-    state
-        .output_render
-        .current_text_render_state(state.font_metrics, state.face_resolver, face_ids)
+    state.output_render.current_text_render_state(
+        state.font_metrics,
+        state.window_system,
+        state.face_resolver,
+        face_ids,
+    )
 }
 
 pub(crate) struct TextRowSourceMeasureState<'a> {
     row_output: DisplayRowCurrentRowOutput<'a>,
     evaluator: &'a mut Context,
     font_metrics: &'a mut Option<FontMetricsService>,
+    window_system: bool,
     face_resolver: &'a FaceResolver,
 }
 
@@ -1107,6 +1133,7 @@ impl<'a> TextRowSourceMeasureState<'a> {
             row_output,
             evaluator,
             font_metrics,
+            window_system: false,
             face_resolver,
         }
     }
@@ -1149,6 +1176,7 @@ fn current_text_measure_state<'emit>(
         state.row_output.reborrow(),
         state.evaluator,
         state.font_metrics,
+        state.window_system,
         state.face_resolver,
         face_ids,
     )

@@ -694,6 +694,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
 
 pub(crate) struct DisplayRowRenderer<'metrics> {
     font_metrics: &'metrics mut Option<FontMetricsService>,
+    allow_proportional_advances: bool,
 }
 
 pub(crate) struct DisplayRowRenderExecutor<'metrics, 'context, 'ids> {
@@ -710,6 +711,19 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
     ) -> Self {
         Self {
             renderer: DisplayRowRenderer::new(font_metrics),
+            context: DisplayRowRenderContext::new(face_resolver, display_host, face_ids),
+        }
+    }
+
+    pub(crate) fn new_for_frame(
+        font_metrics: &'metrics mut Option<FontMetricsService>,
+        window_system: bool,
+        face_resolver: &'context FaceResolver,
+        display_host: Option<&'context dyn DisplayHost>,
+        face_ids: &'ids mut FrameFaceIdAllocator,
+    ) -> Self {
+        Self {
+            renderer: DisplayRowRenderer::new_for_frame(font_metrics, window_system),
             context: DisplayRowRenderContext::new(face_resolver, display_host, face_ids),
         }
     }
@@ -743,7 +757,17 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
 
 impl<'metrics> DisplayRowRenderer<'metrics> {
     pub(crate) fn new(font_metrics: &'metrics mut Option<FontMetricsService>) -> Self {
-        Self { font_metrics }
+        Self::new_for_frame(font_metrics, false)
+    }
+
+    pub(crate) fn new_for_frame(
+        font_metrics: &'metrics mut Option<FontMetricsService>,
+        window_system: bool,
+    ) -> Self {
+        Self {
+            font_metrics,
+            allow_proportional_advances: window_system,
+        }
     }
 
     fn render_lisp_string_plan_with_context(
@@ -929,11 +953,20 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             );
             let progress = match measurement {
                 DisplayRowItemMeasurement::Default => {
-                    let mut glyph_measurer = DisplayRowGlyphMeasurer::new(
-                        &row_faces,
-                        face_realizer.font_metrics_service_mut(),
-                        char_width,
-                    );
+                    let mut glyph_measurer = if self.allow_proportional_advances {
+                        DisplayRowGlyphMeasurer::with_proportional_advances(
+                            &row_faces,
+                            face_realizer.font_metrics_service_mut(),
+                            char_width,
+                            crate::glyph_advance::GlyphAdvanceQuantization::PreserveLogicalPixels,
+                        )
+                    } else {
+                        DisplayRowGlyphMeasurer::new(
+                            &row_faces,
+                            face_realizer.font_metrics_service_mut(),
+                            char_width,
+                        )
+                    };
                     let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer_for_area(
                         &row_layout,
                         &mut *row,

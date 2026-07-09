@@ -443,8 +443,12 @@ impl BufferSourceWalkSetup {
         buf_access: &RustBufferAccess<'buf, B>,
     ) -> (WindowOutputEmitter, BufferSourcePostLoopRenderOutcome) {
         let mut output_emitter = output.begin_text_window_output(begin_request);
-        let source_render =
-            output.source_render_state(&mut output_emitter, font_metrics, face_resolver);
+        let source_render = output.source_render_state(
+            &mut output_emitter,
+            font_metrics,
+            params.window_system,
+            face_resolver,
+        );
         let post_loop = self.render_body_and_tail(
             &mut BufferSourceWalkRenderState::new(
                 source_render,

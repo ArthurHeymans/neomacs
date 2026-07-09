@@ -287,6 +287,7 @@ impl DisplayTextRunMeasurementPlan {
         face_char_width_px: f32,
         fallback_char_width_px: f32,
         quantization: GlyphAdvanceQuantization,
+        standalone_cell_floor: bool,
     ) -> DisplayTextRunMeasurement {
         let cluster_advances =
             DisplayTextRunClusterAdvances::from_shaped_glyphs(text.len(), glyphs);
@@ -303,10 +304,10 @@ impl DisplayTextRunMeasurementPlan {
                 // Complex-script (composed) runs take the shaped advance
                 // as-is: GNU measures compositions by the shaped gstring
                 // width, and joined forms are legitimately narrower than a
-                // character cell. Clamping them up to the cell re-inflates
-                // the cluster to its isolated-forms sum. Standalone chars
-                // keep the cell floor (the monospace column model).
-                let cell_floor = crate::composition::complex_script(ch).is_none();
+                // character cell. Standalone shaped chars keep the cell
+                // fallback only for terminal/fixed-pitch measurement.
+                let cell_floor =
+                    standalone_cell_floor && crate::composition::complex_script(ch).is_none();
                 let minimum = if cell_floor {
                     DisplayRowCharWidthPolicy::new(face_char_width_px).advance_for_columns(columns)
                 } else {

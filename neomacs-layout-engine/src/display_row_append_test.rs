@@ -139,6 +139,7 @@ fn text_row_source_render_state<'a>(
     TextRowSourceRenderState::from_output_render(
         text_row_output_render_state(builder, output_emitter, evaluator),
         font_metrics,
+        false,
         face_resolver,
     )
 }

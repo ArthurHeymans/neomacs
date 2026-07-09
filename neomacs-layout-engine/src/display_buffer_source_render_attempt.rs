@@ -113,6 +113,7 @@ impl<'emit> BufferSourceOutputState<'emit> {
         &'output mut self,
         output_emitter: &'output mut WindowOutputEmitter,
         font_metrics: &'output mut Option<FontMetricsService>,
+        window_system: bool,
         face_resolver: &'output FaceResolver,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
@@ -122,6 +123,7 @@ impl<'emit> BufferSourceOutputState<'emit> {
                 self.evaluator,
             ),
             font_metrics,
+            window_system,
             face_resolver,
         )
     }

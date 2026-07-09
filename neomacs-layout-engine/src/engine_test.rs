@@ -6621,12 +6621,12 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let face_font_size = frame.font_pixel_size;
     let mut metrics = FontMetricsService::new();
-    let expected_i =
-        expected_gui_glyph_advance(&mut metrics, 'i', "Noto Sans", 400, false, face_font_size)
-            .round() as i64;
-    let expected_w =
-        expected_gui_glyph_advance(&mut metrics, 'W', "Noto Sans", 400, false, face_font_size)
-            .round() as i64;
+    let expected_i = metrics
+        .char_width('i', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
+    let expected_w = metrics
+        .char_width('W', "Noto Sans", 400, false, face_font_size)
+        .round() as i64;
     assert_ne!(
         expected_i, expected_w,
         "test requires proportional metrics for i and W"

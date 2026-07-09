@@ -2094,6 +2094,95 @@ fn display_row_measurement_policy_builds_faces_from_frame_mode() {
 }
 
 #[test]
+fn display_row_gui_measurement_preserves_narrow_proportional_glyph_advance() {
+    let mut base = base_face();
+    base.font_family = "Noto Sans".to_string();
+    base.font_size = 9.12871;
+    base.font_weight = 400;
+    base.set_measured_char_width_px(7.2);
+    let gui_face =
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
+    let mut font_metrics = Some(FontMetricsService::new());
+
+    let width = gui_face.advance_for_char(&mut font_metrics, '.', 7.2);
+
+    assert!(
+        width > 0.0 && width < 7.2,
+        "GNU GUI display uses the realized font's per-glyph advance for proportional faces; got {width}"
+    );
+}
+
+#[test]
+fn display_row_gui_renderer_preserves_narrow_proportional_glyph_advance() {
+    let _eval = Context::new();
+    let mut base = base_face();
+    base.font_family = "Noto Sans".to_string();
+    base.font_size = 9.12871;
+    base.font_weight = 400;
+    base.set_measured_char_width_px(7.2);
+    base.font_ascent = 10.0;
+    let mut font_metrics = Some(FontMetricsService::new());
+    let mut renderer = DisplayRowRenderer::new_for_frame(&mut font_metrics, true);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("neo".into()));
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let request = display_row_request_from_base_face(
+        DisplayRowGeometry {
+            y: 0.0,
+            width: 240.0,
+            height: 17.0,
+            char_width: 7.2,
+            ascent: 10.0,
+            tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
+        },
+        &mut face_ids,
+        &base,
+        GlyphRowRole::Text,
+        std::collections::HashMap::new(),
+    );
+
+    let rendered = render_lisp_string_row(
+        &mut renderer,
+        request,
+        Value::string(".agent-sh"),
+        &resolver,
+        &mut face_ids,
+    )
+    .expect("display source row");
+    let first_width = rendered.row().glyphs[GlyphArea::Text.index()][0].pixel_width;
+
+    assert!(
+        first_width > 0.0 && first_width < 7.2,
+        "GUI row rendering must not floor proportional glyph advances to the frame cell; got {first_width}"
+    );
+}
+
+#[test]
+fn display_row_gui_measurement_preserves_narrow_proportional_text_run_advances() {
+    let mut base = base_face();
+    base.font_family = "Noto Sans".to_string();
+    base.font_size = 9.12871;
+    base.font_weight = 400;
+    base.set_measured_char_width_px(7.2);
+    let gui_face =
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
+    let mut font_metrics = Some(FontMetricsService::new());
+
+    let measurement = gui_face.text_run_measurement(&mut font_metrics, ".agent-sh");
+
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
+    else {
+        panic!("GUI font-backed proportional text should produce measured text-run advances");
+    };
+    let first = advances.first().expect("first glyph advance").advance_px;
+    assert!(
+        first > 0.0 && first < 7.2,
+        "GNU GUI display keeps the realized proportional glyph advance in text runs; got {first}"
+    );
+}
+
+#[test]
 fn display_row_fallback_metrics_builds_from_default_face_extents() {
     let fallback = DisplayRowFallbackMetrics::from_default_face_extents(7.5, 18.0, 13.0);
 
@@ -2279,6 +2368,7 @@ fn display_text_run_measurement_plan_builds_from_shaped_glyphs() {
             6.0,
             4.0,
             GlyphAdvanceQuantization::PreserveLogicalPixels,
+            true,
         );
 
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
@@ -3473,6 +3563,7 @@ fn shaped_complex_script_advances_are_not_cell_clamped() {
             8.4,
             8.4,
             GlyphAdvanceQuantization::PreserveLogicalPixels,
+            true,
         );
 
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
