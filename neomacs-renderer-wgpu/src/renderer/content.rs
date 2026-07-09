@@ -1594,27 +1594,17 @@ impl WgpuRenderer {
                 _ => continue,
             };
 
-            let is_rounded = faces
-                .get(&gface_id)
-                .map(|f| f.box_corner_radius > 0)
-                .unwrap_or(false);
-
             let merged = if let Some(last) = box_spans.last_mut() {
                 let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
                 let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
+                // Strict same-face merge for every span. The frame-glyph path
+                // additionally merges sharp overlay (mode-line) spans across
+                // faces, but this child-frame content path draws no
+                // overlay-distinct rows (row_role is ignored throughout), so
+                // that rule does not apply here.
                 let same_face = last.face_id == gface_id;
 
-                let last_is_rounded = faces
-                    .get(&last.face_id)
-                    .map(|f| f.box_corner_radius > 0)
-                    .unwrap_or(false);
-                let face_ok = if is_rounded || last_is_rounded {
-                    same_face
-                } else {
-                    same_face
-                };
-
-                if same_row && adjacent && face_ok {
+                if same_row && adjacent && same_face {
                     last.width = gx + gw - last.x;
                     true
                 } else {
