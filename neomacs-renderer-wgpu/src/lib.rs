@@ -33,7 +33,10 @@ pub use glyph_atlas::{
 };
 pub use image_cache::{CachedImage, ImageCache, ImageDimensions, ImageState};
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
-pub use renderer::{RendererFrameEffects, WgpuRenderer};
+pub use renderer::{
+    FrameRowDamage, RendererFrameEffects, RowDamageInfo, RowReuseStats, WgpuRenderer,
+    WindowRowDamage,
+};
 pub use vertex::{GlyphVertex, RectVertex, RoundedRectVertex, TextureVertex, Uniforms};
 #[cfg(feature = "video")]
 pub use video_cache::{CachedVideo, DecodedFrame, VideoCache, VideoState};

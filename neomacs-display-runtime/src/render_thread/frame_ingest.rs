@@ -59,9 +59,11 @@ struct CursorSyncOutcome {
 }
 
 impl RenderApp {
+    #[allow(clippy::too_many_arguments)]
     fn ingest_frame_window_root_frame(
         window_state: &mut GuiFrameWindowState,
         frame: crate::core::frame_glyphs::FrameGlyphBuffer,
+        row_damage: neomacs_renderer_wgpu::FrameRowDamage,
         menu_bar: Option<GuiMenuBarState>,
         tool_bar: Option<GuiToolBarState>,
         compact_bar: Option<GuiCompactBarState>,
@@ -83,6 +85,7 @@ impl RenderApp {
         let cursor_sync = Self::ingest_top_level_render_frame(
             &mut window_state.render,
             frame,
+            row_damage,
             menu_bar,
             tool_bar,
             compact_bar,
@@ -91,9 +94,11 @@ impl RenderApp {
         cursor_sync
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn ingest_top_level_render_frame(
         render: &mut GuiFrameRenderState,
         frame: crate::core::frame_glyphs::FrameGlyphBuffer,
+        row_damage: neomacs_renderer_wgpu::FrameRowDamage,
         menu_bar: Option<GuiMenuBarState>,
         tool_bar: Option<GuiToolBarState>,
         compact_bar: Option<GuiCompactBarState>,
@@ -103,7 +108,7 @@ impl RenderApp {
         render.set_menu_bar(menu_bar);
         render.set_tool_bar(tool_bar);
         render.set_compact_bar(compact_bar);
-        render.set_current_frame(Some(frame));
+        render.set_current_frame(Some(frame), Some(row_damage));
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
         render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
         render.mark_dirty();
@@ -270,6 +275,11 @@ impl RenderApp {
             // the grid and non-grid items; materialize() converts the
             // grid into pixel-positioned glyphs and appends non-grid items.
             let frame = display_state.materialize();
+            // Row-damage summary for the renderer's vertex reuse. Built from
+            // exactly this display_state (the one `frame` was materialized
+            // from) so damage and glyphs can never describe different frames.
+            let row_damage =
+                neomacs_renderer_wgpu::FrameRowDamage::from_display_state(&display_state);
 
             // ── Observation point: inspect what will be rendered ──
             // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.
@@ -458,6 +468,7 @@ impl RenderApp {
                     let cursor_sync = Self::ingest_frame_window_root_frame(
                         window_state,
                         frame,
+                        row_damage,
                         gui_menu_bar,
                         gui_tool_bar,
                         gui_compact_bar,
@@ -567,6 +578,7 @@ impl RenderApp {
                     Self::ingest_top_level_render_frame(
                         primary_frame,
                         frame,
+                        row_damage,
                         gui_menu_bar,
                         gui_tool_bar,
                         gui_compact_bar,

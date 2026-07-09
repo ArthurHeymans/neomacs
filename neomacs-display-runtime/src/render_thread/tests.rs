@@ -719,7 +719,7 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
     app.frame_windows.adopt_primary_frame_id(0x1000);
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render
-            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)))
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None)
     };
 
     let (x, y, frame_id) = app.pointer_target_at(12.0, 34.0);
@@ -759,7 +759,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     }
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render
-            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)))
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None)
     };
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render.compositor.dirty = false

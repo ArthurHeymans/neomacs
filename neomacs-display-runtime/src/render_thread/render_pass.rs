@@ -773,7 +773,7 @@ impl RenderApp {
                 root_animated_cursor,
                 render.mouse_pos,
                 bg_gradient,
-                None,
+                render.compositor.current_row_damage.as_ref(),
             );
         });
     }

@@ -117,7 +117,7 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     let mut root = FrameGlyphBuffer::with_size(80.0, 32.0);
     root.faces.insert(7, face(7));
     if let Some(ws) = app.frame_windows.primary_window_mut() {
-        ws.render.set_current_frame(Some(root))
+        ws.render.set_current_frame(Some(root), None)
     };
 
     let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);

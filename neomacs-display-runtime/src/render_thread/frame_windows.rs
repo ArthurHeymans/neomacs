@@ -126,6 +126,11 @@ pub(crate) struct OverlayState {
 /// Glyph composition and rendering state for a frame window.
 pub(crate) struct FrameCompositor {
     pub current_frame: Option<FrameGlyphBuffer>,
+    /// Row damage paired with `current_frame` (built from the same
+    /// FrameDisplayState that frame was materialized from). Set only
+    /// together with the frame via `set_current_frame` so a summary can
+    /// never describe a different frame than the glyphs it accompanies.
+    pub current_row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     pub child_frames: ChildFrameManager,
     hidden_child_frames: HashSet<u64>,
     pub glyph_atlas: Option<WgpuGlyphAtlas>,
@@ -214,6 +219,7 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
                 glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
@@ -248,6 +254,7 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
                 glyph_atlas: None,
@@ -378,7 +385,7 @@ impl GuiFrameRenderState {
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn remove_floating_webkit(&mut self, id: u32) -> bool {
         let old_len = self.floating_webkits.len();
-        self.floating_webkits.retain(|w| w.webkit_id != id);
+        self.floating_webkits.retain(|w| w.webkit_id.get() != id);
         let removed = self.floating_webkits.len() != old_len;
         if removed {
             self.compositor.dirty = true;
@@ -431,8 +438,10 @@ impl GuiFrameRenderState {
     pub(super) fn set_current_frame(
         &mut self,
         frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
+        row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     ) {
         self.compositor.current_frame = frame;
+        self.compositor.current_row_damage = row_damage;
     }
 
     pub(super) fn with_chrome_interaction_mut(
