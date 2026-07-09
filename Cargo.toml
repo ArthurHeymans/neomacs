@@ -27,6 +27,21 @@ authors = ["Eval Exec <execvy@gmail.com>"]
 license = "GPL-3.0-or-later"
 repository = "https://github.com/eval-exec/neomacs"
 
+# Lint baseline shared by the frontend crates that opt in with `[lints]
+# workspace = true` (display-protocol, layout-engine, renderer-wgpu,
+# display-runtime, neomacs-bin). Deliberately modest: Rust defaults plus an
+# explicit `unsafe_op_in_unsafe_fn` warn, with Clippy's default lints left at
+# warn. CI runs `clippy -- -D warnings`, which promotes them to hard errors.
+# The neovm-* crates do NOT opt in, so their lint behavior is unchanged.
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+# Clippy default-group lints stay at their default level (warn). Bulk categories
+# that are impractical to resolve without restructuring (e.g. wide FFI /
+# scene-builder signatures) are handled with crate- or item-scoped `#[allow]`
+# at each site with a justification, rather than being escalated or muted here.
+
 [workspace.dependencies]
 # Internal crates
 neovm-core = { path = "neovm-core", version = "0.0.11", default-features = false }

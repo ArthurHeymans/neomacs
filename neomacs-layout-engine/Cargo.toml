@@ -33,3 +33,6 @@ x11-dl.workspace = true
 # macOS (alongside fontconfig above). Only Windows (`cfg(not(unix))`) gets the
 # `None`/empty stubs in `font_probe` and falls back to fontdb selection.
 freetype-rs = "0.38.0"
+
+[lints]
+workspace = true

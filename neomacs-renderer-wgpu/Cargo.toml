@@ -32,3 +32,6 @@ gstreamer-app = { workspace = true, optional = true }
 gstreamer-allocators = { workspace = true, optional = true }
 neomacs-display-protocol.workspace = true
 neomacs-layout-engine.workspace = true
+
+[lints]
+workspace = true
