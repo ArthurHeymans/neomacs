@@ -4662,6 +4662,7 @@ fn resolve_mode_line_buffer_in_state(
 struct ApproxWindowDisplayContext {
     body_height: i64,
     body_lines: i64,
+    body_cols: i64,
     char_width: i64,
     char_height: i64,
     window_start: LispCharPos1,
@@ -4839,6 +4840,7 @@ fn resolve_live_window_display_context(
         };
     let body_height = (body_bottom - body_top).max(1);
     let body_lines = ((body_height + char_height - 1) / char_height).max(1);
+    let body_cols = ((bounds.width.max(1.0) as i64 + char_width - 1) / char_width).max(1);
     let chars = buffer.full_text_string().chars().collect::<Vec<_>>();
     let window_point = if frame.selected_window == wid {
         buffer.point_char_pos().to_lisp()
@@ -4849,6 +4851,7 @@ fn resolve_live_window_display_context(
     Ok(Some(ApproxWindowDisplayContext {
         body_height,
         body_lines,
+        body_cols,
         char_width,
         char_height,
         window_start: *window_start,
@@ -4856,6 +4859,13 @@ fn resolve_live_window_display_context(
         chars,
         is_minibuffer: frame.minibuffer_window == Some(wid),
     }))
+}
+
+fn approx_wrap_cols(ctx: &ApproxWindowDisplayContext) -> i64 {
+    // GNU TTY redisplay reserves one column for the continuation glyph on
+    // wrapped rows, so an 80-column text area displays 79 source characters
+    // before wrapping to the next visual row.
+    ctx.body_cols.saturating_sub(1).max(1)
 }
 
 fn resolve_live_window_identity(
@@ -4951,11 +4961,13 @@ fn row_col_for_lisp_pos(
     chars: &[char],
     start_char: usize,
     lisp_pos: LispCharPos1,
+    wrap_cols: i64,
 ) -> Option<(i64, i64)> {
     let lisp_pos = usize::try_from(lisp_pos.as_i64().max(1)).ok()?;
     let target = lisp_pos.saturating_sub(1).min(chars.len());
     let mut row = 0_i64;
     let mut col = 0_i64;
+    let wrap_cols = wrap_cols.max(1);
     let mut idx = start_char.min(chars.len());
     while idx < target {
         if chars[idx] == '\n' {
@@ -4963,6 +4975,10 @@ fn row_col_for_lisp_pos(
             col = 0;
         } else {
             col += 1;
+            if col >= wrap_cols && idx + 1 < target {
+                row += 1;
+                col = 0;
+            }
         }
         idx += 1;
     }
@@ -4979,7 +4995,7 @@ fn approximate_pos_visible_metrics(
     let start_char = usize::try_from(ctx.window_start.as_i64().max(1))
         .ok()?
         .saturating_sub(1);
-    let (row, col) = row_col_for_lisp_pos(&ctx.chars, start_char, pos_lisp)?;
+    let (row, col) = row_col_for_lisp_pos(&ctx.chars, start_char, pos_lisp, approx_wrap_cols(ctx))?;
     if row < 0 || row >= ctx.body_lines {
         return None;
     }
@@ -5050,38 +5066,58 @@ fn approximate_point_at_coords(
     let char_height = ctx.char_height.max(1);
     let query_row = (y / char_height).max(0);
     let query_col = (x / char_width).max(0);
+    let wrap_cols = approx_wrap_cols(ctx);
 
     let mut row = 0_i64;
     let mut line_start = start;
-    let mut idx = start;
-    while row < query_row && idx < ctx.chars.len() {
-        if ctx.chars[idx] == '\n' {
-            row += 1;
-            line_start = idx + 1;
+    loop {
+        let line_end = ctx.chars[line_start..]
+            .iter()
+            .position(|ch| *ch == '\n')
+            .map_or(ctx.chars.len(), |offset| line_start + offset);
+        let line_len = i64::try_from(line_end.saturating_sub(line_start)).ok()?;
+        let visual_rows = ((line_len + wrap_cols - 1) / wrap_cols).max(1);
+
+        if query_row < row + visual_rows {
+            let visual_row = query_row - row;
+            let segment_start = line_start
+                .saturating_add(usize::try_from(visual_row.saturating_mul(wrap_cols)).ok()?);
+            let segment_len = i64::try_from(line_end.saturating_sub(segment_start)).ok()?;
+            let chosen_col = query_col.min(segment_len.min(wrap_cols));
+            let point = segment_start
+                .saturating_add(usize::try_from(chosen_col).ok()?)
+                .saturating_add(1)
+                .min(ctx.chars.len().saturating_add(1));
+
+            return Some(ExactVisibleMetrics {
+                point: LispCharPos1::from_one_based_usize(point),
+                x,
+                y,
+                dx: x - chosen_col.saturating_mul(char_width),
+                dy: y - query_row.saturating_mul(char_height),
+                width: 0,
+                height: 0,
+                row: query_row,
+                col: query_col,
+            });
         }
-        idx += 1;
+
+        if line_end >= ctx.chars.len() {
+            break;
+        }
+        row += visual_rows;
+        line_start = line_end + 1;
     }
 
-    let line_end = ctx.chars[line_start..]
-        .iter()
-        .position(|ch| *ch == '\n')
-        .map_or(ctx.chars.len(), |offset| line_start + offset);
-    let line_len = i64::try_from(line_end.saturating_sub(line_start)).ok()?;
-    let chosen_col = query_col.min(line_len);
-    let point = line_start
-        .saturating_add(usize::try_from(chosen_col).ok()?)
-        .saturating_add(1)
-        .min(ctx.chars.len().saturating_add(1));
-
     Some(ExactVisibleMetrics {
-        point: LispCharPos1::from_one_based_usize(point),
+        point: LispCharPos1::from_one_based_usize(ctx.chars.len().saturating_add(1)),
         x,
         y,
-        dx: x - chosen_col.saturating_mul(char_width),
-        dy: y - row.saturating_mul(char_height),
+        dx: x,
+        dy: y - query_row.saturating_mul(char_height),
         width: 0,
         height: 0,
-        row,
+        row: query_row,
         col: query_col,
     })
 }

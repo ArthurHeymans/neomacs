@@ -2567,6 +2567,42 @@ fn test_posn_at_x_y_batch_uses_selected_window_without_snapshot() {
 }
 
 #[test]
+fn test_posn_at_x_y_batch_wraps_long_visual_lines_like_gnu_tty() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let scratch = eval.buffers.current_buffer_id().expect("scratch buffer");
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-batch-wrap-posn", 80 * 8, 25 * 16, scratch);
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
+        buffer.insert(&"x".repeat(500));
+    }
+    let (char_width, char_height) = {
+        let frame = eval.frames.get(frame_id).expect("frame");
+        (frame.char_width as i64, frame.char_height as i64)
+    };
+
+    let at_xy = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(3 * char_width),
+            Value::fixnum(2 * char_height),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        super::super::print::print_value(&at_xy),
+        format!(
+            "(#<window 1> 162 ({} . {}) 0 nil 162 (3 . 2) nil (0 . 0) (0 . 0))",
+            3 * char_width,
+            2 * char_height
+        )
+    );
+}
+
+#[test]
 fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
