@@ -36,6 +36,12 @@ use std::net::{
 };
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, RawFd};
+cfg_select! {
+    target_os = "linux" => {
+        use std::os::fd::{FromRawFd, OwnedFd};
+    }
+    _ => {}
+}
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
@@ -73,6 +79,76 @@ pub enum NetworkSocket {
     UnixListener(UnixListener),
     #[cfg(unix)]
     UnixDatagram(UnixDatagram),
+}
+
+cfg_select! {
+    target_os = "linux" => {
+        /// Platform child-status wait source.
+        ///
+        /// GNU Emacs waits for subprocess I/O and child status in one primitive:
+        /// Unix uses its SIGCHLD self-pipe in `wait_reading_process_output`,
+        /// while w32 waits on subprocess handles alongside pipe-reader events.
+        /// Linux pidfds provide the same pollable status edge per subprocess.
+        pub struct ChildStatusSource {
+            pidfd: OwnedFd,
+        }
+    }
+    _ => {
+        /// Platform child-status wait source.
+        ///
+        /// GNU Emacs waits for subprocess I/O and child status in one primitive:
+        /// Unix uses its SIGCHLD self-pipe in `wait_reading_process_output`,
+        /// while w32 waits on subprocess handles alongside pipe-reader events.
+        /// Non-Linux backends keep using the existing explicit status poll until
+        /// their GNU-style wake source is wired here.
+        pub struct ChildStatusSource;
+    }
+}
+
+impl ChildStatusSource {
+    fn open(pid: u32) -> Option<Self> {
+        cfg_select! {
+            target_os = "linux" => {
+                let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) };
+                if fd < 0 {
+                    return None;
+                }
+                // SAFETY: `pidfd_open` returned a new owned descriptor.
+                Some(Self {
+                    pidfd: unsafe { OwnedFd::from_raw_fd(fd as RawFd) },
+                })
+            }
+            _ => {
+                let _ = pid;
+                None
+            }
+        }
+    }
+
+    fn register_with_poller(&self, poller: Option<&polling::Poller>, id: ProcessId) {
+        let Some(poller) = poller else {
+            return;
+        };
+        cfg_select! {
+            target_os = "linux" => {
+                let _ = ProcessManager::register_readable_source(poller, &self.pidfd, id);
+            }
+            _ => {
+                let _ = (poller, id);
+            }
+        }
+    }
+
+    fn unregister_from_poller(&self, poller: &polling::Poller) {
+        cfg_select! {
+            target_os = "linux" => {
+                let _ = poller.delete(&self.pidfd);
+            }
+            _ => {
+                let _ = poller;
+            }
+        }
+    }
 }
 
 /// GNU-compatible GnuTLS process initialization stage.
@@ -907,6 +983,8 @@ pub struct Process {
     /// for network/serial/pipe connections that have no OS child, and stays
     /// independent of the internal `ProcessId` used to key the manager.
     pub os_pid: Option<u32>,
+    /// Pollable child-status wakeup source, where the platform exposes one.
+    pub child_status_source: Option<ChildStatusSource>,
     /// The actual OS child process, if spawned (pipe mode).
     #[allow(dead_code)]
     pub child: Option<Child>,
@@ -2499,8 +2577,25 @@ fn process_defers_pty_status_after_explicit_coding(proc: &Process) -> bool {
     proc.coding_explicitly_set && (proc.pty_child.is_some() || proc.pty_reader.is_some())
 }
 
+fn process_defers_status_poll_while_readable_pty(proc: &Process) -> bool {
+    process_output_source(proc) == Some(ProcessOutputSource::Pty)
+        && process_has_readable_process_io(proc)
+        && process_command_is_shell_command(proc)
+}
+
+fn process_command_is_shell_command(proc: &Process) -> bool {
+    process_command_lisp_argv(proc.command).is_some_and(|argv| {
+        argv.get(1)
+            .is_some_and(|arg| arg.as_bytes() == b"-c" || arg.as_bytes() == b"/c")
+    })
+}
+
 fn process_publishes_status_after_ready_output(proc: &Process) -> bool {
-    proc.eof_sent_to_process || process_output_source(proc) == Some(ProcessOutputSource::Pty)
+    proc.eof_sent_to_process
+        || matches!(
+            process_output_source(proc),
+            Some(ProcessOutputSource::ChildStdout | ProcessOutputSource::Pty)
+        )
 }
 
 fn process_should_defer_explicit_coding_status_after_output(
@@ -3729,6 +3824,9 @@ impl ProcessManager {
         if let Some(stdin) = proc.child.as_ref().and_then(|child| child.stdin.as_ref()) {
             Self::unregister_child_stdin_writable_from_poller(poller, stdin);
         }
+        if let Some(status_source) = proc.child_status_source.as_ref() {
+            status_source.unregister_from_poller(poller);
+        }
         if let Some(tls) = proc.tls_stream.as_ref() {
             let _ = poller.delete(tls.tcp_stream());
         }
@@ -3929,6 +4027,7 @@ impl ProcessManager {
             tty_stdout,
             tty_stderr,
             os_pid: None,
+            child_status_source: None,
             child: None,
             child_stdin_eof_sink: false,
             eof_sent_to_process: false,
@@ -4102,6 +4201,7 @@ impl ProcessManager {
         // GNU records the child's real OS pid (create_process sets
         // p->pid = pid). `std::process::Child::id` exposes it as a `u32`.
         let os_pid = Some(child.id());
+        let child_status_source = os_pid.and_then(ChildStatusSource::open);
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -4111,10 +4211,14 @@ impl ProcessManager {
         if let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout) {
             Self::register_child_stdout_with_poller(poller, stdout, id);
         }
+        if let Some(status_source) = child_status_source.as_ref() {
+            status_source.register_with_poller(self.wait_backend.poller(), id);
+        }
 
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.child_stdout = stdout;
             proc.os_pid = os_pid;
+            proc.child_status_source = child_status_source;
             proc.child = Some(child);
             proc.status = process_status_run_value();
             // Pipe-mode processes don't have a real TTY.
@@ -4338,9 +4442,14 @@ impl ProcessManager {
                 .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
             // GNU records the child's real OS pid (create_process sets p->pid).
             let os_pid = Some(child.id());
+            let child_status_source = os_pid.and_then(ChildStatusSource::open);
             let child_stderr = child.stderr.take();
+            if let Some(status_source) = child_status_source.as_ref() {
+                status_source.register_with_poller(self.wait_backend.poller(), id);
+            }
             if let Some(proc) = self.processes.get_mut(&id) {
                 proc.os_pid = os_pid;
+                proc.child_status_source = child_status_source;
                 proc.child = Some(child);
             }
             (Some(stderr_id), child_stderr)
@@ -4379,8 +4488,13 @@ impl ProcessManager {
             // GNU records the child's real OS pid; portable_pty exposes it via
             // `Child::process_id`.
             let os_pid = pty_child.process_id();
+            let child_status_source = os_pid.and_then(ChildStatusSource::open);
+            if let Some(status_source) = child_status_source.as_ref() {
+                status_source.register_with_poller(self.wait_backend.poller(), id);
+            }
             if let Some(proc) = self.processes.get_mut(&id) {
                 proc.os_pid = os_pid;
+                proc.child_status_source = child_status_source;
                 proc.pty_child = Some(pty_child);
             }
             (None, None)
@@ -4438,8 +4552,23 @@ impl ProcessManager {
         let Some(status) = self.poll_child_exit_status(id) else {
             return false;
         };
+        self.deactivate_child_status_source(id);
         self.set_child_exit_status_pending(id, status);
         true
+    }
+
+    pub(crate) fn defers_minimum_status_drain_after_output(&self, id: ProcessId) -> bool {
+        self.get(id)
+            .is_some_and(process_defers_pty_status_after_explicit_coding)
+    }
+
+    fn deactivate_child_status_source(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id)
+            && let Some(status_source) = proc.child_status_source.take()
+            && let Some(poller) = self.wait_backend.poller()
+        {
+            status_source.unregister_from_poller(poller);
+        }
     }
 
     fn poll_child_exit_status(&mut self, id: ProcessId) -> Option<Value> {
@@ -4450,6 +4579,23 @@ impl ProcessManager {
 
         if proc.status_notify_pending || !process_status_is_run(&proc.status) {
             return None;
+        }
+
+        // PTY child path.  Use the backend child handle first: on Unix this is
+        // the same nonblocking child-status query, and on Windows it maps to
+        // the process handle wait path that GNU's w32 layer uses alongside pipe
+        // reader events.
+        if let Some(ref mut pty_child) = proc.pty_child {
+            match pty_child.try_wait() {
+                Ok(Some(status)) => {
+                    // Preserve the real exit code and signal-death status, as GNU
+                    // does (status_notify decodes WIFSIGNALED/WEXITSTATUS); the
+                    // previous `success ? 0 : 1` collapsed every failure to 1.
+                    return Some(process_status_from_pty_exit(&status));
+                }
+                Ok(None) => return None,
+                Err(_) => return Some(process_status_exit_value(1)),
+            }
         }
 
         #[cfg(unix)]
@@ -4473,20 +4619,6 @@ impl ProcessManager {
                 return None;
             }
             return Some(process_status_exit_value(1));
-        }
-
-        // PTY child path.
-        if let Some(ref mut pty_child) = proc.pty_child {
-            match pty_child.try_wait() {
-                Ok(Some(status)) => {
-                    // Preserve the real exit code and signal-death status, as GNU
-                    // does (status_notify decodes WIFSIGNALED/WEXITSTATUS); the
-                    // previous `success ? 0 : 1` collapsed every failure to 1.
-                    return Some(process_status_from_pty_exit(&status));
-                }
-                Ok(None) => return None,
-                Err(_) => return Some(process_status_exit_value(1)),
-            }
         }
 
         // Pipe child path.
@@ -4773,6 +4905,25 @@ impl ProcessManager {
         }
     }
 
+    /// GNU `read_process_output`: EOF/EIO on a real subprocess PTY removes the
+    /// read fd, but does not make the process terminal; SIGCHLD/status
+    /// notification observes child death later.
+    fn deactivate_pty_process_read_io(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            #[cfg(unix)]
+            if let (Some(poller), Some(master)) = (
+                self.wait_backend.poller(),
+                proc.pty_master
+                    .as_ref()
+                    .and_then(|master| master.as_raw_fd()),
+            ) {
+                let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
+                let _ = poller.delete(&borrowed);
+            }
+            proc.pty_reader = None;
+        }
+    }
+
     /// Kill (remove) a process by id.  Returns true if found.
     pub fn kill_process(&mut self, id: ProcessId) -> bool {
         if let Some(proc) = self.processes.get_mut(&id) {
@@ -4783,6 +4934,7 @@ impl ProcessManager {
             proc.gnutls_boot_parameters = Value::NIL;
             proc.network_socket.take();
             proc.status = process_status_signal_value(signal_kill_number());
+            proc.child_status_source = None;
             true
         } else {
             false
@@ -4793,6 +4945,7 @@ impl ProcessManager {
     pub fn delete_process(&mut self, id: ProcessId) -> bool {
         if let Some(mut proc) = self.processes.remove(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
+            proc.child_status_source = None;
             if matches!(
                 proc.kind,
                 ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
@@ -6353,7 +6506,12 @@ impl super::eval::Context {
                 .processes
                 .get(pid)
                 .is_some_and(process_has_readable_process_io);
-            if (publish_status_before_readable_output || !has_readable_process_io)
+            let defer_status_poll_for_readable_pty = self
+                .processes
+                .get(pid)
+                .is_some_and(process_defers_status_poll_while_readable_pty);
+            if !defer_status_poll_for_readable_pty
+                && (publish_status_before_readable_output || !has_readable_process_io)
                 && self.processes.check_child_exit(pid)
             {
                 if self
@@ -6590,6 +6748,14 @@ impl super::eval::Context {
                 continue;
             }
 
+            if saw_eof_after_output
+                && self.processes.get(pid).is_some_and(|process| {
+                    process_output_source(process) == Some(ProcessOutputSource::Pty)
+                })
+            {
+                self.processes.deactivate_pty_process_read_io(pid);
+            }
+
             if saw_output {
                 let associated_stderr_id = self
                     .processes
@@ -6614,18 +6780,29 @@ impl super::eval::Context {
 
                 // Initial poll passes already checked child status before
                 // reading.  A readiness-wake pass got here because output won
-                // the poll; GNU leaves a plain pipe child's concurrently
-                // arriving status for a later wait.  PTY-backed subprocesses
-                // and explicit `process-send-eof` pipe shutdowns can publish
-                // the terminal status in the same wait.
+                // the poll; GNU then does a no-wait follow-up (`wait =
+                // MINIMUM`) that can observe and publish a just-exited child
+                // before `accept-process-output` returns.  Model that as one
+                // zero-duration backend wait and one nonblocking status poll;
+                // this is a readiness drain, not a retry delay.
                 let publish_same_pass_after_output = self
                     .processes
                     .get(pid)
                     .is_some_and(process_publishes_status_after_ready_output);
-                let exited = !publish_status_before_readable_output
+                let mut exited = !publish_status_before_readable_output
                     && publish_same_pass_after_output
                     && self.processes.check_child_exit(pid);
-                if exited && saw_eof_after_output {
+                if !exited
+                    && !publish_status_before_readable_output
+                    && publish_same_pass_after_output
+                {
+                    let _ = self.processes.wait_for_backend_events(
+                        Duration::ZERO,
+                        ProcessWaitBackendInterest::ProcessesOnly,
+                    );
+                    exited = self.processes.check_child_exit(pid);
+                }
+                if exited {
                     let defer_status_after_output = self
                         .processes
                         .get(pid)
@@ -6641,7 +6818,8 @@ impl super::eval::Context {
 
             // No process bytes were read in this pass.  If the status was not
             // already published before a poll-phase read attempt, check it now.
-            if (!publish_status_before_readable_output || has_readable_process_io)
+            if !defer_status_poll_for_readable_pty
+                && (!publish_status_before_readable_output || has_readable_process_io)
                 && self.processes.check_child_exit(pid)
             {
                 if self

@@ -4405,6 +4405,74 @@ fn accept_process_output_defers_pty_status_after_explicit_coding() {
 }
 
 #[test]
+fn accept_process_output_pipe_reports_gnu_output_status_invariants() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let* ((buf (get-buffer-create " *apio-pipe-reap*"))
+                      (proc (make-process :name "apio-pipe-reap"
+                                          :command (list "{echo}" "x")
+                                          :buffer buf
+                                          :connection-type 'pipe
+                                          :sentinel (lambda (&rest _) nil))))
+                 (set-process-query-on-exit-flag proc nil)
+                 (accept-process-output proc 1)
+                 (prog1 (list (process-type proc)
+                              (process-status proc)
+                              (memq proc (process-list))
+                              (save-current-buffer
+                                (set-buffer buf)
+                                (buffer-string)))
+                   (kill-buffer buf)))"#
+        ),
+    );
+
+    assert!(
+        result == "OK (real exit nil \"x\n\")"
+            || result == "OK (real run (#<process apio-pipe-reap>) \"x\n\")",
+        "unexpected pipe status/output after accept-process-output: {result}"
+    );
+}
+
+#[test]
+fn accept_process_output_direct_pty_runs_minimum_status_pass() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-direct-pty*")))
+                 (save-current-buffer
+                   (set-buffer buf)
+                   (insert "preexisting"))
+                 (let ((proc (make-process :name "apio-direct-pty"
+                                           :command (list "{echo}" "process-output")
+                                           :buffer buf)))
+                   (accept-process-output proc 1)
+                   (prog1 (list (process-type proc)
+                                (process-status proc)
+                                (not (null (process-tty-name proc)))
+                                (memq proc (process-list))
+                                (save-current-buffer
+                                  (set-buffer buf)
+                                  (buffer-string)))
+                     (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(
+        result,
+        "OK (real exit t nil \"preexistingprocess-output\n\nProcess apio-direct-pty finished\n\")"
+    );
+}
+
+#[test]
 fn accept_process_output_decodes_multibyte_before_explicit_coding_status() {
     crate::test_utils::init_test_tracing();
     let printf = find_bin("printf");

@@ -549,6 +549,16 @@ impl WaitRequest {
 
         None
     }
+
+    fn needs_minimum_process_drain_before_completion(
+        self,
+        completion: WaitCompletion,
+        outcome: WaitServiceOutcome,
+    ) -> bool {
+        completion == WaitCompletion::ProcessActivity
+            && self.target_process().is_some()
+            && outcome.has_target_process_activity()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -993,12 +1003,56 @@ impl super::eval::Context {
         })
     }
 
+    fn service_minimum_process_drain(
+        &mut self,
+        request: &WaitRequest,
+    ) -> Result<WaitServiceOutcome, Flow> {
+        let activity = if self.processes.has_wait_input_wakeup_backend() {
+            let events = self
+                .processes
+                .wait_for_backend_events(Duration::ZERO, ProcessWaitBackendInterest::ProcessesOnly)
+                .unwrap_or_default();
+            WaitBlockActivity::from_source_events(events)
+        } else {
+            WaitBlockActivity::poll()
+        };
+        self.service_wait_request_block_activity(request, activity, true)
+    }
+
+    fn complete_wait_after_required_minimum_drain(
+        &mut self,
+        request: &WaitRequest,
+        outcome: WaitServiceOutcome,
+    ) -> Result<Option<WaitCompletion>, Flow> {
+        let Some(completion) = request.completion_for(outcome) else {
+            return Ok(None);
+        };
+
+        // GNU `wait_reading_process_output` sets `wait = MINIMUM` after reading
+        // bytes from WAIT_PROC.  That makes one zero-time process wait/service
+        // pass before the function returns, so a concurrent PTY EOF/SIGCHLD can
+        // run `status_notify` and the sentinel in the same
+        // `accept-process-output` call.
+        let explicit_coding_status_deferred = request
+            .target_pid()
+            .is_some_and(|pid| self.processes.defers_minimum_status_drain_after_output(pid));
+        if request.needs_minimum_process_drain_before_completion(completion, outcome)
+            && !explicit_coding_status_deferred
+        {
+            let _ = self.service_minimum_process_drain(request)?;
+        }
+
+        Ok(Some(completion))
+    }
+
     fn wait_reading_process_output(
         &mut self,
         request: WaitRequest,
     ) -> Result<WaitCompletion, Flow> {
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
-        if let Some(completion) = request.completion_for(outcome) {
+        if let Some(completion) =
+            self.complete_wait_after_required_minimum_drain(&request, outcome)?
+        {
             return Ok(completion);
         }
         if self.wait_request_target_terminated(&request) {
@@ -1040,7 +1094,9 @@ impl super::eval::Context {
             let run_timers = wait_timeout.run_timers_after_block(&activity, deadline_elapsed);
             outcome = self.service_wait_request_block_activity(&request, activity, run_timers)?;
 
-            if let Some(completion) = request.completion_for(outcome) {
+            if let Some(completion) =
+                self.complete_wait_after_required_minimum_drain(&request, outcome)?
+            {
                 return Ok(completion);
             }
             if self.wait_request_target_terminated(&request) {
