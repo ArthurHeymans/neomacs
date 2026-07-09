@@ -185,7 +185,7 @@ impl WgpuRenderer {
             });
 
             render_pass.set_scissor_rect(sx, sy, sw, sh);
-            render_pass.set_pipeline(&self.image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             // Draw old with fading alpha
@@ -334,7 +334,7 @@ impl WgpuRenderer {
             });
 
             render_pass.set_scissor_rect(sx, sy, sw, sh);
-            render_pass.set_pipeline(&self.image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             // Draw old texture sliding out
@@ -690,7 +690,7 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
             rp.set_scissor_rect(sx, sy, sw, sh);
-            rp.set_pipeline(&self.image_pipeline);
+            rp.set_pipeline(&self.pipelines.image);
             rp.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             rp.set_bind_group(1, old_bind_group, &[]);

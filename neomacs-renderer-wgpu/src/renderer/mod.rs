@@ -26,6 +26,7 @@ mod fx_state;
 mod glyphs;
 mod media;
 mod pattern_effects;
+mod resources;
 mod stats;
 mod transitions;
 mod ui_overlays;
@@ -33,6 +34,7 @@ mod window_effects;
 
 pub use fx_state::RendererFrameEffects;
 pub(crate) use fx_state::*;
+pub(crate) use resources::*;
 pub use stats::*;
 
 /// GPU-accelerated renderer using wgpu.
@@ -42,21 +44,17 @@ pub struct WgpuRenderer {
     pub(super) surface: Option<wgpu::Surface<'static>>,
     pub(super) surface_config: Option<wgpu::SurfaceConfiguration>,
     pub(super) surface_format: wgpu::TextureFormat,
-    pub(super) rect_pipeline: wgpu::RenderPipeline,
-    pub(super) rounded_rect_pipeline: wgpu::RenderPipeline,
-    pub(super) corner_mask_pipeline: wgpu::RenderPipeline,
-    pub(super) glyph_pipeline: wgpu::RenderPipeline,
-    pub(super) subpixel_glyph_pipeline: wgpu::RenderPipeline,
-    pub(super) image_pipeline: wgpu::RenderPipeline,
-    pub(super) opaque_image_pipeline: wgpu::RenderPipeline,
+    /// Render pipelines (base + stencil-clipped variants)
+    pub(super) pipelines: Pipelines,
+    /// Stencil texture/view for child frame rounded-corner clipping
+    pub(super) stencil: StencilTargets,
     pub(super) glyph_bind_group_layout: wgpu::BindGroupLayout,
     pub(super) uniform_buffer: wgpu::Buffer,
     pub(super) uniform_bind_group: wgpu::BindGroup,
-    pub(super) image_cache: ImageCache,
-    #[cfg(feature = "video")]
-    pub(super) video_cache: VideoCache,
-    #[cfg(feature = "wpe-webkit")]
-    pub(super) webkit_cache: WgpuWebKitCache,
+    /// Texture/media caches
+    pub(super) caches: RenderCaches,
+    /// Per-frame reusable vertex upload arenas
+    pub(super) arenas: VertexArenas,
     pub(super) width: u32,
     pub(super) height: u32,
     /// Display scale factor (physical pixels / logical pixels)
@@ -68,28 +66,11 @@ pub struct WgpuRenderer {
     pub(super) fx: EffectsState,
     /// Free-running animation clocks (transferred with preserve-if-unset semantics)
     pub(super) clocks: EffectClocks,
-    /// Ripple duration in seconds
-    pub(super) typing_ripple_duration: f32,
-    pub(super) border_transition_duration: std::time::Duration,
-    pub(super) cursor_trail_fade_duration: std::time::Duration,
-    pub(super) scroll_line_spacing_duration_ms: u32,
-    pub(super) aurora_start: std::time::Instant,
-    /// Start time for elapsed time calculation (used by fancy border effects)
-    pub(super) render_start_time: std::time::Instant,
+    /// Effect animation durations (configuration; not transferred)
+    pub(super) durations: EffectDurations,
+    /// Ambient clocks shared by every frame context (not transferred)
+    pub(super) ambient: AmbientClocks,
     pub glyph_stats: GlyphRenderStats,
-    pub(super) glyph_vertex_arena: FrameVertexArena<GlyphVertex>,
-    pub(super) subpixel_vertex_arena: FrameVertexArena<SubpixelGlyphVertex>,
-    pub(super) image_vertex_arena: FrameVertexArena<GlyphVertex>,
-    // --- Stencil-based clipping for child frame rounded corners ---
-    pub(super) stencil_texture: wgpu::Texture,
-    pub(super) stencil_view: wgpu::TextureView,
-    pub(super) stencil_rect_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_rounded_rect_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_glyph_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_subpixel_glyph_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_image_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_opaque_image_pipeline: wgpu::RenderPipeline,
-    pub(super) stencil_write_pipeline: wgpu::RenderPipeline,
 }
 
 impl WgpuRenderer {
@@ -926,46 +907,50 @@ impl WgpuRenderer {
             surface,
             surface_config,
             surface_format: target_format,
-            rect_pipeline,
-            rounded_rect_pipeline,
-            corner_mask_pipeline,
-            glyph_pipeline,
-            subpixel_glyph_pipeline,
-            image_pipeline,
-            opaque_image_pipeline,
+            pipelines: Pipelines {
+                rect: rect_pipeline,
+                rounded_rect: rounded_rect_pipeline,
+                corner_mask: corner_mask_pipeline,
+                glyph: glyph_pipeline,
+                subpixel_glyph: subpixel_glyph_pipeline,
+                image: image_pipeline,
+                opaque_image: opaque_image_pipeline,
+                stencil_rect: stencil_rect_pipeline,
+                stencil_rounded_rect: stencil_rounded_rect_pipeline,
+                stencil_glyph: stencil_glyph_pipeline,
+                stencil_subpixel_glyph: stencil_subpixel_glyph_pipeline,
+                stencil_image: stencil_image_pipeline,
+                stencil_opaque_image: stencil_opaque_image_pipeline,
+                stencil_write: stencil_write_pipeline,
+            },
+            stencil: StencilTargets {
+                texture: stencil_texture,
+                view: stencil_view,
+            },
             glyph_bind_group_layout,
             uniform_buffer,
             uniform_bind_group,
-            image_cache,
-            #[cfg(feature = "video")]
-            video_cache,
-            #[cfg(feature = "wpe-webkit")]
-            webkit_cache,
+            caches: RenderCaches {
+                image: image_cache,
+                #[cfg(feature = "video")]
+                video: video_cache,
+                #[cfg(feature = "wpe-webkit")]
+                webkit: webkit_cache,
+            },
+            arenas: VertexArenas {
+                glyph: FrameVertexArena::new("Glyph Vertex Arena"),
+                subpixel: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
+                image: FrameVertexArena::new("Image Vertex Arena"),
+            },
             width,
             height,
             scale_factor,
             effects: crate::effect_config::EffectsConfig::default(),
             fx: EffectsState::default(),
             clocks: EffectClocks::default(),
-            typing_ripple_duration: 0.3,
-            border_transition_duration: std::time::Duration::from_millis(200),
-            cursor_trail_fade_duration: std::time::Duration::from_millis(300),
-            scroll_line_spacing_duration_ms: 200,
-            aurora_start: std::time::Instant::now(),
-            render_start_time: std::time::Instant::now(),
+            durations: EffectDurations::default(),
+            ambient: AmbientClocks::default(),
             glyph_stats: GlyphRenderStats::new(),
-            glyph_vertex_arena: FrameVertexArena::new("Glyph Vertex Arena"),
-            subpixel_vertex_arena: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
-            image_vertex_arena: FrameVertexArena::new("Image Vertex Arena"),
-            stencil_texture,
-            stencil_view,
-            stencil_rect_pipeline,
-            stencil_rounded_rect_pipeline,
-            stencil_glyph_pipeline,
-            stencil_subpixel_glyph_pipeline,
-            stencil_image_pipeline,
-            stencil_opaque_image_pipeline,
-            stencil_write_pipeline,
         }
     }
 
@@ -1071,8 +1056,8 @@ impl WgpuRenderer {
         // Recreate stencil texture at new size
         let (stencil_texture, stencil_view) =
             Self::create_stencil_texture_static(&self.device, width, height);
-        self.stencil_texture = stencil_texture;
-        self.stencil_view = stencil_view;
+        self.stencil.texture = stencil_texture;
+        self.stencil.view = stencil_view;
 
         // Update uniform buffer with logical size so vertex positions from Emacs map correctly
         let logical_w = width as f32 / self.scale_factor;
@@ -1296,7 +1281,7 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            render_pass.set_pipeline(&self.rect_pipeline);
+            render_pass.set_pipeline(&self.pipelines.rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.draw(0..vertices.len() as u32, 0..1);
@@ -1713,12 +1698,12 @@ impl WgpuRenderer {
 
     /// Get the image bind group layout (for creating bind groups for offscreen textures)
     pub fn image_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        self.image_cache.bind_group_layout()
+        self.caches.image.bind_group_layout()
     }
 
     /// Get the image sampler (for creating bind groups for offscreen textures)
     pub fn image_sampler(&self) -> &wgpu::Sampler {
-        self.image_cache.sampler()
+        self.caches.image.sampler()
     }
 
     /// Get the uniform bind group (needed for composite rendering)
@@ -1728,7 +1713,7 @@ impl WgpuRenderer {
 
     /// Get the image pipeline (needed for blit and scroll slide)
     pub fn image_pipeline(&self) -> &wgpu::RenderPipeline {
-        &self.image_pipeline
+        &self.pipelines.image
     }
 
     /// Create an offscreen texture suitable for rendering a full frame
@@ -1762,7 +1747,7 @@ impl WgpuRenderer {
     pub fn create_texture_bind_group(&self, view: &wgpu::TextureView) -> wgpu::BindGroup {
         self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Offscreen Bind Group"),
-            layout: self.image_cache.bind_group_layout(),
+            layout: self.caches.image.bind_group_layout(),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -1770,7 +1755,7 @@ impl WgpuRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(self.image_cache.sampler()),
+                    resource: wgpu::BindingResource::Sampler(self.caches.image.sampler()),
                 },
             ],
         })
@@ -1853,7 +1838,7 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            render_pass.set_pipeline(&self.image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_bind_group(1, src_bind_group, &[]);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));

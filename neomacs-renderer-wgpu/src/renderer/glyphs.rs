@@ -41,7 +41,7 @@ macro_rules! draw_effect {
                     contents: bytemuck::cast_slice(&verts),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
-            $rp.set_pipeline(&$self.rect_pipeline);
+            $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
             $rp.set_vertex_buffer(0, buf.slice(..));
             $rp.draw(0..verts.len() as u32, 0..1);
@@ -59,7 +59,7 @@ macro_rules! draw_effect {
                     contents: bytemuck::cast_slice(&verts),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
-            $rp.set_pipeline(&$self.rect_pipeline);
+            $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
             $rp.set_vertex_buffer(0, buf.slice(..));
             $rp.draw(0..verts.len() as u32, 0..1);
@@ -82,7 +82,7 @@ macro_rules! draw_stateful {
                     contents: bytemuck::cast_slice(&verts),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
-            $rp.set_pipeline(&$self.rect_pipeline);
+            $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
             $rp.set_vertex_buffer(0, buf.slice(..));
             $rp.draw(0..verts.len() as u32, 0..1);
@@ -1040,8 +1040,8 @@ impl WgpuRenderer {
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
-        self.glyph_vertex_arena.begin_frame();
-        self.subpixel_vertex_arena.begin_frame();
+        self.arenas.glyph.begin_frame();
+        self.arenas.subpixel.begin_frame();
 
         let face_debug_call_id = if trace_face_debug_enabled() {
             next_face_debug_call_id()
@@ -2046,7 +2046,7 @@ impl WgpuRenderer {
                 mouse_pos,
                 surface_width,
                 surface_height,
-                aurora_start: self.aurora_start,
+                aurora_start: self.ambient.aurora_start,
                 scale_factor: self.scale_factor,
                 logical_w: frame_glyphs.width,
                 logical_h: frame_glyphs.height,
@@ -2083,7 +2083,7 @@ impl WgpuRenderer {
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
 
-                    render_pass.set_pipeline(&self.rect_pipeline);
+                    render_pass.set_pipeline(&self.pipelines.rect);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                     render_pass.set_vertex_buffer(0, rect_buffer.slice(..));
                     render_pass.draw(0..overlay_rect_vertices.len() as u32, 0..1);
@@ -2126,7 +2126,7 @@ impl WgpuRenderer {
                                     contents: bytemuck::cast_slice(&overlay_box_fill),
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
-                        render_pass.set_pipeline(&self.rounded_rect_pipeline);
+                        render_pass.set_pipeline(&self.pipelines.rounded_rect);
                         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         render_pass.set_vertex_buffer(0, fill_buffer.slice(..));
                         render_pass.draw(0..overlay_box_fill.len() as u32, 0..1);
@@ -2610,7 +2610,7 @@ impl WgpuRenderer {
                 // Draw mask glyphs with glyph pipeline (alpha tinted with foreground)
                 // Batch consecutive glyphs sharing the same atlas page.
                 if !mask_data.is_empty() {
-                    render_pass.set_pipeline(&self.glyph_pipeline);
+                    render_pass.set_pipeline(&self.pipelines.glyph);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                     let all_vertices: Vec<GlyphVertex> = mask_data
@@ -2666,12 +2666,12 @@ impl WgpuRenderer {
                     }
 
                     let mask_upload =
-                        self.glyph_vertex_arena
+                        self.arenas.glyph
                             .upload(&self.device, &self.queue, &all_vertices);
                     stats.glyph_vertex_buffer_creations += 1;
 
                     if let Some(ref upload) = mask_upload {
-                        render_pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                        render_pass.set_vertex_buffer(0, self.arenas.glyph.slice(upload));
                     }
 
                     let mut i = 0;
@@ -2700,7 +2700,7 @@ impl WgpuRenderer {
                 }
 
                 if !subpixel_data.is_empty() {
-                    render_pass.set_pipeline(&self.subpixel_glyph_pipeline);
+                    render_pass.set_pipeline(&self.pipelines.subpixel_glyph);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                     let all_vertices: Vec<SubpixelGlyphVertex> = subpixel_data
@@ -2709,12 +2709,12 @@ impl WgpuRenderer {
                         .collect();
 
                     let subpixel_upload =
-                        self.subpixel_vertex_arena
+                        self.arenas.subpixel
                             .upload(&self.device, &self.queue, &all_vertices);
                     stats.glyph_vertex_buffer_creations += 1;
 
                     if let Some(ref upload) = subpixel_upload {
-                        render_pass.set_vertex_buffer(0, self.subpixel_vertex_arena.slice(upload));
+                        render_pass.set_vertex_buffer(0, self.arenas.subpixel.slice(upload));
                     }
 
                     let mut i = 0;
@@ -2746,7 +2746,7 @@ impl WgpuRenderer {
 
                 // Draw color glyphs with image pipeline (direct RGBA, e.g. color emoji)
                 if !color_data.is_empty() {
-                    render_pass.set_pipeline(&self.image_pipeline);
+                    render_pass.set_pipeline(&self.pipelines.image);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                     let all_vertices: Vec<GlyphVertex> = color_data
@@ -2755,12 +2755,12 @@ impl WgpuRenderer {
                         .collect();
 
                     let color_upload =
-                        self.glyph_vertex_arena
+                        self.arenas.glyph
                             .upload(&self.device, &self.queue, &all_vertices);
                     stats.glyph_vertex_buffer_creations += 1;
 
                     if let Some(ref upload) = color_upload {
-                        render_pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                        render_pass.set_vertex_buffer(0, self.arenas.glyph.slice(upload));
                     }
 
                     let mut i = 0;
@@ -3151,7 +3151,7 @@ impl WgpuRenderer {
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
 
-                        render_pass.set_pipeline(&self.rect_pipeline);
+                        render_pass.set_pipeline(&self.pipelines.rect);
                         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         render_pass.set_vertex_buffer(0, decoration_buffer.slice(..));
                         render_pass.draw(0..decoration_vertices.len() as u32, 0..1);
@@ -3308,7 +3308,7 @@ impl WgpuRenderer {
                                     contents: bytemuck::cast_slice(&sharp_border_vertices),
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
-                        render_pass.set_pipeline(&self.rect_pipeline);
+                        render_pass.set_pipeline(&self.pipelines.rect);
                         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         render_pass.set_vertex_buffer(0, sharp_buffer.slice(..));
                         render_pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
@@ -3323,7 +3323,7 @@ impl WgpuRenderer {
                                     contents: bytemuck::cast_slice(&rounded_border_vertices),
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
-                        render_pass.set_pipeline(&self.rounded_rect_pipeline);
+                        render_pass.set_pipeline(&self.pipelines.rounded_rect);
                         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         render_pass.set_vertex_buffer(0, rounded_buffer.slice(..));
                         render_pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
@@ -3332,7 +3332,7 @@ impl WgpuRenderer {
             }
 
             // Draw inline images
-            render_pass.set_pipeline(&self.image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             for glyph in &frame_glyphs.glyphs {
@@ -3395,7 +3395,7 @@ impl WgpuRenderer {
                         clipped_height
                     );
                     // Check if image texture is ready
-                    if let Some(cached) = self.image_cache.get(image_id.get()) {
+                    if let Some(cached) = self.caches.image.get(image_id.get()) {
                         // Create vertices for image quad (white color = no tinting)
                         let vertices = [
                             GlyphVertex {
@@ -3456,16 +3456,16 @@ impl WgpuRenderer {
                 } = glyph
                 {
                     if *loop_count != 0 {
-                        self.video_cache.set_loop(video_id.get(), *loop_count);
+                        self.caches.video.set_loop(video_id.get(), *loop_count);
                     }
                     if *autoplay {
-                        let state = self.video_cache.get_state(video_id.get());
+                        let state = self.caches.video.get_state(video_id.get());
                         if matches!(
                             state,
                             Some(super::super::VideoState::Stopped)
                                 | Some(super::super::VideoState::Loading)
                         ) {
-                            self.video_cache.play(video_id.get());
+                            self.caches.video.play(video_id.get());
                         }
                     }
                 }
@@ -3524,7 +3524,7 @@ impl WgpuRenderer {
                     }
 
                     // Check if video texture is ready
-                    if let Some(cached) = self.video_cache.get(video_id.get()) {
+                    if let Some(cached) = self.caches.video.get(video_id.get()) {
                         tracing::trace!(
                             "Rendering video {} at ({}, {}) size {}x{} (clipped to {}), frame_count={}",
                             video_id,
@@ -3593,7 +3593,7 @@ impl WgpuRenderer {
             // Draw inline webkit views (use opaque pipeline — DMA-BUF XRGB has alpha=0)
             #[cfg(feature = "wpe-webkit")]
             {
-                render_pass.set_pipeline(&self.opaque_image_pipeline);
+                render_pass.set_pipeline(&self.pipelines.opaque_image);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
                 for glyph in &frame_glyphs.glyphs {
@@ -3647,7 +3647,7 @@ impl WgpuRenderer {
                         }
 
                         // Check if webkit texture is ready
-                        if let Some(cached) = self.webkit_cache.get(*xwidget_id) {
+                        if let Some(cached) = self.caches.webkit.get(*xwidget_id) {
                             tracing::debug!(
                                 "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
                                 xwidget_id,
@@ -3719,7 +3719,7 @@ impl WgpuRenderer {
                             usage: wgpu::BufferUsages::VERTEX,
                         });
 
-                render_pass.set_pipeline(&self.rect_pipeline);
+                render_pass.set_pipeline(&self.pipelines.rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, cursor_buffer.slice(..));
                 render_pass.draw(0..cursor_vertices.len() as u32, 0..1);
@@ -3748,7 +3748,7 @@ impl WgpuRenderer {
                             contents: bytemuck::cast_slice(&rounded_verts),
                             usage: wgpu::BufferUsages::VERTEX,
                         });
-                render_pass.set_pipeline(&self.rounded_rect_pipeline);
+                render_pass.set_pipeline(&self.pipelines.rounded_rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, thumb_buffer.slice(..));
                 render_pass.draw(0..rounded_verts.len() as u32, 0..1);
@@ -3924,7 +3924,7 @@ impl WgpuRenderer {
         } else {
             surface_height as f32 / self.scale_factor
         };
-        let elapsed = self.render_start_time.elapsed().as_secs_f32();
+        let elapsed = self.ambient.render_start_time.elapsed().as_secs_f32();
         let uniforms = Uniforms {
             screen_size: [logical_w, logical_h],
             time: elapsed,
@@ -4044,7 +4044,7 @@ impl WgpuRenderer {
                     contents: bytemuck::cast_slice(&box_fill_vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
-            render_pass.set_pipeline(&self.rounded_rect_pipeline);
+            render_pass.set_pipeline(&self.pipelines.rounded_rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, fill_buffer.slice(..));
             render_pass.draw(0..box_fill_vertices.len() as u32, 0..1);
@@ -4080,7 +4080,7 @@ impl WgpuRenderer {
                 contents: bytemuck::cast_slice(rect_vertices),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-        render_pass.set_pipeline(&self.rect_pipeline);
+        render_pass.set_pipeline(&self.pipelines.rect);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
         render_pass.set_vertex_buffer(0, rect_buffer.slice(..));
         render_pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -4360,7 +4360,7 @@ impl WgpuRenderer {
                     contents: bytemuck::cast_slice(&border_verts),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
-            render_pass.set_pipeline(&self.rounded_rect_pipeline);
+            render_pass.set_pipeline(&self.pipelines.rounded_rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, border_buf.slice(..));
             render_pass.draw(0..border_verts.len() as u32, 0..1);
@@ -5232,7 +5232,7 @@ impl WgpuRenderer {
                 ctx,
                 &mut self.fx.border_transition.transitions,
                 &mut self.fx.border_transition.prev_selected,
-                self.border_transition_duration,
+                self.durations.border_transition,
             )
         );
     }
@@ -5327,7 +5327,7 @@ impl WgpuRenderer {
             super::cursor_effects::emit_cursor_trail_fade(
                 ctx,
                 &mut self.fx.cursor_trail.positions,
-                &self.cursor_trail_fade_duration,
+                &self.durations.cursor_trail_fade,
             )
         );
 
@@ -5355,7 +5355,7 @@ impl WgpuRenderer {
             super::window_effects::emit_typing_ripple(
                 ctx,
                 &mut self.fx.typing_ripple.active,
-                self.typing_ripple_duration,
+                self.durations.typing_ripple,
             )
         );
     }

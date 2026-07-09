@@ -16,7 +16,7 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.image_cache
+        self.caches.image
             .load_file(path, max_width, max_height, fg_color, bg_color)
     }
 
@@ -30,7 +30,7 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.image_cache
+        self.caches.image
             .load_file_with_id(id, path, max_width, max_height, fg_color, bg_color)
     }
 
@@ -43,7 +43,7 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.image_cache
+        self.caches.image
             .load_data(data, max_width, max_height, fg_color, bg_color)
     }
 
@@ -57,19 +57,19 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.image_cache
+        self.caches.image
             .load_data_with_id(id, data, max_width, max_height, fg_color, bg_color)
     }
 
     /// Load image from raw ARGB32 pixel data
     pub fn load_image_argb32(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
-        self.image_cache
+        self.caches.image
             .load_raw_argb32(data, width, height, stride, 0, 0)
     }
 
     /// Load image from raw RGB24 pixel data
     pub fn load_image_rgb24(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
-        self.image_cache
+        self.caches.image
             .load_raw_rgb24(data, width, height, stride, 0, 0)
     }
 
@@ -82,7 +82,7 @@ impl WgpuRenderer {
         height: u32,
         stride: u32,
     ) {
-        self.image_cache
+        self.caches.image
             .load_raw_argb32_with_id(id, data, width, height, stride)
     }
 
@@ -95,7 +95,7 @@ impl WgpuRenderer {
         height: u32,
         stride: u32,
     ) {
-        self.image_cache
+        self.caches.image
             .load_raw_rgb24_with_id(id, data, width, height, stride)
     }
 
@@ -111,31 +111,31 @@ impl WgpuRenderer {
 
     /// Get image dimensions (works for pending and loaded images)
     pub fn get_image_size(&self, id: u32) -> Option<(u32, u32)> {
-        self.image_cache
+        self.caches.image
             .get_dimensions(id)
             .map(|d| (d.width, d.height))
     }
 
     /// Check if image is ready for rendering
     pub fn is_image_ready(&self, id: u32) -> bool {
-        self.image_cache.is_ready(id)
+        self.caches.image.is_ready(id)
     }
 
     /// Free an image from cache
     pub fn free_image(&mut self, id: u32) {
-        self.image_cache.free(id)
+        self.caches.image.free(id)
     }
 
     /// Process pending decoded images (call each frame before rendering)
     pub fn process_pending_images(&mut self) {
-        self.image_cache.process_pending(&self.device, &self.queue);
+        self.caches.image.process_pending(&self.device, &self.queue);
     }
 
     /// Load video from file path (async - returns immediately)
     /// Returns video ID, frames decode in background
     #[cfg(feature = "video")]
     pub fn load_video_file(&mut self, path: &str) -> u32 {
-        self.video_cache.load_file(path)
+        self.caches.video.load_file(path)
     }
 
     /// Load video from file path with a pre-allocated ID.
@@ -147,57 +147,57 @@ impl WgpuRenderer {
         loop_count: i32,
         autoplay: bool,
     ) {
-        self.video_cache
+        self.caches.video
             .load_file_with_id(id, path, loop_count, autoplay);
     }
 
     /// Load video from URI with a pre-allocated ID.
     #[cfg(feature = "video")]
     pub fn load_video_uri_with_id(&mut self, id: u32, uri: &str, loop_count: i32, autoplay: bool) {
-        self.video_cache
+        self.caches.video
             .load_uri_with_id(id, uri, loop_count, autoplay);
     }
 
     /// Get video dimensions
     #[cfg(feature = "video")]
     pub fn get_video_size(&self, id: u32) -> Option<(u32, u32)> {
-        self.video_cache.get_dimensions(id)
+        self.caches.video.get_dimensions(id)
     }
 
     /// Get video state
     #[cfg(feature = "video")]
     pub fn get_video_state(&self, id: u32) -> Option<super::super::video_cache::VideoState> {
-        self.video_cache.get_state(id)
+        self.caches.video.get_state(id)
     }
 
     /// Play video
     #[cfg(feature = "video")]
     pub fn video_play(&mut self, id: u32) {
-        self.video_cache.play(id)
+        self.caches.video.play(id)
     }
 
     /// Pause video
     #[cfg(feature = "video")]
     pub fn video_pause(&mut self, id: u32) {
-        self.video_cache.pause(id)
+        self.caches.video.pause(id)
     }
 
     /// Stop video
     #[cfg(feature = "video")]
     pub fn video_stop(&mut self, id: u32) {
-        self.video_cache.stop(id)
+        self.caches.video.stop(id)
     }
 
     /// Set video loop count (-1 for infinite)
     #[cfg(feature = "video")]
     pub fn video_set_loop(&mut self, id: u32, count: i32) {
-        self.video_cache.set_loop(id, count)
+        self.caches.video.set_loop(id, count)
     }
 
     /// Free a video from cache
     #[cfg(feature = "video")]
     pub fn free_video(&mut self, id: u32) {
-        self.video_cache.remove(id)
+        self.caches.video.remove(id)
     }
 
     /// Process pending decoded video frames (call each frame before rendering)
@@ -206,22 +206,22 @@ impl WgpuRenderer {
         tracing::debug!("process_pending_videos called");
         // Use image_cache's bind_group_layout and sampler to ensure video bind groups
         // are compatible with the shared image/video rendering pipeline
-        let layout = self.image_cache.bind_group_layout();
-        let sampler = self.image_cache.sampler();
-        self.video_cache
+        let layout = self.caches.image.bind_group_layout();
+        let sampler = self.caches.image.sampler();
+        self.caches.video
             .process_pending(&self.device, &self.queue, layout, sampler);
     }
 
     /// Check if any video is currently playing
     #[cfg(feature = "video")]
     pub fn has_playing_videos(&self) -> bool {
-        self.video_cache.has_playing_videos()
+        self.caches.video.has_playing_videos()
     }
 
     /// Get cached video for rendering
     #[cfg(feature = "video")]
     pub fn get_video(&self, id: u32) -> Option<&super::super::video_cache::CachedVideo> {
-        self.video_cache.get(id)
+        self.caches.video.get(id)
     }
 
     /// Render floating videos from the scene.
@@ -263,7 +263,7 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            render_pass.set_pipeline(&self.image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             for fv in floating_videos {
@@ -276,7 +276,7 @@ impl WgpuRenderer {
                     fv.height
                 );
 
-                if let Some(cached) = self.video_cache.get(fv.video_id.get()) {
+                if let Some(cached) = self.caches.video.get(fv.video_id.get()) {
                     if let Some(ref bind_group) = cached.bind_group {
                         let vertices = [
                             GlyphVertex {
@@ -342,7 +342,7 @@ impl WgpuRenderer {
         view_id: u32,
         buffer: super::super::external_buffer::DmaBufBuffer,
     ) -> bool {
-        self.webkit_cache
+        self.caches.webkit
             .update_view(view_id, buffer, &self.device, &self.queue)
     }
 
@@ -356,7 +356,7 @@ impl WgpuRenderer {
         height: u32,
         pixels: &[u8],
     ) -> bool {
-        self.webkit_cache.update_view_from_pixels(
+        self.caches.webkit.update_view_from_pixels(
             view_id,
             width,
             height,
@@ -369,7 +369,7 @@ impl WgpuRenderer {
     /// Remove a webkit view from the cache.
     #[cfg(feature = "wpe-webkit")]
     pub fn remove_webkit_view(&mut self, view_id: u32) {
-        self.webkit_cache.remove(view_id);
+        self.caches.webkit.remove(view_id);
     }
 
     /// Process pending webkit frames from WPE views.
@@ -441,7 +441,7 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            render_pass.set_pipeline(&self.opaque_image_pipeline);
+            render_pass.set_pipeline(&self.pipelines.opaque_image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             for fw in floating_webkits {
@@ -454,7 +454,7 @@ impl WgpuRenderer {
                     fw.height
                 );
 
-                if let Some(cached) = self.webkit_cache.get(fw.webkit_id) {
+                if let Some(cached) = self.caches.webkit.get(fw.webkit_id) {
                     let vertices = [
                         GlyphVertex {
                             position: [fw.x, fw.y],

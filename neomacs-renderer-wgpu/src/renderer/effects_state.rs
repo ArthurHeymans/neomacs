@@ -465,7 +465,7 @@ impl WgpuRenderer {
             bounds,
             direction,
             started: now,
-            duration: std::time::Duration::from_millis(self.scroll_line_spacing_duration_ms as u64),
+            duration: std::time::Duration::from_millis(self.durations.scroll_line_spacing_ms as u64),
         });
         self.fx.needs_continuous_redraw = true;
     }

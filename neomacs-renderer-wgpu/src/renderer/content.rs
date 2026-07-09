@@ -111,8 +111,8 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         clip_corner_radius: f32,
     ) {
-        self.glyph_vertex_arena.begin_frame();
-        self.subpixel_vertex_arena.begin_frame();
+        self.arenas.glyph.begin_frame();
+        self.arenas.subpixel.begin_frame();
 
         tracing::debug!(
             "render_frame_content: frame={}x{} offset=({:.1},{:.1}) {} glyphs",
@@ -976,39 +976,39 @@ impl WgpuRenderer {
         // Select pipelines: stencil-aware variants when clipping to rounded corners
         let use_stencil = clip_corner_radius > 0.0;
         let rect_pl = if use_stencil {
-            &self.stencil_rect_pipeline
+            &self.pipelines.stencil_rect
         } else {
-            &self.rect_pipeline
+            &self.pipelines.rect
         };
         let rounded_rect_pl = if use_stencil {
-            &self.stencil_rounded_rect_pipeline
+            &self.pipelines.stencil_rounded_rect
         } else {
-            &self.rounded_rect_pipeline
+            &self.pipelines.rounded_rect
         };
         let glyph_pl = if use_stencil {
-            &self.stencil_glyph_pipeline
+            &self.pipelines.stencil_glyph
         } else {
-            &self.glyph_pipeline
+            &self.pipelines.glyph
         };
         let subpixel_pl = if use_stencil {
-            &self.stencil_subpixel_glyph_pipeline
+            &self.pipelines.stencil_subpixel_glyph
         } else {
-            &self.subpixel_glyph_pipeline
+            &self.pipelines.subpixel_glyph
         };
         let image_pl = if use_stencil {
-            &self.stencil_image_pipeline
+            &self.pipelines.stencil_image
         } else {
-            &self.image_pipeline
+            &self.pipelines.image
         };
         let _opaque_image_pl = if use_stencil {
-            &self.stencil_opaque_image_pipeline
+            &self.pipelines.stencil_opaque_image
         } else {
-            &self.opaque_image_pipeline
+            &self.pipelines.opaque_image
         };
 
         let stencil_attachment = if use_stencil {
             Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.stencil_view,
+                view: &self.stencil.view,
                 depth_ops: None,
                 stencil_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Load,
@@ -1116,14 +1116,14 @@ impl WgpuRenderer {
                     .collect();
 
                 let mask_upload =
-                    self.glyph_vertex_arena
+                    self.arenas.glyph
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(glyph_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 if let Some(ref upload) = mask_upload {
-                    pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                    pass.set_vertex_buffer(0, self.arenas.glyph.slice(upload));
                 }
 
                 let mut i = 0;
@@ -1159,14 +1159,14 @@ impl WgpuRenderer {
                     .collect();
 
                 let subpixel_upload =
-                    self.subpixel_vertex_arena
+                    self.arenas.subpixel
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(subpixel_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 if let Some(ref upload) = subpixel_upload {
-                    pass.set_vertex_buffer(0, self.subpixel_vertex_arena.slice(upload));
+                    pass.set_vertex_buffer(0, self.arenas.subpixel.slice(upload));
                 }
 
                 let mut i = 0;
@@ -1202,14 +1202,14 @@ impl WgpuRenderer {
                     .collect();
 
                 let color_upload =
-                    self.glyph_vertex_arena
+                    self.arenas.glyph
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
                 pass.set_pipeline(image_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 if let Some(ref upload) = color_upload {
-                    pass.set_vertex_buffer(0, self.glyph_vertex_arena.slice(upload));
+                    pass.set_vertex_buffer(0, self.arenas.glyph.slice(upload));
                 }
 
                 let mut i = 0;
@@ -1296,7 +1296,7 @@ impl WgpuRenderer {
                     ..
                 } = glyph
                 {
-                    if let Some(cached) = self.image_cache.get(image_id.get()) {
+                    if let Some(cached) = self.caches.image.get(image_id.get()) {
                         let ix = *x + offset_x;
                         let iy = *y + offset_y;
                         tracing::debug!(
@@ -1366,7 +1366,7 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if let Some(cached) = self.video_cache.get(video_id.get()) {
+                        if let Some(cached) = self.caches.video.get(video_id.get()) {
                             if let Some(ref bind_group) = cached.bind_group {
                                 let vx = *x + offset_x;
                                 let vy = *y + offset_y;
@@ -1442,7 +1442,7 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if let Some(cached) = self.webkit_cache.get(*xwidget_id) {
+                        if let Some(cached) = self.caches.webkit.get(*xwidget_id) {
                             let wx = *x + offset_x;
                             let wy = *y + offset_y;
                             tracing::debug!(

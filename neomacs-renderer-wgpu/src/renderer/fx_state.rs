@@ -538,6 +538,46 @@ impl Default for EffectClocks {
     }
 }
 
+/// Effect animation durations (configuration; NOT transferred by
+/// frame-effects swaps).
+pub(crate) struct EffectDurations {
+    /// Ripple duration in seconds
+    pub(crate) typing_ripple: f32,
+    pub(crate) border_transition: std::time::Duration,
+    pub(crate) cursor_trail_fade: std::time::Duration,
+    pub(crate) scroll_line_spacing_ms: u32,
+}
+
+impl Default for EffectDurations {
+    fn default() -> Self {
+        Self {
+            typing_ripple: 0.3,
+            border_transition: std::time::Duration::from_millis(200),
+            cursor_trail_fade: std::time::Duration::from_millis(300),
+            scroll_line_spacing_ms: 200,
+        }
+    }
+}
+
+/// Ambient clocks shared by every frame context (NOT transferred by
+/// frame-effects swaps): a child frame's effects read the same aurora phase
+/// and render epoch as the primary frame.
+pub(crate) struct AmbientClocks {
+    pub(crate) aurora_start: std::time::Instant,
+    /// Start time for elapsed time calculation (used by fancy border effects)
+    pub(crate) render_start_time: std::time::Instant,
+}
+
+impl Default for AmbientClocks {
+    fn default() -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            aurora_start: now,
+            render_start_time: now,
+        }
+    }
+}
+
 /// Frame-local renderer effect queues that are rendered through `WgpuRenderer`.
 #[derive(Default)]
 pub struct RendererFrameEffects {

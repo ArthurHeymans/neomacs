@@ -209,7 +209,7 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    pass.set_pipeline(&self.rect_pipeline);
+                    pass.set_pipeline(&self.pipelines.rect);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                     pass.set_vertex_buffer(0, rect_buffer.slice(..));
                     pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -451,7 +451,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.glyph_pipeline);
+            pass.set_pipeline(&self.pipelines.glyph);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
 
@@ -476,9 +476,9 @@ impl WgpuRenderer {
                     }
                 };
                 if matches!(entry, AnyAtlasEntry::Color(_)) {
-                    pass.set_pipeline(&self.opaque_image_pipeline);
+                    pass.set_pipeline(&self.pipelines.opaque_image);
                 } else {
-                    pass.set_pipeline(&self.glyph_pipeline);
+                    pass.set_pipeline(&self.pipelines.glyph);
                 }
                 pass.set_bind_group(1, bg, &[]);
                 pass.draw(batch_start..vert_idx, 0..1);
@@ -680,7 +680,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.glyph_pipeline);
+            pass.set_pipeline(&self.pipelines.glyph);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
 
@@ -705,9 +705,9 @@ impl WgpuRenderer {
                     }
                 };
                 if matches!(entry, AnyAtlasEntry::Color(_)) {
-                    pass.set_pipeline(&self.opaque_image_pipeline);
+                    pass.set_pipeline(&self.pipelines.opaque_image);
                 } else {
-                    pass.set_pipeline(&self.glyph_pipeline);
+                    pass.set_pipeline(&self.pipelines.glyph);
                 }
                 pass.set_bind_group(1, bg, &[]);
                 pass.draw(batch_start..vert_idx, 0..1);
@@ -813,7 +813,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, rect_buffer.slice(..));
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -1030,7 +1030,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, rect_buffer.slice(..));
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -1283,7 +1283,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.rect_pipeline);
+            pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, rect_buffer.slice(..));
             pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -1377,7 +1377,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, rect_buffer.slice(..));
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -1481,7 +1481,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.corner_mask_pipeline);
+            pass.set_pipeline(&self.pipelines.corner_mask);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
             pass.draw(0..vertices.len() as u32, 0..1);
@@ -1806,7 +1806,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, rect_buffer.slice(..));
                 pass.draw(0..all_rect_vertices.len() as u32, 0..1);
@@ -1924,7 +1924,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, rect_buffer.slice(..));
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -2012,7 +2012,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.rect_pipeline);
+            pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, rect_buffer.slice(..));
             pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -2115,7 +2115,7 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.rect_pipeline);
+            pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             pass.set_vertex_buffer(0, rect_buffer.slice(..));
             pass.draw(0..rect_vertices.len() as u32, 0..1);
@@ -2240,7 +2240,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..rect_verts.len() as u32, 0..1);
@@ -2322,7 +2322,7 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-        self.image_vertex_arena.begin_frame();
+        self.arenas.image.begin_frame();
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -2462,7 +2462,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..rect_verts.len() as u32, 0..1);
@@ -2523,7 +2523,7 @@ impl WgpuRenderer {
                 if let Some(image) = item.image.as_ref()
                     && let Some(&image_id) = icon_textures.get(image)
                 {
-                    if let Some(cached) = self.image_cache.get(image_id) {
+                    if let Some(cached) = self.caches.image.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [
                             GlyphVertex {
@@ -2580,7 +2580,7 @@ impl WgpuRenderer {
                 batch_ranges.push((bg, start..end));
             }
             let icon_upload = self
-                .image_vertex_arena
+                .arenas.image
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
                 let mut encoder =
@@ -2605,9 +2605,9 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    pass.set_pipeline(&self.image_pipeline);
+                    pass.set_pipeline(&self.pipelines.image);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
+                    pass.set_vertex_buffer(0, self.arenas.image.slice(upload));
                     for (bg, range) in &batch_ranges {
                         pass.set_bind_group(1, bg, &[]);
                         pass.draw(range.clone(), 0..1);
@@ -2635,7 +2635,7 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-        self.image_vertex_arena.begin_frame();
+        self.arenas.image.begin_frame();
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -2762,7 +2762,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                pass.set_pipeline(&self.rect_pipeline);
+                pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..rect_verts.len() as u32, 0..1);
@@ -2786,7 +2786,7 @@ impl WgpuRenderer {
                 if let Some(image) = item.image.as_ref()
                     && let Some(&image_id) = icon_textures.get(image)
                 {
-                    if let Some(cached) = self.image_cache.get(image_id) {
+                    if let Some(cached) = self.caches.image.get(image_id) {
                         let bg = cached.bind_group.clone();
                         let verts = [
                             GlyphVertex {
@@ -2843,7 +2843,7 @@ impl WgpuRenderer {
                 batch_ranges.push((bg, start..end));
             }
             let icon_upload = self
-                .image_vertex_arena
+                .arenas.image
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
                 let mut encoder =
@@ -2868,9 +2868,9 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    pass.set_pipeline(&self.image_pipeline);
+                    pass.set_pipeline(&self.pipelines.image);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, self.image_vertex_arena.slice(upload));
+                    pass.set_vertex_buffer(0, self.arenas.image.slice(upload));
                     for (bg, range) in &batch_ranges {
                         pass.set_bind_group(1, bg, &[]);
                         pass.draw(range.clone(), 0..1);

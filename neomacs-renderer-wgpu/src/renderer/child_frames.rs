@@ -104,7 +104,7 @@ impl WgpuRenderer {
                                     contents: bytemuck::cast_slice(&shadow_verts),
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
-                        pass.set_pipeline(&self.rect_pipeline);
+                        pass.set_pipeline(&self.pipelines.rect);
                         pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         pass.set_vertex_buffer(0, buffer.slice(..));
                         pass.draw(0..shadow_verts.len() as u32, 0..1);
@@ -155,7 +155,7 @@ impl WgpuRenderer {
                                     contents: bytemuck::cast_slice(&bg_verts),
                                     usage: wgpu::BufferUsages::VERTEX,
                                 });
-                        pass.set_pipeline(&self.rounded_rect_pipeline);
+                        pass.set_pipeline(&self.pipelines.rounded_rect);
                         pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                         pass.set_vertex_buffer(0, buffer.slice(..));
                         pass.draw(0..bg_verts.len() as u32, 0..1);
@@ -186,7 +186,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&bg_verts),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
-                    pass.set_pipeline(&self.rect_pipeline);
+                    pass.set_pipeline(&self.pipelines.rect);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                     pass.set_vertex_buffer(0, buffer.slice(..));
                     pass.draw(0..bg_verts.len() as u32, 0..1);
@@ -235,7 +235,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&border_verts),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
-                    pass.set_pipeline(&self.rounded_rect_pipeline);
+                    pass.set_pipeline(&self.pipelines.rounded_rect);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                     pass.set_vertex_buffer(0, buffer.slice(..));
                     pass.draw(0..border_verts.len() as u32, 0..1);
@@ -278,7 +278,7 @@ impl WgpuRenderer {
                             depth_slice: None,
                         })],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &self.stencil_view,
+                            view: &self.stencil.view,
                             depth_ops: None,
                             stencil_ops: Some(wgpu::Operations {
                                 load: wgpu::LoadOp::Clear(0),
@@ -296,7 +296,7 @@ impl WgpuRenderer {
                                 contents: bytemuck::cast_slice(&stencil_verts),
                                 usage: wgpu::BufferUsages::VERTEX,
                             });
-                    pass.set_pipeline(&self.stencil_write_pipeline);
+                    pass.set_pipeline(&self.pipelines.stencil_write);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
                     pass.set_vertex_buffer(0, buffer.slice(..));
                     pass.set_stencil_reference(1);
