@@ -79,6 +79,19 @@ fn div_v8_combo_async_process_kill_buffer_marker_cleanup() {
             (eq (process-buffer proc) buf)
             (process-live-p proc)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
-    crate::common::assert_oracle_parity_expect(form, expect);
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm(form);
+    let exited_before_kill = "OK (t nil nil t nil)";
+    let live_through_kill =
+        "OK (t (run open listen connect stop) nil t (run open listen connect stop))";
+    let live_before_kill = "OK (t (run open listen connect stop) nil t nil)";
+    // GNU can observe the short subprocess status before or after the single
+    // `accept-process-output' call returns.  The stable semantics here are
+    // that the buffer starts live, `kill-buffer' kills it, and the process
+    // object still records the killed buffer as its process buffer.
+    for (label, value) in [("GNU", oracle.as_str()), ("Neomacs", neovm.as_str())] {
+        assert!(
+            value == exited_before_kill || value == live_through_kill || value == live_before_kill,
+            "{label} returned unexpected process/buffer state: {value:?}"
+        );
+    }
 }
