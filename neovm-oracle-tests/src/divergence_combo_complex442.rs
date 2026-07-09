@@ -179,8 +179,11 @@ fn div_cx442_file_newer_than() {
         r##"(let ((f1 (make-temp-file "neo-cx442-fnt1-"))
       (f2 (make-temp-file "neo-cx442-fnt2-")))
   (unwind-protect
-      (list (file-newer-than-file-p f1 f2)
-            (file-newer-than-file-p f2 f1))
+      (progn
+        (set-file-times f1 100)
+        (set-file-times f2 100)
+        (list (file-newer-than-file-p f1 f2)
+              (file-newer-than-file-p f2 f1)))
     (delete-file f1)
     (delete-file f2)))"##,
         expect,
