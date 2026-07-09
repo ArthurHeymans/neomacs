@@ -192,10 +192,14 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; GNU uses addresses for threads/mutexes/condition variables, while
          ;; Neomacs uses simulated ids.  Normalize to stable semantic tokens
          ;; before generic cons/vector traversal can copy Neomacs handles.
+         ;; Thread liveness is intentionally not part of the opaque thread
+         ;; token: GNU `make-thread' returns before the worker necessarily
+         ;; exits, so `(thread-live-p v)' is scheduler-sensitive for short
+         ;; thread functions.  Tests that need liveness should call
+         ;; `thread-live-p' explicitly.
          ((and (fboundp 'threadp) (threadp v))
           (list :thread
-                (and (fboundp 'thread-name) (thread-name v))
-                (and (fboundp 'thread-live-p) (thread-live-p v))))
+                (and (fboundp 'thread-name) (thread-name v))))
          ((and (fboundp 'mutexp) (mutexp v))
           (list :mutex
                 (and (fboundp 'mutex-name) (mutex-name v))))
