@@ -111,26 +111,27 @@ fn gnu_system_type() -> &'static str {
     }
 }
 
-fn linux_initial_feature_names() -> Vec<&'static str> {
-    // Match the GNU/Linux GTK oracle build's C-level startup feature
-    // surface.  GNU initializes `features' to `(emacs)' in fns.c and
-    // each subsystem provides itself in syms_of_* order; the final order
-    // below is user-visible through `features', `featurep', and `require'.
-    let mut features = vec!["threads", "dbusbind", "inotify"];
+fn push_optional_lcms2_feature(features: &mut Vec<&'static str>) {
     if cfg!(neomacs_have_lcms2) {
         features.push("lcms2");
     }
+}
+
+fn portable_initial_feature_names() -> Vec<&'static str> {
+    // GNU initializes `features' from C subsystems that are actually linked
+    // into the executable.  Neomacs has its own cross-platform `neo' GUI
+    // backend, so OS choice alone must not advertise GNU's native X/GTK, W32,
+    // or NS terminal backends.
+    let mut features = vec!["threads", "multi-tty", "make-network-process", "emacs"];
+    push_optional_lcms2_feature(&mut features);
+    features
+}
+
+fn linux_initial_feature_names() -> Vec<&'static str> {
+    let mut features = vec!["threads", "dbusbind", "inotify"];
+    push_optional_lcms2_feature(&mut features);
     features.extend([
-        "dynamic-setting",
-        "system-font-setting",
-        "font-render-setting",
-        "cairo",
-        "gtk",
-        "x-toolkit",
-        "xinput2",
-        "x",
         "multi-tty",
-        "move-toolbar",
         "make-network-process",
         "tty-child-frames",
         "emacs",
@@ -143,22 +144,20 @@ fn selected_initial_feature_names() -> Vec<&'static str> {
         target_os = "linux" => {
             linux_initial_feature_names()
         }
-        neomacs_have_lcms2 => {
-            vec!["threads", "lcms2", "emacs"]
+        target_os = "windows" => {
+            portable_initial_feature_names()
+        }
+        target_os = "macos" => {
+            portable_initial_feature_names()
         }
         _ => {
-            vec!["threads", "emacs"]
+            portable_initial_feature_names()
         }
     }
 }
 
 fn initial_feature_names() -> Vec<&'static str> {
-    let mut features = selected_initial_feature_names();
-    if cfg!(target_os = "windows") {
-        // GNU w32term.c calls Fprovide(Qw32) during C-level startup.
-        features.insert(0, "w32");
-    }
-    features
+    selected_initial_feature_names()
 }
 
 fn initial_features_value() -> Value {

@@ -1245,6 +1245,11 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
     crate::test_utils::init_test_tracing();
     let requests = Arc::new(Mutex::new(Vec::new()));
     let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::clone(&requests),
     }));

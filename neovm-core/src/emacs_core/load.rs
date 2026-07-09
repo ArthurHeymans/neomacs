@@ -2260,7 +2260,8 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // V21 keeps Neomacs' GUI terminal library out of the dumped batch surface.
 // V22 stops redirecting bootstrap `loaddefs` loads to `ldefs-boot` when the
 // real generated loaddefs file exists, matching GNU loadup.el's fallback path.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 22;
+// V23 stops advertising GNU X/GTK startup features for Neomacs' `neo` backend.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 23;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
@@ -4558,10 +4559,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         maybe_trace_bootstrap_step(format!(
             "create_bootstrap_evaluator_with_features: provided-features={bootstrap_features:?}"
         ));
-        if bootstrap_features
-            .iter()
-            .any(|feature| feature == "x" || feature == "neomacs")
-        {
+        if bootstrap_features.iter().any(|feature| feature == "x") {
             install_bootstrap_x_window_system_vars(&mut eval)?;
             maybe_trace_bootstrap_step(
                 "create_bootstrap_evaluator_with_features: installed-x-window-system-vars",
