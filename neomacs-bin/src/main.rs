@@ -1132,6 +1132,18 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
+    fn show_gui_child_frame(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+    ) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Window(WindowCommand::ShowChildFrame {
+                frame_id: frame_id.0,
+            }),
+            "failed to show GUI child frame",
+        )
+    }
+
     fn destroy_gui_frame(&mut self, frame_id: neovm_core::window::FrameId) -> Result<(), String> {
         let frame = if self.primary_frame_id == Some(frame_id) {
             self.primary_frame_id = None;

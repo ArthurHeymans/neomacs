@@ -118,6 +118,7 @@ impl<'a> FrameChromeOutputTarget<'a> {
 
 pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
     font_metrics: &'emit mut Option<FontMetricsService>,
+    window_system: bool,
     face_resolver: &'face FaceResolver,
     face_ids: &'emit mut FrameFaceIdAllocator,
 }
@@ -142,6 +143,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     ) -> Self {
         Self {
             font_metrics,
+            window_system: face_resolver.is_window_system(),
             face_resolver,
             face_ids,
         }
@@ -150,6 +152,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     pub(crate) fn reborrow(&mut self) -> ChromeRowRenderServices<'_, 'face> {
         ChromeRowRenderServices {
             font_metrics: self.font_metrics,
+            window_system: self.window_system,
             face_resolver: self.face_resolver,
             face_ids: self.face_ids,
         }
@@ -168,8 +171,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         request: DisplayRowLispStringSourceRenderRequest<'_>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<RenderedDisplayRow> {
-        let mut render_executor = DisplayRowRenderExecutor::new(
+        let mut render_executor = DisplayRowRenderExecutor::new_for_frame(
             &mut *self.font_metrics,
+            self.window_system,
             self.face_resolver,
             display_host,
             &mut *self.face_ids,
@@ -184,8 +188,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<DisplayRowRenderIntoRowResult> {
-        let mut render_executor = DisplayRowRenderExecutor::new(
+        let mut render_executor = DisplayRowRenderExecutor::new_for_frame(
             &mut *self.font_metrics,
+            self.window_system,
             self.face_resolver,
             None,
             &mut *self.face_ids,

@@ -11,6 +11,7 @@ use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Evaluate all forms with a fresh evaluator that has a frame+window set up.
 fn eval_with_frame(src: &str) -> Vec<String> {
@@ -112,6 +113,7 @@ struct RecordingDisplayHost {
     realized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
     resized: Rc<RefCell<Vec<GuiFrameHostRequest>>>,
     destroyed_gui_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
+    shown_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     removed_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     geometry_hints:
         Rc<RefCell<Vec<(crate::window::FrameId, crate::window::GuiFrameGeometryHints)>>>,
@@ -174,6 +176,11 @@ impl DisplayHost for RecordingDisplayHost {
         Ok(())
     }
 
+    fn show_gui_child_frame(&mut self, frame_id: crate::window::FrameId) -> Result<(), String> {
+        self.shown_child_frames.borrow_mut().push(frame_id);
+        Ok(())
+    }
+
     fn remove_gui_child_frame(&mut self, frame_id: crate::window::FrameId) -> Result<(), String> {
         self.removed_child_frames.borrow_mut().push(frame_id);
         Ok(())
@@ -186,6 +193,28 @@ impl DisplayHost for RecordingDisplayHost {
     ) -> Result<Option<ResolvedFrameFont>, String> {
         Ok(self.resolved_frame_font.clone())
     }
+}
+
+fn due_gnu_timer(callback: Value, args: Value) -> Value {
+    let when = SystemTime::now()
+        .checked_sub(Duration::from_millis(10))
+        .expect("timer deadline should fit in system time")
+        .duration_since(UNIX_EPOCH)
+        .expect("timer deadline should be after unix epoch");
+    let secs = when.as_secs() as i64;
+
+    Value::vector(vec![
+        Value::NIL,
+        Value::fixnum(secs >> 16),
+        Value::fixnum(secs & 0xFFFF),
+        Value::fixnum(when.subsec_micros() as i64),
+        Value::NIL,
+        callback,
+        args,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+    ])
 }
 
 // -- Window queries --
@@ -4414,6 +4443,100 @@ fn make_frame_invisible_removes_gui_child_overlay_from_display_host() {
 
     super::builtin_make_frame_invisible(&mut ev, vec![created])
         .expect("make child frame invisible");
+
+    let child = ev.frames.get(child_id).expect("child frame remains live");
+    assert!(!child.visible);
+    assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
+fn make_frame_visible_shows_gui_child_overlay_from_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let shown_child_frames = host.shown_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
+
+    super::builtin_make_frame_invisible(&mut ev, vec![created])
+        .expect("make child frame invisible");
+    super::builtin_make_frame_visible(&mut ev, vec![created]).expect("make child frame visible");
+
+    let child = ev.frames.get(child_id).expect("child frame remains live");
+    assert!(child.visible);
+    assert_eq!(*shown_child_frames.borrow(), vec![child_id]);
+}
+
+#[test]
+fn timer_deferred_make_frame_invisible_removes_gui_child_overlay_from_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 10.0;
+        parent.char_height = 20.0;
+        parent.font_pixel_size = 20.0;
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::new();
+    let removed_child_frames = host.removed_child_frames.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(20)),
+        Value::cons(Value::symbol("height"), Value::fixnum(5)),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
+
+    ev.eval_str(
+        r#"(progn
+             (fset 'neomacs-test-hide-frame
+                   (lambda (frame) (make-frame-invisible frame)))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install timer handler");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![due_gnu_timer(
+            Value::symbol("neomacs-test-hide-frame"),
+            Value::list(vec![created]),
+        )]),
+    );
+
+    ev.fire_pending_timers();
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
     assert!(!child.visible);

@@ -488,22 +488,19 @@ impl RenderApp {
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id.get()) {
                     let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
-                    window_state
-                        .render
-                        .compositor
-                        .child_frames
-                        .update_frame(frame);
-                    let cursor_sync = Self::sync_frame_window_cursor(window_state, cursor_config);
-                    window_state.render.mark_dirty();
-                    if let Some(cursor_sync) = cursor_sync {
-                        Self::update_frame_window_cursor_side_effects(
-                            renderer,
-                            window_state,
-                            cursor_sync,
-                            typing_ripple_enabled,
-                            cursor_trail_fade_enabled,
-                            update_transient_effects,
-                        );
+                    if window_state.render.update_child_frame(frame) {
+                        let cursor_sync =
+                            Self::sync_frame_window_cursor(window_state, cursor_config);
+                        if let Some(cursor_sync) = cursor_sync {
+                            Self::update_frame_window_cursor_side_effects(
+                                renderer,
+                                window_state,
+                                cursor_sync,
+                                typing_ripple_enabled,
+                                cursor_trail_fade_enabled,
+                                update_transient_effects,
+                            );
+                        }
                     }
                     continue;
                 }
@@ -513,7 +510,7 @@ impl RenderApp {
                 && self.frame_windows.is_primary_frame_id(parent_id.get())
             {
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
-                    ws.render.update_child_frame(frame)
+                    ws.render.update_child_frame(frame);
                 };
             } else if parent_id == DisplayFrameId::new(0)
                 && self.frame_windows.is_primary_frame_id(frame_id.get())

@@ -131,6 +131,7 @@ pub(crate) struct OverlayState {
 pub(crate) struct FrameCompositor {
     pub current_frame: Option<FrameGlyphBuffer>,
     pub child_frames: ChildFrameManager,
+    hidden_child_frames: HashSet<u64>,
     pub glyph_atlas: Option<WgpuGlyphAtlas>,
     pub dirty: bool,
     pub(super) visual_cursors: HashMap<i64, CursorState>,
@@ -314,6 +315,7 @@ impl GuiFrameRenderState {
             compositor: FrameCompositor {
                 current_frame: None,
                 child_frames: ChildFrameManager::new(),
+                hidden_child_frames: HashSet::new(),
                 glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
                 dirty: false,
                 visual_cursors: HashMap::new(),
@@ -347,6 +349,7 @@ impl GuiFrameRenderState {
             compositor: FrameCompositor {
                 current_frame: None,
                 child_frames: ChildFrameManager::new(),
+                hidden_child_frames: HashSet::new(),
                 glyph_atlas: None,
                 dirty: false,
                 visual_cursors: HashMap::new(),
@@ -824,6 +827,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
+        self.compositor.hidden_child_frames.insert(frame_id);
         let removed = self.compositor.child_frames.remove_frame(frame_id);
         if removed {
             self.compositor.dirty = true;
@@ -842,9 +846,22 @@ impl GuiFrameRenderState {
         removed
     }
 
-    pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) {
+    pub(super) fn show_child_frame(&mut self, frame_id: u64) -> bool {
+        self.compositor.hidden_child_frames.remove(&frame_id)
+    }
+
+    pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) -> bool {
+        let frame_id = frame.frame_id.get();
+        if self.compositor.hidden_child_frames.contains(&frame_id) {
+            tracing::debug!(
+                frame_id,
+                "ignoring child frame update while frame is explicitly hidden"
+            );
+            return false;
+        }
         self.compositor.child_frames.update_frame(frame);
         self.compositor.dirty = true;
+        true
     }
 }
 
@@ -1192,6 +1209,10 @@ impl GuiFrameWindowState {
             self.reset_ime_cursor_area();
         }
         changed
+    }
+
+    pub(super) fn show_child_frame(&mut self, frame_id: u64) -> bool {
+        self.render.show_child_frame(frame_id)
     }
 
     pub(super) fn drag_resize_for_current_edge(&self) -> bool {
@@ -1963,6 +1984,14 @@ impl GuiFrameWindowManager {
         let mut changed = false;
         self.for_each_top_level_window_mut(|window_state| {
             changed |= window_state.remove_child_frame(frame_id);
+        });
+        changed
+    }
+
+    pub(super) fn show_child_frame_in_top_level_windows(&mut self, frame_id: u64) -> bool {
+        let mut changed = false;
+        self.for_each_top_level_window_mut(|window_state| {
+            changed |= window_state.show_child_frame(frame_id);
         });
         changed
     }

@@ -1555,6 +1555,9 @@ pub trait DisplayHost {
     fn destroy_gui_frame(&mut self, _frame_id: crate::window::FrameId) -> Result<(), String> {
         Ok(())
     }
+    fn show_gui_child_frame(&mut self, _frame_id: crate::window::FrameId) -> Result<(), String> {
+        Ok(())
+    }
     fn remove_gui_child_frame(&mut self, _frame_id: crate::window::FrameId) -> Result<(), String> {
         Ok(())
     }

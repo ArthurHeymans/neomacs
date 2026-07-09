@@ -1324,6 +1324,17 @@ fn render_command_remove_child_frame() {
 }
 
 #[test]
+fn render_command_show_child_frame() {
+    let cmd = RenderCommand::Window(WindowCommand::ShowChildFrame { frame_id: 0xBEEF });
+    match cmd {
+        RenderCommand::Window(WindowCommand::ShowChildFrame { frame_id }) => {
+            assert_eq!(frame_id, 0xBEEF)
+        }
+        other => panic!("Expected ShowChildFrame, got {:?}", other),
+    }
+}
+
+#[test]
 fn render_command_create_window() {
     let geometry_hints = GuiFrameGeometryHints {
         base_width: 42,

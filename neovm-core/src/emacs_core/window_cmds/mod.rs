@@ -6116,6 +6116,9 @@ fn set_frame_visibility(
     visible: bool,
 ) -> Result<(), Flow> {
     let was_visible = eval.frames.get(fid).is_some_and(|f| f.visible);
+    let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
+        frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
+    });
     if visible {
         if let Some(frame) = eval.frames.get_mut(fid) {
             frame.visible = true;
@@ -6123,14 +6126,18 @@ fn set_frame_visibility(
                 eval.frames.raise_or_lower_child_frame(fid, true);
             }
         }
+        if !was_visible
+            && is_gui_child_frame
+            && let Some(host) = eval.display_host.as_mut()
+        {
+            host.show_gui_child_frame(fid)
+                .map_err(|message| signal("error", vec![Value::string(message)]))?;
+        }
     } else if was_visible {
         if let Some(frame) = eval.frames.get_mut(fid) {
             frame.visible = false;
         }
         // Notify display runtime: GUI child frames need RemoveChildFrame.
-        let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
-            frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
-        });
         if is_gui_child_frame && let Some(host) = eval.display_host.as_mut() {
             host.remove_gui_child_frame(fid)
                 .map_err(|message| signal("error", vec![Value::string(message)]))?;

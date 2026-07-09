@@ -2475,6 +2475,10 @@ pub struct FaceResolver {
 }
 
 impl FaceResolver {
+    pub(crate) fn is_window_system(&self) -> bool {
+        self.window_system.is_some()
+    }
+
     fn face_spec_is_plist(items: &[Value]) -> bool {
         match items.first() {
             Some(v) if v.is_keyword() => true,

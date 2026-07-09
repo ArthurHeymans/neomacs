@@ -245,6 +245,51 @@ fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
 }
 
 #[test]
+fn frame_render_state_remove_child_frame_ignores_late_stale_update() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut child = make_frame(0x99, 0x42);
+    child.parent_x = 10.0;
+    child.parent_y = 20.0;
+
+    render.update_child_frame(child.clone());
+    assert!(render.compositor.child_frames.frames.contains_key(&0x99));
+
+    assert!(render.remove_child_frame(0x99));
+    assert!(render.compositor.child_frames.frames.is_empty());
+
+    render.update_child_frame(child);
+
+    assert!(
+        render.compositor.child_frames.frames.is_empty(),
+        "a child frame buffer queued before explicit removal must not re-add the hidden overlay"
+    );
+}
+
+#[test]
+fn frame_render_state_show_child_frame_allows_fresh_update_after_removal() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut child = make_frame(0x99, 0x42);
+    child.parent_x = 10.0;
+    child.parent_y = 20.0;
+
+    render.update_child_frame(child.clone());
+    assert!(render.remove_child_frame(0x99));
+    render.show_child_frame(0x99);
+    render.update_child_frame(child);
+
+    assert!(
+        render.compositor.child_frames.frames.contains_key(&0x99),
+        "a fresh child frame update after explicit visibility restore must be accepted"
+    );
+}
+
+#[test]
 fn frame_render_state_remove_child_cursor_clears_preedit() {
     let Some(device) = make_test_device() else {
         return;

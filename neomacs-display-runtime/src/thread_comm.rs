@@ -288,7 +288,9 @@ pub enum WindowCommand {
     AdoptPrimaryFrame { frame: FrameRef },
     /// Destroy an OS window for a top-level Emacs frame
     DestroyWindow { frame: FrameRef },
-    /// Remove a child frame (sent when frame is deleted or unparented)
+    /// Mark a child frame visible again.
+    ShowChildFrame { frame_id: u64 },
+    /// Remove a child frame (sent when frame is deleted, unparented, or hidden)
     RemoveChildFrame { frame_id: u64 },
     /// Request window attention (urgency hint / taskbar flash)
     RequestAttention { urgent: bool },

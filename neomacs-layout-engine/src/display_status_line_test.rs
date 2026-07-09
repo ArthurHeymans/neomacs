@@ -2,6 +2,7 @@ use super::*;
 use crate::display_row::DisplayRowFace;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neovm_core::face::FaceTable;
 
 #[test]
@@ -102,6 +103,114 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     assert_eq!(render.measured.row_index(), 3);
     assert_eq!(render.measured.bounds().y, 24.0);
     assert_eq!(render.measured.output_progress().y(), 24.0);
+}
+
+fn proportional_chrome_test_face(
+    face_resolver: &FaceResolver,
+    origin: &DisplayOrigin,
+) -> ResolvedFace {
+    let mut face = face_resolver.default_base_face_for_origin_without_buffer(origin);
+    face.font_family = "Noto Sans".to_string();
+    face.font_size = 9.12871;
+    face.font_weight = 400;
+    face.set_measured_char_width_px(7.2);
+    face.font_ascent = 10.0;
+    face.font_line_height = 17.0;
+    face
+}
+
+fn assert_matches_proportional_dot_width(actual: f32, label: &str) {
+    let mut metrics = FontMetricsService::new();
+    let expected = metrics.char_width('.', "Noto Sans", 400, false, 9.12871);
+    assert!(
+        expected > 0.0 && expected < 7.2,
+        "test requires Noto Sans dot to be narrower than the fallback cell, got {expected}"
+    );
+    assert!(
+        (actual - expected).abs() < 0.25,
+        "{label} should use the GUI font-backed glyph advance for '.', got {actual}, expected {expected}"
+    );
+}
+
+#[test]
+fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver =
+        FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, Some("neo".to_string()));
+
+    for (kind, origin, selected, label) in [
+        (
+            WindowChromeKind::TabLine,
+            DisplayOrigin::TabLine,
+            true,
+            "tab-line",
+        ),
+        (
+            WindowChromeKind::ModeLine,
+            DisplayOrigin::ModeLine { selected: true },
+            true,
+            "mode-line",
+        ),
+    ] {
+        let base_face = proportional_chrome_test_face(&face_resolver, &origin);
+        let mut font_metrics = Some(FontMetricsService::new());
+        let mut face_ids = FrameFaceIdAllocator::new(1);
+        let mut render_services =
+            ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+
+        let render = WindowChromeDisplayRowRequest {
+            window_id: 42,
+            kind,
+            selected,
+            display_row_index: 0,
+            output: ChromeRowOutput::new(0, 0.0),
+            bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 240.0, 17.0),
+            text_area_left_px: 0.0,
+            metrics: DisplayRowFallbackMetrics::from_default_face_extents(7.2, 17.0, 10.0),
+            tab_policy: DisplayTabPolicy::every(8),
+            base_face: &base_face,
+            symbol_values: std::collections::HashMap::new(),
+            text: Value::string(".agent-sh"),
+        }
+        .into_render_request(render_services.face_ids())
+        .render_measured(&mut render_services, None)
+        .expect("window chrome row should render");
+        let first_width =
+            render.measured.rendered().row().glyphs[GlyphArea::Text.index()][0].pixel_width;
+
+        assert_matches_proportional_dot_width(first_width, label);
+    }
+}
+
+#[test]
+fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver =
+        FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, Some("neo".to_string()));
+    let base_face = proportional_chrome_test_face(&face_resolver, &DisplayOrigin::TabBar);
+    let mut font_metrics = Some(FontMetricsService::new());
+    let mut face_ids = FrameFaceIdAllocator::new(1);
+    let mut render_services =
+        ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+
+    let measured = FrameTabBarDisplayRowRequest {
+        row_index: 0,
+        y: 0.0,
+        width: 240.0,
+        height: 17.0,
+        metrics: DisplayRowFallbackMetrics::from_default_face_extents(7.2, 17.0, 10.0),
+        base_face: &base_face,
+        text: Value::string(".agent-sh"),
+    }
+    .into_chrome_render_request(render_services.face_ids())
+    .render_row(&mut render_services, None)
+    .expect("frame tab-bar row should render")
+    .measure();
+    let first_width = measured.rendered().row().glyphs[GlyphArea::Text.index()][0].pixel_width;
+
+    assert_matches_proportional_dot_width(first_width, "tab-bar");
 }
 
 /// A mode-line whose text carries a tall `display` element (here a glyph with

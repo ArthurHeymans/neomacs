@@ -209,29 +209,15 @@ impl RenderApp {
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
             }
+            WindowCommand::ShowChildFrame { frame_id } => {
+                tracing::debug!("Showing child frame 0x{:x}", frame_id);
+                self.frame_windows
+                    .show_child_frame_in_top_level_windows(frame_id);
+            }
             WindowCommand::RemoveChildFrame { frame_id } => {
                 tracing::info!("Removing child frame 0x{:x}", frame_id);
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
-                {
-                    let target_was_child = self
-                        .frame_windows
-                        .primary_window()
-                        .map_or(&self.cursor_defaults, |ws| &ws.render.cursor)
-                        .target_cloned()
-                        .is_some_and(|target| target.frame_id == frame_id);
-                    if let Some(ws) = self.frame_windows.primary_window_mut() {
-                        let changed = ws.render.remove_child_frame(frame_id);
-                        if target_was_child {
-                            if let Some(window_state) = self.frame_windows.primary_window_mut() {
-                                window_state.reset_ime_cursor_area()
-                            }
-                        }
-                        changed
-                    } else {
-                        false
-                    }
-                };
             }
             WindowCommand::ScrollBlit { .. } => {
                 // handled above in dispatch, here as exhaustive match
