@@ -503,6 +503,11 @@ pub(crate) enum BacktraceArgs {
     },
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ThreadDynamicBindingState {
+    lexenv: Value,
+}
+
 impl BacktraceArgs {
     #[inline]
     pub(crate) fn is_unevalled(&self) -> bool {
@@ -14208,6 +14213,158 @@ impl Context {
     /// Matches GNU Emacs's unbind_to() in eval.c.
     pub(crate) fn unbind_to(&mut self, count: usize) {
         let _ = self.unbind_to_result(count);
+    }
+
+    fn local_binding_value_for_thread_switch(
+        &self,
+        sym_id: SymId,
+        buffer_id: crate::buffer::BufferId,
+    ) -> Option<Value> {
+        self.buffers
+            .get(buffer_id)
+            .and_then(|buf| buf.get_buffer_local_binding_by_sym_id(sym_id))
+            .map(|binding| binding.as_value().unwrap_or(Value::UNBOUND))
+    }
+
+    fn set_local_binding_for_thread_switch(
+        &mut self,
+        sym_id: SymId,
+        buffer_id: crate::buffer::BufferId,
+        value: Value,
+    ) {
+        use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
+
+        let is_localized = self
+            .obarray
+            .get_by_id(sym_id)
+            .map(|s| s.redirect() == SymbolRedirect::Localized)
+            .unwrap_or(false);
+        if is_localized {
+            let buf_val = Value::make_buffer(buffer_id);
+            let alist = self
+                .buffers
+                .get(buffer_id)
+                .map(|b| b.local_var_alist)
+                .unwrap_or(Value::NIL);
+            let new_alist = self.obarray.set_internal_localized(
+                sym_id,
+                value,
+                buf_val,
+                alist,
+                SetInternalBind::ThreadSwitch,
+                false,
+            );
+            if let Some(buf) = self.buffers.get_mut(buffer_id) {
+                buf.local_var_alist = new_alist;
+            }
+        } else if value.is_unbound() {
+            let _ = self
+                .buffers
+                .set_buffer_local_void_property_by_sym_id(buffer_id, sym_id);
+        } else {
+            let _ = self
+                .buffers
+                .set_buffer_local_property_by_sym_id(buffer_id, sym_id, value);
+        }
+        self.sync_cached_runtime_binding_by_id(sym_id, value);
+    }
+
+    fn swap_let_binding_for_thread_switch(&mut self, index: usize) {
+        let (sym_id, old_value, default_binding) = match self.specpdl.get(index) {
+            Some(SpecBinding::Let { sym_id, old_value }) => (*sym_id, *old_value, false),
+            Some(SpecBinding::LetDefault {
+                sym_id, old_value, ..
+            }) => (*sym_id, *old_value, true),
+            _ => return,
+        };
+        let current_value = if default_binding {
+            self.obarray.default_value_id(sym_id).copied()
+        } else {
+            self.obarray.symbol_value_id(sym_id).copied()
+        };
+        match self.specpdl.get_mut(index) {
+            Some(SpecBinding::Let {
+                old_value: saved_value,
+                ..
+            })
+            | Some(SpecBinding::LetDefault {
+                old_value: saved_value,
+                ..
+            }) => {
+                *saved_value = current_value;
+            }
+            _ => {}
+        }
+        if default_binding {
+            self.restore_default_binding_by_id(sym_id, old_value);
+        } else {
+            match old_value {
+                Some(value) => {
+                    self.obarray.set_symbol_value_id(sym_id, value);
+                    self.sync_cached_runtime_binding_by_id(sym_id, value);
+                }
+                None => {
+                    self.obarray.makunbound_id(sym_id);
+                    self.sync_cached_runtime_binding_by_id(sym_id, Value::NIL);
+                }
+            }
+        }
+    }
+
+    fn swap_local_let_binding_for_thread_switch(&mut self, index: usize) {
+        let (sym_id, old_value, buffer_id) = match self.specpdl.get(index) {
+            Some(SpecBinding::LetLocal {
+                sym_id,
+                old_value,
+                buffer_id,
+            }) => (*sym_id, *old_value, *buffer_id),
+            _ => return,
+        };
+        let Some(current_value) = self.local_binding_value_for_thread_switch(sym_id, buffer_id)
+        else {
+            if let Some(binding) = self.specpdl.get_mut(index) {
+                *binding = SpecBinding::Nop;
+            }
+            return;
+        };
+        if let Some(SpecBinding::LetLocal { old_value, .. }) = self.specpdl.get_mut(index) {
+            *old_value = current_value;
+        }
+        self.set_local_binding_for_thread_switch(sym_id, buffer_id, old_value);
+    }
+
+    fn specpdl_unrewind_vars_for_thread_switch(&mut self, rewind: bool) {
+        if rewind {
+            for index in 0..self.specpdl.len() {
+                self.swap_let_binding_for_thread_switch(index);
+                self.swap_local_let_binding_for_thread_switch(index);
+            }
+        } else {
+            for index in (0..self.specpdl.len()).rev() {
+                self.swap_let_binding_for_thread_switch(index);
+                self.swap_local_let_binding_for_thread_switch(index);
+            }
+        }
+        self.lexenv_assq_cache.clear();
+        self.lexenv_special_cache.clear();
+    }
+
+    pub(crate) fn suspend_dynamic_bindings_for_thread_switch(
+        &mut self,
+    ) -> ThreadDynamicBindingState {
+        let lexenv = std::mem::replace(&mut self.lexenv, Value::NIL);
+        self.specpdl_unrewind_vars_for_thread_switch(false);
+        ThreadDynamicBindingState { lexenv }
+    }
+
+    pub(crate) fn resume_dynamic_bindings_for_thread_switch(
+        &mut self,
+        state: ThreadDynamicBindingState,
+    ) {
+        self.specpdl_unrewind_vars_for_thread_switch(true);
+        self.lexenv = state.lexenv;
+        self.lexenv_assq_cache.clear();
+        self.lexenv_special_cache.clear();
     }
 
     pub(crate) fn unbind_to_result(&mut self, count: usize) -> Result<(), Flow> {

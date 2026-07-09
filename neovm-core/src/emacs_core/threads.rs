@@ -733,16 +733,18 @@ pub(crate) fn finish_make_thread_in_eval(
     finish_make_thread_result(&mut eval.threads, thread_id, result)
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ThreadRuntimeState {
     previous_thread_id: u64,
     previous_buffer_id: Option<crate::buffer::BufferId>,
+    previous_dynamic_bindings: super::eval::ThreadDynamicBindingState,
 }
 
 pub(crate) fn enter_thread_runtime(
     eval: &mut super::eval::Context,
     thread_id: u64,
 ) -> Result<ThreadRuntimeState, Flow> {
+    let previous_dynamic_bindings = eval.suspend_dynamic_bindings_for_thread_switch();
     let previous_thread_id = eval.threads.enter_thread(thread_id);
     let previous_buffer_id = eval
         .threads
@@ -750,7 +752,11 @@ pub(crate) fn enter_thread_runtime(
         .or_else(|| eval.buffers.current_buffer_id());
     if let Some(thread_buffer_id) = eval.threads.thread_current_buffer(thread_id) {
         if eval.buffers.current_buffer_id() != Some(thread_buffer_id) {
-            eval.switch_current_buffer(thread_buffer_id)?;
+            if let Err(err) = eval.switch_current_buffer(thread_buffer_id) {
+                eval.threads.restore_thread(previous_thread_id);
+                eval.resume_dynamic_bindings_for_thread_switch(previous_dynamic_bindings);
+                return Err(err);
+            }
         } else {
             eval.sync_current_thread_buffer_state();
         }
@@ -760,6 +766,7 @@ pub(crate) fn enter_thread_runtime(
     Ok(ThreadRuntimeState {
         previous_thread_id,
         previous_buffer_id,
+        previous_dynamic_bindings,
     })
 }
 
@@ -772,6 +779,7 @@ pub(crate) fn exit_thread_runtime(
         .set_thread_current_buffer(thread_id, eval.buffers.current_buffer_id());
     eval.threads
         .restore_thread(runtime_state.previous_thread_id);
+    eval.resume_dynamic_bindings_for_thread_switch(runtime_state.previous_dynamic_bindings);
     if let Some(previous_buffer_id) = runtime_state.previous_buffer_id {
         eval.restore_current_buffer_if_live(previous_buffer_id);
     }
