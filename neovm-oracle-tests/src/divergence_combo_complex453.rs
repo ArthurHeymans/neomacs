@@ -1,10 +1,12 @@
 //! Complex combo batch 453 — 5 proptest fuzz batches generating random
 //! Elisp forms to surface new divergence patterns via property testing.
 
-use super::common::assert_oracle_parity;
+use super::common::{ORACLE_PROP_CASES, assert_oracle_parity};
 use proptest::prelude::*;
 
 proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(ORACLE_PROP_CASES))]
+
     #[test]
     fn div_cx453_proptest_arithmetic(
         a in -1000..1000i64,
