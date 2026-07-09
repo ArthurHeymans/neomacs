@@ -683,6 +683,14 @@ pub struct ScrollBarItem {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameDisplayState {
+    /// Serialized-protocol version stamp; see [`crate::PROTOCOL_VERSION`].
+    ///
+    /// Always `PROTOCOL_VERSION` for in-process states. Deserialization
+    /// rejects any other value (or a missing field) with an explicit error,
+    /// so stale snapshots/goldens cannot silently skew against the current
+    /// wire layout.
+    #[serde(deserialize_with = "validate_protocol_version")]
+    pub protocol_version: u32,
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Frame-level chrome rows that are not owned by any leaf window.
     pub frame_chrome_rows: Vec<FrameChromeRow>,
@@ -840,9 +848,27 @@ pub struct GuiCompactBarState {
     pub tool_bg: Color,
 }
 
+/// Serde gate for [`FrameDisplayState::protocol_version`]: loading a snapshot
+/// produced by a different protocol version is an explicit error.
+fn validate_protocol_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = <u32 as serde::Deserialize>::deserialize(deserializer)?;
+    if version != crate::PROTOCOL_VERSION {
+        return Err(serde::de::Error::custom(format!(
+            "display protocol version mismatch: snapshot has {version}, \
+             this build expects {} — regenerate the snapshot/golden",
+            crate::PROTOCOL_VERSION
+        )));
+    }
+    Ok(version)
+}
+
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
+            protocol_version: crate::PROTOCOL_VERSION,
             window_matrices: Vec::new(),
             frame_chrome_rows: Vec::new(),
             frame_cols,
