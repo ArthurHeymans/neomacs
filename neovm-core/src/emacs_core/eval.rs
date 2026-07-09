@@ -10219,10 +10219,7 @@ impl Context {
     // -----------------------------------------------------------------------
 
     fn try_special_form_value_id(&mut self, sym_id: SymId, tail: Value) -> Option<EvalResult> {
-        let saved_depth = self.depth;
-        let result = self.try_special_form_inner_value_id(sym_id, tail);
-        self.depth = saved_depth;
-        result
+        self.try_special_form_with_surface(sym_id, sym_id, tail)
     }
 
     fn try_aliased_special_form_value_id(
@@ -10231,8 +10228,42 @@ impl Context {
         target_id: SymId,
         tail: Value,
     ) -> Option<EvalResult> {
+        self.try_special_form_with_surface(surface_id, target_id, tail)
+    }
+
+    /// The single special-form dispatch table. `target_id` selects the form
+    /// (already resolved through any defalias chain); `surface_id` is the
+    /// symbol the source form actually named, threaded into the forms whose
+    /// errors report a call name — GNU signals with the surface symbol
+    /// object itself, so an uninterned alias keeps its identity. The direct
+    /// (non-aliased) path passes the same id for both.
+    fn try_special_form_with_surface(
+        &mut self,
+        surface_id: SymId,
+        target_id: SymId,
+        tail: Value,
+    ) -> Option<EvalResult> {
         let saved_depth = self.depth;
         let result = Some(match target_id {
+            // Forms that report the surface name in their signals.
+            id if id == quote_symbol() => self.sf_quote_value_named(surface_id, tail),
+            id if id == function_symbol() => self.sf_function_value_named(surface_id, tail),
+            id if id == let_symbol() => self.sf_let_value_named(surface_id, tail),
+            id if id == let_star_symbol() => self.sf_let_star_value_named(surface_id, tail),
+            id if id == setq_symbol() => self.sf_setq_value_named(surface_id, tail),
+            id if id == if_symbol() => self.sf_if_value_named(surface_id, tail),
+            id if id == while_symbol() => self.sf_while_value_named(surface_id, tail),
+            id if id == prog1_symbol() => self.sf_prog1_value_named(surface_id, tail),
+            id if id == defvar_symbol() => self.sf_defvar_value_named(surface_id, tail),
+            id if id == defconst_symbol() => self.sf_defconst_value_named(surface_id, tail),
+            id if id == catch_symbol() => self.sf_catch_value_named(surface_id, tail),
+            id if id == unwind_protect_symbol() => {
+                self.sf_unwind_protect_value_named(surface_id, tail)
+            }
+            id if id == condition_case_symbol() => {
+                self.sf_condition_case_value_named(surface_id, tail)
+            }
+            // Forms whose signals never carry a call name.
             id if id == and_symbol() => self.sf_and_value(tail),
             id if id == or_symbol() => self.sf_or_value(tail),
             id if id == cond_symbol() => self.sf_cond_value(tail),
@@ -10241,69 +10272,23 @@ impl Context {
             id if id == save_current_buffer_symbol() => self.sf_save_current_buffer_value(tail),
             id if id == save_restriction_symbol() => self.sf_save_restriction_value(tail),
             id if id == interactive_symbol_id() => Ok(Value::NIL),
-            id if id == quote_symbol() => self.sf_quote_value_named(resolve_sym(surface_id), tail),
-            id if id == function_symbol() => {
-                self.sf_function_value_named(resolve_sym(surface_id), tail)
+            // Reachable only under their canonical names: the aliased path
+            // never dispatched these, so an alias target falls through to
+            // the normal function path exactly as before.
+            id if id == lambda_symbol() && surface_id == target_id => self.sf_lambda_value(tail),
+            id if id == byte_code_literal_symbol() && surface_id == target_id => {
+                self.sf_byte_code_literal_value(tail)
             }
-            id if id == let_symbol() => self.sf_let_value_named(resolve_sym(surface_id), tail),
-            id if id == let_star_symbol() => {
-                self.sf_let_star_value_named(resolve_sym(surface_id), tail)
+            id if id == byte_code_symbol() && surface_id == target_id => {
+                self.sf_byte_code_value(tail)
             }
-            id if id == setq_symbol() => self.sf_setq_value_named(resolve_sym(surface_id), tail),
-            id if id == if_symbol() => self.sf_if_value_named(resolve_sym(surface_id), tail),
-            id if id == while_symbol() => self.sf_while_value_named(resolve_sym(surface_id), tail),
-            id if id == prog1_symbol() => self.sf_prog1_value_named(resolve_sym(surface_id), tail),
-            id if id == defvar_symbol() => {
-                self.sf_defvar_value_named(resolve_sym(surface_id), tail)
+            _ => {
+                self.depth = saved_depth;
+                return None;
             }
-            id if id == defconst_symbol() => {
-                self.sf_defconst_value_named(resolve_sym(surface_id), tail)
-            }
-            id if id == catch_symbol() => self.sf_catch_value_named(resolve_sym(surface_id), tail),
-            id if id == unwind_protect_symbol() => {
-                self.sf_unwind_protect_value_named(resolve_sym(surface_id), tail)
-            }
-            id if id == condition_case_symbol() => {
-                self.sf_condition_case_value_named(resolve_sym(surface_id), tail)
-            }
-            _ => return None,
         });
         self.depth = saved_depth;
         result
-    }
-
-    fn try_special_form_inner_value_id(
-        &mut self,
-        sym_id: SymId,
-        tail: Value,
-    ) -> Option<EvalResult> {
-        Some(match sym_id {
-            id if id == quote_symbol() => self.sf_quote_value(tail),
-            id if id == function_symbol() => self.sf_function_value(tail),
-            id if id == let_symbol() => self.sf_let_value(tail),
-            id if id == let_star_symbol() => self.sf_let_star_value(tail),
-            id if id == setq_symbol() => self.sf_setq_value(tail),
-            id if id == if_symbol() => self.sf_if_value(tail),
-            id if id == and_symbol() => self.sf_and_value(tail),
-            id if id == or_symbol() => self.sf_or_value(tail),
-            id if id == cond_symbol() => self.sf_cond_value(tail),
-            id if id == while_symbol() => self.sf_while_value(tail),
-            id if id == progn_symbol() => self.sf_progn_value(tail),
-            id if id == prog1_symbol() => self.sf_prog1_value(tail),
-            id if id == defvar_symbol() => self.sf_defvar_value(tail),
-            id if id == defconst_symbol() => self.sf_defconst_value(tail),
-            id if id == catch_symbol() => self.sf_catch_value(tail),
-            id if id == unwind_protect_symbol() => self.sf_unwind_protect_value(tail),
-            id if id == condition_case_symbol() => self.sf_condition_case_value(tail),
-            id if id == save_excursion_symbol() => self.sf_save_excursion_value(tail),
-            id if id == save_current_buffer_symbol() => self.sf_save_current_buffer_value(tail),
-            id if id == save_restriction_symbol() => self.sf_save_restriction_value(tail),
-            id if id == interactive_symbol_id() => Ok(Value::NIL),
-            id if id == lambda_symbol() => self.sf_lambda_value(tail),
-            id if id == byte_code_literal_symbol() => self.sf_byte_code_literal_value(tail),
-            id if id == byte_code_symbol() => self.sf_byte_code_value(tail),
-            _ => return None,
-        })
     }
 
     fn listp_error(&self, value: Value) -> Flow {
@@ -10327,13 +10312,13 @@ impl Context {
         list_length(&list).ok_or_else(|| self.listp_error(list))
     }
 
-    fn one_unevalled_arg(&self, name: &str, tail: Value) -> Result<Value, Flow> {
+    fn one_unevalled_arg(&self, name: SymId, tail: Value) -> Result<Value, Flow> {
         let mut cursor = tail;
         if !cursor.is_cons() {
             return if cursor.is_nil() {
                 Err(signal(
                     "wrong-number-of-arguments",
-                    vec![Value::symbol(name), Value::fixnum(0)],
+                    vec![Value::from_sym_id(name), Value::fixnum(0)],
                 ))
             } else {
                 Err(self.listp_error(tail))
@@ -10345,7 +10330,7 @@ impl Context {
             return Err(signal(
                 "wrong-number-of-arguments",
                 vec![
-                    Value::symbol(name),
+                    Value::from_sym_id(name),
                     Value::fixnum(self.value_list_len_or_error(tail)? as i64),
                 ],
             ));
@@ -10354,18 +10339,18 @@ impl Context {
     }
 
     fn sf_quote_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_quote_value_named("quote", tail)
+        self.sf_quote_value_named(quote_symbol(), tail)
     }
 
-    fn sf_quote_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_quote_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         Ok(self.one_unevalled_arg(call_name, tail)?)
     }
 
     fn sf_function_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_function_value_named("function", tail)
+        self.sf_function_value_named(function_symbol(), tail)
     }
 
-    fn sf_function_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_function_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         let arg = self.one_unevalled_arg(call_name, tail)?;
         if cons_head_symbol_id(&arg) == Some(lambda_symbol()) {
             return self.instantiate_callable_cons_form(arg);
@@ -10378,14 +10363,14 @@ impl Context {
     }
 
     fn sf_let_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_let_value_named("let", tail)
+        self.sf_let_value_named(let_symbol(), tail)
     }
 
-    fn sf_let_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_let_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -10550,14 +10535,14 @@ impl Context {
     }
 
     fn sf_let_star_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_let_star_value_named("let*", tail)
+        self.sf_let_star_value_named(let_star_symbol(), tail)
     }
 
-    fn sf_let_star_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_let_star_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -10658,10 +10643,10 @@ impl Context {
     }
 
     fn sf_setq_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_setq_value_named("setq", tail)
+        self.sf_setq_value_named(setq_symbol(), tail)
     }
 
-    fn sf_setq_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_setq_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Ok(Value::NIL);
         }
@@ -10675,7 +10660,7 @@ impl Context {
             if cursor.is_nil() {
                 return Err(signal(
                     "wrong-number-of-arguments",
-                    vec![Value::symbol(call_name), Value::fixnum(nargs as i64)],
+                    vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
                 ));
             }
             if !cursor.is_cons() {
@@ -10732,14 +10717,14 @@ impl Context {
     }
 
     fn sf_if_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_if_value_named("if", tail)
+        self.sf_if_value_named(if_symbol(), tail)
     }
 
-    fn sf_if_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_if_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -10750,7 +10735,7 @@ impl Context {
         if rest.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(1)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(1)],
             ));
         }
         if !rest.is_cons() {
@@ -10827,14 +10812,14 @@ impl Context {
     }
 
     fn sf_while_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_while_value_named("while", tail)
+        self.sf_while_value_named(while_symbol(), tail)
     }
 
-    fn sf_while_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_while_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -10896,14 +10881,14 @@ impl Context {
     }
 
     fn sf_prog1_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_prog1_value_named("prog1", tail)
+        self.sf_prog1_value_named(prog1_symbol(), tail)
     }
 
-    fn sf_prog1_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_prog1_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -10921,14 +10906,14 @@ impl Context {
     }
 
     fn sf_defvar_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_defvar_value_named("defvar", tail)
+        self.sf_defvar_value_named(defvar_symbol(), tail)
     }
 
-    fn sf_defvar_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_defvar_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -11000,14 +10985,14 @@ impl Context {
     }
 
     fn sf_defconst_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_defconst_value_named("defconst", tail)
+        self.sf_defconst_value_named(defconst_symbol(), tail)
     }
 
-    fn sf_defconst_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_defconst_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -11024,7 +11009,7 @@ impl Context {
         if rest.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(1)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(1)],
             ));
         }
         if !rest.is_cons() {
@@ -11063,14 +11048,14 @@ impl Context {
     }
 
     fn sf_catch_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_catch_value_named("catch", tail)
+        self.sf_catch_value_named(catch_symbol(), tail)
     }
 
-    fn sf_catch_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_catch_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         if tail.is_nil() {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(0)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(0)],
             ));
         }
         if !tail.is_cons() {
@@ -11112,10 +11097,10 @@ impl Context {
     }
 
     fn sf_unwind_protect_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_unwind_protect_value_named("unwind-protect", tail)
+        self.sf_unwind_protect_value_named(unwind_protect_symbol(), tail)
     }
 
-    fn sf_unwind_protect_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_unwind_protect_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         // GNU eval.c:1461 declares `unwind-protect` with min_args=1.
         // The generic arity check in GNU `eval_sub` (eval.c:2612) runs
         // for every SUBRP including UNEVALLED. Neomacs skips that check
@@ -11126,7 +11111,7 @@ impl Context {
         if nargs < 1 {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(nargs as i64)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
             ));
         }
         let body = tail.cons_car();
@@ -11157,15 +11142,15 @@ impl Context {
     }
 
     fn sf_condition_case_value(&mut self, tail: Value) -> EvalResult {
-        self.sf_condition_case_value_named("condition-case", tail)
+        self.sf_condition_case_value_named(condition_case_symbol(), tail)
     }
 
-    fn sf_condition_case_value_named(&mut self, call_name: &str, tail: Value) -> EvalResult {
+    fn sf_condition_case_value_named(&mut self, call_name: SymId, tail: Value) -> EvalResult {
         let nargs = self.value_list_len_or_error(tail)?;
         if nargs < 2 {
             return Err(signal(
                 "wrong-number-of-arguments",
-                vec![Value::symbol(call_name), Value::fixnum(nargs as i64)],
+                vec![Value::from_sym_id(call_name), Value::fixnum(nargs as i64)],
             ));
         }
         let var = self.unwrap_symbol(tail.cons_car());
@@ -11456,7 +11441,7 @@ impl Context {
     }
 
     fn sf_byte_code_literal_value(&mut self, tail: Value) -> EvalResult {
-        let vector = self.one_unevalled_arg("byte-code-literal", tail)?;
+        let vector = self.one_unevalled_arg(byte_code_literal_symbol(), tail)?;
         let Some(items) = vector.as_vector_data() else {
             return Err(signal(
                 "wrong-type-argument",
