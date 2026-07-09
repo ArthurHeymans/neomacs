@@ -1530,11 +1530,11 @@ fn split_window_side_domain_matches_gnu() {
 }
 
 #[test]
-fn split_window_internal_side_t_splits_horizontally_like_gnu() {
+fn split_window_side_t_splits_horizontally_like_gnu() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = bootstrap_eval_with_frame(
         "(let* ((old (selected-window))
-                (new (split-window-internal old nil t nil)))
+                (new (split-window old nil t)))
            (list (> (window-left-column new) (window-left-column old))
                  (= (window-top-line new) (window-top-line old))))",
     );
