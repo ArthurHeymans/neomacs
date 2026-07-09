@@ -85,3 +85,103 @@ jobs:
 
       - name: Run melpa package tests for neomacs
         run: cargo nextest run -p neomacs-melpa-tests --release --no-fail-fast
+
+  lint:
+    name: lint & clippy (frontend, linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies (apt)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            git \
+            pkg-config \
+            cmake \
+            m4 \
+            libssl-dev \
+            fontconfig \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libharfbuzz-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libxcb1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxi-dev \
+            libxcursor-dev \
+            mesa-vulkan-drivers \
+            libvulkan-dev \
+            libdbus-1-dev \
+            libsystemd-dev \
+            libsqlite3-dev \
+            libxml2-dev \
+            gnutls-bin \
+            libgnutls28-dev
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain-file: rust-toolchain.toml
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-x86_64-lint
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+
+      # 5a: whole-workspace formatting (matches the repo owner's pre-push gate).
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      # 5b/5c: clippy hygiene gate for the five frontend crates, default
+      # features. `--no-deps` scopes linting to the selected packages so the
+      # gate does not depend on (or fail on) the neovm-* crates' own lint state,
+      # which is owned separately.
+      - name: Clippy (frontend crates, default features)
+        run: |
+          cargo clippy \
+            -p neomacs-display-protocol \
+            -p neomacs-layout-engine \
+            -p neomacs-renderer-wgpu \
+            -p neomacs-display-runtime \
+            -p neomacs \
+            --no-deps -- -D warnings
+
+      # wpe-webkit variant for the two crates that expose the feature. This is
+      # type-check only (no linking), but display-runtime's build.rs runs bindgen
+      # and therefore needs the EGL/WPE dev headers; wpe-platform-2.0 is optional
+      # (build.rs skips it when absent). Kept best-effort so a runner without
+      # these packages does not block the hard gate above — the wpe gate is
+      # verified locally where the WPE stack is installed.
+      - name: Install WPE dev headers (best-effort)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libegl-dev \
+            libwpewebkit-1.0-dev \
+            libwpe-1.0-dev \
+            libwpebackend-fdo-1.0-dev
+
+      - name: Clippy (renderer-wgpu + display-runtime, wpe-webkit feature)
+        continue-on-error: true
+        run: |
+          cargo clippy \
+            -p neomacs-renderer-wgpu \
+            -p neomacs-display-runtime \
+            --no-deps --features wpe-webkit -- -D warnings
