@@ -611,6 +611,134 @@ fn normalize_selected_window_point_in_snapshot(
     }
 }
 
+fn persistent_window_parameter_keys(value: Value) -> Vec<Value> {
+    let mut keys = Vec::new();
+    let mut cursor = value;
+    let mut remaining = 1024;
+    while cursor.is_cons() && remaining > 0 {
+        let entry = cursor.cons_car();
+        if entry.is_cons() && entry.cons_cdr().is_truthy() {
+            keys.push(entry.cons_car());
+        }
+        cursor = cursor.cons_cdr();
+        remaining -= 1;
+    }
+    keys
+}
+
+fn window_parameter_is_persistent(key: &Value, persistent_keys: &[Value]) -> bool {
+    persistent_keys
+        .iter()
+        .any(|persistent| crate::emacs_core::value::eq_value(key, persistent))
+}
+
+fn save_persistent_window_parameters(
+    window: &mut crate::window::Window,
+    persistent_keys: &[Value],
+) {
+    let current = window.parameters().clone();
+    let saved = persistent_keys
+        .iter()
+        .map(|key| {
+            let value = current
+                .iter()
+                .find(|(existing_key, _)| crate::emacs_core::value::eq_value(existing_key, key))
+                .map(|(_, value)| *value)
+                .unwrap_or(Value::NIL);
+            (*key, value)
+        })
+        .collect();
+    *window.parameters_mut() = saved;
+    if let crate::window::Window::Internal { children, .. } = window {
+        for child in children {
+            save_persistent_window_parameters(child, persistent_keys);
+        }
+    }
+}
+
+fn save_snapshot_persistent_window_parameters(
+    snapshot: &mut WindowConfigurationSnapshot,
+    persistent_parameters: Value,
+) -> Vec<Value> {
+    let persistent_keys = persistent_window_parameter_keys(persistent_parameters);
+    save_persistent_window_parameters(&mut snapshot.root_window, &persistent_keys);
+    if let Some(minibuffer) = &mut snapshot.minibuffer_leaf {
+        save_persistent_window_parameters(minibuffer, &persistent_keys);
+    }
+    persistent_keys
+}
+
+fn collect_window_parameters(
+    window: &crate::window::Window,
+    out: &mut HashMap<crate::window::WindowId, Vec<(Value, Value)>>,
+) {
+    out.insert(window.id(), window.parameters().clone());
+    if let crate::window::Window::Internal { children, .. } = window {
+        for child in children {
+            collect_window_parameters(child, out);
+        }
+    }
+}
+
+fn collect_frame_window_parameters(
+    frame: &crate::window::Frame,
+) -> HashMap<crate::window::WindowId, Vec<(Value, Value)>> {
+    let mut parameters = HashMap::new();
+    collect_window_parameters(&frame.root_window, &mut parameters);
+    if let Some(minibuffer) = &frame.minibuffer_leaf {
+        collect_window_parameters(minibuffer, &mut parameters);
+    }
+    parameters
+}
+
+fn merge_restored_window_parameters(
+    window: &mut crate::window::Window,
+    live_parameters: &HashMap<crate::window::WindowId, Vec<(Value, Value)>>,
+) {
+    let saved_parameters = window.parameters().clone();
+    let saved_keys = saved_parameters
+        .iter()
+        .map(|(key, _)| *key)
+        .collect::<Vec<_>>();
+    let live = live_parameters.get(&window.id());
+    let mut merged = live
+        .into_iter()
+        .flat_map(|params| params.iter().copied())
+        .filter(|(key, _)| !window_parameter_is_persistent(key, &saved_keys))
+        .collect::<Vec<_>>();
+
+    for (key, saved_value) in saved_parameters {
+        if saved_value.is_nil() {
+            if live.is_some_and(|params| {
+                params.iter().any(|(live_key, live_value)| {
+                    crate::emacs_core::value::eq_value(live_key, &key) && live_value.is_truthy()
+                })
+            }) {
+                merged.insert(0, (key, Value::NIL));
+            }
+        } else {
+            merged.insert(0, (key, saved_value));
+        }
+    }
+
+    *window.parameters_mut() = merged;
+    if let crate::window::Window::Internal { children, .. } = window {
+        for child in children {
+            merge_restored_window_parameters(child, live_parameters);
+        }
+    }
+}
+
+fn merge_snapshot_window_parameters(
+    snapshot: &mut WindowConfigurationSnapshot,
+    live_parameters: &HashMap<crate::window::WindowId, Vec<(Value, Value)>>,
+) {
+    merge_restored_window_parameters(&mut snapshot.root_window, live_parameters);
+    if let Some(minibuffer) = &mut snapshot.minibuffer_leaf {
+        merge_restored_window_parameters(minibuffer, live_parameters);
+    }
+}
+
 thread_local! {
     static WINDOW_CONFIGURATION_SNAPSHOTS: RefCell<HashMap<i64, WindowConfigurationSnapshot>> =
         RefCell::new(HashMap::new());
@@ -833,6 +961,13 @@ pub(crate) fn builtin_current_window_configuration(
             minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
         };
         normalize_selected_window_point_in_snapshot(&mut snapshot, &mut eval.buffers);
+        save_snapshot_persistent_window_parameters(
+            &mut snapshot,
+            eval.obarray
+                .symbol_value("window-persistent-parameters")
+                .copied()
+                .unwrap_or(Value::NIL),
+        );
         let roots = window_configuration_snapshot_roots(&snapshot);
         let serial = next_window_configuration_serial();
         WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| {
@@ -869,6 +1004,13 @@ pub(crate) fn builtin_set_window_configuration(
     let snapshot = WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| slot.borrow().get(&serial).cloned());
 
     if let Some(snapshot) = snapshot {
+        let live_parameters = eval
+            .frames
+            .get(snapshot.frame_id)
+            .map(collect_frame_window_parameters)
+            .unwrap_or_default();
+        let mut snapshot = snapshot;
+        merge_snapshot_window_parameters(&mut snapshot, &live_parameters);
         let selected_window_state = if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
             frame.root_window = snapshot.root_window;
             // GNU `Fset_window_configuration` does NOT touch
