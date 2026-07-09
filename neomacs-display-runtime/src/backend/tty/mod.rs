@@ -11,7 +11,6 @@
 
 use std::io::{self, Write};
 
-use crate::backend::DisplayBackend;
 use crate::core::error::{DisplayError, DisplayResult};
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyph, FrameGlyphBuffer, WindowCursor};
 use crate::core::scene::Scene;
@@ -814,8 +813,8 @@ impl TtyBackend {
     }
 }
 
-impl DisplayBackend for TtyBackend {
-    fn init(&mut self) -> DisplayResult<()> {
+impl TtyBackend {
+    pub fn init(&mut self) -> DisplayResult<()> {
         // Get terminal size
         if let Some((cols, rows)) = get_terminal_size() {
             self.width = cols as u32;
@@ -859,7 +858,7 @@ impl DisplayBackend for TtyBackend {
         Ok(())
     }
 
-    fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) {
         if !self.initialized {
             return;
         }
@@ -886,7 +885,7 @@ impl DisplayBackend for TtyBackend {
         self.initialized = false;
     }
 
-    fn render(&mut self, scene: &Scene) -> DisplayResult<()> {
+    pub fn render(&mut self, scene: &Scene) -> DisplayResult<()> {
         if !self.initialized {
             return Err(DisplayError::Backend("TTY backend not initialized".into()));
         }
@@ -923,7 +922,7 @@ impl DisplayBackend for TtyBackend {
         Ok(())
     }
 
-    fn present(&mut self) -> DisplayResult<()> {
+    pub fn present(&mut self) -> DisplayResult<()> {
         if !self.initialized {
             return Err(DisplayError::Backend("TTY backend not initialized".into()));
         }
@@ -945,15 +944,15 @@ impl DisplayBackend for TtyBackend {
         Ok(())
     }
 
-    fn name(&self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         "tty"
     }
 
-    fn is_initialized(&self) -> bool {
+    pub fn is_initialized(&self) -> bool {
         self.initialized
     }
 
-    fn resize(&mut self, width: u32, height: u32) {
+    pub fn resize(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
         self.current.resize(width as usize, height as usize);
@@ -961,7 +960,7 @@ impl DisplayBackend for TtyBackend {
         self.force_full_render = true;
     }
 
-    fn set_vsync(&mut self, _enabled: bool) {
+    pub fn set_vsync(&mut self, _enabled: bool) {
         // No vsync on TTY
     }
 }

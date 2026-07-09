@@ -33,7 +33,6 @@ pub mod layout {
     pub use neomacs_layout_engine::*;
 }
 
-pub use crate::backend::DisplayBackend;
 pub use crate::core::*;
 
 /// Library version
