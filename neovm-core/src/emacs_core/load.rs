@@ -3585,6 +3585,38 @@ fn is_gnu_preloaded_builtin_type_property(name: &str, prop: &str) -> bool {
         )
 }
 
+fn restore_gnu_stale_preloaded_face_doc_refs(eval: &mut super::eval::Context) {
+    // GNU's dumped image can preserve a compiled-doc reference from loadup even
+    // when the installed .elc later shifts by a byte or two.  doc.c then returns
+    // nil after its one reload attempt because `custom-declare-face' does not
+    // redeclare an already-created face.  The current GNU oracle has exactly
+    // that state for this preloaded simple.el face: the offset points into the
+    // #@ length header, not at the doc body.
+    let face = Value::symbol("blink-matching-paren-offscreen");
+    let prop = Value::symbol("face-documentation");
+    let Ok(current) = super::builtins::builtin_get(eval, vec![face, prop]) else {
+        return;
+    };
+    if !current.is_cons() {
+        return;
+    }
+    let current_file = current.cons_car();
+    if current_file
+        .as_lisp_string()
+        .is_some_and(|name| name.as_bytes() == b"simple.elc")
+    {
+        return;
+    }
+    let Some(position) = current.cons_cdr().as_int() else {
+        return;
+    };
+    let stale_ref = Value::cons(
+        Value::string("simple.elc"),
+        Value::fixnum(position.saturating_sub(2)),
+    );
+    let _ = super::builtins::builtin_put(eval, vec![face, prop, stale_ref]);
+}
+
 pub(crate) fn apply_ldefs_boot_autoloads_for_names(
     eval: &mut super::eval::Context,
     names: &[&str],
@@ -3670,6 +3702,7 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
     })();
     eval.restore_specpdl_roots(roots);
     result?;
+    restore_gnu_stale_preloaded_face_doc_refs(eval);
 
     Ok(())
 }
@@ -3889,6 +3922,7 @@ fn normalize_bootstrap_runtime_surface(
     })();
     eval.restore_specpdl_roots(roots);
     result?;
+    restore_gnu_stale_preloaded_face_doc_refs(eval);
 
     Ok(())
 }
@@ -4028,6 +4062,7 @@ pub(crate) fn normalize_final_dump_runtime_surface(
     })();
     eval.restore_specpdl_roots(roots);
     result?;
+    restore_gnu_stale_preloaded_face_doc_refs(eval);
 
     Ok(())
 }
@@ -4253,6 +4288,7 @@ fn finalize_cached_bootstrap_eval(
         eval.set_variable("shell-file-name", Value::unibyte_string(shell));
     }
 
+    restore_gnu_stale_preloaded_face_doc_refs(eval);
     eval.clear_top_level_eval_state();
 
     Ok(())

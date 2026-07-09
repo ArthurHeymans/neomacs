@@ -70,6 +70,49 @@ fn bootstrap_load_path_entries_use_gnu_windows_file_name_syntax() {
     assert!(first.ends_with("/lisp"));
 }
 
+#[test]
+fn stale_preloaded_face_doc_ref_restore_is_idempotent() {
+    let mut eval = Context::new();
+    let face = Value::symbol("blink-matching-paren-offscreen");
+    let prop = Value::symbol("face-documentation");
+    crate::emacs_core::builtins::builtin_put(
+        &mut eval,
+        vec![
+            face,
+            prop,
+            Value::cons(
+                Value::string("/tmp/neomacs/lisp/simple.elc"),
+                Value::fixnum(100),
+            ),
+        ],
+    )
+    .expect("put absolute doc ref");
+
+    restore_gnu_stale_preloaded_face_doc_refs(&mut eval);
+    let restored = crate::emacs_core::builtins::builtin_get(&mut eval, vec![face, prop])
+        .expect("get restored doc ref");
+    assert_eq!(
+        restored
+            .cons_car()
+            .as_lisp_string()
+            .map(|name| crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes())),
+        Some("simple.elc".to_string())
+    );
+    assert_eq!(restored.cons_cdr().as_int(), Some(98));
+
+    restore_gnu_stale_preloaded_face_doc_refs(&mut eval);
+    let restored_again = crate::emacs_core::builtins::builtin_get(&mut eval, vec![face, prop])
+        .expect("get restored doc ref again");
+    assert_eq!(
+        restored_again
+            .cons_car()
+            .as_lisp_string()
+            .map(|name| crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes())),
+        Some("simple.elc".to_string())
+    );
+    assert_eq!(restored_again.cons_cdr().as_int(), Some(98));
+}
+
 fn load_neomacs_gui_term_layer_for_test(eval: &mut Context) {
     let load_path = get_load_path(eval.obarray());
     for library in ["term/common-win", "term/neo-win"] {
