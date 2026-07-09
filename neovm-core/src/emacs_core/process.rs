@@ -2594,8 +2594,10 @@ fn process_publishes_status_after_ready_output(proc: &Process) -> bool {
     proc.eof_sent_to_process
         || matches!(
             process_output_source(proc),
-            Some(ProcessOutputSource::ChildStdout | ProcessOutputSource::Pty)
+            Some(ProcessOutputSource::ChildStdout)
         )
+        || (process_output_source(proc) == Some(ProcessOutputSource::Pty)
+            && !process_command_is_shell_command(proc))
 }
 
 fn process_should_defer_explicit_coding_status_after_output(
