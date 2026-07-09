@@ -314,6 +314,7 @@ pub(super) fn expect_wholenump(value: &Value) -> Result<i64, Flow> {
     Ok(n)
 }
 
+#[derive(Clone, Copy, Debug)]
 pub(super) enum NumberOrMarker {
     Int(i64),
     Float(f64),
@@ -506,11 +507,13 @@ mod arithmetic;
 mod buffer_text_backend;
 pub(crate) mod collections;
 mod cons_list;
+pub(crate) mod from_value;
 mod misc_pure;
 mod strings;
 mod types;
 
 pub(crate) use arithmetic::*;
+pub(crate) use from_value::*;
 pub(crate) use buffer_text_backend::*;
 pub(crate) use collections::*;
 pub use cons_list::lambda_params_to_value;
