@@ -133,9 +133,7 @@ fn div_cx45_json_encode_decode_multibyte_hash_roundtrip_mega() {
 #[test]
 fn div_cx45_process_env_coding_narrow_output_filter_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"prop\" \"café世界\" \"PREoutput\n\nProcess neo-cx45-pe finished\n\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"prop\" \"café世界\" \"PREoutput\n\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx45-pe*")))
@@ -149,8 +147,12 @@ fn div_cx45_process_env_coding_narrow_output_filter_hash_mega() {
              (call-process "printf" nil t nil "café世界"))
            (buffer-string))))
     (let ((p (make-process :name "neo-cx45-pe" :command '("echo" "output")
-                           :buffer buf)))
-      (accept-process-output p 1))
+                           :buffer buf :sentinel #'ignore)))
+      (set-process-query-on-exit-flag p nil)
+      (let ((i 0))
+        (while (and (process-live-p p) (< i 20))
+          (accept-process-output p 0.05)
+          (setq i (1+ i)))))
     (prog1 (list env-val coding-out
                  (with-current-buffer buf (widen) (buffer-string)))
       (kill-buffer buf))))
