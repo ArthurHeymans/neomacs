@@ -10834,133 +10834,35 @@ pub(crate) fn builtin_list_processes_refresh(
 }
 
 /// (make-network-process &rest ARGS) -> process-or-nil
-pub(crate) fn builtin_make_network_process(
+/// `make-network-process` with an explicit `:local` / `:remote` address
+/// spec: binds or connects exactly the given inet or unix-domain address,
+/// bypassing family/host/service resolution. Both arms return, so the
+/// general resolution path below never runs for explicit addresses.
+/// Extracted verbatim from builtin_make_network_process.
+#[allow(clippy::too_many_arguments)]
+fn connect_network_process_at_explicit_address(
     eval: &mut super::eval::Context,
-    args: Vec<Value>,
+    explicit_address: Value,
+    remote_address_value: Value,
+    name: LispString,
+    mut contact: Value,
+    filter_val: Value,
+    sentinel_val: Value,
+    log_val: Value,
+    coding_val: Value,
+    buffer: Value,
+    plist_val: Value,
+    nowait: bool,
+    server: bool,
+    noquery: bool,
+    stop: bool,
+    server_backlog: Option<i32>,
+    socket_type: NetworkSocketType,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+    tls_parameters: Option<super::tls::GnutlsBootParameters>,
+    default_process_coding: Value,
+    network_buffer_multibyte: bool,
 ) -> EvalResult {
-    if args.is_empty() {
-        return Ok(Value::NIL);
-    }
-    check_keyword_arg_pairs(&args)?;
-    eval.sync_process_read_config_from_visible_variables();
-
-    // ---- Parse all keyword arguments ----
-    let mut name: Option<LispString> = None;
-    let mut host_value = Value::NIL;
-    let mut service: Option<Value> = None;
-    let mut server = false;
-    let mut server_value = Value::NIL;
-    let mut family_value = Value::NIL;
-    let mut local_address_value = Value::NIL;
-    let mut remote_address_value = Value::NIL;
-    let mut nowait = false;
-    let mut socket_type = NetworkSocketType::Stream;
-    let mut contact = Value::list(args.clone());
-    let mut filter_val = Value::NIL;
-    let mut sentinel_val = Value::NIL;
-    let mut log_val = Value::NIL;
-    let mut buffer_val = Value::NIL;
-    let mut coding_val = Value::NIL;
-    let mut tls_parameters_val = Value::NIL;
-    let mut noquery = false;
-    let mut plist_val = Value::NIL;
-    let mut stop_val = Value::NIL;
-    let socket_options = collect_network_socket_options(&args);
-
-    let mut seen_keywords = Vec::new();
-    let mut i = 0usize;
-    while i < args.len() {
-        let key = &args[i];
-        let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
-        let Some(keyword) = ProcessKeyword::from_value(key) else {
-            i += 2;
-            continue;
-        };
-        if process_keyword_already_seen(&mut seen_keywords, keyword) {
-            i += 2;
-            continue;
-        }
-        match keyword {
-            ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
-            ProcessKeyword::Host => host_value = value,
-            ProcessKeyword::Service => service = Some(value),
-            ProcessKeyword::Server => {
-                server = value.is_truthy();
-                server_value = value;
-            }
-            ProcessKeyword::Family => family_value = value,
-            ProcessKeyword::Type => socket_type = parse_network_socket_type(&value)?,
-            ProcessKeyword::Nowait => nowait = value.is_truthy(),
-            ProcessKeyword::Filter => filter_val = value,
-            ProcessKeyword::Sentinel => sentinel_val = value,
-            ProcessKeyword::Log => log_val = value,
-            ProcessKeyword::Buffer => buffer_val = value,
-            ProcessKeyword::Coding => coding_val = value,
-            ProcessKeyword::TlsParameters => tls_parameters_val = value,
-            ProcessKeyword::Noquery => noquery = value.is_truthy(),
-            ProcessKeyword::Stop => stop_val = value,
-            ProcessKeyword::Local => local_address_value = value,
-            ProcessKeyword::Remote => remote_address_value = value,
-            ProcessKeyword::Plist => plist_val = value,
-            _ => {}
-        }
-        i += 2;
-    }
-
-    let Some(name) = name else {
-        return Err(signal(
-            "error",
-            vec![Value::string("Missing :name keyword parameter")],
-        ));
-    };
-
-    if server && nowait {
-        return Err(signal(
-            "error",
-            vec![Value::string("`:server' is incompatible with `:nowait'")],
-        ));
-    }
-    validate_process_coding_value(Some(&eval.coding_systems), coding_val)?;
-    let plist_val = copy_process_plist(plist_val)?;
-    let stop = stop_val.is_truthy();
-    let server_backlog = if server {
-        Some(network_server_backlog(server_value)?)
-    } else {
-        None
-    };
-    let tls_parameters = parse_make_network_tls_parameters(tls_parameters_val)?;
-
-    // Resolve :buffer to a buffer name (creating buffer if needed).
-    let buffer = if !buffer_val.is_nil() {
-        parse_make_process_buffer(eval, &buffer_val)?
-    } else {
-        Value::NIL
-    };
-
-    // Default coding resolution for `:coding nil`, mirroring GNU
-    // `set_network_socket_coding_system` (src/process.c:3291-3367): the decode
-    // side depends on the process buffer's multibyteness (raw for a unibyte
-    // buffer, `default-process-coding-system` otherwise) and a missing buffer
-    // uses the default buffer's multibyteness (multibyte by default).
-    let default_process_coding =
-        eval.visible_variable_value_or_nil("default-process-coding-system");
-    let network_buffer_multibyte =
-        match resolve_buffer_for_process_lookup_in_state(&eval.frames, &eval.buffers, &buffer) {
-            Ok(Some(bid)) => eval
-                .buffers
-                .get(bid)
-                .map(|b| b.get_multibyte())
-                .unwrap_or(true),
-            // No buffer (or unresolved) -> default buffer is multibyte in GNU.
-            _ => true,
-        };
-
-    let explicit_address = if server {
-        local_address_value
-    } else {
-        remote_address_value
-    };
-    if !explicit_address.is_nil() {
         let address = parse_network_address_spec(&explicit_address)?;
         match address {
             NetworkAddressSpec::Inet(addr) => {
@@ -11854,17 +11756,312 @@ pub(crate) fn builtin_make_network_process(
                 return Ok(Value::make_process(id));
             }
         }
-    }
+}
 
-    let family = parse_network_process_family(&family_value)?;
-    let host = parse_network_host(&host_value, family)?;
+/// `make-network-process` for `:type 'datagram` (UDP): binds a server
+/// socket or creates a connected client socket. Every path returns, so
+/// the stream-mode server/client paths below never see datagram type.
+/// Extracted verbatim from builtin_make_network_process.
+#[allow(clippy::too_many_arguments)]
+fn connect_datagram_network_process(
+    eval: &mut super::eval::Context,
+    family: NetworkProcessFamily,
+    host: Option<String>,
+    service: Value,
+    name: LispString,
+    mut contact: Value,
+    filter_val: Value,
+    sentinel_val: Value,
+    log_val: Value,
+    coding_val: Value,
+    buffer: Value,
+    plist_val: Value,
+    server: bool,
+    noquery: bool,
+    stop: bool,
+    socket_type: NetworkSocketType,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+    default_process_coding: Value,
+    network_buffer_multibyte: bool,
+) -> EvalResult {
+        let port = parse_network_service_port(&service, server, socket_type)?;
+        let host_str = host
+            .clone()
+            .unwrap_or_else(|| family.loopback_host().to_string());
+        if server {
+            let effective_options = tcp_server_socket_options(&socket_options);
+            let socket = bind_udp_socket_host(host_str.as_str(), port, family, &effective_options)?;
+            let local_addr = socket.local_addr().map_err(|e| {
+                signal(
+                    "file-error",
+                    vec![Value::string(format!("getsockname: {}", e))],
+                )
+            })?;
+            let zero_datagram = datagram_zero_address_for(local_addr);
+            contact = process_contact_plist_put(
+                contact,
+                ProcessKeyword::Service.value(),
+                Value::fixnum(local_addr.port() as i64),
+            )?;
+            contact = process_contact_plist_put(
+                contact,
+                ProcessKeyword::Local.value(),
+                socket_addr_to_lisp_value(local_addr),
+            )?;
+            contact =
+                process_contact_plist_put(contact, ProcessKeyword::Remote.value(), zero_datagram)?;
 
-    let service = service.unwrap_or(Value::NIL);
-    if service.is_nil() {
-        return Err(signal_wrong_type_string(Value::NIL));
-    }
+            let id = eval.processes.create_process_with_kind_lisp(
+                name,
+                buffer,
+                LispString::from_utf8("network"),
+                Vec::new(),
+                ProcessKind::Network,
+            );
+            eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+            if let Some(proc) = eval.processes.get_mut(id) {
+                proc.childp = contact;
+                set_network_process_coding(
+                    proc,
+                    coding_val,
+                    default_process_coding,
+                    network_buffer_multibyte,
+                );
+                proc.thread = current_thread_handle(&eval.threads);
+                proc.plist = plist_val;
+                proc.status = ProcessStatusSymbol::Open.value();
+                proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+                proc.datagram_address = zero_datagram;
+                proc.datagram_socket_addr = None;
+                if !filter_val.is_nil() {
+                    proc.filter = filter_val;
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Filter.value(),
+                        proc.filter,
+                    )?;
+                }
+                if !sentinel_val.is_nil() {
+                    proc.sentinel = sentinel_val;
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Sentinel.value(),
+                        proc.sentinel,
+                    )?;
+                }
+                if !log_val.is_nil() {
+                    proc.log = log_val;
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Log.value(),
+                        proc.log,
+                    )?;
+                }
+                if !buffer.is_nil() {
+                    proc.childp = process_contact_plist_put(
+                        proc.childp,
+                        ProcessKeyword::Buffer.value(),
+                        buffer,
+                    )?;
+                }
+                apply_connection_process_flags(proc, noquery, stop);
+            }
+            eval.processes.register_socket_fd(id).ok();
+            return Ok(Value::make_process(id));
+        }
 
-    if family.is_local() {
+        let (socket, remote_addr) =
+            connect_udp_socket_host(host_str.as_str(), port, family, &socket_options)?;
+        contact = process_contact_plist_put(
+            contact,
+            ProcessKeyword::Remote.value(),
+            socket_addr_to_lisp_value(remote_addr),
+        )?;
+        contact = process_contact_plist_put(
+            contact,
+            ProcessKeyword::Local.value(),
+            socket_addr_to_lisp_value(udp_unspecified_addr_for(remote_addr)),
+        )?;
+
+        let id = eval.processes.create_process_with_kind_lisp(
+            name,
+            buffer,
+            LispString::from_utf8("network"),
+            Vec::new(),
+            ProcessKind::Network,
+        );
+        eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+        if let Some(proc) = eval.processes.get_mut(id) {
+            proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+            proc.datagram_socket_addr = Some(remote_addr);
+            proc.datagram_address = socket_addr_to_lisp_value(remote_addr);
+            proc.status = ProcessStatusSymbol::Open.value();
+            proc.childp = contact;
+            proc.plist = plist_val;
+            set_network_process_coding(
+                proc,
+                coding_val,
+                default_process_coding,
+                network_buffer_multibyte,
+            );
+            proc.thread = current_thread_handle(&eval.threads);
+            if !filter_val.is_nil() {
+                proc.filter = filter_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Filter.value(),
+                    proc.filter,
+                )?;
+            }
+            if !sentinel_val.is_nil() {
+                proc.sentinel = sentinel_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Sentinel.value(),
+                    proc.sentinel,
+                )?;
+            }
+            if !buffer.is_nil() {
+                proc.childp =
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
+            }
+            apply_connection_process_flags(proc, noquery, stop);
+        }
+        eval.processes.register_socket_fd(id).ok();
+        return Ok(Value::make_process(id));
+}
+
+/// `make-network-process` server mode for stream sockets: bind, listen,
+/// and register the accepting process. Always returns. Extracted
+/// verbatim from builtin_make_network_process.
+#[allow(clippy::too_many_arguments)]
+fn listen_stream_network_process(
+    eval: &mut super::eval::Context,
+    family: NetworkProcessFamily,
+    host: Option<String>,
+    service: Value,
+    name: LispString,
+    mut contact: Value,
+    filter_val: Value,
+    sentinel_val: Value,
+    log_val: Value,
+    coding_val: Value,
+    buffer: Value,
+    plist_val: Value,
+    noquery: bool,
+    stop: bool,
+    server_backlog: Option<i32>,
+    socket_type: NetworkSocketType,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+    default_process_coding: Value,
+    network_buffer_multibyte: bool,
+) -> EvalResult {
+        let port = parse_network_service_port(&service, true, socket_type)?;
+        let host_str = host
+            .clone()
+            .unwrap_or_else(|| family.loopback_host().to_string());
+        let effective_options = tcp_server_socket_options(&socket_options);
+        let listener = bind_tcp_listener_host(
+            host_str.as_str(),
+            port,
+            family,
+            server_backlog.unwrap_or(5),
+            &effective_options,
+        )?;
+        let local_addr = listener.local_addr().map_err(|e| {
+            signal(
+                "file-error",
+                vec![Value::string(format!("getsockname: {}", e))],
+            )
+        })?;
+        let local = socket_addr_to_lisp_value(local_addr);
+        let actual_service = Value::fixnum(local_addr.port() as i64);
+        contact =
+            process_contact_plist_put(contact, ProcessKeyword::Service.value(), actual_service)?;
+        contact = process_contact_plist_put(contact, ProcessKeyword::Local.value(), local)?;
+
+        let id = eval.processes.create_process_with_kind_lisp(
+            name,
+            buffer,
+            LispString::from_utf8("network"),
+            Vec::new(),
+            ProcessKind::Network,
+        );
+        eval.processes.sync_process_mark(&mut eval.buffers, id)?;
+        if let Some(proc) = eval.processes.get_mut(id) {
+            proc.childp = contact;
+            set_network_process_coding(
+                proc,
+                coding_val,
+                default_process_coding,
+                network_buffer_multibyte,
+            );
+            proc.thread = current_thread_handle(&eval.threads);
+            proc.plist = plist_val;
+            proc.network_socket = Some(NetworkSocket::TcpListener(listener));
+            if !filter_val.is_nil() {
+                proc.filter = filter_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Filter.value(),
+                    proc.filter,
+                )?;
+            }
+            if !sentinel_val.is_nil() {
+                proc.sentinel = sentinel_val;
+                proc.childp = process_contact_plist_put(
+                    proc.childp,
+                    ProcessKeyword::Sentinel.value(),
+                    proc.sentinel,
+                )?;
+            }
+            if !log_val.is_nil() {
+                proc.log = log_val;
+                proc.childp =
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Log.value(), proc.log)?;
+            }
+            if !buffer.is_nil() {
+                proc.childp =
+                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
+            }
+            apply_connection_process_flags(proc, noquery, stop);
+        }
+        eval.processes.register_socket_fd(id).ok();
+        return Ok(Value::make_process(id));
+}
+
+/// `make-network-process` for `:family 'local` (unix-domain sockets):
+/// server bind/listen or client connect on a filesystem socket path,
+/// stream or datagram. Diverges on every path (non-unix builds signal),
+/// so the inet resolution below never runs for local family. Extracted
+/// verbatim from builtin_make_network_process.
+#[allow(clippy::too_many_arguments)]
+#[allow(unused_variables)] // family/host_value feed cfg(unix)-gated arms
+fn connect_local_socket_process(
+    eval: &mut super::eval::Context,
+    family: NetworkProcessFamily,
+    host_value: Value,
+    service: Value,
+    name: LispString,
+    mut contact: Value,
+    filter_val: Value,
+    sentinel_val: Value,
+    log_val: Value,
+    coding_val: Value,
+    buffer: Value,
+    plist_val: Value,
+    nowait: bool,
+    server: bool,
+    noquery: bool,
+    stop: bool,
+    server_backlog: Option<i32>,
+    socket_type: NetworkSocketType,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+    tls_parameters: Option<super::tls::GnutlsBootParameters>,
+    default_process_coding: Value,
+    network_buffer_multibyte: bool,
+    remote_address_value: Value,
+) -> EvalResult {
         #[cfg(not(unix))]
         {
             return Err(signal(
@@ -12381,154 +12578,218 @@ pub(crate) fn builtin_make_network_process(
 
             return Ok(Value::make_process(id));
         }
+}
+
+pub(crate) fn builtin_make_network_process(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    if args.is_empty() {
+        return Ok(Value::NIL);
+    }
+    check_keyword_arg_pairs(&args)?;
+    eval.sync_process_read_config_from_visible_variables();
+
+    // ---- Parse all keyword arguments ----
+    let mut name: Option<LispString> = None;
+    let mut host_value = Value::NIL;
+    let mut service: Option<Value> = None;
+    let mut server = false;
+    let mut server_value = Value::NIL;
+    let mut family_value = Value::NIL;
+    let mut local_address_value = Value::NIL;
+    let mut remote_address_value = Value::NIL;
+    let mut nowait = false;
+    let mut socket_type = NetworkSocketType::Stream;
+    let mut contact = Value::list(args.clone());
+    let mut filter_val = Value::NIL;
+    let mut sentinel_val = Value::NIL;
+    let mut log_val = Value::NIL;
+    let mut buffer_val = Value::NIL;
+    let mut coding_val = Value::NIL;
+    let mut tls_parameters_val = Value::NIL;
+    let mut noquery = false;
+    let mut plist_val = Value::NIL;
+    let mut stop_val = Value::NIL;
+    let socket_options = collect_network_socket_options(&args);
+
+    let mut seen_keywords = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        let key = &args[i];
+        let value = args.get(i + 1).cloned().unwrap_or(Value::NIL);
+        let Some(keyword) = ProcessKeyword::from_value(key) else {
+            i += 2;
+            continue;
+        };
+        if process_keyword_already_seen(&mut seen_keywords, keyword) {
+            i += 2;
+            continue;
+        }
+        match keyword {
+            ProcessKeyword::Name => name = Some(expect_process_name_lisp_string(&value)?),
+            ProcessKeyword::Host => host_value = value,
+            ProcessKeyword::Service => service = Some(value),
+            ProcessKeyword::Server => {
+                server = value.is_truthy();
+                server_value = value;
+            }
+            ProcessKeyword::Family => family_value = value,
+            ProcessKeyword::Type => socket_type = parse_network_socket_type(&value)?,
+            ProcessKeyword::Nowait => nowait = value.is_truthy(),
+            ProcessKeyword::Filter => filter_val = value,
+            ProcessKeyword::Sentinel => sentinel_val = value,
+            ProcessKeyword::Log => log_val = value,
+            ProcessKeyword::Buffer => buffer_val = value,
+            ProcessKeyword::Coding => coding_val = value,
+            ProcessKeyword::TlsParameters => tls_parameters_val = value,
+            ProcessKeyword::Noquery => noquery = value.is_truthy(),
+            ProcessKeyword::Stop => stop_val = value,
+            ProcessKeyword::Local => local_address_value = value,
+            ProcessKeyword::Remote => remote_address_value = value,
+            ProcessKeyword::Plist => plist_val = value,
+            _ => {}
+        }
+        i += 2;
+    }
+
+    let Some(name) = name else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Missing :name keyword parameter")],
+        ));
+    };
+
+    if server && nowait {
+        return Err(signal(
+            "error",
+            vec![Value::string("`:server' is incompatible with `:nowait'")],
+        ));
+    }
+    validate_process_coding_value(Some(&eval.coding_systems), coding_val)?;
+    let plist_val = copy_process_plist(plist_val)?;
+    let stop = stop_val.is_truthy();
+    let server_backlog = if server {
+        Some(network_server_backlog(server_value)?)
+    } else {
+        None
+    };
+    let tls_parameters = parse_make_network_tls_parameters(tls_parameters_val)?;
+
+    // Resolve :buffer to a buffer name (creating buffer if needed).
+    let buffer = if !buffer_val.is_nil() {
+        parse_make_process_buffer(eval, &buffer_val)?
+    } else {
+        Value::NIL
+    };
+
+    // Default coding resolution for `:coding nil`, mirroring GNU
+    // `set_network_socket_coding_system` (src/process.c:3291-3367): the decode
+    // side depends on the process buffer's multibyteness (raw for a unibyte
+    // buffer, `default-process-coding-system` otherwise) and a missing buffer
+    // uses the default buffer's multibyteness (multibyte by default).
+    let default_process_coding =
+        eval.visible_variable_value_or_nil("default-process-coding-system");
+    let network_buffer_multibyte =
+        match resolve_buffer_for_process_lookup_in_state(&eval.frames, &eval.buffers, &buffer) {
+            Ok(Some(bid)) => eval
+                .buffers
+                .get(bid)
+                .map(|b| b.get_multibyte())
+                .unwrap_or(true),
+            // No buffer (or unresolved) -> default buffer is multibyte in GNU.
+            _ => true,
+        };
+
+    let explicit_address = if server {
+        local_address_value
+    } else {
+        remote_address_value
+    };
+    if !explicit_address.is_nil() {
+        return connect_network_process_at_explicit_address(
+            eval,
+            explicit_address,
+            remote_address_value,
+            name,
+            contact,
+            filter_val,
+            sentinel_val,
+            log_val,
+            coding_val,
+            buffer,
+            plist_val,
+            nowait,
+            server,
+            noquery,
+            stop,
+            server_backlog,
+            socket_type,
+            socket_options,
+            tls_parameters,
+            default_process_coding,
+            network_buffer_multibyte,
+        );
+    }
+
+    let family = parse_network_process_family(&family_value)?;
+    let host = parse_network_host(&host_value, family)?;
+
+    let service = service.unwrap_or(Value::NIL);
+    if service.is_nil() {
+        return Err(signal_wrong_type_string(Value::NIL));
+    }
+
+    if family.is_local() {
+        return connect_local_socket_process(
+            eval,
+            family,
+            host_value,
+            service,
+            name,
+            contact,
+            filter_val,
+            sentinel_val,
+            log_val,
+            coding_val,
+            buffer,
+            plist_val,
+            nowait,
+            server,
+            noquery,
+            stop,
+            server_backlog,
+            socket_type,
+            socket_options,
+            tls_parameters,
+            default_process_coding,
+            network_buffer_multibyte,
+            remote_address_value,
+        );
     }
 
     if socket_type == NetworkSocketType::Datagram {
-        let port = parse_network_service_port(&service, server, socket_type)?;
-        let host_str = host
-            .clone()
-            .unwrap_or_else(|| family.loopback_host().to_string());
-        if server {
-            let effective_options = tcp_server_socket_options(&socket_options);
-            let socket = bind_udp_socket_host(host_str.as_str(), port, family, &effective_options)?;
-            let local_addr = socket.local_addr().map_err(|e| {
-                signal(
-                    "file-error",
-                    vec![Value::string(format!("getsockname: {}", e))],
-                )
-            })?;
-            let zero_datagram = datagram_zero_address_for(local_addr);
-            contact = process_contact_plist_put(
-                contact,
-                ProcessKeyword::Service.value(),
-                Value::fixnum(local_addr.port() as i64),
-            )?;
-            contact = process_contact_plist_put(
-                contact,
-                ProcessKeyword::Local.value(),
-                socket_addr_to_lisp_value(local_addr),
-            )?;
-            contact =
-                process_contact_plist_put(contact, ProcessKeyword::Remote.value(), zero_datagram)?;
-
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
-            eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-            if let Some(proc) = eval.processes.get_mut(id) {
-                proc.childp = contact;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
-                proc.thread = current_thread_handle(&eval.threads);
-                proc.plist = plist_val;
-                proc.status = ProcessStatusSymbol::Open.value();
-                proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
-                proc.datagram_address = zero_datagram;
-                proc.datagram_socket_addr = None;
-                if !filter_val.is_nil() {
-                    proc.filter = filter_val;
-                    proc.childp = process_contact_plist_put(
-                        proc.childp,
-                        ProcessKeyword::Filter.value(),
-                        proc.filter,
-                    )?;
-                }
-                if !sentinel_val.is_nil() {
-                    proc.sentinel = sentinel_val;
-                    proc.childp = process_contact_plist_put(
-                        proc.childp,
-                        ProcessKeyword::Sentinel.value(),
-                        proc.sentinel,
-                    )?;
-                }
-                if !log_val.is_nil() {
-                    proc.log = log_val;
-                    proc.childp = process_contact_plist_put(
-                        proc.childp,
-                        ProcessKeyword::Log.value(),
-                        proc.log,
-                    )?;
-                }
-                if !buffer.is_nil() {
-                    proc.childp = process_contact_plist_put(
-                        proc.childp,
-                        ProcessKeyword::Buffer.value(),
-                        buffer,
-                    )?;
-                }
-                apply_connection_process_flags(proc, noquery, stop);
-            }
-            eval.processes.register_socket_fd(id).ok();
-            return Ok(Value::make_process(id));
-        }
-
-        let (socket, remote_addr) =
-            connect_udp_socket_host(host_str.as_str(), port, family, &socket_options)?;
-        contact = process_contact_plist_put(
-            contact,
-            ProcessKeyword::Remote.value(),
-            socket_addr_to_lisp_value(remote_addr),
-        )?;
-        contact = process_contact_plist_put(
-            contact,
-            ProcessKeyword::Local.value(),
-            socket_addr_to_lisp_value(udp_unspecified_addr_for(remote_addr)),
-        )?;
-
-        let id = eval.processes.create_process_with_kind_lisp(
+        return connect_datagram_network_process(
+            eval,
+            family,
+            host,
+            service,
             name,
+            contact,
+            filter_val,
+            sentinel_val,
+            log_val,
+            coding_val,
             buffer,
-            LispString::from_utf8("network"),
-            Vec::new(),
-            ProcessKind::Network,
+            plist_val,
+            server,
+            noquery,
+            stop,
+            socket_type,
+            socket_options,
+            default_process_coding,
+            network_buffer_multibyte,
         );
-        eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-        if let Some(proc) = eval.processes.get_mut(id) {
-            proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
-            proc.datagram_socket_addr = Some(remote_addr);
-            proc.datagram_address = socket_addr_to_lisp_value(remote_addr);
-            proc.status = ProcessStatusSymbol::Open.value();
-            proc.childp = contact;
-            proc.plist = plist_val;
-            set_network_process_coding(
-                proc,
-                coding_val,
-                default_process_coding,
-                network_buffer_multibyte,
-            );
-            proc.thread = current_thread_handle(&eval.threads);
-            if !filter_val.is_nil() {
-                proc.filter = filter_val;
-                proc.childp = process_contact_plist_put(
-                    proc.childp,
-                    ProcessKeyword::Filter.value(),
-                    proc.filter,
-                )?;
-            }
-            if !sentinel_val.is_nil() {
-                proc.sentinel = sentinel_val;
-                proc.childp = process_contact_plist_put(
-                    proc.childp,
-                    ProcessKeyword::Sentinel.value(),
-                    proc.sentinel,
-                )?;
-            }
-            if !buffer.is_nil() {
-                proc.childp =
-                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
-            }
-            apply_connection_process_flags(proc, noquery, stop);
-        }
-        eval.processes.register_socket_fd(id).ok();
-        return Ok(Value::make_process(id));
     }
 
     #[cfg(unix)]
@@ -12540,78 +12801,27 @@ pub(crate) fn builtin_make_network_process(
     }
 
     if server {
-        let port = parse_network_service_port(&service, true, socket_type)?;
-        let host_str = host
-            .clone()
-            .unwrap_or_else(|| family.loopback_host().to_string());
-        let effective_options = tcp_server_socket_options(&socket_options);
-        let listener = bind_tcp_listener_host(
-            host_str.as_str(),
-            port,
+        return listen_stream_network_process(
+            eval,
             family,
-            server_backlog.unwrap_or(5),
-            &effective_options,
-        )?;
-        let local_addr = listener.local_addr().map_err(|e| {
-            signal(
-                "file-error",
-                vec![Value::string(format!("getsockname: {}", e))],
-            )
-        })?;
-        let local = socket_addr_to_lisp_value(local_addr);
-        let actual_service = Value::fixnum(local_addr.port() as i64);
-        contact =
-            process_contact_plist_put(contact, ProcessKeyword::Service.value(), actual_service)?;
-        contact = process_contact_plist_put(contact, ProcessKeyword::Local.value(), local)?;
-
-        let id = eval.processes.create_process_with_kind_lisp(
+            host,
+            service,
             name,
+            contact,
+            filter_val,
+            sentinel_val,
+            log_val,
+            coding_val,
             buffer,
-            LispString::from_utf8("network"),
-            Vec::new(),
-            ProcessKind::Network,
+            plist_val,
+            noquery,
+            stop,
+            server_backlog,
+            socket_type,
+            socket_options,
+            default_process_coding,
+            network_buffer_multibyte,
         );
-        eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-        if let Some(proc) = eval.processes.get_mut(id) {
-            proc.childp = contact;
-            set_network_process_coding(
-                proc,
-                coding_val,
-                default_process_coding,
-                network_buffer_multibyte,
-            );
-            proc.thread = current_thread_handle(&eval.threads);
-            proc.plist = plist_val;
-            proc.network_socket = Some(NetworkSocket::TcpListener(listener));
-            if !filter_val.is_nil() {
-                proc.filter = filter_val;
-                proc.childp = process_contact_plist_put(
-                    proc.childp,
-                    ProcessKeyword::Filter.value(),
-                    proc.filter,
-                )?;
-            }
-            if !sentinel_val.is_nil() {
-                proc.sentinel = sentinel_val;
-                proc.childp = process_contact_plist_put(
-                    proc.childp,
-                    ProcessKeyword::Sentinel.value(),
-                    proc.sentinel,
-                )?;
-            }
-            if !log_val.is_nil() {
-                proc.log = log_val;
-                proc.childp =
-                    process_contact_plist_put(proc.childp, ProcessKeyword::Log.value(), proc.log)?;
-            }
-            if !buffer.is_nil() {
-                proc.childp =
-                    process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
-            }
-            apply_connection_process_flags(proc, noquery, stop);
-        }
-        eval.processes.register_socket_fd(id).ok();
-        return Ok(Value::make_process(id));
     }
 
     // ---- Client mode: establish TCP connection ----
