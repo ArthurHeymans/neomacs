@@ -15,15 +15,63 @@
 //!   `condition-wait`, `condition-notify`
 //! - Special form: `with-mutex`
 
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use super::error::{
     EvalResult, Flow, make_signal_binding_value, signal, signal_from_binding_value,
-    signal_with_data,
+    signal_with_data, signal_with_data_id,
 };
-use super::value::{Value, ValueKind, eq_value};
+use super::value::{Value, ValueKind, eq_value, list_to_vec};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
+
+const CONDITION_CASE_CONTINUATION_MARKER: &str = "neomacs--thread-condition-case-continuation";
+const SLEEP_BLOCKER_MARKER: &str = "sleep-for";
+
+pub(crate) fn make_thread_condition_case_continuation(
+    var: Value,
+    remaining_forms: Value,
+    handlers: Value,
+    lexenv: Value,
+) -> Value {
+    Value::list(vec![
+        Value::symbol(CONDITION_CASE_CONTINUATION_MARKER),
+        var,
+        remaining_forms,
+        handlers,
+        lexenv,
+    ])
+}
+
+pub(crate) fn thread_condition_case_continuation_parts(
+    value: Value,
+) -> Option<(Value, Value, Value, Value)> {
+    let items = list_to_vec(&value)?;
+    if items.len() != 5 || !items[0].is_symbol_named(CONDITION_CASE_CONTINUATION_MARKER) {
+        return None;
+    }
+    Some((items[1], items[2], items[3], items[4]))
+}
+
+pub(crate) fn make_sleep_blocker(seconds: f64) -> Value {
+    Value::list(vec![
+        Value::symbol(SLEEP_BLOCKER_MARKER),
+        Value::make_float(seconds),
+    ])
+}
+
+fn sleep_duration_from_blocker(value: Value) -> Option<Duration> {
+    let items = list_to_vec(&value)?;
+    if items.len() != 2 || !items[0].is_symbol_named(SLEEP_BLOCKER_MARKER) {
+        return None;
+    }
+    let seconds = items[1].xfloat();
+    seconds
+        .is_finite()
+        .then_some(seconds)
+        .filter(|seconds| *seconds > 0.0)
+        .map(Duration::from_secs_f64)
+}
 
 // ---------------------------------------------------------------------------
 // Thread state
@@ -231,7 +279,6 @@ impl ThreadManager {
     /// `thread-join` re-raises. Only `thread-signal` reaches this path.
     pub fn signal_thread(&mut self, id: u64, error: Value) {
         if let Some(t) = self.threads.get_mut(&id) {
-            t.status = ThreadStatus::Signaled;
             t.last_error = Some(error);
             if let Some((symbol, data)) = split_signal_binding_value(error) {
                 t.error_symbol = symbol;
@@ -239,6 +286,11 @@ impl ThreadManager {
             } else {
                 t.error_symbol = Value::NIL;
                 t.error_data = Value::NIL;
+            }
+            if t.status == ThreadStatus::Blocked {
+                t.event_object = Value::NIL;
+            } else {
+                t.status = ThreadStatus::Signaled;
             }
         }
     }
@@ -268,6 +320,19 @@ impl ThreadManager {
             return None;
         }
         thread.last_error.and_then(signal_from_binding_value)
+    }
+
+    pub fn take_pending_thread_signal(&mut self, id: u64) -> Option<Flow> {
+        let thread = self.threads.get_mut(&id)?;
+        if thread.error_symbol.is_nil() {
+            return None;
+        }
+        let symbol = thread.error_symbol;
+        let data = thread.error_data;
+        thread.error_symbol = Value::NIL;
+        thread.error_data = Value::NIL;
+        let sym_id = symbol.as_symbol_id()?;
+        Some(signal_with_data_id(sym_id, data))
     }
 
     /// Publish an error value for `thread-last-error`.
@@ -357,6 +422,22 @@ impl ThreadManager {
         self.threads.get(&id).is_some_and(|thread| {
             thread.status == ThreadStatus::Blocked && thread.event_object.is_nil()
         })
+    }
+
+    pub fn blocked_sleep_duration(&self, id: u64) -> Option<Duration> {
+        let thread = self.threads.get(&id)?;
+        if thread.status != ThreadStatus::Blocked || thread.event_object.is_nil() {
+            return None;
+        }
+        sleep_duration_from_blocker(thread.event_object)
+    }
+
+    pub fn wake_thread(&mut self, id: u64) {
+        if let Some(thread) = self.threads.get_mut(&id)
+            && thread.status == ThreadStatus::Blocked
+        {
+            thread.event_object = Value::NIL;
+        }
     }
 
     pub fn take_blocked_remaining_forms(&mut self, id: u64) -> Option<Value> {
@@ -885,7 +966,15 @@ pub(crate) fn builtin_thread_join(
             vec![Value::string("Cannot join current thread")],
         ));
     }
+    // GNU snapshots the target thread's injected error before waiting, then
+    // re-signals that snapshot even if the target catches and clears it while
+    // join is waiting.
+    let pending_join_signal = ctx.threads.pending_thread_signal(id);
     if ctx.threads.thread_ready_to_resume(id) {
+        resume_blocked_thread(ctx, id)?;
+    } else if let Some(duration) = ctx.threads.blocked_sleep_duration(id) {
+        std::thread::sleep(duration);
+        ctx.threads.wake_thread(id);
         resume_blocked_thread(ctx, id)?;
     }
     // GNU `Fthread_join` (thread.c:1118-1144) re-raises only an error injected
@@ -893,7 +982,7 @@ pub(crate) fn builtin_thread_join(
     // error signalled *inside* the thread function is surfaced via
     // `thread-last-error`, and join just returns the thread's result.
     ctx.threads.join_thread(id);
-    if let Some(flow) = ctx.threads.pending_thread_signal(id) {
+    if let Some(flow) = pending_join_signal {
         return Err(flow);
     }
     Ok(ctx.threads.thread_result(id))
@@ -909,6 +998,10 @@ fn resume_blocked_thread(ctx: &mut crate::emacs_core::eval::Context, thread_id: 
         .is_some()
     {
         ctx.apply(remaining_forms, vec![])
+    } else if let Some((var, body, handlers, lexenv)) =
+        thread_condition_case_continuation_parts(remaining_forms)
+    {
+        ctx.resume_thread_condition_case_continuation(var, body, handlers, lexenv)
     } else {
         ctx.eval_lambda_body_value(remaining_forms)
     };

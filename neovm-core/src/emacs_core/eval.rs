@@ -10861,7 +10861,24 @@ impl Context {
             let mut cursor = forms;
             let mut last = Value::NIL;
             while cursor.is_cons() {
-                last = self.eval_sub(cursor.cons_car())?;
+                match self.eval_sub(cursor.cons_car()) {
+                    Ok(value) => last = value,
+                    Err(Flow::ThreadBlocked {
+                        blocker,
+                        remaining_forms,
+                    }) => {
+                        let remaining_forms = if remaining_forms.is_nil() {
+                            cursor.cons_cdr()
+                        } else {
+                            remaining_forms
+                        };
+                        return Err(Flow::ThreadBlocked {
+                            blocker,
+                            remaining_forms,
+                        });
+                    }
+                    Err(flow) => return Err(flow),
+                }
                 cursor = cursor.cons_cdr();
             }
             if !cursor.is_nil() {
@@ -11199,6 +11216,19 @@ impl Context {
             return Err(self.listp_error(handlers));
         }
 
+        self.run_condition_case_body(var, var_id, &handlers_vec, success_handler_idx, |ctx| {
+            ctx.eval_sub(body)
+        })
+    }
+
+    fn run_condition_case_body(
+        &mut self,
+        var: Value,
+        var_id: SymId,
+        handlers_vec: &[Value],
+        success_handler_idx: Option<usize>,
+        eval_body: impl FnOnce(&mut Self) -> EvalResult,
+    ) -> EvalResult {
         let condition_stack_base = self.condition_stack_len();
         for (idx, handler) in handlers_vec.iter().enumerate().rev() {
             if success_handler_idx == Some(idx) || handler.is_nil() {
@@ -11217,7 +11247,7 @@ impl Context {
             });
         }
 
-        match self.eval_sub(body) {
+        match eval_body(self) {
             Ok(value) => {
                 self.truncate_condition_stack(condition_stack_base);
                 if let Some(idx) = success_handler_idx {
@@ -11291,6 +11321,23 @@ impl Context {
             }
             Err(flow @ Flow::ThreadBlocked { .. }) => {
                 self.truncate_condition_stack(condition_stack_base);
+                if let Flow::ThreadBlocked {
+                    blocker,
+                    remaining_forms,
+                } = flow
+                    && !remaining_forms.is_nil()
+                {
+                    return Err(Flow::ThreadBlocked {
+                        blocker,
+                        remaining_forms:
+                            crate::emacs_core::threads::make_thread_condition_case_continuation(
+                                var,
+                                remaining_forms,
+                                Value::list(handlers_vec.to_vec()),
+                                self.lexenv,
+                            ),
+                    });
+                }
                 Err(flow)
             }
             Err(flow @ Flow::Throw { .. }) => {
@@ -11298,6 +11345,48 @@ impl Context {
                 Err(flow)
             }
         }
+    }
+
+    pub(crate) fn resume_thread_condition_case_continuation(
+        &mut self,
+        var: Value,
+        body: Value,
+        handlers: Value,
+        lexenv: Value,
+    ) -> EvalResult {
+        let Some(var_id) = var.as_symbol_id() else {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("symbolp"), var],
+            ));
+        };
+        let Some(handlers_vec) = list_to_vec(&handlers) else {
+            return Err(self.listp_error(handlers));
+        };
+        let success_handler_idx = handlers_vec.iter().position(|handler| {
+            handler.is_cons()
+                && self
+                    .unwrap_symbol(handler.cons_car())
+                    .is_symbol_named(":success")
+        });
+
+        let specpdl_count = self.specpdl.len();
+        self.specpdl.push(SpecBinding::LexicalEnv {
+            old_lexenv: self.lexenv,
+        });
+        self.lexenv = lexenv;
+        let thread_id = self.threads.current_thread_id();
+        let pending = self.threads.take_pending_thread_signal(thread_id);
+        let result =
+            self.run_condition_case_body(var, var_id, &handlers_vec, success_handler_idx, |ctx| {
+                if let Some(flow) = pending {
+                    Err(flow)
+                } else {
+                    ctx.sf_progn_value(body)
+                }
+            });
+        self.unbind_to(specpdl_count);
+        result
     }
 
     fn sf_save_excursion_value(&mut self, tail: Value) -> EvalResult {
@@ -13553,7 +13642,12 @@ impl Context {
             Err(Flow::ThreadBlocked {
                 blocker,
                 remaining_forms,
-            }) if !remaining_forms.is_nil() => {
+            }) if !remaining_forms.is_nil()
+                && crate::emacs_core::threads::thread_condition_case_continuation_parts(
+                    remaining_forms,
+                )
+                .is_none() =>
+            {
                 let resume_function = builtins::symbols::make_interpreted_closure_from_parts(
                     &Value::NIL,
                     &remaining_forms,
