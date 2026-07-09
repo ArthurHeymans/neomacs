@@ -1,17 +1,17 @@
 use std::env;
 
-/// The full `neovm_jit_*` runtime-shim set an AOT preload `.so` imports
-/// (`#[unsafe(no_mangle)] pub` in neovm-core). SINGLE SOURCE OF TRUTH (R2-C2):
-/// the list lives in `neovm-core/src/emacs_core/jit/shim_names.rs` and is
-/// `include!`-ed here (as `NEOVM_JIT_SHIM_NAMES`) so this production export set
-/// can never drift from neovm-core's `MIR_SHIM_NAMES` or its lib build.rs export
-/// set. Still MUST match the shim DEFINITIONS in jit/compile.rs + `JIT_SHIM_ANCHOR`.
-/// R2-B5: the PRODUCTION `neomacs` binary exports these into its DYNAMIC symbol
-/// table so the dump-time `libneomacs-preload.so` (R2) binds its undefined shim
-/// imports at `dlopen`. Under the workspace linker `wild`, plain `-rdynamic` does
-/// NOT promote these address-only-referenced fns — each must be named with
-/// `--export-dynamic-symbol` (the R1c carry-forward; without it the preload `.so`
-/// aborts on first shim call).
+// The full `neovm_jit_*` runtime-shim set an AOT preload `.so` imports
+// (`#[unsafe(no_mangle)] pub` in neovm-core). SINGLE SOURCE OF TRUTH (R2-C2):
+// the list lives in `neovm-core/src/emacs_core/jit/shim_names.rs` and is
+// `include!`-ed here (as `NEOVM_JIT_SHIM_NAMES`) so this production export set
+// can never drift from neovm-core's `MIR_SHIM_NAMES` or its lib build.rs export
+// set. Still MUST match the shim DEFINITIONS in jit/compile.rs + `JIT_SHIM_ANCHOR`.
+// R2-B5: the PRODUCTION `neomacs` binary exports these into its DYNAMIC symbol
+// table so the dump-time `libneomacs-preload.so` (R2) binds its undefined shim
+// imports at `dlopen`. Under the workspace linker `wild`, plain `-rdynamic` does
+// NOT promote these address-only-referenced fns — each must be named with
+// `--export-dynamic-symbol` (the R1c carry-forward; without it the preload `.so`
+// aborts on first shim call).
 include!("../neovm-core/src/emacs_core/jit/shim_names.rs");
 
 /// R2-B5: export the `neovm_jit_*` shims into the `neomacs` binary's dynamic

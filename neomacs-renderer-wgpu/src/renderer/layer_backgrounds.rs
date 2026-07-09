@@ -1,6 +1,11 @@
 //! Background collection and overlay-background draw phases of
 //! `render_frame_glyphs` (z-order steps 1 and 5).
 
+// `bg` is an `Option<Color>` consumed by an `is_some()` guard above; by the
+// `unwrap_or` it is provably `Some`, but the fallback is retained alongside the
+// Option typing, so the literal-unwrap lint is allowed module-wide.
+#![allow(clippy::unnecessary_literal_unwrap)]
+
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::{Color, FaceId};
@@ -196,47 +201,43 @@ impl WgpuRenderer {
                 stipple_fg,
                 ..
             } = glyph
+                && !row_role.is_chrome()
+                && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
             {
-                if !row_role.is_chrome()
-                    && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
+                let ya = if has_line_anims {
+                    *y + self.line_y_offset(*x, *y)
+                } else {
+                    *y
+                };
+                let Some((draw_y, draw_h)) = Self::clip_vertical(ya, *height, clip_rect.as_ref())
+                else {
+                    continue;
+                };
+                let face = faces.get(face_id);
+                self.add_face_background_rect(
+                    &mut non_overlay_rect_vertices,
+                    face,
+                    bg,
+                    *x,
+                    draw_y,
+                    *width,
+                    draw_h,
+                    clip_rect.as_ref(),
+                );
+                // Overlay stipple pattern if present
+                if *stipple_id > 0
+                    && let (Some(fg), Some(pat)) =
+                        (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
                 {
-                    let ya = if has_line_anims {
-                        *y + self.line_y_offset(*x, *y)
-                    } else {
-                        *y
-                    };
-                    let Some((draw_y, draw_h)) =
-                        Self::clip_vertical(ya, *height, clip_rect.as_ref())
-                    else {
-                        continue;
-                    };
-                    let face = faces.get(face_id);
-                    self.add_face_background_rect(
+                    self.render_stipple_pattern(
                         &mut non_overlay_rect_vertices,
-                        face,
-                        bg,
                         *x,
                         draw_y,
                         *width,
                         draw_h,
-                        clip_rect.as_ref(),
+                        fg,
+                        pat,
                     );
-                    // Overlay stipple pattern if present
-                    if *stipple_id > 0 {
-                        if let (Some(fg), Some(pat)) =
-                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
-                        {
-                            self.render_stipple_pattern(
-                                &mut non_overlay_rect_vertices,
-                                *x,
-                                draw_y,
-                                *width,
-                                draw_h,
-                                fg,
-                                pat,
-                            );
-                        }
-                    }
                 }
             }
         }
@@ -253,55 +254,52 @@ impl WgpuRenderer {
                 clip_rect,
                 ..
             } = glyph
+                && !row_role.is_chrome()
             {
-                if !row_role.is_chrome() {
-                    // The per-glyph background used to be inlined as
-                    // `Some(face.background)` by materialization, so resolving
-                    // it from the face reproduces that value exactly.
-                    let rf = match bg_face_cache {
-                        Some((id, ref data)) if id == *face_id => *data,
-                        _ => {
-                            let data = frame_glyphs.resolved_face(*face_id);
-                            bg_face_cache = Some((*face_id, data));
-                            data
-                        }
-                    };
-                    let bg: Option<Color> = Some(rf.bg);
-                    let face = faces.get(face_id);
-                    let has_gradient = face
-                        .and_then(|resolved| resolved.background_gradient.as_deref())
-                        .is_some();
-                    let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
-                    if (bg.is_some() || has_gradient || has_solid_bg)
-                        && !Self::overlaps_rounded_box_span(
-                            *x, *y, false, box_spans, faces, box_margin,
-                        )
-                    {
-                        let ya = if has_line_anims {
-                            *y + self.line_y_offset(*x, *y)
-                        } else {
-                            *y
-                        };
-                        let Some((draw_y, draw_h)) =
-                            Self::clip_vertical(ya, *height, clip_rect.as_ref())
-                        else {
-                            continue;
-                        };
-                        let fallback = bg.unwrap_or(
-                            face.map(|resolved| resolved.background)
-                                .unwrap_or(Color::TRANSPARENT),
-                        );
-                        self.add_face_background_rect(
-                            &mut non_overlay_rect_vertices,
-                            face,
-                            &fallback,
-                            *x,
-                            draw_y,
-                            *width,
-                            draw_h,
-                            clip_rect.as_ref(),
-                        );
+                // The per-glyph background used to be inlined as
+                // `Some(face.background)` by materialization, so resolving
+                // it from the face reproduces that value exactly.
+                let rf = match bg_face_cache {
+                    Some((id, ref data)) if id == *face_id => *data,
+                    _ => {
+                        let data = frame_glyphs.resolved_face(*face_id);
+                        bg_face_cache = Some((*face_id, data));
+                        data
                     }
+                };
+                let bg: Option<Color> = Some(rf.bg);
+                let face = faces.get(face_id);
+                let has_gradient = face
+                    .and_then(|resolved| resolved.background_gradient.as_deref())
+                    .is_some();
+                let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
+                if (bg.is_some() || has_gradient || has_solid_bg)
+                    && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
+                {
+                    let ya = if has_line_anims {
+                        *y + self.line_y_offset(*x, *y)
+                    } else {
+                        *y
+                    };
+                    let Some((draw_y, draw_h)) =
+                        Self::clip_vertical(ya, *height, clip_rect.as_ref())
+                    else {
+                        continue;
+                    };
+                    let fallback = bg.unwrap_or(
+                        face.map(|resolved| resolved.background)
+                            .unwrap_or(Color::TRANSPARENT),
+                    );
+                    self.add_face_background_rect(
+                        &mut non_overlay_rect_vertices,
+                        face,
+                        &fallback,
+                        *x,
+                        draw_y,
+                        *width,
+                        draw_h,
+                        clip_rect.as_ref(),
+                    );
                 }
             }
         }
@@ -554,41 +552,37 @@ impl WgpuRenderer {
                 stipple_fg,
                 ..
             } = glyph
+                && row_role.is_chrome()
+                && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
             {
-                if row_role.is_chrome()
-                    && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
+                let Some((draw_y, draw_h)) = Self::clip_vertical(*y, *height, clip_rect.as_ref())
+                else {
+                    continue;
+                };
+                let face = faces.get(face_id);
+                self.add_face_background_rect(
+                    &mut overlay_rect_vertices,
+                    face,
+                    bg,
+                    *x,
+                    draw_y,
+                    *width,
+                    draw_h,
+                    clip_rect.as_ref(),
+                );
+                if *stipple_id > 0
+                    && let (Some(fg), Some(pat)) =
+                        (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
                 {
-                    let Some((draw_y, draw_h)) =
-                        Self::clip_vertical(*y, *height, clip_rect.as_ref())
-                    else {
-                        continue;
-                    };
-                    let face = faces.get(face_id);
-                    self.add_face_background_rect(
+                    self.render_stipple_pattern(
                         &mut overlay_rect_vertices,
-                        face,
-                        bg,
                         *x,
                         draw_y,
                         *width,
                         draw_h,
-                        clip_rect.as_ref(),
+                        fg,
+                        pat,
                     );
-                    if *stipple_id > 0 {
-                        if let (Some(fg), Some(pat)) =
-                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
-                        {
-                            self.render_stipple_pattern(
-                                &mut overlay_rect_vertices,
-                                *x,
-                                draw_y,
-                                *width,
-                                draw_h,
-                                fg,
-                                pat,
-                            );
-                        }
-                    }
                 }
             }
         }
@@ -605,48 +599,45 @@ impl WgpuRenderer {
                 clip_rect,
                 ..
             } = glyph
+                && row_role.is_chrome()
             {
-                if row_role.is_chrome() {
-                    // Background was inlined as `Some(face.background)`.
-                    let rf = match overlay_bg_face_cache {
-                        Some((id, ref data)) if id == *face_id => *data,
-                        _ => {
-                            let data = frame_glyphs.resolved_face(*face_id);
-                            overlay_bg_face_cache = Some((*face_id, data));
-                            data
-                        }
-                    };
-                    let bg: Option<Color> = Some(rf.bg);
-                    let face = faces.get(face_id);
-                    let has_gradient = face
-                        .and_then(|resolved| resolved.background_gradient.as_deref())
-                        .is_some();
-                    let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
-                    if (bg.is_some() || has_gradient || has_solid_bg)
-                        && !Self::overlaps_rounded_box_span(
-                            *x, *y, true, box_spans, faces, box_margin,
-                        )
-                    {
-                        let Some((draw_y, draw_h)) =
-                            Self::clip_vertical(*y, *height, clip_rect.as_ref())
-                        else {
-                            continue;
-                        };
-                        let fallback = bg.unwrap_or(
-                            face.map(|resolved| resolved.background)
-                                .unwrap_or(Color::TRANSPARENT),
-                        );
-                        self.add_face_background_rect(
-                            &mut overlay_rect_vertices,
-                            face,
-                            &fallback,
-                            *x,
-                            draw_y,
-                            *width,
-                            draw_h,
-                            clip_rect.as_ref(),
-                        );
+                // Background was inlined as `Some(face.background)`.
+                let rf = match overlay_bg_face_cache {
+                    Some((id, ref data)) if id == *face_id => *data,
+                    _ => {
+                        let data = frame_glyphs.resolved_face(*face_id);
+                        overlay_bg_face_cache = Some((*face_id, data));
+                        data
                     }
+                };
+                let bg: Option<Color> = Some(rf.bg);
+                let face = faces.get(face_id);
+                let has_gradient = face
+                    .and_then(|resolved| resolved.background_gradient.as_deref())
+                    .is_some();
+                let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
+                if (bg.is_some() || has_gradient || has_solid_bg)
+                    && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
+                {
+                    let Some((draw_y, draw_h)) =
+                        Self::clip_vertical(*y, *height, clip_rect.as_ref())
+                    else {
+                        continue;
+                    };
+                    let fallback = bg.unwrap_or(
+                        face.map(|resolved| resolved.background)
+                            .unwrap_or(Color::TRANSPARENT),
+                    );
+                    self.add_face_background_rect(
+                        &mut overlay_rect_vertices,
+                        face,
+                        &fallback,
+                        *x,
+                        draw_y,
+                        *width,
+                        draw_h,
+                        clip_rect.as_ref(),
+                    );
                 }
             }
         }
@@ -692,26 +683,26 @@ impl WgpuRenderer {
                 if !span.row_role.is_chrome() {
                     continue;
                 }
-                if let Some(ref bg_color) = span.bg {
-                    if let Some(face) = faces.get(&span.face_id) {
-                        if face.box_corner_radius <= 0 {
-                            continue;
-                        }
-                        let radius = (face.box_corner_radius as f32)
-                            .min(span.height * 0.45)
-                            .min(span.width * 0.45);
-                        let fill_bw = span.height.max(span.width);
-                        self.add_rounded_rect(
-                            &mut overlay_box_fill,
-                            span.x,
-                            span.y,
-                            span.width,
-                            span.height,
-                            fill_bw,
-                            radius,
-                            bg_color,
-                        );
+                if let Some(ref bg_color) = span.bg
+                    && let Some(face) = faces.get(&span.face_id)
+                {
+                    if face.box_corner_radius <= 0 {
+                        continue;
                     }
+                    let radius = (face.box_corner_radius as f32)
+                        .min(span.height * 0.45)
+                        .min(span.width * 0.45);
+                    let fill_bw = span.height.max(span.width);
+                    self.add_rounded_rect(
+                        &mut overlay_box_fill,
+                        span.x,
+                        span.y,
+                        span.width,
+                        span.height,
+                        fill_bw,
+                        radius,
+                        bg_color,
+                    );
                 }
             }
             if let Some(upload) =

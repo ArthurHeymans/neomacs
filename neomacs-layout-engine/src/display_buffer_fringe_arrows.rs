@@ -245,21 +245,21 @@ impl DisplayWindowRowMutation for FringeArrowRowMutation {
         // Precedence: don't clobber an explicit `(left-fringe …)` spec or the
         // empty-line filler already occupying the slot (GNU's
         // `row->left_user_fringe_bitmap` short-circuit).
-        if row.left_fringe_bitmap.is_none() {
-            if let Some(bitmap_index) = left {
-                row.left_fringe_bitmap = Some(FringeBitmapInfo {
-                    bitmap_index,
-                    face_id: self.face_id,
-                });
-            }
+        if row.left_fringe_bitmap.is_none()
+            && let Some(bitmap_index) = left
+        {
+            row.left_fringe_bitmap = Some(FringeBitmapInfo {
+                bitmap_index,
+                face_id: self.face_id,
+            });
         }
-        if row.right_fringe_bitmap.is_none() {
-            if let Some(bitmap_index) = right {
-                row.right_fringe_bitmap = Some(FringeBitmapInfo {
-                    bitmap_index,
-                    face_id: self.face_id,
-                });
-            }
+        if row.right_fringe_bitmap.is_none()
+            && let Some(bitmap_index) = right
+        {
+            row.right_fringe_bitmap = Some(FringeBitmapInfo {
+                bitmap_index,
+                face_id: self.face_id,
+            });
         }
     }
 }

@@ -127,13 +127,13 @@ impl RenderApp {
             view.update();
 
             // Send state change events
-            if view.title != old_title {
-                if let Some(ref title) = view.title {
-                    self.comms.send_input(InputEvent::WebKitTitleChanged {
-                        id: *id,
-                        title: title.clone(),
-                    });
-                }
+            if view.title != old_title
+                && let Some(ref title) = view.title
+            {
+                self.comms.send_input(InputEvent::WebKitTitleChanged {
+                    id: *id,
+                    title: title.clone(),
+                });
             }
             if view.url != old_url {
                 self.comms.send_input(InputEvent::WebKitUrlChanged {
@@ -182,11 +182,10 @@ impl RenderApp {
                 let mut strides = [0u32; 4];
                 let mut offsets = [0u32; 4];
 
-                for i in 0..num_planes as usize {
-                    fds[i] = dmabuf.fds[i];
-                    strides[i] = dmabuf.strides[i];
-                    offsets[i] = dmabuf.offsets[i];
-                }
+                let n = num_planes as usize;
+                fds[..n].copy_from_slice(&dmabuf.fds[..n]);
+                strides[..n].copy_from_slice(&dmabuf.strides[..n]);
+                offsets[..n].copy_from_slice(&dmabuf.offsets[..n]);
 
                 let buffer = DmaBufBuffer::new(
                     fds,
@@ -236,18 +235,18 @@ impl RenderApp {
                                 view_id
                             );
                         }
-                    } else if let Some(raw_pixels) = view.take_latest_pixels() {
-                        if renderer.update_webkit_view_pixels(
+                    } else if let Some(raw_pixels) = view.take_latest_pixels()
+                        && renderer.update_webkit_view_pixels(
                             *view_id,
                             raw_pixels.width,
                             raw_pixels.height,
                             &raw_pixels.pixels,
-                        ) {
-                            tracing::debug!(
-                                "Uploaded pixels for webkit view {} (dmabuf-first: no dmabuf frame)",
-                                view_id
-                            );
-                        }
+                        )
+                    {
+                        tracing::debug!(
+                            "Uploaded pixels for webkit view {} (dmabuf-first: no dmabuf frame)",
+                            view_id
+                        );
                     }
                 }
                 WebKitImportPolicy::PixelsFirst | WebKitImportPolicy::Auto => {
@@ -327,7 +326,7 @@ impl RenderApp {
     pub(super) fn has_playing_videos(&self) -> bool {
         self.renderer
             .as_ref()
-            .map_or(false, |r| r.has_playing_videos())
+            .is_some_and(|r| r.has_playing_videos())
     }
 
     #[cfg(not(feature = "video"))]
@@ -414,11 +413,11 @@ impl RenderApp {
                         continue;
                     }
                     // Resize if grid dimensions changed
-                    if let Some(content) = view.content() {
-                        if content.cols as u16 != target_cols || content.rows as u16 != target_rows
-                        {
-                            view.resize(target_cols, target_rows);
-                        }
+                    if let Some(content) = view.content()
+                        && (content.cols as u16 != target_cols
+                            || content.rows as u16 != target_rows)
+                    {
+                        view.resize(target_cols, target_rows);
                     }
                 }
             }
@@ -429,11 +428,12 @@ impl RenderApp {
 
         // Check for exited terminals and notify Emacs
         for id in self.terminal_manager.ids() {
-            if let Some(view) = self.terminal_manager.get_mut(id) {
-                if view.event_proxy.is_exited() && !view.exit_notified {
-                    view.exit_notified = true;
-                    self.comms.send_input(InputEvent::TerminalExited { id });
-                }
+            if let Some(view) = self.terminal_manager.get_mut(id)
+                && view.event_proxy.is_exited()
+                && !view.exit_notified
+            {
+                view.exit_notified = true;
+                self.comms.send_input(InputEvent::TerminalExited { id });
             }
         }
 

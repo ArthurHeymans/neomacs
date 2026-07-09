@@ -237,7 +237,7 @@ where
                 geometry.mode_line_display_row,
                 reserve_right_border_col,
                 window_metrics,
-                &buffer_name,
+                buffer_name,
             ),
             remaining_visibility_retries,
             local_display_policy,

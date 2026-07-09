@@ -140,11 +140,9 @@ impl RenderApp {
                     let effective_scale = effective_window_scale_factor(raw_scale_factor);
                     {
                         let primary = self.frame_windows.primary_window_mut().unwrap();
-                        match &mut primary.lifecycle {
-                            FrameLifecycle::Pending { scale_factor, .. } => {
-                                *scale_factor = effective_scale;
-                            }
-                            _ => {}
+                        if let FrameLifecycle::Pending { scale_factor, .. } = &mut primary.lifecycle
+                        {
+                            *scale_factor = effective_scale;
                         }
                     }
                     tracing::info!(
@@ -156,16 +154,14 @@ impl RenderApp {
                     let phys = window.inner_size();
                     {
                         let primary = self.frame_windows.primary_window_mut().unwrap();
-                        match &mut primary.lifecycle {
-                            FrameLifecycle::Pending {
-                                width: pw,
-                                height: ph,
-                                ..
-                            } => {
-                                *pw = phys.width;
-                                *ph = phys.height;
-                            }
-                            _ => {}
+                        if let FrameLifecycle::Pending {
+                            width: pw,
+                            height: ph,
+                            ..
+                        } = &mut primary.lifecycle
+                        {
+                            *pw = phys.width;
+                            *ph = phys.height;
                         }
                     }
                     tracing::info!(
@@ -292,14 +288,13 @@ impl RenderApp {
             if has_active_content {
                 self.frame_windows.request_redraw_for_top_level_windows();
             }
-            if has_active_content {
-                if let Some(window) = self
+            if has_active_content
+                && let Some(window) = self
                     .frame_windows
                     .primary_window()
                     .and_then(|ws| ws.window())
-                {
-                    window.request_redraw();
-                }
+            {
+                window.request_redraw();
             }
         }
 

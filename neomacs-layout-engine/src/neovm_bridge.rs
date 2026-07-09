@@ -691,6 +691,7 @@ pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(buffer: &B, name: &s
 ///     `right_p ? (partial_p ? 3 : 1) : (partial_p ? 2 : 0)`, falling back to
 ///     the non-partial element (`ix1 = right_p`) when a partial element is
 ///     absent.
+///
 /// An element equal to `t` means "no bitmap here" (skip to the fallback). The
 /// buffer-local alist is consulted first, then the global/default value.
 ///
@@ -734,12 +735,11 @@ pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
         }
         let items = list_to_vec(&spec)?;
         // Prefer the partial element when requested and present & not `t`.
-        if partial_p {
-            if let Some(elem) = items.get(ix2).copied() {
-                if elem.bits() != Value::T.bits() {
-                    return Some(elem);
-                }
-            }
+        if partial_p
+            && let Some(elem) = items.get(ix2).copied()
+            && elem.bits() != Value::T.bits()
+        {
+            return Some(elem);
         }
         // Non-partial (or partial-absent) fallback: the ix1 element.
         let elem = items.get(ix1).copied()?;
@@ -763,15 +763,15 @@ pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
     // Try the buffer-local binding first. GNU only falls through to the global
     // value when the local lookup yields no usable element (a `t` element or a
     // missing partial spec); a present non-`t` element short-circuits.
-    if let Some(local) = local.filter(|v| !v.is_nil()) {
-        if let Some(cdr) = assq_cdr(local, logical_sym) {
-            if cdr.is_nil() {
-                // Explicit nil cdr => NO_FRINGE_BITMAP for this indicator.
-                return None;
-            }
-            if let Some(sym) = pick_bitmap_symbol(cdr, ix1, ix2, partial_p) {
-                return resolve_index(sym);
-            }
+    if let Some(local) = local.filter(|v| !v.is_nil())
+        && let Some(cdr) = assq_cdr(local, logical_sym)
+    {
+        if cdr.is_nil() {
+            // Explicit nil cdr => NO_FRINGE_BITMAP for this indicator.
+            return None;
+        }
+        if let Some(sym) = pick_bitmap_symbol(cdr, ix1, ix2, partial_p) {
+            return resolve_index(sym);
         }
     }
 
@@ -2157,20 +2157,18 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                 .layout_overlays()
                 .overlay_start_emacs_byte_pos(oid)
                 == Some(bytepos)
-            {
-                if let Some(val) = self
+                && let Some(val) = self
                     .buffer
                     .layout_overlays()
                     .overlay_get_named(oid, Value::symbol("before-string"))
-                    && val.is_string()
-                {
-                    entries.push(OverlayDisplayString {
-                        string: val,
-                        overlay_id: oid,
-                        after_string_p: false,
-                        priority,
-                    });
-                }
+                && val.is_string()
+            {
+                entries.push(OverlayDisplayString {
+                    string: val,
+                    overlay_id: oid,
+                    after_string_p: false,
+                    priority,
+                });
             }
 
             if self
@@ -2178,20 +2176,18 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
                 .layout_overlays()
                 .overlay_end_emacs_byte_pos(oid)
                 == Some(bytepos)
-            {
-                if let Some(val) = self
+                && let Some(val) = self
                     .buffer
                     .layout_overlays()
                     .overlay_get_named(oid, Value::symbol("after-string"))
-                    && val.is_string()
-                {
-                    entries.push(OverlayDisplayString {
-                        string: val,
-                        overlay_id: oid,
-                        after_string_p: true,
-                        priority,
-                    });
-                }
+                && val.is_string()
+            {
+                entries.push(OverlayDisplayString {
+                    string: val,
+                    overlay_id: oid,
+                    after_string_p: true,
+                    priority,
+                });
             }
         }
 
@@ -2344,9 +2340,9 @@ fn colors_close(a: u32, b: u32) -> bool {
     let br = (b >> 16) & 0xFF;
     let bg = (b >> 8) & 0xFF;
     let bb = b & 0xFF;
-    let dr = ar.abs_diff(br) as u32;
-    let dg = ag.abs_diff(bg) as u32;
-    let db = ab.abs_diff(bb) as u32;
+    let dr = ar.abs_diff(br);
+    let dg = ag.abs_diff(bg);
+    let db = ab.abs_diff(bb);
     // Weighted Euclidean distance (human perception weights R more than B)
     // Threshold ~30 in each channel ≈ 2700 squared distance
     (dr * dr * 3 + dg * dg * 4 + db * db * 2) < 3000
@@ -2719,11 +2715,11 @@ impl FaceResolver {
         }
 
         // Distant-foreground: swap fg when too close to bg
-        if let Some(dfg) = &face.distant_foreground {
-            if colors_close(rf.fg, rf.bg) {
-                rf.fg = color_to_pixel(dfg);
-                rf.use_default_foreground = false;
-            }
+        if let Some(dfg) = &face.distant_foreground
+            && colors_close(rf.fg, rf.bg)
+        {
+            rf.fg = color_to_pixel(dfg);
+            rf.use_default_foreground = false;
         }
 
         rf
@@ -2807,7 +2803,7 @@ impl FaceResolver {
         self.apply_specified_face_over(base, &face)
     }
 
-    fn face_name_from_value<'a>(value: &'a Value) -> Option<&'a str> {
+    fn face_name_from_value(value: &Value) -> Option<&str> {
         match value.kind() {
             ValueKind::Symbol(_) => value.as_symbol_name(),
             ValueKind::String => value.as_utf8_str(),
@@ -2826,11 +2822,7 @@ impl FaceResolver {
     ///                          (nil for TTY, "x" for X11, etc.)
     fn eval_filtered_face_spec(&self, items: &[Value]) -> Option<Vec<Value>> {
         let first = items.first()?;
-        let name = if first.is_keyword() {
-            first.as_symbol_name()?
-        } else {
-            first.as_symbol_name()?
-        };
+        let name = first.as_symbol_name()?;
         if name != "filtered" && name != ":filtered" {
             return None; // not a :filtered form — caller handles
         }
@@ -2850,11 +2842,7 @@ impl FaceResolver {
                 let mut i = 0;
                 while i < filter_items.len() {
                     let pred = filter_items.get(i)?;
-                    let pred_name = if pred.is_keyword() {
-                        pred.as_symbol_name()?
-                    } else {
-                        pred.as_symbol_name()?
-                    };
+                    let pred_name = pred.as_symbol_name()?;
                     match pred_name {
                         ":window-system" | "window-system" => {
                             i += 1;
@@ -3075,12 +3063,11 @@ impl FaceResolver {
             buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
 
         // 1. Text face property, with font-lock-face fallback.
-        if let Some(val) = face_prop.or(font_lock_face_prop) {
-            if let Some(next) =
+        if let Some(val) = face_prop.or(font_lock_face_prop)
+            && let Some(next) =
                 self.resolve_buffer_face_value_over_inner(buffer, &resolved, &val, &mut remap_stack)
-            {
-                resolved = next;
-            }
+        {
+            resolved = next;
         }
         // Update next_check from text property boundaries
         if let Some(nc) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(bytepos) {
@@ -3094,10 +3081,10 @@ impl FaceResolver {
             for oid in &overlay_ids {
                 let oid = *oid;
                 // Update next_check from overlay boundaries
-                if let Some(end) = buffer.layout_overlays().overlay_end_emacs_byte_pos(oid) {
-                    if end > bytepos {
-                        min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, end));
-                    }
+                if let Some(end) = buffer.layout_overlays().overlay_end_emacs_byte_pos(oid)
+                    && end > bytepos
+                {
+                    min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, end));
                 }
                 // Get priority (default 0)
                 let priority = buffer

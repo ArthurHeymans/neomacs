@@ -1244,9 +1244,7 @@ pub fn foundry_for_file(file: &str) -> Option<String> {
 
 #[cfg(unix)]
 fn foundry_for_file_uncached(file: &str) -> Option<String> {
-    if fontconfig_handle().is_none() {
-        return None;
-    }
+    fontconfig_handle()?;
     let pattern = unsafe { fontconfig_sys::FcPatternCreate() };
     if pattern.is_null() {
         return None;

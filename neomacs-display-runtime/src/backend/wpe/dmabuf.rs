@@ -4,7 +4,6 @@
 //! for zero-copy import into wgpu.
 
 use std::ffi::CStr;
-use std::ptr;
 
 use super::sys::egl;
 use crate::core::error::{DisplayError, DisplayResult};
@@ -64,6 +63,10 @@ pub struct DmaBufExporter {
 
 impl DmaBufExporter {
     /// Create a new DMA-BUF exporter for the given EGL display.
+    // EGL proc-address loading: the null-check-then-unwrap and the untyped
+    // transmute of opaque `eglGetProcAddress` results are idiomatic FFI
+    // boilerplate here.
+    #[allow(clippy::unnecessary_unwrap, clippy::missing_transmute_annotations)]
     pub fn new(egl_display: *mut libc::c_void) -> Self {
         let egl_display = egl_display as egl::EGLDisplay;
 
@@ -185,7 +188,7 @@ impl DmaBufExporter {
                 ));
             }
 
-            if num_planes < 1 || num_planes > 4 {
+            if !(1..=4).contains(&num_planes) {
                 return Err(DisplayError::WebKit(format!(
                     "Invalid plane count: {}",
                     num_planes
@@ -249,7 +252,7 @@ impl Default for DmaBufExporter {
         // Create with current EGL display
         unsafe {
             let display = egl::eglGetCurrentDisplay();
-            Self::new(display as *mut libc::c_void)
+            Self::new(display)
         }
     }
 }

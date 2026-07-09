@@ -618,6 +618,10 @@ impl DisplaySourceItem {
         self.item.span.buffer_byte_len()
     }
 
+    // The `Err` arm returns the unconsumed item to the caller (retry protocol),
+    // so it is deliberately the same large type as `Ok`; boxing it is a perf
+    // hint deferred out of the lint gate.
+    #[allow(clippy::result_large_err)]
     pub(crate) fn consume_for_render(
         self,
         position: &mut DisplaySourceTextPosition,

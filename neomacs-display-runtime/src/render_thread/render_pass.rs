@@ -1,3 +1,8 @@
+// Several render entry points carry the recurring `bg_gradient` RGB-pair tuple
+// parameter, which mirrors the renderer-wgpu API surface; a local type alias
+// would not be reused, so the type-complexity lint is allowed module-wide.
+#![allow(clippy::type_complexity)]
+
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
 use super::frame_windows::{
@@ -186,68 +191,69 @@ impl RenderApp {
             );
         }
 
-        if let Some(menu_bar) = overlays.menu_bar {
-            if menu_bar.height > 0.0 && !menu_bar.items.is_empty() {
-                renderer.render_menu_bar(
-                    surface_view,
-                    menu_bar.items,
-                    menu_bar.height,
-                    menu_bar.fg,
-                    menu_bar.bg,
-                    overlays.chrome_interaction.menu_bar_hovered,
-                    overlays.chrome_interaction.menu_bar_active,
-                    glyph_atlas,
-                    width,
-                    height,
-                );
-            }
+        if let Some(menu_bar) = overlays.menu_bar
+            && menu_bar.height > 0.0
+            && !menu_bar.items.is_empty()
+        {
+            renderer.render_menu_bar(
+                surface_view,
+                menu_bar.items,
+                menu_bar.height,
+                menu_bar.fg,
+                menu_bar.bg,
+                overlays.chrome_interaction.menu_bar_hovered,
+                overlays.chrome_interaction.menu_bar_active,
+                glyph_atlas,
+                width,
+                height,
+            );
         }
 
-        if let Some(tool_bar) = overlays.tool_bar {
-            if tool_bar.height > 0.0 && !tool_bar.items.is_empty() {
-                renderer.render_toolbar(
-                    surface_view,
-                    tool_bar.items,
-                    tool_bar.y_origin,
-                    tool_bar.height,
-                    tool_bar.fg,
-                    tool_bar.bg,
-                    &tool_bar.toolbar.icon_textures,
-                    overlays.chrome_interaction.toolbar_hovered,
-                    overlays.chrome_interaction.toolbar_pressed,
-                    tool_bar.toolbar.icon_size,
-                    tool_bar.toolbar.padding,
-                    width,
-                    height,
-                );
-            }
+        if let Some(tool_bar) = overlays.tool_bar
+            && tool_bar.height > 0.0
+            && !tool_bar.items.is_empty()
+        {
+            renderer.render_toolbar(
+                surface_view,
+                tool_bar.items,
+                tool_bar.y_origin,
+                tool_bar.height,
+                tool_bar.fg,
+                tool_bar.bg,
+                &tool_bar.toolbar.icon_textures,
+                overlays.chrome_interaction.toolbar_hovered,
+                overlays.chrome_interaction.toolbar_pressed,
+                tool_bar.toolbar.icon_size,
+                tool_bar.toolbar.padding,
+                width,
+                height,
+            );
         }
 
-        if let Some(compact_bar) = overlays.compact_bar {
-            if compact_bar.height > 0.0
-                && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
-            {
-                renderer.render_compact_bar(
-                    surface_view,
-                    compact_bar.menu_items,
-                    compact_bar.tool_items,
-                    compact_bar.height,
-                    compact_bar.menu_fg,
-                    compact_bar.menu_bg,
-                    compact_bar.tool_fg,
-                    compact_bar.tool_bg,
-                    &compact_bar.toolbar.icon_textures,
-                    overlays.chrome_interaction.compact_bar_menu_hovered,
-                    overlays.chrome_interaction.compact_bar_menu_active,
-                    overlays.chrome_interaction.compact_bar_tool_hovered,
-                    overlays.chrome_interaction.compact_bar_tool_pressed,
-                    compact_bar.toolbar.icon_size,
-                    compact_bar.toolbar.padding,
-                    glyph_atlas,
-                    width,
-                    height,
-                );
-            }
+        if let Some(compact_bar) = overlays.compact_bar
+            && compact_bar.height > 0.0
+            && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
+        {
+            renderer.render_compact_bar(
+                surface_view,
+                compact_bar.menu_items,
+                compact_bar.tool_items,
+                compact_bar.height,
+                compact_bar.menu_fg,
+                compact_bar.menu_bg,
+                compact_bar.tool_fg,
+                compact_bar.tool_bg,
+                &compact_bar.toolbar.icon_textures,
+                overlays.chrome_interaction.compact_bar_menu_hovered,
+                overlays.chrome_interaction.compact_bar_menu_active,
+                overlays.chrome_interaction.compact_bar_tool_hovered,
+                overlays.chrome_interaction.compact_bar_tool_pressed,
+                compact_bar.toolbar.icon_size,
+                compact_bar.toolbar.padding,
+                glyph_atlas,
+                width,
+                height,
+            );
         }
 
         if let Some(menu) = overlays.popup_menu {
@@ -395,9 +401,7 @@ impl RenderApp {
             _ => return None,
         };
         Self::update_fps_counter(&mut render.overlays.fps);
-        let Some(frame_for_decision) = render.current_frame_clone() else {
-            return None;
-        };
+        let frame_for_decision = render.current_frame_clone()?;
         let mut frame = frame_for_decision.clone();
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
@@ -449,9 +453,7 @@ impl RenderApp {
             }
         };
 
-        let Some(drained_frame) = render.take_current_frame_for_render() else {
-            return None;
-        };
+        let drained_frame = render.take_current_frame_for_render()?;
         frame = drained_frame;
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
@@ -650,7 +652,7 @@ impl RenderApp {
         Self::render_frame_chrome_overlays(
             renderer,
             surface_view,
-            &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+            render.compositor.glyph_atlas.as_mut().unwrap(),
             GuiFrameChromeOverlays {
                 native_chrome: &native.chrome,
                 titlebar_background: Some((
@@ -731,7 +733,7 @@ impl RenderApp {
         if Self::render_frame_fps_overlay(
             renderer,
             surface_view,
-            &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+            render.compositor.glyph_atlas.as_mut().unwrap(),
             &mut render.overlays.fps,
             frame.glyphs.len(),
             frame.window_infos.len(),
@@ -748,7 +750,7 @@ impl RenderApp {
                 renderer,
                 surface_view,
                 frame,
-                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+                render.compositor.glyph_atlas.as_mut().unwrap(),
                 &mut render.overlays.typing_speed,
                 &mut render.compositor.dirty,
             );
@@ -774,7 +776,7 @@ impl RenderApp {
             renderer.render_frame_glyphs(
                 surface_view,
                 frame,
-                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+                render.compositor.glyph_atlas.as_mut().unwrap(),
                 native.width,
                 native.height,
                 cursor_visible,
@@ -813,7 +815,7 @@ impl RenderApp {
                         &child_entry.frame,
                         child_entry.abs_x,
                         child_entry.abs_y,
-                        &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+                        render.compositor.glyph_atlas.as_mut().unwrap(),
                         native.width,
                         native.height,
                         cursor_visible,
@@ -845,7 +847,7 @@ impl RenderApp {
                 renderer,
                 surface_view,
                 frame,
-                &mut render.compositor.glyph_atlas.as_mut().unwrap(),
+                render.compositor.glyph_atlas.as_mut().unwrap(),
                 native.width,
                 native.height,
                 scroll_indicators_enabled,

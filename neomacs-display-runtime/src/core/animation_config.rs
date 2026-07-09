@@ -9,7 +9,7 @@ use neomacs_display_protocol::{ScrollEasing, ScrollEffect};
 use std::time::Duration;
 
 /// Master animation configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AnimationConfig {
     /// Master switch - disable all animations
     pub enabled: bool,
@@ -22,17 +22,6 @@ pub struct AnimationConfig {
 
     /// Scroll animation settings
     pub scroll: ScrollAnimationConfig,
-}
-
-impl Default for AnimationConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false, // Disabled by default - user opts in
-            cursor: CursorAnimationConfig::default(),
-            buffer_transition: BufferTransitionConfig::default(),
-            scroll: ScrollAnimationConfig::default(),
-        }
-    }
 }
 
 impl AnimationConfig {

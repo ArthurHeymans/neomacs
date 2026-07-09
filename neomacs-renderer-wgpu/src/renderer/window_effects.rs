@@ -215,7 +215,7 @@ pub(super) fn emit_stained_glass(ctx: &EffectCtx) -> Vec<RectVertex> {
             // starts at wb.y and bleeds over it. Use win_info.content_rect(). See module note.
             let content_h = wb.height - mode_h;
             if content_h > 0.0 {
-                let hash = (win_info.buffer_id as u64).wrapping_mul(2654435761) >> 16;
+                let hash = win_info.buffer_id.wrapping_mul(2654435761) >> 16;
                 let hue = (hash % 360) as f32;
                 let c = sg_sat;
                 let h_prime = hue / 60.0;
@@ -511,7 +511,7 @@ pub(super) fn emit_cursor_ghost(
     // Detect cursor movement and spawn ghost
     if let Some(anim) = ctx.animated_cursor {
         let should_spawn = ghost_entries.is_empty()
-            || ghost_entries.last().map_or(true, |last| {
+            || ghost_entries.last().is_none_or(|last| {
                 let dx = (anim.x - last.x).abs();
                 let dy = (anim.y - last.y).abs();
                 (dx > 2.0 || dy > 2.0) && now.duration_since(last.started).as_millis() > 30
@@ -1272,9 +1272,9 @@ pub(super) fn emit_focus_mode(ctx: &EffectCtx) -> Vec<RectVertex> {
 
     // Search forward for paragraph end
     let mut para_end_y = bounds.y + bounds.height;
-    for i in (cursor_idx + 1)..row_ys.len() {
-        if !row_ys[i].2 {
-            para_end_y = row_ys[i].0;
+    for row in &row_ys[(cursor_idx + 1)..] {
+        if !row.2 {
+            para_end_y = row.0;
             break;
         }
     }
@@ -1459,17 +1459,16 @@ pub(super) fn emit_search_highlight(
             face_id,
             ..
         } = glyph
+            && *face_id == target_face
         {
-            if *face_id == target_face {
-                min_x = min_x.min(*x);
-                min_y = min_y.min(*y);
-                max_x = max_x.max(*x + *width);
-                max_y = max_y.max(*y + *height);
-                found = true;
-                if match_bg.is_none() {
-                    // Background was inlined as `Some(face.background)`.
-                    match_bg = Some(ctx.frame_glyphs.resolved_face(*face_id).bg);
-                }
+            min_x = min_x.min(*x);
+            min_y = min_y.min(*y);
+            max_x = max_x.max(*x + *width);
+            max_y = max_y.max(*y + *height);
+            found = true;
+            if match_bg.is_none() {
+                // Background was inlined as `Some(face.background)`.
+                match_bg = Some(ctx.frame_glyphs.resolved_face(*face_id).bg);
             }
         }
     }
@@ -1531,21 +1530,20 @@ pub(super) fn emit_selection_glow(
             face_id,
             ..
         } = glyph
+            && *face_id == target_face
         {
-            if *face_id == target_face {
-                if (*y - current_row_y).abs() > 1.0 {
-                    if row_min_x < row_max_x {
-                        row_bounds.push((row_min_x, current_row_y, row_max_x - row_min_x, row_h));
-                    }
-                    current_row_y = *y;
-                    row_min_x = *x;
-                    row_max_x = *x + *width;
-                    row_h = *height;
-                } else {
-                    row_min_x = row_min_x.min(*x);
-                    row_max_x = row_max_x.max(*x + *width);
-                    row_h = row_h.max(*height);
+            if (*y - current_row_y).abs() > 1.0 {
+                if row_min_x < row_max_x {
+                    row_bounds.push((row_min_x, current_row_y, row_max_x - row_min_x, row_h));
                 }
+                current_row_y = *y;
+                row_min_x = *x;
+                row_max_x = *x + *width;
+                row_h = *height;
+            } else {
+                row_min_x = row_min_x.min(*x);
+                row_max_x = row_max_x.max(*x + *width);
+                row_h = row_h.max(*height);
             }
         }
     }
@@ -2075,21 +2073,23 @@ pub(super) fn emit_minibuffer_completion(ctx: &EffectCtx) -> Vec<RectVertex> {
                 height,
                 ..
             } = glyph
+                && *y >= mb.y
+                && *y < mb.y + mb.height
+                && *x >= mb.x
+                && *x < mb.x + mb.width
             {
-                if *y >= mb.y && *y < mb.y + mb.height && *x >= mb.x && *x < mb.x + mb.width {
-                    let mut merged = false;
-                    for row in &mut highlighted_rows {
-                        if (row.1 - *y).abs() < 1.0 {
-                            row.0 = row.0.min(*x);
-                            row.2 = row.2.max(*x + *width);
-                            row.3 = row.3.max(*height);
-                            merged = true;
-                            break;
-                        }
+                let mut merged = false;
+                for row in &mut highlighted_rows {
+                    if (row.1 - *y).abs() < 1.0 {
+                        row.0 = row.0.min(*x);
+                        row.2 = row.2.max(*x + *width);
+                        row.3 = row.3.max(*height);
+                        merged = true;
+                        break;
                     }
-                    if !merged {
-                        highlighted_rows.push((*x, *y, *x + *width, *height));
-                    }
+                }
+                if !merged {
+                    highlighted_rows.push((*x, *y, *x + *width, *height));
                 }
             }
         }
@@ -2284,33 +2284,32 @@ pub(super) fn emit_line_wrap_indicator(ctx: &EffectCtx) -> Vec<RectVertex> {
             height,
             ..
         } = glyph
+            && *ch == '\u{21B5}'
         {
-            if *ch == '\u{21B5}' {
-                for info in &ctx.frame_glyphs.window_infos {
-                    if info.is_minibuffer {
-                        continue;
-                    }
-                    let b = &info.bounds;
-                    let text_bottom = b.y + b.height - info.mode_line_height;
-                    if *y >= b.y && *y < text_bottom && *x >= b.x && *x < b.x + b.width {
-                        let grad_w = 20.0_f32.min(b.width * 0.1);
-                        let text_right = *x;
-                        let grad_x = text_right - grad_w;
-                        let draw_h = (text_bottom - *y).min(*height).max(0.0);
-                        if draw_h <= 0.0 {
-                            break;
-                        }
-                        let steps = 5;
-                        for i in 0..steps {
-                            let frac = i as f32 / steps as f32;
-                            let step_alpha = w_opacity * frac * frac;
-                            let sx = grad_x + frac * grad_w;
-                            let sw = grad_w / steps as f32;
-                            let c = Color::new(wr, wg, wb, step_alpha);
-                            push_rect(&mut verts, sx, *y, sw, draw_h, &c);
-                        }
+            for info in &ctx.frame_glyphs.window_infos {
+                if info.is_minibuffer {
+                    continue;
+                }
+                let b = &info.bounds;
+                let text_bottom = b.y + b.height - info.mode_line_height;
+                if *y >= b.y && *y < text_bottom && *x >= b.x && *x < b.x + b.width {
+                    let grad_w = 20.0_f32.min(b.width * 0.1);
+                    let text_right = *x;
+                    let grad_x = text_right - grad_w;
+                    let draw_h = (text_bottom - *y).min(*height).max(0.0);
+                    if draw_h <= 0.0 {
                         break;
                     }
+                    let steps = 5;
+                    for i in 0..steps {
+                        let frac = i as f32 / steps as f32;
+                        let step_alpha = w_opacity * frac * frac;
+                        let sx = grad_x + frac * grad_w;
+                        let sw = grad_w / steps as f32;
+                        let c = Color::new(wr, wg, wb, step_alpha);
+                        push_rect(&mut verts, sx, *y, sw, draw_h, &c);
+                    }
+                    break;
                 }
             }
         }

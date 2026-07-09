@@ -172,7 +172,7 @@ pub mod ansi {
     }
 
     /// Cell attributes that map to SGR sequences.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
     pub struct CellAttrs {
         /// Foreground color as (R, G, B).  None = terminal default.
         pub fg: Option<(u8, u8, u8)>,
@@ -190,21 +190,6 @@ pub mod ansi {
         pub strikethrough: bool,
         /// Inverse video
         pub inverse: bool,
-    }
-
-    impl Default for CellAttrs {
-        fn default() -> Self {
-            Self {
-                fg: None,
-                bg: None,
-                bold: false,
-                italic: false,
-                underline: 0,
-                underline_color: None,
-                strikethrough: false,
-                inverse: false,
-            }
-        }
     }
 
     /// Terminal cursor shapes expressible via DECSCUSR.
@@ -494,7 +479,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
                 // width relative to char_width)
                 let display_width = ((*x + frame.char_width - 0.5).max(0.0) / cw) as usize;
                 let glyph_cols = ((glyph_pixel_width(glyph) / cw) + 0.5) as usize;
-                let w = glyph_cols.max(1).min(2) as u8;
+                let w = glyph_cols.clamp(1, 2) as u8;
 
                 grid.set(col, row, TtyCell { width: w, ..cell });
 

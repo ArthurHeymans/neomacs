@@ -1147,85 +1147,85 @@ impl WgpuRenderer {
             );
 
             // Cursor
-            if let Some(cursor) = &window.cursor {
-                if cursor.visible {
-                    let cursor_x = window.bounds.x + cursor.x;
-                    let cursor_y = window.bounds.y + cursor.y;
+            if let Some(cursor) = &window.cursor
+                && cursor.visible
+            {
+                let cursor_x = window.bounds.x + cursor.x;
+                let cursor_y = window.bounds.y + cursor.y;
 
-                    match cursor.style {
-                        SceneCursorStyle::Box => {
-                            // Filled box cursor
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y,
-                                cursor.width,
-                                cursor.height,
-                                &cursor.color,
-                            );
-                        }
-                        SceneCursorStyle::Bar => {
-                            // Thin vertical bar
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y,
-                                2.0, // Bar width
-                                cursor.height,
-                                &cursor.color,
-                            );
-                        }
-                        SceneCursorStyle::Underline => {
-                            // Horizontal line at bottom
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y + cursor.height - 2.0,
-                                cursor.width,
-                                2.0, // Underline thickness
-                                &cursor.color,
-                            );
-                        }
-                        SceneCursorStyle::Hollow => {
-                            // Hollow box (4 lines forming a rectangle)
-                            let thickness = 1.0;
-                            // Top
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y,
-                                cursor.width,
-                                thickness,
-                                &cursor.color,
-                            );
-                            // Bottom
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y + cursor.height - thickness,
-                                cursor.width,
-                                thickness,
-                                &cursor.color,
-                            );
-                            // Left
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x,
-                                cursor_y,
-                                thickness,
-                                cursor.height,
-                                &cursor.color,
-                            );
-                            // Right
-                            self.add_rect(
-                                &mut vertices,
-                                cursor_x + cursor.width - thickness,
-                                cursor_y,
-                                thickness,
-                                cursor.height,
-                                &cursor.color,
-                            );
-                        }
+                match cursor.style {
+                    SceneCursorStyle::Box => {
+                        // Filled box cursor
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y,
+                            cursor.width,
+                            cursor.height,
+                            &cursor.color,
+                        );
+                    }
+                    SceneCursorStyle::Bar => {
+                        // Thin vertical bar
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y,
+                            2.0, // Bar width
+                            cursor.height,
+                            &cursor.color,
+                        );
+                    }
+                    SceneCursorStyle::Underline => {
+                        // Horizontal line at bottom
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y + cursor.height - 2.0,
+                            cursor.width,
+                            2.0, // Underline thickness
+                            &cursor.color,
+                        );
+                    }
+                    SceneCursorStyle::Hollow => {
+                        // Hollow box (4 lines forming a rectangle)
+                        let thickness = 1.0;
+                        // Top
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y,
+                            cursor.width,
+                            thickness,
+                            &cursor.color,
+                        );
+                        // Bottom
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y + cursor.height - thickness,
+                            cursor.width,
+                            thickness,
+                            &cursor.color,
+                        );
+                        // Left
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x,
+                            cursor_y,
+                            thickness,
+                            cursor.height,
+                            &cursor.color,
+                        );
+                        // Right
+                        self.add_rect(
+                            &mut vertices,
+                            cursor_x + cursor.width - thickness,
+                            cursor_y,
+                            thickness,
+                            cursor.height,
+                            &cursor.color,
+                        );
                     }
                 }
             }
@@ -1381,7 +1381,7 @@ impl WgpuRenderer {
         if pattern.width == 0 || pattern.height == 0 {
             return;
         }
-        let bytes_per_row = ((pattern.width + 7) / 8) as usize;
+        let bytes_per_row = pattern.width.div_ceil(8) as usize;
         let w_pixels = width as u32;
         let h_pixels = height as u32;
 

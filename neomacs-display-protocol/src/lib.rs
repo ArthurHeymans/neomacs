@@ -1,5 +1,11 @@
 //! Shared protocol types between layout, renderer, and runtime crates.
 
+// The wide scene-/glyph-builder and FFI-index constructors in this crate
+// (frame_glyphs, scroll_animation, transition_policy) mirror fixed wire/data
+// layouts; folding their parameters into structs is a separate refactor, so
+// `too_many_arguments` is allowed crate-wide rather than at each of the ~15 sites.
+#![allow(clippy::too_many_arguments)]
+
 /// Version of the serialized display-protocol surface.
 ///
 /// Stamped into every serialized [`glyph_matrix::FrameDisplayState`] (and the

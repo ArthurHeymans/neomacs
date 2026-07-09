@@ -180,20 +180,19 @@ impl WgpuRenderer {
                         bg,
                     );
                     // Stipple pattern overlay
-                    if *stipple_id > 0 {
-                        if let (Some(fg), Some(pat)) =
+                    if *stipple_id > 0
+                        && let (Some(fg), Some(pat)) =
                             (stipple_fg, frame.stipple_patterns.get(stipple_id))
-                        {
-                            self.render_stipple_pattern(
-                                &mut bg_vertices,
-                                *x + offset_x,
-                                *y + offset_y,
-                                *width,
-                                *height,
-                                fg,
-                                pat,
-                            );
-                        }
+                    {
+                        self.render_stipple_pattern(
+                            &mut bg_vertices,
+                            *x + offset_x,
+                            *y + offset_y,
+                            *width,
+                            *height,
+                            fg,
+                            pat,
+                        );
                     }
                 }
                 FrameGlyph::Char {
@@ -839,23 +838,23 @@ impl WgpuRenderer {
                 let bw = face.box_line_width as f32;
 
                 // Rounded box background fill
-                if face.box_corner_radius > 0 {
-                    if let Some(ref bg_color) = span.bg {
-                        let radius = (face.box_corner_radius as f32)
-                            .min(span.height * 0.45)
-                            .min(span.width * 0.45);
-                        let fill_bw = span.height.max(span.width);
-                        self.add_rounded_rect(
-                            &mut rounded_fill_vertices,
-                            span.x + offset_x,
-                            span.y + offset_y,
-                            span.width,
-                            span.height,
-                            fill_bw,
-                            radius,
-                            bg_color,
-                        );
-                    }
+                if face.box_corner_radius > 0
+                    && let Some(ref bg_color) = span.bg
+                {
+                    let radius = (face.box_corner_radius as f32)
+                        .min(span.height * 0.45)
+                        .min(span.width * 0.45);
+                    let fill_bw = span.height.max(span.width);
+                    self.add_rounded_rect(
+                        &mut rounded_fill_vertices,
+                        span.x + offset_x,
+                        span.y + offset_y,
+                        span.width,
+                        span.height,
+                        fill_bw,
+                        radius,
+                        bg_color,
+                    );
                 }
 
                 // Box border
@@ -923,7 +922,7 @@ impl WgpuRenderer {
                             };
                             (dark, light)
                         }
-                        _ => (bx_color.clone(), bx_color.clone()),
+                        _ => (*bx_color, *bx_color),
                     };
 
                     let sx = span.x + offset_x;
@@ -1279,23 +1278,22 @@ impl WgpuRenderer {
                     height,
                     ..
                 } = glyph
+                    && self.caches.image.get(image_id.get()).is_some()
                 {
-                    if self.caches.image.get(image_id.get()).is_some() {
-                        let ix = *x + offset_x;
-                        let iy = *y + offset_y;
-                        tracing::debug!(
-                            "render_frame_content: image {} at ({:.1},{:.1}) size {:.1}x{:.1}",
-                            image_id,
-                            ix,
-                            iy,
-                            width,
-                            height,
-                        );
-                        image_quads.push(MediaQuad {
-                            id: image_id.get(),
-                            vertices: textured_quad_vertices(ix, iy, *width, *height, 0.0, 1.0),
-                        });
-                    }
+                    let ix = *x + offset_x;
+                    let iy = *y + offset_y;
+                    tracing::debug!(
+                        "render_frame_content: image {} at ({:.1},{:.1}) size {:.1}x{:.1}",
+                        image_id,
+                        ix,
+                        iy,
+                        width,
+                        height,
+                    );
+                    image_quads.push(MediaQuad {
+                        id: image_id.get(),
+                        vertices: textured_quad_vertices(ix, iy, *width, *height, 0.0, 1.0),
+                    });
                 }
             }
             let image_vertices: Vec<GlyphVertex> = image_quads
@@ -1329,27 +1327,23 @@ impl WgpuRenderer {
                         height,
                         ..
                     } = glyph
+                        && let Some(cached) = self.caches.video.get(video_id.get())
+                        && cached.bind_group.is_some()
                     {
-                        if let Some(cached) = self.caches.video.get(video_id.get()) {
-                            if cached.bind_group.is_some() {
-                                let vx = *x + offset_x;
-                                let vy = *y + offset_y;
-                                tracing::debug!(
-                                    "render_frame_content: video {} at ({:.1},{:.1}) size {:.1}x{:.1}",
-                                    video_id,
-                                    vx,
-                                    vy,
-                                    width,
-                                    height,
-                                );
-                                video_quads.push(MediaQuad {
-                                    id: video_id.get(),
-                                    vertices: textured_quad_vertices(
-                                        vx, vy, *width, *height, 0.0, 1.0,
-                                    ),
-                                });
-                            }
-                        }
+                        let vx = *x + offset_x;
+                        let vy = *y + offset_y;
+                        tracing::debug!(
+                            "render_frame_content: video {} at ({:.1},{:.1}) size {:.1}x{:.1}",
+                            video_id,
+                            vx,
+                            vy,
+                            width,
+                            height,
+                        );
+                        video_quads.push(MediaQuad {
+                            id: video_id.get(),
+                            vertices: textured_quad_vertices(vx, vy, *width, *height, 0.0, 1.0),
+                        });
                     }
                 }
                 let video_vertices: Vec<GlyphVertex> = video_quads

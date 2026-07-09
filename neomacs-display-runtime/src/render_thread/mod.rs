@@ -30,8 +30,6 @@ mod window_events;
 mod x11_hints;
 
 pub use bootstrap::{build_render_event_loop, run_render_loop, run_render_loop_current_thread};
-#[cfg(feature = "wpe-webkit")]
-use state::WebKitImportPolicy;
 use state::{FpsCounter, ImeCursorArea, RenderApp};
 pub use state::{MonitorInfo, SharedImageDimensions, SharedMonitorInfo};
 pub use thread_handle::RenderThread;
@@ -39,12 +37,6 @@ pub use thread_handle::RenderThread;
 use winit::event_loop::EventLoopProxy;
 
 pub(crate) use neomacs_renderer_wgpu::{PopupMenuState, TooltipState};
-
-#[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
-use crate::backend::wpe::sys::platform as plat;
-
-#[cfg(feature = "wpe-webkit")]
-use crate::backend::wpe::{WpeBackend, WpeWebView};
 
 #[derive(Clone, Copy, Debug)]
 pub enum RenderUserEvent {

@@ -816,6 +816,8 @@ impl DisplayPropertyReplacementAppendPlan {
 }
 
 #[derive(Clone)]
+// Large payload variant; boxing is a perf hint deferred out of the lint gate.
+#[allow(clippy::large_enum_variant)]
 enum DisplayPropertyReplacementAppendPlanItem {
     Empty,
     String(DisplayReplacementStringAppendRequest),

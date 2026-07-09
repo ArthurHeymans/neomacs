@@ -929,21 +929,20 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             if policy.stop_before_item(&item) {
                 break DisplayRowRenderStop::SourceExhausted;
             }
-            if let RenderFaceRef::FaceId(face_id) = item.face {
-                if face_id != row_face.face_id
-                    && !row_faces.iter().any(|face| face.face_id == face_id)
-                    && let Some(resolved) = state.resolved_face(face_id).cloned()
-                {
-                    let realized = face_realizer.realize_face(
-                        face_id,
-                        &resolved,
-                        char_width,
-                        geometry.ascent(),
-                        geometry.height(),
-                    );
-                    include_display_row_face_metrics(&mut row_layout, &realized);
-                    row_faces.push(realized);
-                }
+            if let RenderFaceRef::FaceId(face_id) = item.face
+                && face_id != row_face.face_id
+                && !row_faces.iter().any(|face| face.face_id == face_id)
+                && let Some(resolved) = state.resolved_face(face_id).cloned()
+            {
+                let realized = face_realizer.realize_face(
+                    face_id,
+                    &resolved,
+                    char_width,
+                    geometry.ascent(),
+                    geometry.height(),
+                );
+                include_display_row_face_metrics(&mut row_layout, &realized);
+                row_faces.push(realized);
             }
             let render_item = DisplayRowRenderItem::from_source_item(item);
             let item_face_id = render_face_ref_id(render_item.row_face(), row_face.face_id);

@@ -3,6 +3,8 @@
 //! Generates Rust bindings for WPE WebKit using bindgen.
 
 use std::env;
+#[cfg(feature = "wpe-webkit")]
+use std::path::Path;
 use std::path::PathBuf;
 
 fn main() {
@@ -32,7 +34,7 @@ fn main() {
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_wpe_bindings(out_dir: &PathBuf) {
+fn generate_wpe_bindings(out_dir: &Path) {
     // Find WPE libraries using pkg-config
     let wpe = pkg_config::Config::new()
         .atleast_version("1.0")
@@ -75,7 +77,7 @@ fn generate_wpe_bindings(out_dir: &PathBuf) {
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_egl_bindings(out_dir: &PathBuf) {
+fn generate_egl_bindings(out_dir: &Path) {
     // EGL bindings for DMA-BUF export
     let egl = pkg_config::Config::new().probe("egl");
 
@@ -135,7 +137,7 @@ fn generate_egl_bindings(out_dir: &PathBuf) {
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_wpe_webkit_bindings(out_dir: &PathBuf, wpe_webkit: &pkg_config::Library) {
+fn generate_wpe_webkit_bindings(out_dir: &Path, wpe_webkit: &pkg_config::Library) {
     let mut builder = bindgen::Builder::default()
         .header_contents(
             "wpe_webkit_wrapper.h",
@@ -222,7 +224,7 @@ fn generate_wpe_webkit_bindings(out_dir: &PathBuf, wpe_webkit: &pkg_config::Libr
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_libwpe_bindings(out_dir: &PathBuf, wpe: &pkg_config::Library) {
+fn generate_libwpe_bindings(out_dir: &Path, wpe: &pkg_config::Library) {
     let mut builder = bindgen::Builder::default()
         .header_contents(
             "wpe_wrapper.h",
@@ -262,7 +264,7 @@ fn generate_libwpe_bindings(out_dir: &PathBuf, wpe: &pkg_config::Library) {
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_wpe_fdo_bindings(out_dir: &PathBuf, wpe_fdo: &pkg_config::Library) {
+fn generate_wpe_fdo_bindings(out_dir: &Path, wpe_fdo: &pkg_config::Library) {
     let mut builder = bindgen::Builder::default()
         .header_contents(
             "wpe_fdo_wrapper.h",
@@ -341,7 +343,7 @@ fn generate_wpe_fdo_bindings(out_dir: &PathBuf, wpe_fdo: &pkg_config::Library) {
 }
 
 #[cfg(feature = "wpe-webkit")]
-fn generate_wpe_platform_bindings(out_dir: &PathBuf) {
+fn generate_wpe_platform_bindings(out_dir: &Path) {
     // Check if wpe-platform-2.0 is available
     let wpe_platform = match pkg_config::Config::new().probe("wpe-platform-2.0") {
         Ok(lib) => lib,

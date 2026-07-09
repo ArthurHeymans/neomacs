@@ -65,7 +65,7 @@ impl RenderApp {
         if !self
             .frame_windows
             .primary_window()
-            .map_or(false, |ws| ws.ime_enabled())
+            .is_some_and(|ws| ws.ime_enabled())
             && !self
                 .frame_windows
                 .primary_window()

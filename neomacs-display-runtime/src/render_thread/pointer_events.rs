@@ -26,10 +26,12 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
             height,
             ..
         } = glyph
+            && x >= *wx
+            && x < *wx + *width
+            && y >= *wy
+            && y < *wy + *height
         {
-            if x >= *wx && x < *wx + *width && y >= *wy && y < *wy + *height {
-                return Some((xwidget_id.get(), (x - *wx) as i32, (y - *wy) as i32));
-            }
+            return Some((xwidget_id.get(), (x - *wx) as i32, (y - *wy) as i32));
         }
     }
     None
@@ -308,10 +310,10 @@ impl RenderApp {
         }
         let primary_frame_id = self.frame_windows.primary_event_frame_id();
         #[cfg(feature = "wpe-webkit")]
-        if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render) {
-            if Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some() {
-                return (x, y, primary_frame_id);
-            }
+        if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render)
+            && Self::floating_webkit_hit_test(&primary_frame.floating_webkits, x, y).is_some()
+        {
+            return (x, y, primary_frame_id);
         }
         if let Some((fid, local_x, local_y)) = self
             .frame_windows
@@ -337,26 +339,23 @@ impl RenderApp {
         let mut wk_ry = 0i32;
 
         #[cfg(feature = "wpe-webkit")]
-        if self.frame_windows.is_primary_frame_id(target_fid) {
-            if let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render) {
-                if let Some((id, rx, ry)) =
-                    Self::floating_webkit_hit_test(&primary_frame.floating_webkits, ev_x, ev_y)
-                {
-                    wk_id = id;
-                    wk_rx = rx;
-                    wk_ry = ry;
-                }
-            }
+        if self.frame_windows.is_primary_frame_id(target_fid)
+            && let Some(primary_frame) = self.frame_windows.primary_window().map(|ws| &ws.render)
+            && let Some((id, rx, ry)) =
+                Self::floating_webkit_hit_test(&primary_frame.floating_webkits, ev_x, ev_y)
+        {
+            wk_id = id;
+            wk_rx = rx;
+            wk_ry = ry;
         }
 
-        if wk_id == 0 {
-            if let Some(glyphs) = self.glyphs_for_pointer_target(target_fid) {
-                if let Some((id, rx, ry)) = webkit_glyph_hit_test(glyphs, ev_x, ev_y) {
-                    wk_id = id;
-                    wk_rx = rx;
-                    wk_ry = ry;
-                }
-            }
+        if wk_id == 0
+            && let Some(glyphs) = self.glyphs_for_pointer_target(target_fid)
+            && let Some((id, rx, ry)) = webkit_glyph_hit_test(glyphs, ev_x, ev_y)
+        {
+            wk_id = id;
+            wk_rx = rx;
+            wk_ry = ry;
         }
 
         (wk_id, wk_rx, wk_ry)
@@ -729,8 +728,9 @@ impl RenderApp {
                         }
                         handled_chrome = true;
                     }
-                } else if state == ElementState::Released && button == MouseButton::Left {
-                    if window_state
+                } else if state == ElementState::Released
+                    && button == MouseButton::Left
+                    && (window_state
                         .render
                         .chrome
                         .interaction
@@ -757,11 +757,10 @@ impl RenderApp {
                             .chrome
                             .interaction
                             .toolbar_pressed
-                            .is_some()
-                    {
-                        window_state.render.clear_all_chrome_pressed();
-                        handled_chrome = true;
-                    }
+                            .is_some())
+                {
+                    window_state.render.clear_all_chrome_pressed();
+                    handled_chrome = true;
                 }
 
                 if handled_chrome {
@@ -1582,8 +1581,8 @@ impl RenderApp {
                 .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
                 .1,
         );
-        if target_fid != 0 {
-            if let Some(entry) = self
+        if target_fid != 0
+            && let Some(entry) = self
                 .frame_windows
                 .primary_window()
                 .expect("primary child frames")
@@ -1592,26 +1591,25 @@ impl RenderApp {
                 .child_frames
                 .frames
                 .get(&target_fid)
-            {
-                tracing::trace!(
-                    "Child frame hit: fid={} abs=({:.1},{:.1}) size=({:.1}x{:.1}) mouse=({:.1},{:.1}) local=({:.1},{:.1})",
-                    target_fid,
-                    entry.abs_x,
-                    entry.abs_y,
-                    entry.frame.width,
-                    entry.frame.height,
-                    self.frame_windows
-                        .primary_window()
-                        .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
-                        .0,
-                    self.frame_windows
-                        .primary_window()
-                        .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
-                        .1,
-                    ev_x,
-                    ev_y
-                );
-            }
+        {
+            tracing::trace!(
+                "Child frame hit: fid={} abs=({:.1},{:.1}) size=({:.1}x{:.1}) mouse=({:.1},{:.1}) local=({:.1},{:.1})",
+                target_fid,
+                entry.abs_x,
+                entry.abs_y,
+                entry.frame.width,
+                entry.frame.height,
+                self.frame_windows
+                    .primary_window()
+                    .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
+                    .0,
+                self.frame_windows
+                    .primary_window()
+                    .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
+                    .1,
+                ev_x,
+                ev_y
+            );
         }
 
         let (wk_id, wk_rx, wk_ry) = if state == ElementState::Pressed {
@@ -1707,10 +1705,10 @@ impl RenderApp {
                     Some(dir) => winit::window::CursorIcon::from(dir),
                     None => winit::window::CursorIcon::Default,
                 };
-                if !window_state.chrome().decorations_enabled {
-                    if let Some(window) = window_state.window() {
-                        window.set_cursor(icon);
-                    }
+                if !window_state.chrome().decorations_enabled
+                    && let Some(window) = window_state.window()
+                {
+                    window.set_cursor(icon);
                 }
             }
 
@@ -1959,19 +1957,17 @@ impl RenderApp {
                     .chrome()
                     .resize_edge
                     .is_none()
-                {
-                    if let Some(window) = self
+                    && let Some(window) = self
                         .frame_windows
                         .primary_window()
                         .and_then(|ws| ws.window())
-                    {
-                        use winit::window::CursorIcon;
-                        let icon = match new_hover {
-                            2 | 3 | 4 => CursorIcon::Pointer,
-                            _ => CursorIcon::Default,
-                        };
-                        window.set_cursor(icon);
-                    }
+                {
+                    use winit::window::CursorIcon;
+                    let icon = match new_hover {
+                        2..=4 => CursorIcon::Pointer,
+                        _ => CursorIcon::Default,
+                    };
+                    window.set_cursor(icon);
                 }
             }
         }

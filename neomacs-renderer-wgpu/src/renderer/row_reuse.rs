@@ -322,7 +322,7 @@ impl RowReuseCache {
             row.tick = tick;
             self.rows.insert(key, row);
         }
-        if self.tick % 64 == 0 {
+        if self.tick.is_multiple_of(64) {
             self.rows
                 .retain(|_, row| tick.saturating_sub(row.tick) < CACHE_STALE_TICKS);
         }

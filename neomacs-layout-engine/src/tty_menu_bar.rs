@@ -103,23 +103,23 @@ fn collect_menu_bar_keymap_bindings(
 ) {
     list_keymap_for_each_binding_recursive(menu_bar_keymap, |key, def| {
         let key_str = key_symbol_name(&key);
-        if seen_keys.insert(key_str.clone()) {
-            if let Some(label) = extract_menu_label(&def) {
-                // Dedup-by-key: GNU's `menu_bar_item` calls `Fmemq (key,
-                // menu_bar_one_keymap_changed_items)` to skip a key it has
-                // already seen for the *current* keymap. Here we apply the
-                // same idea across the union of keymaps so that a major
-                // mode that re-binds an existing top-level menu (rare)
-                // doesn't produce a duplicate label. The first occurrence
-                // wins, mirroring the natural reverse-insertion-order walk
-                // (newest binding first within each map).
-                if !items.iter().any(|item| item.key == key_str) {
-                    items.push(TtyMenuBarItem {
-                        label,
-                        key: key_str,
-                        hpos: 0,
-                    });
-                }
+        if seen_keys.insert(key_str.clone())
+            && let Some(label) = extract_menu_label(&def)
+        {
+            // Dedup-by-key: GNU's `menu_bar_item` calls `Fmemq (key,
+            // menu_bar_one_keymap_changed_items)` to skip a key it has
+            // already seen for the *current* keymap. Here we apply the
+            // same idea across the union of keymaps so that a major
+            // mode that re-binds an existing top-level menu (rare)
+            // doesn't produce a duplicate label. The first occurrence
+            // wins, mirroring the natural reverse-insertion-order walk
+            // (newest binding first within each map).
+            if !items.iter().any(|item| item.key == key_str) {
+                items.push(TtyMenuBarItem {
+                    label,
+                    key: key_str,
+                    hpos: 0,
+                });
             }
         }
     });
@@ -131,12 +131,11 @@ fn resolve_keymap(eval: &Context, value: &Value) -> Option<Value> {
     if is_keymap(value) {
         return Some(*value);
     }
-    if let Some(name) = value.as_symbol_name() {
-        if let Some(symbol_value) = eval.obarray().symbol_value(name) {
-            if is_keymap(symbol_value) {
-                return Some(*symbol_value);
-            }
-        }
+    if let Some(name) = value.as_symbol_name()
+        && let Some(symbol_value) = eval.obarray().symbol_value(name)
+        && is_keymap(symbol_value)
+    {
+        return Some(*symbol_value);
     }
     None
 }

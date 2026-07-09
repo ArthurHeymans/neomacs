@@ -15,7 +15,7 @@
 //!   (Wobbly, Wave, PerLineSpring, Liquid)
 //! - **Post-processing effects**: Full-screen shader passes
 //!   (MotionBlur, ChromaticAberration, GhostTrails, ColorTemperature,
-//!    CRTScanlines, DepthOfField)
+//!   CRTScanlines, DepthOfField)
 //! - **Creative effects**: Special rendering techniques
 //!   (TypewriterReveal)
 //!
@@ -29,12 +29,13 @@ use strum::{EnumString, IntoStaticStr};
 ///
 /// Each variant represents a complete visual style for scroll transitions.
 /// Select one at a time via configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum ScrollEffect {
     // ── Transition effects (2D, vertex position/alpha changes) ──────────
     /// Default: old content slides out, new content slides in.
+    #[default]
     Slide,
 
     /// Alpha blend between old and new content.
@@ -193,6 +194,9 @@ impl ScrollEffect {
     ];
 
     /// Parse from string (for Lisp integration).
+    // Inherent infallible parser that defaults on an unknown name; deliberately
+    // not `FromStr` (which would return `Result`), so the name collision is fine.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         s.to_lowercase()
             .replace('_', "-")
@@ -242,16 +246,10 @@ impl ScrollEffect {
     }
 }
 
-impl Default for ScrollEffect {
-    fn default() -> Self {
-        Self::Slide
-    }
-}
-
 // ─── Scroll Easing (how the animation parameter `t` evolves) ────────────
 
 /// Physics model for scroll animation timing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
@@ -262,6 +260,7 @@ pub enum ScrollEasing {
         serialize = "ease-out",
         serialize = "quad"
     )]
+    #[default]
     EaseOutQuad,
 
     /// Ease-out cubic (stronger deceleration).
@@ -308,6 +307,9 @@ impl ScrollEasing {
         }
     }
 
+    // Inherent infallible parser that defaults on an unknown name; deliberately
+    // not `FromStr` (which would return `Result`), so the name collision is fine.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         s.to_lowercase()
             .replace('_', "-")
@@ -317,12 +319,6 @@ impl ScrollEasing {
 
     pub fn as_str(&self) -> &'static str {
         (*self).into()
-    }
-}
-
-impl Default for ScrollEasing {
-    fn default() -> Self {
-        Self::EaseOutQuad
     }
 }
 
@@ -520,7 +516,7 @@ pub fn make_quad_vertices(
 
 /// Simple 2D hash-based noise (deterministic, no external dependency).
 pub fn noise2d(x: f32, y: f32) -> f32 {
-    let n = (x * 12.9898 + y * 78.233).sin() * 43758.5453;
+    let n = (x * 12.9898 + y * 78.233).sin() * 43_758.547;
     n.fract()
 }
 

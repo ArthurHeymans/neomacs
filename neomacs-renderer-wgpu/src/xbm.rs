@@ -88,7 +88,7 @@ fn parse_xbm(text: &str) -> Option<(u32, u32, Vec<u8>)> {
     }
 
     // Validate: need at least (width+7)/8 * height bytes
-    let bytes_per_line = ((width + 7) / 8) as usize;
+    let bytes_per_line = width.div_ceil(8) as usize;
     let expected = bytes_per_line * height as usize;
     if bytes.len() < expected {
         tracing::warn!(
@@ -122,7 +122,7 @@ fn parse_c_integer(s: &str) -> Option<u32> {
 fn render_xbm(width: u32, height: u32, bits: &[u8], fg: [u8; 4], bg: [u8; 4]) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
-    let bytes_per_line = (w + 7) / 8;
+    let bytes_per_line = w.div_ceil(8);
     let mut rgba = vec![0u8; w * h * 4];
 
     for y in 0..h {

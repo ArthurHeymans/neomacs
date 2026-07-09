@@ -181,6 +181,9 @@ impl Drop for WpePlatformDisplay {
 /// Handles buffer-rendered signals for GPU texture extraction
 pub struct WpePlatformView {
     wpe_view: *mut plat::WPEView,
+    /// Owning WebKitWebView this WPEView was derived from; retained as an FFI
+    /// handle for identity, not read back.
+    #[allow(dead_code)]
     web_view: *mut wk::WebKitWebView,
     width: u32,
     height: u32,
@@ -190,6 +193,9 @@ impl WpePlatformView {
     /// Create a new WPE Platform view from a WebKitWebView
     ///
     /// The WebKitWebView must have been created with a WPE Platform display
+    // Null-checked before use and only dereferenced through FFI; kept
+    // safe-callable for the view-setup path rather than marked `unsafe`.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn from_web_view(web_view: *mut wk::WebKitWebView) -> DisplayResult<Self> {
         unsafe {
             if web_view.is_null() {
@@ -277,75 +283,6 @@ impl WpePlatformView {
     }
 }
 
-/// Import a WPEBuffer to an EGL image
-///
-/// Returns the EGLImage that can be converted to a GdkTexture
-pub fn buffer_to_egl_image(buffer: *mut plat::WPEBuffer) -> DisplayResult<egl::EGLImageKHR> {
-    unsafe {
-        if buffer.is_null() {
-            return Err(DisplayError::WebKit("WPEBuffer is null".into()));
-        }
-
-        let mut error: *mut plat::GError = ptr::null_mut();
-        let egl_image = plat::wpe_buffer_import_to_egl_image(buffer, &mut error);
-
-        if egl_image.is_null() {
-            let error_msg = if !error.is_null() {
-                let msg = std::ffi::CStr::from_ptr((*error).message)
-                    .to_string_lossy()
-                    .into_owned();
-                plat::g_error_free(error);
-                msg
-            } else {
-                "Unknown error".into()
-            };
-            return Err(DisplayError::WebKit(format!(
-                "Failed to import buffer to EGL image: {}",
-                error_msg
-            )));
-        }
-
-        Ok(egl_image as egl::EGLImageKHR)
-    }
-}
-
-/// Import a WPEBuffer to pixels (fallback for non-EGL)
-///
-/// Returns pixel data as GBytes
-pub fn buffer_to_pixels(
-    buffer: *mut plat::WPEBuffer,
-) -> DisplayResult<(*mut plat::GBytes, u32, u32)> {
-    unsafe {
-        if buffer.is_null() {
-            return Err(DisplayError::WebKit("WPEBuffer is null".into()));
-        }
-
-        let width = plat::wpe_buffer_get_width(buffer) as u32;
-        let height = plat::wpe_buffer_get_height(buffer) as u32;
-
-        let mut error: *mut plat::GError = ptr::null_mut();
-        let bytes = plat::wpe_buffer_import_to_pixels(buffer, &mut error);
-
-        if bytes.is_null() {
-            let error_msg = if !error.is_null() {
-                let msg = std::ffi::CStr::from_ptr((*error).message)
-                    .to_string_lossy()
-                    .into_owned();
-                plat::g_error_free(error);
-                msg
-            } else {
-                "Unknown error".into()
-            };
-            return Err(DisplayError::WebKit(format!(
-                "Failed to import buffer to pixels: {}",
-                error_msg
-            )));
-        }
-
-        Ok((bytes, width, height))
-    }
-}
-
 /// Check if a WPEBuffer is a DMA-BUF buffer and return its info
 ///
 /// Returns (fourcc, n_planes, modifier, fd, stride, offset) if it's a DMA-BUF buffer
@@ -405,6 +342,8 @@ pub fn buffer_dmabuf_info(buffer: *mut plat::WPEBuffer) -> Option<DmaBufInfo> {
 #[derive(Debug)]
 pub struct DmaBufInfo {
     pub fourcc: u32,
+    /// Plane count reported by WPE; the per-plane data itself lives in `planes`.
+    #[allow(dead_code)]
     pub n_planes: u32,
     pub modifier: u64,
     pub width: u32,

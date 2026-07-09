@@ -39,18 +39,13 @@ pub enum NodeKind {
 }
 
 /// Cursor style
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SceneCursorStyle {
+    #[default]
     Box,
     Bar,
     Underline,
     Hollow,
-}
-
-impl Default for SceneCursorStyle {
-    fn default() -> Self {
-        Self::Box
-    }
 }
 
 /// A node in the scene graph
@@ -504,14 +499,14 @@ impl Scene {
         // TODO: Build text nodes from glyph rows
 
         // Cursor
-        if let Some(cursor) = &window.cursor {
-            if cursor.visible {
-                children.push(Node::cursor(
-                    cursor.style,
-                    cursor.color,
-                    Rect::new(cursor.x, cursor.y, cursor.width, cursor.height),
-                ));
-            }
+        if let Some(cursor) = &window.cursor
+            && cursor.visible
+        {
+            children.push(Node::cursor(
+                cursor.style,
+                cursor.color,
+                Rect::new(cursor.x, cursor.y, cursor.width, cursor.height),
+            ));
         }
 
         // Apply window position and scroll offset

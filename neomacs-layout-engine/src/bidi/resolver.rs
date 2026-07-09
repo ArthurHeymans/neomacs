@@ -87,9 +87,7 @@ fn determine_paragraph_level(classes: &[BidiClass]) -> u8 {
                 isolate_depth += 1;
             }
             BidiClass::PDI => {
-                if isolate_depth > 0 {
-                    isolate_depth -= 1;
-                }
+                isolate_depth = isolate_depth.saturating_sub(1);
             }
             BidiClass::L if isolate_depth == 0 => return 0,
             BidiClass::R | BidiClass::AL if isolate_depth == 0 => return 1,
@@ -316,8 +314,8 @@ fn resolve_explicit(classes: &mut [BidiClass], paragraph_level: u8) -> Vec<u8> {
 /// Determine the embedding level for an FSI from the text following it.
 fn determine_fsi_level(classes: &[BidiClass], start: usize) -> u8 {
     let mut isolate_depth = 0u32;
-    for i in start..classes.len() {
-        match classes[i] {
+    for &class in &classes[start..] {
+        match class {
             BidiClass::LRI | BidiClass::RLI | BidiClass::FSI => {
                 isolate_depth += 1;
             }
@@ -477,10 +475,8 @@ fn resolve_weak(classes: &mut [BidiClass], seq: &RunSequence, _original_classes:
             BidiClass::L | BidiClass::R | BidiClass::AL => {
                 last_strong = classes[i];
             }
-            BidiClass::EN => {
-                if last_strong == BidiClass::AL {
-                    classes[i] = BidiClass::AN;
-                }
+            BidiClass::EN if last_strong == BidiClass::AL => {
+                classes[i] = BidiClass::AN;
             }
             _ => {}
         }
@@ -499,10 +495,10 @@ fn resolve_weak(classes: &mut [BidiClass], seq: &RunSequence, _original_classes:
         let prev_i = indices[idx - 1];
         let next_i = indices[idx + 1];
         match classes[i] {
-            BidiClass::ES => {
-                if classes[prev_i] == BidiClass::EN && classes[next_i] == BidiClass::EN {
-                    classes[i] = BidiClass::EN;
-                }
+            BidiClass::ES
+                if classes[prev_i] == BidiClass::EN && classes[next_i] == BidiClass::EN =>
+            {
+                classes[i] = BidiClass::EN;
             }
             BidiClass::CS => {
                 if classes[prev_i] == BidiClass::EN && classes[next_i] == BidiClass::EN {
@@ -564,10 +560,8 @@ fn resolve_weak(classes: &mut [BidiClass], seq: &RunSequence, _original_classes:
             BidiClass::L | BidiClass::R => {
                 last_strong = classes[i];
             }
-            BidiClass::EN => {
-                if last_strong == BidiClass::L {
-                    classes[i] = BidiClass::L;
-                }
+            BidiClass::EN if last_strong == BidiClass::L => {
+                classes[i] = BidiClass::L;
             }
             _ => {}
         }
@@ -625,7 +619,7 @@ fn resolve_brackets(
     pairs.sort_by_key(|pair| pair.open_seq);
 
     // Resolve each pair per N0b-d
-    let embedding_dir = if seq.level % 2 == 0 {
+    let embedding_dir = if seq.level.is_multiple_of(2) {
         BidiClass::L
     } else {
         BidiClass::R
@@ -664,26 +658,26 @@ fn resolve_brackets(
         }
 
         // N0c: If strong type inside is opposite to embedding direction
-        if let Some(strong) = inside_strong {
-            if strong != embedding_dir {
-                // Check context before the opening bracket
-                let mut context_dir = sos;
-                for &i in indices[..open_seq].iter().rev() {
-                    let s = classes[i].to_strong_for_neutral();
-                    if s == BidiClass::L || s == BidiClass::R {
-                        context_dir = s;
-                        break;
-                    }
+        if let Some(strong) = inside_strong
+            && strong != embedding_dir
+        {
+            // Check context before the opening bracket
+            let mut context_dir = sos;
+            for &i in indices[..open_seq].iter().rev() {
+                let s = classes[i].to_strong_for_neutral();
+                if s == BidiClass::L || s == BidiClass::R {
+                    context_dir = s;
+                    break;
                 }
-                let resolved = if context_dir == embedding_dir {
-                    embedding_dir
-                } else {
-                    strong
-                };
-                classes[open_idx] = resolved;
-                classes[close_idx] = resolved;
-                continue;
             }
+            let resolved = if context_dir == embedding_dir {
+                embedding_dir
+            } else {
+                strong
+            };
+            classes[open_idx] = resolved;
+            classes[close_idx] = resolved;
+            continue;
         }
 
         // N0d: No strong type inside — leave as ON
@@ -700,7 +694,7 @@ fn resolve_neutral(classes: &mut [BidiClass], seq: &RunSequence) {
     // N1: Between two strong types of the same direction → that direction
     // N2: Otherwise → embedding direction
 
-    let embedding_dir = if seq.level % 2 == 0 {
+    let embedding_dir = if seq.level.is_multiple_of(2) {
         BidiClass::L
     } else {
         BidiClass::R
@@ -771,7 +765,7 @@ fn resolve_implicit(levels: &mut [u8], classes: &[BidiClass], _paragraph_level: 
         let level = levels[i];
         let class = classes[i];
 
-        if level % 2 == 0 {
+        if level.is_multiple_of(2) {
             // I1: Even level
             match class {
                 BidiClass::R => levels[i] = level + 1,

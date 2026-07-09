@@ -570,6 +570,9 @@ impl WgpuRenderer {
     }
 
     /// Helper: compute scissor rect and content UV from bounds.
+    // Returns a flat scissor-rect + UV tuple consumed inline by the caller; a
+    // named struct would not be reused elsewhere.
+    #[allow(clippy::type_complexity)]
     fn scroll_scissor_and_uv(
         &mut self,
         bounds: &neomacs_display_protocol::types::Rect,

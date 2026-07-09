@@ -129,7 +129,7 @@ fn max_mini_window_lines_for_window(
         evaluator
             .buffer_manager()
             .find_buffer_by_name(" *Echo Area 0*")
-            .unwrap_or_else(|| neovm_core::buffer::BufferId(params.buffer_id))
+            .unwrap_or(neovm_core::buffer::BufferId(params.buffer_id))
     } else {
         neovm_core::buffer::BufferId(params.buffer_id)
     };
@@ -232,6 +232,12 @@ pub struct LayoutEngine {
     /// Instrumentation from the most recent `layout_frame_rust` pass: the
     /// relaid-row-count gate metric (spec §7). Reset per frame.
     layout_stats: LayoutStats,
+}
+
+impl Default for LayoutEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LayoutEngine {
@@ -610,23 +616,23 @@ impl LayoutEngine {
             self.display_snapshots.clear();
 
             let tab_bar_height = frame_params.tab_bar_height;
-            if tab_bar_height > 0.0 {
-                if let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
+            if tab_bar_height > 0.0
+                && let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
                     evaluator,
                     frame_id.0 as i64,
                     &face_resolver,
                     &frame_params,
                     tab_bar_height,
-                ) && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
-                    && !tab_bar_resize_attempted
-                {
-                    if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                        frame.tab_bar_height = actual_tab_bar_height.round().max(1.0) as u32;
-                        frame.sync_window_area_bounds();
-                    }
-                    tab_bar_resize_attempted = true;
-                    continue;
+                )
+                && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
+                && !tab_bar_resize_attempted
+            {
+                if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                    frame.tab_bar_height = actual_tab_bar_height.round().max(1.0) as u32;
+                    frame.sync_window_area_bounds();
                 }
+                tab_bar_resize_attempted = true;
+                continue;
             }
 
             tracing::debug!(
@@ -747,150 +753,134 @@ impl LayoutEngine {
             // the minibuffer and re-layout the entire frame (one retry).
             // Also shrink back when the minibuffer content fits in fewer
             // rows than currently allocated.
-            if !mini_resize_attempted {
-                if let Some(mini_rows_used) = self.latest_output_window_enabled_rows() {
-                    if let Some(mini_params) = window_params_list.last() {
-                        if mini_params.is_minibuffer() {
-                            let char_h = frame_params.char_height.max(1.0);
-                            let allocated_rows =
-                                (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
-                            let frame_rows = frame_params.height / char_h;
-                            let max_mini_lines = max_mini_window_lines_for_window(
-                                evaluator,
-                                mini_params,
-                                frame_rows,
-                            );
-                            // GNU `resize_mini_window` reads `Vresize_mini_windows`
-                            // after `set_buffer_internal (XBUFFER (w->contents))`
-                            // (xdisp.c:13296,13318), so a buffer-local binding in the
-                            // mini-window's buffer takes effect. Read buffer-local-
-                            // then-global from that buffer, not the raw global.
-                            let resize_policy = evaluator
-                                .buffer_manager()
-                                .get(neovm_core::buffer::BufferId(mini_params.buffer_id))
-                                .and_then(|buffer| buffer.buffer_local_value("resize-mini-windows"))
-                                .or_else(|| {
-                                    evaluator
-                                        .obarray()
-                                        .symbol_value("resize-mini-windows")
-                                        .copied()
-                                });
-                            let resize_mode =
-                                ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
+            if !mini_resize_attempted
+                && let Some(mini_rows_used) = self.latest_output_window_enabled_rows()
+                && let Some(mini_params) = window_params_list.last()
+                && mini_params.is_minibuffer()
+            {
+                let char_h = frame_params.char_height.max(1.0);
+                let allocated_rows = (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
+                let frame_rows = frame_params.height / char_h;
+                let max_mini_lines =
+                    max_mini_window_lines_for_window(evaluator, mini_params, frame_rows);
+                // GNU `resize_mini_window` reads `Vresize_mini_windows`
+                // after `set_buffer_internal (XBUFFER (w->contents))`
+                // (xdisp.c:13296,13318), so a buffer-local binding in the
+                // mini-window's buffer takes effect. Read buffer-local-
+                // then-global from that buffer, not the raw global.
+                let resize_policy = evaluator
+                    .buffer_manager()
+                    .get(neovm_core::buffer::BufferId(mini_params.buffer_id))
+                    .and_then(|buffer| buffer.buffer_local_value("resize-mini-windows"))
+                    .or_else(|| {
+                        evaluator
+                            .obarray()
+                            .symbol_value("resize-mini-windows")
+                            .copied()
+                    });
+                let resize_mode = ResizeMiniWindowsMode::from_lisp_value(resize_policy.as_ref());
 
-                            // GNU `resize_mini_window` measures the mini-window's
-                            // CONTENT height via `move_it_to (ZV)` (xdisp.c:13340) and
-                            // shrinks a grow-only window when `height < old_height &&
-                            // (exact_p || BEGV == ZV)` (xdisp.c:13395). An empty
-                            // mini/echo buffer is exactly one line.
-                            //
-                            // We measure with the glyph matrix
-                            // (`latest_output_window_enabled_rows`) instead, which can
-                            // be STALE: after find-file the mini-window is laid out
-                            // with zero text height and SKIPPED, so its matrix keeps
-                            // the vertico candidate row count and the echo area never
-                            // shrinks back (it stays ~9 rows tall and empty). Mirror
-                            // GNU's content measurement for the empty case: when the
-                            // buffer the window actually displays is empty (BEGV == ZV)
-                            // the used height is 1, regardless of the stale matrix.
-                            //
-                            // `buf_id` is that displayed buffer: the swapped
-                            // ` *Echo Area 0*` for an inactive mini-window (GNU
-                            // `with_echo_area_buffer`), or the window's own buffer when
-                            // the minibuffer is active.
-                            let mini_window_id =
-                                neovm_core::window::WindowId(mini_params.window_id as u64);
-                            let minibuffer_active =
-                                evaluator.minibuffer_window_is_active(mini_window_id);
-                            let buf_id = if !minibuffer_active {
-                                evaluator.ensure_echo_area_buffers();
-                                evaluator
-                                    .buffer_manager()
-                                    .find_buffer_by_name(" *Echo Area 0*")
-                                    .unwrap_or(neovm_core::buffer::BufferId(mini_params.buffer_id))
-                            } else {
-                                neovm_core::buffer::BufferId(mini_params.buffer_id)
-                            };
-                            let visible_region_empty = evaluator
-                                .buffer_manager()
-                                .get(buf_id)
-                                .map(|b| b.accessible_emacs_byte_range().is_empty())
-                                .unwrap_or(true);
-                            // For an INACTIVE mini-window, measure the displayed echo
-                            // buffer's content height directly (GNU `resize_mini_window`
-                            // measures `w->contents` via `move_it_to (ZV)`) rather than
-                            // the engine's cached enabled-row count. That matrix goes
-                            // STALE: the inactive mini-window is laid out with ~zero text
-                            // height and skipped, so it keeps the active minibuffer's
-                            // candidate-overlay row count (e.g. 35). With the stale
-                            // matrix, the instant any echo message ("Quit" after C-g)
-                            // makes the buffer non-empty, the window re-grows to that
-                            // stale height. Content measurement keeps "Quit"/empty one
-                            // line. When the minibuffer is ACTIVE the matrix is fresh and
-                            // includes the candidate overlay, so keep using it there.
-                            let mini_rows_used = if !minibuffer_active {
-                                let cols = (mini_params.bounds.width
-                                    / frame_params.char_width.max(1.0))
-                                .floor()
-                                .max(1.0) as usize;
-                                let text = evaluator
-                                    .buffer_manager()
-                                    .get(buf_id)
-                                    .map(|b| b.full_text_string())
-                                    .unwrap_or_default();
-                                echo_content_rows(&text, cols)
-                            } else {
-                                mini_rows_used
-                            };
+                // GNU `resize_mini_window` measures the mini-window's
+                // CONTENT height via `move_it_to (ZV)` (xdisp.c:13340) and
+                // shrinks a grow-only window when `height < old_height &&
+                // (exact_p || BEGV == ZV)` (xdisp.c:13395). An empty
+                // mini/echo buffer is exactly one line.
+                //
+                // We measure with the glyph matrix
+                // (`latest_output_window_enabled_rows`) instead, which can
+                // be STALE: after find-file the mini-window is laid out
+                // with zero text height and SKIPPED, so its matrix keeps
+                // the vertico candidate row count and the echo area never
+                // shrinks back (it stays ~9 rows tall and empty). Mirror
+                // GNU's content measurement for the empty case: when the
+                // buffer the window actually displays is empty (BEGV == ZV)
+                // the used height is 1, regardless of the stale matrix.
+                //
+                // `buf_id` is that displayed buffer: the swapped
+                // ` *Echo Area 0*` for an inactive mini-window (GNU
+                // `with_echo_area_buffer`), or the window's own buffer when
+                // the minibuffer is active.
+                let mini_window_id = neovm_core::window::WindowId(mini_params.window_id as u64);
+                let minibuffer_active = evaluator.minibuffer_window_is_active(mini_window_id);
+                let buf_id = if !minibuffer_active {
+                    evaluator.ensure_echo_area_buffers();
+                    evaluator
+                        .buffer_manager()
+                        .find_buffer_by_name(" *Echo Area 0*")
+                        .unwrap_or(neovm_core::buffer::BufferId(mini_params.buffer_id))
+                } else {
+                    neovm_core::buffer::BufferId(mini_params.buffer_id)
+                };
+                let visible_region_empty = evaluator
+                    .buffer_manager()
+                    .get(buf_id)
+                    .map(|b| b.accessible_emacs_byte_range().is_empty())
+                    .unwrap_or(true);
+                // For an INACTIVE mini-window, measure the displayed echo
+                // buffer's content height directly (GNU `resize_mini_window`
+                // measures `w->contents` via `move_it_to (ZV)`) rather than
+                // the engine's cached enabled-row count. That matrix goes
+                // STALE: the inactive mini-window is laid out with ~zero text
+                // height and skipped, so it keeps the active minibuffer's
+                // candidate-overlay row count (e.g. 35). With the stale
+                // matrix, the instant any echo message ("Quit" after C-g)
+                // makes the buffer non-empty, the window re-grows to that
+                // stale height. Content measurement keeps "Quit"/empty one
+                // line. When the minibuffer is ACTIVE the matrix is fresh and
+                // includes the candidate overlay, so keep using it there.
+                let mini_rows_used = if !minibuffer_active {
+                    let cols = (mini_params.bounds.width / frame_params.char_width.max(1.0))
+                        .floor()
+                        .max(1.0) as usize;
+                    let text = evaluator
+                        .buffer_manager()
+                        .get(buf_id)
+                        .map(|b| b.full_text_string())
+                        .unwrap_or_default();
+                    echo_content_rows(&text, cols)
+                } else {
+                    mini_rows_used
+                };
 
-                            if mini_rows_used > allocated_rows {
-                                // --- Grow ---
-                                let delta = (mini_rows_used as i32) - (allocated_rows as i32);
+                if mini_rows_used > allocated_rows {
+                    // --- Grow ---
+                    let delta = (mini_rows_used as i32) - (allocated_rows as i32);
 
-                                if resize_mode.should_grow() {
-                                    tracing::debug!(
-                                        "minibuffer auto-resize: grow by {} rows \
+                    if resize_mode.should_grow() {
+                        tracing::debug!(
+                            "minibuffer auto-resize: grow by {} rows \
                                          (used={}, allocated={})",
-                                        delta,
-                                        mini_rows_used,
-                                        allocated_rows,
-                                    );
-                                    if let Some(frame) =
-                                        evaluator.frame_manager_mut().get_mut(frame_id)
-                                    {
-                                        frame
-                                            .grow_mini_window_with_max_lines(delta, max_mini_lines);
-                                    }
-                                    mini_resize_attempted = true;
-                                    continue; // restart the layout loop
-                                }
-                            } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
-                                // --- Shrink ---
-                                // `exact_p` is GNU's post-command exact resize
-                                // (`resize_echo_area_exactly`, run with
-                                // `minibuf_level == 0`); `visible_region_empty`
-                                // (computed above) is the `BEGV == ZV` case.
-                                let exact = evaluator.echo_area_resize_exact_pending();
-                                let should_shrink =
-                                    resize_mode.should_shrink(exact, visible_region_empty);
-
-                                if should_shrink {
-                                    tracing::debug!(
-                                        "minibuffer auto-resize: shrink \
-                                         (used={}, allocated={})",
-                                        mini_rows_used,
-                                        allocated_rows,
-                                    );
-                                    if let Some(frame) =
-                                        evaluator.frame_manager_mut().get_mut(frame_id)
-                                    {
-                                        frame.shrink_mini_window();
-                                    }
-                                    mini_resize_attempted = true;
-                                    continue; // restart the layout loop
-                                }
-                            }
+                            delta,
+                            mini_rows_used,
+                            allocated_rows,
+                        );
+                        if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                            frame.grow_mini_window_with_max_lines(delta, max_mini_lines);
                         }
+                        mini_resize_attempted = true;
+                        continue; // restart the layout loop
+                    }
+                } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
+                    // --- Shrink ---
+                    // `exact_p` is GNU's post-command exact resize
+                    // (`resize_echo_area_exactly`, run with
+                    // `minibuf_level == 0`); `visible_region_empty`
+                    // (computed above) is the `BEGV == ZV` case.
+                    let exact = evaluator.echo_area_resize_exact_pending();
+                    let should_shrink = resize_mode.should_shrink(exact, visible_region_empty);
+
+                    if should_shrink {
+                        tracing::debug!(
+                            "minibuffer auto-resize: shrink \
+                                         (used={}, allocated={})",
+                            mini_rows_used,
+                            allocated_rows,
+                        );
+                        if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
+                            frame.shrink_mini_window();
+                        }
+                        mini_resize_attempted = true;
+                        continue; // restart the layout loop
                     }
                 }
             }
@@ -1075,10 +1065,9 @@ impl LayoutEngine {
                             for g in area {
                                 if let std::collections::hash_map::Entry::Vacant(slot) =
                                     faces.entry(g.face_id)
+                                    && let Some(face) = frame_state.faces.get(&g.face_id)
                                 {
-                                    if let Some(face) = frame_state.faces.get(&g.face_id) {
-                                        slot.insert(face.clone());
-                                    }
+                                    slot.insert(face.clone());
                                 }
                             }
                         }
@@ -1217,13 +1206,12 @@ impl LayoutEngine {
             // the accumulated dirty span is the edits the NEXT frame must relay.
             let mut acked: std::collections::HashSet<u64> = std::collections::HashSet::new();
             for key in key_map.values() {
-                if acked.insert(key.buffer_id) {
-                    if let Some(buffer) = evaluator
+                if acked.insert(key.buffer_id)
+                    && let Some(buffer) = evaluator
                         .buffer_manager()
                         .get(neovm_core::buffer::BufferId(key.buffer_id))
-                    {
-                        buffer.reset_unchanged_region();
-                    }
+                {
+                    buffer.reset_unchanged_region();
                 }
             }
         }
@@ -1438,7 +1426,7 @@ impl LayoutEngine {
             evaluator
                 .buffer_manager()
                 .find_buffer_by_name(" *Echo Area 0*")
-                .unwrap_or_else(|| neovm_core::buffer::BufferId(params.buffer_id))
+                .unwrap_or(neovm_core::buffer::BufferId(params.buffer_id))
         } else {
             neovm_core::buffer::BufferId(params.buffer_id)
         };
@@ -1597,10 +1585,7 @@ impl LayoutEngine {
         tab_bar_height: f32,
     ) -> Option<f32> {
         let gc_roots = ScratchGcRootScope::new();
-        let Some(tab_bar) = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)
-        else {
-            return None;
-        };
+        let tab_bar = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)?;
 
         let width = frame_params.width;
         let tab_bar_face =
@@ -1618,7 +1603,7 @@ impl LayoutEngine {
         };
         let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
-        let Some(rendered_tab_bar) = self.frame_output.render_frame_tab_bar_row(
+        let rendered_tab_bar = self.frame_output.render_frame_tab_bar_row(
             FrameTabBarDisplayRowRequest {
                 row_index,
                 y: tab_bar_y,
@@ -1633,9 +1618,7 @@ impl LayoutEngine {
             },
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),
-        ) else {
-            return None;
-        };
+        )?;
         face_ids.finish_into(&mut self.frame_face_id_counter);
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;

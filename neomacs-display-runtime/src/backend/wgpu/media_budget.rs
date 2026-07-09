@@ -84,10 +84,10 @@ impl MediaBudget {
             .find(|(_, e)| e.media_type == media_type && e.id == id)
             .map(|(k, _)| *k);
 
-        if let Some(key) = key {
-            if let Some(entry) = self.entries.remove(&key) {
-                self.current_memory = self.current_memory.saturating_sub(entry.size_bytes);
-            }
+        if let Some(key) = key
+            && let Some(entry) = self.entries.remove(&key)
+        {
+            self.current_memory = self.current_memory.saturating_sub(entry.size_bytes);
         }
     }
 
@@ -99,13 +99,13 @@ impl MediaBudget {
             .find(|(_, e)| e.media_type == media_type && e.id == id)
             .map(|(k, _)| *k);
 
-        if let Some(old_key) = old_key {
-            if let Some(mut entry) = self.entries.remove(&old_key) {
-                self.access_counter += 1;
-                entry.last_access = self.access_counter;
-                self.entries
-                    .insert((media_type, self.access_counter, id), entry);
-            }
+        if let Some(old_key) = old_key
+            && let Some(mut entry) = self.entries.remove(&old_key)
+        {
+            self.access_counter += 1;
+            entry.last_access = self.access_counter;
+            self.entries
+                .insert((media_type, self.access_counter, id), entry);
         }
     }
 

@@ -6,6 +6,11 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
+// `resvg::usvg::Options` is a large external config type; setting fields after
+// `default()` reads clearly and sidesteps functional-record-update constraints
+// on an external type, so the field-reassign lint is allowed module-wide.
+#![allow(clippy::field_reassign_with_default)]
+
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -1145,16 +1150,16 @@ impl ImageCache {
                     .iter()
                     .map(|(&id, cached)| (id, cached.last_access.get())),
             );
-            if let Some(id) = victim {
-                if let Some(cached) = self.textures.remove(&id) {
-                    self.total_memory -= cached.memory_size;
-                    self.states.remove(&id);
-                    tracing::debug!(
-                        "Evicted image {} to free {}KB",
-                        id,
-                        cached.memory_size / 1024
-                    );
-                }
+            if let Some(id) = victim
+                && let Some(cached) = self.textures.remove(&id)
+            {
+                self.total_memory -= cached.memory_size;
+                self.states.remove(&id);
+                tracing::debug!(
+                    "Evicted image {} to free {}KB",
+                    id,
+                    cached.memory_size / 1024
+                );
             }
         }
     }

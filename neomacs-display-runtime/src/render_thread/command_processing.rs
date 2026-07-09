@@ -8,15 +8,14 @@ impl RenderApp {
 
         while let Ok(cmd) = self.comms.cmd_rx.try_recv() {
             match cmd {
-                RenderCommand::Lifecycle(c) => match c {
-                    LifecycleCommand::Shutdown => {
+                RenderCommand::Lifecycle(c) => {
+                    if let LifecycleCommand::Shutdown = c {
                         tracing::info!("Render thread received shutdown command");
                         self.lifecycle_flags.shutdown_requested = true;
                         should_exit = true;
                         continue;
                     }
-                    _ => {}
-                },
+                }
                 RenderCommand::Window(c) => {
                     if matches!(c, WindowCommand::ScrollBlit { .. }) {
                         tracing::debug!("ScrollBlit ignored (full-frame rendering mode)");

@@ -80,7 +80,7 @@ impl WebKitCache {
             .views
             .get_mut(&id)
             .ok_or_else(|| DisplayError::WebKit(format!("View {} not found", id)))?;
-        view.load_uri(uri);
+        let _ = view.load_uri(uri);
         Ok(())
     }
 
@@ -90,7 +90,7 @@ impl WebKitCache {
             .views
             .get_mut(&id)
             .ok_or_else(|| DisplayError::WebKit(format!("View {} not found", id)))?;
-        view.load_html(html, base_uri);
+        let _ = view.load_html(html, base_uri);
         Ok(())
     }
 
@@ -100,7 +100,7 @@ impl WebKitCache {
             .views
             .get_mut(&id)
             .ok_or_else(|| DisplayError::WebKit(format!("View {} not found", id)))?;
-        view.execute_javascript(script);
+        let _ = view.execute_javascript(script);
         Ok(())
     }
 

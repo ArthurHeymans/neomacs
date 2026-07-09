@@ -109,18 +109,16 @@ impl RenderApp {
 
         {
             let primary = self.frame_windows.primary_window_mut().unwrap();
-            match &mut primary.lifecycle {
-                FrameLifecycle::Pending {
-                    width: pw,
-                    height: ph,
-                    scale_factor: sf,
-                    ..
-                } => {
-                    *pw = phys.width;
-                    *ph = phys.height;
-                    *sf = effective_scale;
-                }
-                _ => {}
+            if let FrameLifecycle::Pending {
+                width: pw,
+                height: ph,
+                scale_factor: sf,
+                ..
+            } = &mut primary.lifecycle
+            {
+                *pw = phys.width;
+                *ph = phys.height;
+                *sf = effective_scale;
             }
         }
 
@@ -356,7 +354,7 @@ pub(crate) fn run_render_loop_with_event_loop(
     // not the default context. Only the render thread will dispatch events from this context,
     // preventing the Emacs main thread's xg_select from dispatching WebKit callbacks.
     #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
-    let webkit_main_context = unsafe {
+    let _webkit_main_context = unsafe {
         let ctx = plat::g_main_context_new();
         if !ctx.is_null() {
             // Acquire the context so we can dispatch on it

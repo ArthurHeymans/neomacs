@@ -9,6 +9,10 @@
 //! (loaded .el files), just like GNU Emacs.  Only the core command loop and
 //! low-level primitives are implemented in Rust.
 
+// Several CLI/redisplay entry points here take many positional parameters;
+// folding them into structs is a separate refactor, out of scope for the gate.
+#![allow(clippy::too_many_arguments)]
+
 // Global allocator: mimalloc handles the heavy Rust-side small-object churn
 // (per-string StringObj boxes, Vec/String temporaries) far faster than the
 // system allocator. Feature-gated so `--no-default-features` reverts to system
@@ -79,6 +83,9 @@ use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameId, FrameParam, Window};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Variants share a `Print*` prefix by design (all are print-and-exit CLI
+// actions); the naming lint is allowed here.
+#[allow(clippy::enum_variant_names)]
 enum EarlyCliAction {
     PrintHelp { program: String },
     PrintVersion,
@@ -1795,9 +1802,7 @@ fn frame_host_title(eval: &mut Context, frame_id: FrameId) -> LispString {
         eval,
         format,
         Value::make_window(selected_window_id.0),
-        buffer_id
-            .map(|buffer_id| Value::make_buffer(buffer_id))
-            .unwrap_or(Value::NIL),
+        buffer_id.map(Value::make_buffer).unwrap_or(Value::NIL),
         target_cols,
     );
     rendered.as_lisp_string().cloned().unwrap_or(fallback_title)
@@ -2707,10 +2712,10 @@ pub fn run(mode: RuntimeMode) {
                             event,
                             kb_event
                         );
-                        if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event {
-                            if key.is_default_quit_char() {
-                                quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
-                            }
+                        if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event
+                            && key.is_default_quit_char()
+                        {
+                            quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                         }
                         if input_tx.send(kb_event).is_err() {
                             break; // Context dropped
@@ -2802,12 +2807,6 @@ fn log_clean_process_exit(started_at: Instant, args: &[OsString]) {
 // ---------------------------------------------------------------------------
 // Bootstrap dump mode
 // ---------------------------------------------------------------------------
-
-/// Set up the terminal for the TtyRif direct-rendering path:
-/// raw mode, alternate screen buffer, hidden cursor.
-
-/// Restore the terminal to its original state: show cursor, leave alt screen,
-/// reset SGR, restore saved termios.
 
 fn run_temacs_dump_mode(dump_mode: LoadupDumpMode, startup: &StartupOptions) {
     // Logging is already initialized by `run()` before this function is
@@ -3211,22 +3210,21 @@ fn bootstrap_buffers(
         if let Window::Leaf { bounds, .. } = &mut frame.root_window {
             bounds.height = mini_y;
         }
-        if let Some(mini_leaf) = &mut frame.minibuffer_leaf {
-            if let Window::Leaf {
+        if let Some(mini_leaf) = &mut frame.minibuffer_leaf
+            && let Window::Leaf {
                 buffer_id,
                 window_start,
                 point,
                 bounds,
                 ..
             } = mini_leaf
-            {
-                *buffer_id = mini_id;
-                *window_start = LispCharPos1::ONE;
-                *point = LispCharPos1::ONE;
-                bounds.y = mini_y;
-                bounds.height = mini_h;
-                bounds.width = width as f32;
-            }
+        {
+            *buffer_id = mini_id;
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
+            bounds.y = mini_y;
+            bounds.height = mini_h;
+            bounds.width = width as f32;
         }
     }
     eval.create_window_markers_for_minibuffer(frame_id, mini_id);
@@ -3238,7 +3236,7 @@ fn bootstrap_buffers(
 }
 
 fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &StartupOptions) {
-    let argv_strings = startup.forwarded_args.iter().cloned().collect::<Vec<_>>();
+    let argv_strings = startup.forwarded_args.to_vec();
     let argv = argv_strings
         .iter()
         .cloned()

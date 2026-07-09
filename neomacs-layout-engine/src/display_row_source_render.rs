@@ -1059,15 +1059,14 @@ impl<'a> TextRowSourceRenderState<'a> {
             self.insert_resolved_face(face_id, &resolved);
             return face_id;
         }
-        if let Some(face_value) = spec_face {
-            if let Some(resolved) = self
+        if let Some(face_value) = spec_face
+            && let Some(resolved) = self
                 .face_resolver
                 .resolve_face_value_over(self.face_resolver.default_face(), &face_value)
-            {
-                let face_id = face_ids.allocate();
-                self.insert_resolved_face(face_id, &resolved);
-                return face_id;
-            }
+        {
+            let face_id = face_ids.allocate();
+            self.insert_resolved_face(face_id, &resolved);
+            return face_id;
         }
         fallback_face_id
     }

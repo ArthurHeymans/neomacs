@@ -662,10 +662,10 @@ fn calc_cons(
                 pixels = -pixels;
             }
             // Sync the local_align back to the caller.
-            if let Some(a) = align_to.as_deref_mut() {
-                if let Some(la) = local_align {
-                    *a = la;
-                }
+            if let Some(a) = align_to.as_deref_mut()
+                && let Some(la) = local_align
+            {
+                *a = la;
             }
             return Some(pixels);
         }
@@ -722,10 +722,10 @@ fn calc_cons(
         let mut local_align: Option<i32> = align_to.as_deref().copied();
         let sub_align_ref: Option<&mut i32> = local_align.as_mut();
         let fact = calc_pixel_width_or_height(ctx, &cdr_raw, width_p, sub_align_ref)?;
-        if let Some(a) = align_to.as_deref_mut() {
-            if let Some(la) = local_align {
-                *a = la;
-            }
+        if let Some(a) = align_to
+            && let Some(la) = local_align
+        {
+            *a = la;
         }
         return Some(pixels * fact + offset);
     }

@@ -3,9 +3,7 @@
 //! Uses the modern WPE Platform API (wpe-platform-2.0) for GPU-accelerated
 //! web rendering instead of legacy wpebackend-fdo.
 
-use std::ptr;
 use std::sync::Once;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::core::error::{DisplayError, DisplayResult};
 
@@ -15,11 +13,6 @@ use super::sys::platform as plat;
 static WPE_INIT: Once = Once::new();
 static mut WPE_PLATFORM_DISPLAY: Option<WpePlatformDisplay> = None;
 static mut WPE_INIT_ERROR: Option<String> = None;
-
-/// Flag to track if WebKit encountered a fatal error
-static WEBKIT_FATAL_ERROR: AtomicBool = AtomicBool::new(false);
-/// Store the last WebKit error message
-static mut WEBKIT_ERROR_MESSAGE: Option<String> = None;
 
 /// Check if required sandbox tools are available
 fn check_sandbox_prerequisites() -> Result<(), String> {
@@ -60,20 +53,6 @@ fn check_sandbox_prerequisites() -> Result<(), String> {
     Ok(())
 }
 
-/// Check if WebKit has encountered a fatal error
-pub fn has_webkit_error() -> bool {
-    WEBKIT_FATAL_ERROR.load(Ordering::SeqCst)
-}
-
-/// Get and clear the last WebKit error message
-pub fn take_webkit_error() -> Option<String> {
-    if WEBKIT_FATAL_ERROR.swap(false, Ordering::SeqCst) {
-        unsafe { (*std::ptr::addr_of_mut!(WEBKIT_ERROR_MESSAGE)).take() }
-    } else {
-        None
-    }
-}
-
 /// WPE Backend manager using WPE Platform API.
 ///
 /// Uses headless WPE Platform display for embedding web content
@@ -90,6 +69,10 @@ impl WpeBackend {
     ///
     /// Creates a headless WPE Platform display for embedding.
     /// If a device path is not provided, uses the default GPU.
+    ///
+    /// # Safety
+    /// `egl_display_hint` must be null or a valid EGL display pointer. WPE
+    /// Platform initialization runs once and mutates process-global state.
     pub unsafe fn new(_egl_display_hint: *mut libc::c_void) -> DisplayResult<Self> {
         Self::new_with_device(_egl_display_hint, None)
     }
@@ -101,6 +84,10 @@ impl WpeBackend {
     /// # Arguments
     /// * `egl_display_hint` - EGL display hint (unused with WPE Platform API)
     /// * `device_path` - Optional DRM render node path (e.g., "/dev/dri/renderD128")
+    ///
+    /// # Safety
+    /// `egl_display_hint` must be null or a valid EGL display pointer. This
+    /// initializes process-global WPE Platform state via a `Once`.
     pub unsafe fn new_with_device(
         _egl_display_hint: *mut libc::c_void,
         device_path: Option<&str>,

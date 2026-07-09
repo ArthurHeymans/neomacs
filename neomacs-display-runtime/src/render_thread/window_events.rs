@@ -169,32 +169,32 @@ impl RenderApp {
 
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
-                if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
-                    if let Some(ws) = self.frame_windows.get_by_winit_mut(window_id) {
-                        ws.handle_resize(&device, size.width, size.height);
-                        if is_primary {
-                            if let Some(renderer) = &mut self.renderer {
-                                renderer.resize(size.width, size.height);
-                            }
-                            if self.effects.resize_padding.enabled
-                                && let Some(renderer) = self.renderer.as_ref()
-                            {
-                                renderer.trigger_transient_resize_padding(
-                                    &mut ws.render.compositor.renderer_effects,
-                                    std::time::Instant::now(),
-                                );
-                            }
-                            ws.render.mark_dirty();
+                if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone())
+                    && let Some(ws) = self.frame_windows.get_by_winit_mut(window_id)
+                {
+                    ws.handle_resize(&device, size.width, size.height);
+                    if is_primary {
+                        if let Some(renderer) = &mut self.renderer {
+                            renderer.resize(size.width, size.height);
                         }
-                        let scale_factor = ws.scale_factor();
-                        let (emacs_w, emacs_h) =
-                            emacs_pixels_from_window_size(size.width, size.height, scale_factor);
-                        self.comms.send_input(InputEvent::WindowResize {
-                            width: emacs_w,
-                            height: emacs_h,
-                            emacs_frame_id: emacs_fid,
-                        });
+                        if self.effects.resize_padding.enabled
+                            && let Some(renderer) = self.renderer.as_ref()
+                        {
+                            renderer.trigger_transient_resize_padding(
+                                &mut ws.render.compositor.renderer_effects,
+                                std::time::Instant::now(),
+                            );
+                        }
+                        ws.render.mark_dirty();
                     }
+                    let scale_factor = ws.scale_factor();
+                    let (emacs_w, emacs_h) =
+                        emacs_pixels_from_window_size(size.width, size.height, scale_factor);
+                    self.comms.send_input(InputEvent::WindowResize {
+                        width: emacs_w,
+                        height: emacs_h,
+                        emacs_frame_id: emacs_fid,
+                    });
                 }
             }
 
@@ -278,52 +278,50 @@ impl RenderApp {
                     let mut handled_via_text = false;
                     if state == ElementState::Pressed
                         && Self::should_use_committed_text(&logical_key)
+                        && let Some(ref txt) = text
                     {
-                        if let Some(ref txt) = text {
-                            let s = txt.as_str();
-                            if let Some(control_keysym) = Self::translate_control_text(s) {
+                        let s = txt.as_str();
+                        if let Some(control_keysym) = Self::translate_control_text(s) {
+                            tracing::debug!(
+                                "KeyboardInput control text path: text={:?} keysym=0x{:04x} mods=0x{:x}",
+                                s,
+                                control_keysym,
+                                self.modifiers
+                            );
+                            self.comms.send_input(InputEvent::Key {
+                                keysym: control_keysym,
+                                modifiers: self.modifiers,
+                                pressed: true,
+                                emacs_frame_id: self.emacs_frame_for_window_event(window_id),
+                            });
+                            self.record_idle_dim_activity(window_id);
+                            self.record_typing_speed_keypress(window_id);
+                            handled_via_text = true;
+                        } else if let Some(keysyms) =
+                            Self::translate_committed_text(s, self.modifiers)
+                        {
+                            tracing::debug!(
+                                "KeyboardInput committed text path: text={:?} keysyms={:?} mods=0x{:x}",
+                                s,
+                                keysyms,
+                                self.modifiers
+                            );
+                            for keysym in keysyms {
                                 tracing::debug!(
-                                    "KeyboardInput control text path: text={:?} keysym=0x{:04x} mods=0x{:x}",
-                                    s,
-                                    control_keysym,
+                                    "Queueing text key event: keysym=0x{:04x} mods=0x{:x}",
+                                    keysym,
                                     self.modifiers
                                 );
                                 self.comms.send_input(InputEvent::Key {
-                                    keysym: control_keysym,
+                                    keysym,
                                     modifiers: self.modifiers,
                                     pressed: true,
                                     emacs_frame_id: self.emacs_frame_for_window_event(window_id),
                                 });
                                 self.record_idle_dim_activity(window_id);
                                 self.record_typing_speed_keypress(window_id);
-                                handled_via_text = true;
-                            } else if let Some(keysyms) =
-                                Self::translate_committed_text(s, self.modifiers)
-                            {
-                                tracing::debug!(
-                                    "KeyboardInput committed text path: text={:?} keysyms={:?} mods=0x{:x}",
-                                    s,
-                                    keysyms,
-                                    self.modifiers
-                                );
-                                for keysym in keysyms {
-                                    tracing::debug!(
-                                        "Queueing text key event: keysym=0x{:04x} mods=0x{:x}",
-                                        keysym,
-                                        self.modifiers
-                                    );
-                                    self.comms.send_input(InputEvent::Key {
-                                        keysym,
-                                        modifiers: self.modifiers,
-                                        pressed: true,
-                                        emacs_frame_id: self
-                                            .emacs_frame_for_window_event(window_id),
-                                    });
-                                    self.record_idle_dim_activity(window_id);
-                                    self.record_typing_speed_keypress(window_id);
-                                }
-                                handled_via_text = true;
                             }
+                            handled_via_text = true;
                         }
                     }
                     if !handled_via_text {
@@ -345,12 +343,11 @@ impl RenderApp {
                                 self.modifiers,
                                 state == ElementState::Pressed
                             );
-                            if state == ElementState::Pressed {
-                                if let Some(window_state) =
+                            if state == ElementState::Pressed
+                                && let Some(window_state) =
                                     self.frame_windows.get_by_winit_mut(window_id)
-                                {
-                                    window_state.set_mouse_hidden_for_typing(true);
-                                }
+                            {
+                                window_state.set_mouse_hidden_for_typing(true);
                             }
                             if state == ElementState::Pressed {
                                 self.record_typing_speed_keypress(window_id);
@@ -478,11 +475,11 @@ impl RenderApp {
                     tracing::debug!("IME Commit: '{}'", text);
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                         window_state.render.clear_ime_preedit();
-                    } else if self.frame_windows.is_primary_winit(window_id) {
-                        if let Some(ws) = self.frame_windows.primary_window_mut() {
-                            ws.render.clear_ime_preedit()
-                        };
-                    }
+                    } else if self.frame_windows.is_primary_winit(window_id)
+                        && let Some(ws) = self.frame_windows.primary_window_mut()
+                    {
+                        ws.render.clear_ime_preedit()
+                    };
                     for ch in text.chars() {
                         let keysym = ch as u32;
                         if keysym != 0 {
@@ -550,10 +547,8 @@ impl RenderApp {
                         effective_scale
                     );
                     ws.set_scale_factor(scale_factor);
-                    if is_primary {
-                        if let Some(ref mut renderer) = self.renderer {
-                            renderer.set_scale_factor(effective_scale as f32);
-                        }
+                    if is_primary && let Some(ref mut renderer) = self.renderer {
+                        renderer.set_scale_factor(effective_scale as f32);
                     }
                 }
             }

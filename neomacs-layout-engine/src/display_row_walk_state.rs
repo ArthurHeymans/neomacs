@@ -432,7 +432,7 @@ impl WordWrapRenderState {
 impl HorizontalScrollSkipState {
     pub(crate) fn new(wrap_mode: LineWrapMode, hscroll_columns: i32) -> Self {
         let configured_columns = if wrap_mode == LineWrapMode::Truncate {
-            hscroll_columns.max(0) as i32
+            hscroll_columns.max(0)
         } else {
             0
         };

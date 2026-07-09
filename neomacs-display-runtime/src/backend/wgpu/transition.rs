@@ -185,11 +185,11 @@ impl TransitionManager {
     ///
     /// Returns `true` if there was an active transition that completed.
     pub fn tick(&mut self) -> bool {
-        if let Some(ref transition) = self.active {
-            if transition.is_complete() {
-                self.active = None;
-                return true;
-            }
+        if let Some(ref transition) = self.active
+            && transition.is_complete()
+        {
+            self.active = None;
+            return true;
         }
         false
     }

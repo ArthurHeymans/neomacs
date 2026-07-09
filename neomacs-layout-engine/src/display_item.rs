@@ -376,7 +376,7 @@ impl BufferDisplayPropertyReplacementItem {
         text_start_byte: usize,
         text: &'a [u8],
     ) -> Option<&'a [u8]> {
-        Some(text.get(self.start_byte_idx(text_start_byte)?..)?)
+        text.get(self.start_byte_idx(text_start_byte)?..)
     }
 
     pub(crate) fn fallback_display_item(

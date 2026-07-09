@@ -35,6 +35,8 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Stop,
 }
 
+// Large payload variant; boxing is a perf hint deferred out of the lint gate.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
     Applied,
     Fallback(DisplaySourceStepItem),

@@ -29,6 +29,9 @@ pub enum BufferTransitionEffect {
 }
 
 impl BufferTransitionEffect {
+    // Inherent infallible parser that defaults on an unknown name; deliberately
+    // not `FromStr` (which would return `Result`), so the name collision is fine.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "none" => Self::None,

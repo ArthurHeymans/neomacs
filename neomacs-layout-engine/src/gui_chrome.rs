@@ -219,11 +219,10 @@ fn button_state(eval: &mut Context, value: Value) -> Option<(ToolBarItemType, bo
     if !value.is_cons() {
         return None;
     }
-    let item_type = match value.cons_car().as_symbol_name()? {
-        name => match MenuButtonKind::from_keyword(name)? {
-            MenuButtonKind::Radio => ToolBarItemType::Radio,
-            MenuButtonKind::Toggle => ToolBarItemType::Toggle,
-        },
+    let name = value.cons_car().as_symbol_name()?;
+    let item_type = match MenuButtonKind::from_keyword(name)? {
+        MenuButtonKind::Radio => ToolBarItemType::Radio,
+        MenuButtonKind::Toggle => ToolBarItemType::Toggle,
     };
     let selected = eval_menu_property(eval, value.cons_cdr()).is_truthy();
     Some((item_type, selected))

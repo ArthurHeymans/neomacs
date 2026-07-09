@@ -214,7 +214,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     ) -> Option<BufferSourceConsumedItem> {
         let consumption = self.consume_source_item(
             progress.source_position(),
-            face_resolution_context.clone(),
+            face_resolution_context,
             face_ids,
         );
         consumption.apply_to_render_progress(

@@ -377,7 +377,7 @@ pub fn generate_report(log: &ProfilerLog) -> ProfilerReport {
         .iter()
         .map(|(k, &v)| (k.frames.clone(), v))
         .collect();
-    top.sort_by(|a, b| b.1.cmp(&a.1));
+    top.sort_by_key(|e| std::cmp::Reverse(e.1));
 
     ProfilerReport {
         total_samples: log.total_samples(),
@@ -397,7 +397,7 @@ pub fn top_entries(log: &ProfilerLog, n: usize) -> Vec<(Vec<u64>, u64)> {
         .iter()
         .map(|(k, &v)| (k.frames.clone(), v))
         .collect();
-    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.1));
     entries.truncate(n);
     entries
 }

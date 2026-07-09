@@ -1659,15 +1659,11 @@ impl FrameGlyphBuffer {
 
     /// Set the authoritative physical cursor for the frame.
     pub fn set_phys_cursor(&mut self, mut cursor: PhysCursor) {
-        if let Some(slot) = self.slot_glyph(cursor.slot_id) {
-            match slot {
-                FrameGlyph::Image { .. }
-                | FrameGlyph::Video { .. }
-                | FrameGlyph::Xwidget { .. } => {
-                    cursor.style = CursorStyle::Hollow;
-                }
-                _ => {}
-            }
+        if let Some(
+            FrameGlyph::Image { .. } | FrameGlyph::Video { .. } | FrameGlyph::Xwidget { .. },
+        ) = self.slot_glyph(cursor.slot_id)
+        {
+            cursor.style = CursorStyle::Hollow;
         }
         let (x, y, width, height) = self.cursor_draw_rect(
             cursor.slot_id,

@@ -180,7 +180,7 @@ impl CursorState {
 
     pub(super) fn set_target(&mut self, new_target: CursorTarget) -> (bool, bool) {
         let had_target = self.target.is_some();
-        let target_moved = self.target.as_ref().map_or(true, |old| {
+        let target_moved = self.target.as_ref().is_none_or(|old| {
             (old.x - new_target.x).abs() > 0.5
                 || (old.y - new_target.y).abs() > 0.5
                 || (old.width - new_target.width).abs() > 0.5
@@ -449,11 +449,13 @@ impl CursorState {
 
                 if all_settled {
                     let target_corners = Self::target_corners(&target);
-                    for i in 0..4 {
-                        self.corner_springs[i].x = target_corners[i].0;
-                        self.corner_springs[i].y = target_corners[i].1;
-                        self.corner_springs[i].vx = 0.0;
-                        self.corner_springs[i].vy = 0.0;
+                    for (spring, target) in
+                        self.corner_springs.iter_mut().zip(target_corners.iter())
+                    {
+                        spring.x = target.0;
+                        spring.y = target.1;
+                        spring.vx = 0.0;
+                        spring.vy = 0.0;
                     }
                     self.snap(&target);
                 }

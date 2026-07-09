@@ -82,7 +82,7 @@ impl RenderApp {
             window_state.render.chrome.interaction.clear_tab_bar();
         }
 
-        let cursor_sync = Self::ingest_top_level_render_frame(
+        Self::ingest_top_level_render_frame(
             &mut window_state.render,
             frame,
             row_damage,
@@ -90,8 +90,7 @@ impl RenderApp {
             tool_bar,
             compact_bar,
             cursor_config,
-        );
-        cursor_sync
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -127,7 +126,7 @@ impl RenderApp {
         });
 
         if active_cursor.is_none() {
-            for (_, entry) in &render.compositor.child_frames.frames {
+            for entry in render.compositor.child_frames.frames.values() {
                 if let Some(cursor) = entry.frame.active_cursor() {
                     // Resolve through the shared cursor_draw_rect (where the
                     // static cursor draws), not the grid-approximate cursor

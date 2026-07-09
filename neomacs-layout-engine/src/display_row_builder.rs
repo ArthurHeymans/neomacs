@@ -1106,9 +1106,8 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let measurement = self.text_run_measurement(text, face_id);
         let start_char = source_span_start_char(span);
         let mut status = DisplayRowAppendStatus::Complete;
-        let mut char_offset = 0usize;
         let mut byte_offset = 0usize;
-        for ch in text.chars() {
+        for (char_offset, ch) in text.chars().enumerate() {
             let char_state = self.writer.text_char_state(ch);
             let advance_request = DisplayRowTextCharAdvanceRequest::new(
                 char_state,
@@ -1141,7 +1140,6 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             ));
             self.advance(written);
             metrics.add(written);
-            char_offset += 1;
             byte_offset += ch.len_utf8();
         }
         status
@@ -1276,9 +1274,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     ) {
         let measurement = self.text_run_measurement(text, face_id);
         let start_char = source_span_start_char(span);
-        let mut char_offset = 0usize;
         let mut byte_offset = 0usize;
-        for ch in text.chars() {
+        for (char_offset, ch) in text.chars().enumerate() {
             let char_state = self.text_char_state(ch);
             self.push_text_char_with_measurement(
                 char_state,
@@ -1288,7 +1285,6 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 byte_offset,
                 &measurement,
             );
-            char_offset += 1;
             byte_offset += ch.len_utf8();
         }
     }
@@ -1351,7 +1347,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             DisplayRowTextNaturalAdvanceKind::ClusterContinuation => {
                 glyph_row_writer::push_cluster_continuation_to_area(
-                    &mut self.row,
+                    self.row,
                     self.area_index,
                     ch,
                     advance_request.face_id,
@@ -1361,7 +1357,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_run_member_to_area(
-                    &mut self.row,
+                    self.row,
                     self.area_index,
                     ch,
                     advance_request.face_id,
@@ -1372,7 +1368,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayRowTextNaturalAdvanceKind::FaceColumns { columns } if columns > 1 => {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_wide_char_to_area(
-                    &mut self.row,
+                    self.row,
                     self.area_index,
                     ch,
                     advance_request.face_id,
@@ -1383,7 +1379,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayRowTextNaturalAdvanceKind::FaceColumns { .. } => {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_char_to_area(
-                    &mut self.row,
+                    self.row,
                     self.area_index,
                     ch,
                     advance_request.face_id,
@@ -1424,7 +1420,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .advance_from(position, self.layout.char_width_px);
         let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
         glyph_row_writer::push_stretch_to_area(
-            &mut self.row,
+            self.row,
             self.area_index,
             width_cols,
             face_id,
@@ -1475,7 +1471,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .unwrap_or(0.0);
 
         glyph_row_writer::push_stretch_to_area(
-            &mut self.row,
+            self.row,
             self.area_index,
             width_cols,
             face_id,

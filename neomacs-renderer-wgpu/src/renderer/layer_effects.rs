@@ -83,7 +83,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Background Pattern",
-            super::pattern_effects::emit_background_pattern(&ctx)
+            super::pattern_effects::emit_background_pattern(ctx)
         );
 
         // === Step 1b: Draw filled rounded rect backgrounds for ROUNDED boxed spans ===
@@ -93,27 +93,27 @@ impl WgpuRenderer {
             if span.row_role.is_chrome() {
                 continue;
             }
-            if let Some(ref bg_color) = span.bg {
-                if let Some(face) = faces.get(&span.face_id) {
-                    if face.box_corner_radius <= 0 {
-                        continue;
-                    }
-                    let radius = (face.box_corner_radius as f32)
-                        .min(span.height * 0.45)
-                        .min(span.width * 0.45);
-                    // Use a border_width larger than half the rect to fill solid
-                    let fill_bw = span.height.max(span.width);
-                    self.add_rounded_rect(
-                        &mut box_fill_vertices,
-                        span.x,
-                        span.y,
-                        span.width,
-                        span.height,
-                        fill_bw,
-                        radius,
-                        bg_color,
-                    );
+            if let Some(ref bg_color) = span.bg
+                && let Some(face) = faces.get(&span.face_id)
+            {
+                if face.box_corner_radius <= 0 {
+                    continue;
                 }
+                let radius = (face.box_corner_radius as f32)
+                    .min(span.height * 0.45)
+                    .min(span.width * 0.45);
+                // Use a border_width larger than half the rect to fill solid
+                let fill_bw = span.height.max(span.width);
+                self.add_rounded_rect(
+                    &mut box_fill_vertices,
+                    span.x,
+                    span.y,
+                    span.width,
+                    span.height,
+                    fill_bw,
+                    radius,
+                    bg_color,
+                );
             }
         }
         if let Some(upload) =
@@ -151,7 +151,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Glow",
-            super::cursor_effects::emit_cursor_glow(&ctx, &self.clocks.cursor_pulse_start)
+            super::cursor_effects::emit_cursor_glow(ctx, &self.clocks.cursor_pulse_start)
         );
 
         // === Step 1d: Draw cursor crosshair guide lines ===
@@ -159,7 +159,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Crosshair",
-            super::cursor_effects::emit_cursor_crosshair(&ctx)
+            super::cursor_effects::emit_cursor_crosshair(ctx)
         );
 
         // === Step 1e: Draw buffer modified border indicator ===
@@ -167,7 +167,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Modified Indicator",
-            super::window_effects::emit_modified_indicator(&ctx)
+            super::window_effects::emit_modified_indicator(ctx)
         );
 
         // === Step 1f: Typing heat map overlay ===
@@ -176,7 +176,7 @@ impl WgpuRenderer {
             render_pass,
             "Heat Map",
             super::window_effects::emit_typing_heatmap(
-                &ctx,
+                ctx,
                 &mut self.fx.typing_heatmap.entries,
                 &mut self.fx.typing_heatmap.prev_cursor
             )
@@ -190,7 +190,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Stained Glass",
-            super::window_effects::emit_stained_glass(&ctx)
+            super::window_effects::emit_stained_glass(ctx)
         );
 
         // === Step 1i_focus: Focus gradient border ===
@@ -198,7 +198,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Focus Gradient Border",
-            super::window_effects::emit_focus_gradient_border(&ctx)
+            super::window_effects::emit_focus_gradient_border(ctx)
         );
 
         // === Step 1i_depth: Window depth shadow layers ===
@@ -206,7 +206,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Depth Shadow",
-            super::window_effects::emit_window_depth_shadow(&ctx)
+            super::window_effects::emit_window_depth_shadow(ctx)
         );
 
         // === Step 1i_modeline_grad: Mode-line gradient background ===
@@ -214,7 +214,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Mode-line Gradient",
-            super::window_effects::emit_mode_line_gradient(&ctx)
+            super::window_effects::emit_mode_line_gradient(ctx)
         );
 
         // === Step 1i_magnetism: Cursor magnetism effect ===
@@ -223,7 +223,7 @@ impl WgpuRenderer {
             render_pass,
             "Cursor Magnetism",
             super::cursor_effects::emit_cursor_magnetism(
-                &ctx,
+                ctx,
                 &mut self.fx.cursor_magnetism.entries
             )
         );
@@ -233,7 +233,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Corner Fold",
-            super::window_effects::emit_window_corner_fold(&ctx)
+            super::window_effects::emit_window_corner_fold(ctx)
         );
 
         // === Step 1i2: Frosted window border effect ===
@@ -241,7 +241,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Frosted Border",
-            super::window_effects::emit_frosted_window_border(&ctx)
+            super::window_effects::emit_frosted_window_border(ctx)
         );
 
         // === Step 1i3: Line number pulse on cursor line ===
@@ -249,7 +249,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Line Number Pulse",
-            super::cursor_effects::emit_line_number_pulse(&ctx)
+            super::cursor_effects::emit_line_number_pulse(ctx)
         );
 
         // === Step 1i4: Window breathing border animation ===
@@ -257,7 +257,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Breathing Border",
-            super::window_effects::emit_window_breathing_border(&ctx)
+            super::window_effects::emit_window_breathing_border(ctx)
         );
 
         // === Step 1i5: Window scanline (CRT) effect ===
@@ -265,7 +265,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Scanlines",
-            super::window_effects::emit_window_scanline(&ctx)
+            super::window_effects::emit_window_scanline(ctx)
         );
 
         // === Step 1j: Cursor spotlight/radial gradient effect ===
@@ -273,7 +273,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Spotlight",
-            super::cursor_effects::emit_cursor_spotlight(&ctx)
+            super::cursor_effects::emit_cursor_spotlight(ctx)
         );
 
         // === Step 1k: Cursor comet tail effect ===
@@ -281,7 +281,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Comet",
-            super::cursor_effects::emit_cursor_comet(&ctx, &mut self.fx.cursor_comet.positions)
+            super::cursor_effects::emit_cursor_comet(ctx, &mut self.fx.cursor_comet.positions)
         );
 
         // === Step 1l: Cursor particle trail effect ===
@@ -290,7 +290,7 @@ impl WgpuRenderer {
             render_pass,
             "Cursor Particles",
             super::cursor_effects::emit_cursor_particles(
-                &ctx,
+                ctx,
                 &mut self.fx.cursor_particles.entries,
                 &mut self.fx.cursor_particles.prev_pos
             )
@@ -301,7 +301,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Matrix Rain",
-            super::cursor_effects::emit_matrix_rain(&ctx, &mut self.fx.matrix_rain.columns)
+            super::cursor_effects::emit_matrix_rain(ctx, &mut self.fx.matrix_rain.columns)
         );
 
         // Frost/ice border effect
@@ -309,7 +309,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Frost Border",
-            super::cursor_effects::emit_frost_border(&ctx)
+            super::cursor_effects::emit_frost_border(ctx)
         );
 
         // Cursor ghost afterimage effect
@@ -317,7 +317,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Ghost",
-            super::window_effects::emit_cursor_ghost(&ctx, &mut self.fx.cursor_ghost.entries)
+            super::window_effects::emit_cursor_ghost(ctx, &mut self.fx.cursor_ghost.entries)
         );
 
         // Edge glow on scroll boundaries
@@ -325,7 +325,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Edge Glow",
-            super::window_effects::emit_edge_glow(&ctx, &mut self.fx.edge_glow.entries)
+            super::window_effects::emit_edge_glow(ctx, &mut self.fx.edge_glow.entries)
         );
 
         // Rain/drip ambient effect
@@ -333,7 +333,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Rain",
-            super::window_effects::emit_rain_effect(&ctx, &mut self.fx.rain.drops)
+            super::window_effects::emit_rain_effect(ctx, &mut self.fx.rain.drops)
         );
 
         // Cursor ripple wave effect
@@ -341,7 +341,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Ripple",
-            super::cursor_effects::emit_cursor_ripple_wave(&ctx, &mut self.fx.ripple_wave.waves)
+            super::cursor_effects::emit_cursor_ripple_wave(ctx, &mut self.fx.ripple_wave.waves)
         );
     }
 
@@ -403,7 +403,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Aurora",
-            super::window_effects::emit_aurora_overlay(&ctx)
+            super::window_effects::emit_aurora_overlay(ctx)
         );
 
         // === Heat distortion effect ===
@@ -411,7 +411,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Heat Distortion Buffer",
-            super::pattern_effects::emit_heat_distortion(&ctx),
+            super::pattern_effects::emit_heat_distortion(ctx),
             continuous
         );
 
@@ -420,7 +420,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Lighthouse Beam Buffer",
-            super::cursor_effects::emit_cursor_lighthouse_beam(&ctx),
+            super::cursor_effects::emit_cursor_lighthouse_beam(ctx),
             continuous
         );
 
@@ -429,7 +429,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Neon Border Buffer",
-            super::pattern_effects::emit_neon_border(&ctx),
+            super::pattern_effects::emit_neon_border(ctx),
             continuous
         );
 
@@ -438,7 +438,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Sonar Ping Buffer",
-            super::cursor_effects::emit_cursor_sonar_ping(&ctx, &mut self.fx.sonar_ping.entries)
+            super::cursor_effects::emit_cursor_sonar_ping(ctx, &mut self.fx.sonar_ping.entries)
         );
 
         // === Lightning bolt effect ===
@@ -447,7 +447,7 @@ impl WgpuRenderer {
             render_pass,
             "Lightning Bolt Buffer",
             super::cursor_effects::emit_lightning_bolt(
-                &ctx,
+                ctx,
                 &mut self.clocks.lightning_bolt_last,
                 &mut self.fx.lightning_bolt.segments,
                 &mut self.fx.lightning_bolt.age
@@ -459,7 +459,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Orbit Particles Buffer",
-            super::cursor_effects::emit_cursor_orbit_particles(&ctx),
+            super::cursor_effects::emit_cursor_orbit_particles(ctx),
             continuous
         );
 
@@ -468,7 +468,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Plasma Border Buffer",
-            super::pattern_effects::emit_plasma_border(&ctx),
+            super::pattern_effects::emit_plasma_border(ctx),
             continuous
         );
 
@@ -477,7 +477,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Heartbeat Pulse Buffer",
-            super::cursor_effects::emit_cursor_heartbeat_pulse(&ctx),
+            super::cursor_effects::emit_cursor_heartbeat_pulse(ctx),
             continuous
         );
 
@@ -486,7 +486,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Topo Contour Buffer",
-            super::pattern_effects::emit_topographic_contour(&ctx),
+            super::pattern_effects::emit_topographic_contour(ctx),
             continuous
         );
 
@@ -496,7 +496,7 @@ impl WgpuRenderer {
             render_pass,
             "Metronome Tick Buffer",
             super::cursor_effects::emit_cursor_metronome_tick(
-                &ctx,
+                ctx,
                 &mut self.fx.metronome.last_x,
                 &mut self.fx.metronome.last_y,
                 &mut self.fx.metronome.tick_start
@@ -508,7 +508,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Constellation Buffer",
-            super::pattern_effects::emit_constellation(&ctx),
+            super::pattern_effects::emit_constellation(ctx),
             continuous
         );
 
@@ -517,7 +517,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Radar Sweep Buffer",
-            super::cursor_effects::emit_cursor_radar_sweep(&ctx),
+            super::cursor_effects::emit_cursor_radar_sweep(ctx),
             continuous
         );
 
@@ -526,7 +526,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Kaleidoscope Buffer",
-            super::pattern_effects::emit_kaleidoscope(&ctx),
+            super::pattern_effects::emit_kaleidoscope(ctx),
             continuous
         );
 
@@ -536,7 +536,7 @@ impl WgpuRenderer {
             render_pass,
             "Ripple Ring Buffer",
             super::cursor_effects::emit_cursor_ripple_ring(
-                &ctx,
+                ctx,
                 &mut self.fx.ripple_ring.start,
                 &mut self.fx.ripple_ring.last_x,
                 &mut self.fx.ripple_ring.last_y
@@ -548,7 +548,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Noise Field Buffer",
-            super::pattern_effects::emit_noise_field(&ctx),
+            super::pattern_effects::emit_noise_field(ctx),
             continuous
         );
 
@@ -557,7 +557,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Scope Buffer",
-            super::cursor_effects::emit_cursor_scope(&ctx),
+            super::cursor_effects::emit_cursor_scope(ctx),
             continuous
         );
 
@@ -566,7 +566,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Spiral Vortex Buffer",
-            super::pattern_effects::emit_spiral_vortex(&ctx),
+            super::pattern_effects::emit_spiral_vortex(ctx),
             continuous
         );
 
@@ -576,7 +576,7 @@ impl WgpuRenderer {
             render_pass,
             "Shockwave Buffer",
             super::cursor_effects::emit_cursor_shockwave(
-                &ctx,
+                ctx,
                 &mut self.fx.shockwave.start,
                 &mut self.fx.shockwave.last_x,
                 &mut self.fx.shockwave.last_y
@@ -588,7 +588,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Diamond Lattice Buffer",
-            super::pattern_effects::emit_diamond_lattice(&ctx),
+            super::pattern_effects::emit_diamond_lattice(ctx),
             continuous
         );
 
@@ -597,7 +597,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Gravity Well Buffer",
-            super::cursor_effects::emit_cursor_gravity_well(&ctx),
+            super::cursor_effects::emit_cursor_gravity_well(ctx),
             continuous
         );
 
@@ -606,7 +606,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Wave Interference Buffer",
-            super::pattern_effects::emit_wave_interference(&ctx),
+            super::pattern_effects::emit_wave_interference(ctx),
             continuous
         );
 
@@ -615,7 +615,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Portal Buffer",
-            super::cursor_effects::emit_cursor_portal(&ctx),
+            super::cursor_effects::emit_cursor_portal(ctx),
             continuous
         );
 
@@ -624,7 +624,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Chevron Pattern Buffer",
-            super::pattern_effects::emit_chevron(&ctx),
+            super::pattern_effects::emit_chevron(ctx),
             continuous
         );
 
@@ -634,7 +634,7 @@ impl WgpuRenderer {
             render_pass,
             "Cursor Bubble Buffer",
             super::cursor_effects::emit_cursor_bubble(
-                &ctx,
+                ctx,
                 &mut self.fx.bubble.spawn_time,
                 &mut self.fx.bubble.last_x,
                 &mut self.fx.bubble.last_y
@@ -646,7 +646,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "sunburst_pattern_vb",
-            super::pattern_effects::emit_sunburst(&ctx),
+            super::pattern_effects::emit_sunburst(ctx),
             continuous
         );
 
@@ -656,7 +656,7 @@ impl WgpuRenderer {
             render_pass,
             "cursor_firework_vb",
             super::cursor_effects::emit_cursor_firework(
-                &ctx,
+                ctx,
                 &mut self.fx.firework.start,
                 &mut self.fx.firework.last_x,
                 &mut self.fx.firework.last_y
@@ -668,7 +668,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "honeycomb_dissolve_vb",
-            super::pattern_effects::emit_honeycomb_dissolve(&ctx),
+            super::pattern_effects::emit_honeycomb_dissolve(ctx),
             continuous
         );
 
@@ -677,7 +677,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_tornado_vb",
-            super::cursor_effects::emit_cursor_tornado(&ctx),
+            super::cursor_effects::emit_cursor_tornado(ctx),
             continuous
         );
 
@@ -686,7 +686,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "moire_pattern_vb",
-            super::pattern_effects::emit_moire(&ctx),
+            super::pattern_effects::emit_moire(ctx),
             continuous
         );
 
@@ -696,7 +696,7 @@ impl WgpuRenderer {
             render_pass,
             "cursor_lightning_vb",
             super::cursor_effects::emit_cursor_lightning(
-                &ctx,
+                ctx,
                 &mut self.fx.cursor_lightning.start,
                 &mut self.fx.cursor_lightning.last_x,
                 &mut self.fx.cursor_lightning.last_y
@@ -708,7 +708,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "dot_matrix_vb",
-            super::pattern_effects::emit_dot_matrix(&ctx),
+            super::pattern_effects::emit_dot_matrix(ctx),
             continuous
         );
 
@@ -718,7 +718,7 @@ impl WgpuRenderer {
             render_pass,
             "cursor_snowflake_vb",
             super::cursor_effects::emit_cursor_snowflake(
-                &ctx,
+                ctx,
                 &mut self.fx.snowflake.start,
                 &mut self.fx.snowflake.last_x,
                 &mut self.fx.snowflake.last_y
@@ -730,7 +730,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "concentric_rings_vb",
-            super::pattern_effects::emit_concentric_rings(&ctx),
+            super::pattern_effects::emit_concentric_rings(ctx),
             continuous
         );
 
@@ -739,7 +739,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_flame_vb",
-            super::cursor_effects::emit_cursor_flame(&ctx),
+            super::cursor_effects::emit_cursor_flame(ctx),
             continuous
         );
 
@@ -748,7 +748,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "zigzag_pattern_vb",
-            super::pattern_effects::emit_zigzag(&ctx),
+            super::pattern_effects::emit_zigzag(ctx),
             continuous
         );
 
@@ -757,7 +757,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_crystal_vb",
-            super::cursor_effects::emit_cursor_crystal(&ctx),
+            super::cursor_effects::emit_cursor_crystal(ctx),
             continuous
         );
 
@@ -766,7 +766,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "tessellation_verts",
-            super::pattern_effects::emit_tessellation(&ctx)
+            super::pattern_effects::emit_tessellation(ctx)
         );
 
         // === Cursor water drop effect ===
@@ -774,7 +774,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_water_drop_verts",
-            super::cursor_effects::emit_cursor_water_drop(&ctx),
+            super::cursor_effects::emit_cursor_water_drop(ctx),
             continuous
         );
 
@@ -783,7 +783,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "guilloche_verts",
-            super::pattern_effects::emit_guilloche(&ctx),
+            super::pattern_effects::emit_guilloche(ctx),
             continuous
         );
 
@@ -792,7 +792,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_pixel_dust_verts",
-            super::cursor_effects::emit_cursor_pixel_dust(&ctx),
+            super::cursor_effects::emit_cursor_pixel_dust(ctx),
             continuous
         );
 
@@ -801,7 +801,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "celtic_knot_verts",
-            super::pattern_effects::emit_celtic_knot(&ctx),
+            super::pattern_effects::emit_celtic_knot(ctx),
             continuous
         );
 
@@ -810,7 +810,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_candle_flame_verts",
-            super::cursor_effects::emit_cursor_candle_flame(&ctx),
+            super::cursor_effects::emit_cursor_candle_flame(ctx),
             continuous
         );
 
@@ -819,7 +819,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "argyle_pattern_verts",
-            super::pattern_effects::emit_argyle(&ctx)
+            super::pattern_effects::emit_argyle(ctx)
         );
 
         // === Cursor moth flame effect ===
@@ -827,7 +827,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_moth_flame_verts",
-            super::cursor_effects::emit_cursor_moth_flame(&ctx),
+            super::cursor_effects::emit_cursor_moth_flame(ctx),
             continuous
         );
 
@@ -836,7 +836,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "basket_weave_verts",
-            super::pattern_effects::emit_basket_weave(&ctx)
+            super::pattern_effects::emit_basket_weave(ctx)
         );
 
         // === Cursor sparkler effect ===
@@ -844,7 +844,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_sparkler_verts",
-            super::cursor_effects::emit_cursor_sparkler(&ctx),
+            super::cursor_effects::emit_cursor_sparkler(ctx),
             continuous
         );
 
@@ -853,7 +853,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "fish_scale_verts",
-            super::pattern_effects::emit_fish_scale(&ctx)
+            super::pattern_effects::emit_fish_scale(ctx)
         );
 
         // === Cursor plasma ball effect ===
@@ -861,7 +861,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_plasma_ball_verts",
-            super::cursor_effects::emit_cursor_plasma_ball(&ctx),
+            super::cursor_effects::emit_cursor_plasma_ball(ctx),
             continuous
         );
 
@@ -870,7 +870,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "trefoil_knot_verts",
-            super::pattern_effects::emit_trefoil_knot(&ctx),
+            super::pattern_effects::emit_trefoil_knot(ctx),
             continuous
         );
 
@@ -879,7 +879,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_quill_pen_verts",
-            super::cursor_effects::emit_cursor_quill_pen(&ctx),
+            super::cursor_effects::emit_cursor_quill_pen(ctx),
             continuous
         );
 
@@ -888,7 +888,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "herringbone_pattern_verts",
-            super::pattern_effects::emit_herringbone(&ctx)
+            super::pattern_effects::emit_herringbone(ctx)
         );
 
         // === Cursor aurora borealis effect ===
@@ -896,7 +896,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_aurora_borealis_verts",
-            super::cursor_effects::emit_cursor_aurora_borealis(&ctx),
+            super::cursor_effects::emit_cursor_aurora_borealis(ctx),
             continuous
         );
 
@@ -905,7 +905,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "target_reticle_verts",
-            super::pattern_effects::emit_target_reticle(&ctx),
+            super::pattern_effects::emit_target_reticle(ctx),
             continuous
         );
 
@@ -914,7 +914,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_feather_verts",
-            super::cursor_effects::emit_cursor_feather(&ctx),
+            super::cursor_effects::emit_cursor_feather(ctx),
             continuous
         );
 
@@ -923,7 +923,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "plaid_pattern_verts",
-            super::pattern_effects::emit_plaid(&ctx)
+            super::pattern_effects::emit_plaid(ctx)
         );
 
         // === Cursor stardust effect ===
@@ -931,7 +931,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_stardust_verts",
-            super::cursor_effects::emit_cursor_stardust(&ctx),
+            super::cursor_effects::emit_cursor_stardust(ctx),
             continuous
         );
 
@@ -940,7 +940,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "brick_wall_verts",
-            super::pattern_effects::emit_brick_wall(&ctx)
+            super::pattern_effects::emit_brick_wall(ctx)
         );
 
         // === Cursor compass needle effect ===
@@ -948,7 +948,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_compass_needle_verts",
-            super::cursor_effects::emit_cursor_compass_needle(&ctx),
+            super::cursor_effects::emit_cursor_compass_needle(ctx),
             continuous
         );
 
@@ -957,7 +957,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "sine_wave_verts",
-            super::pattern_effects::emit_sine_wave(&ctx),
+            super::pattern_effects::emit_sine_wave(ctx),
             continuous
         );
 
@@ -966,7 +966,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_galaxy_verts",
-            super::cursor_effects::emit_cursor_galaxy(&ctx),
+            super::cursor_effects::emit_cursor_galaxy(ctx),
             continuous
         );
 
@@ -975,7 +975,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "rotating_gear_verts",
-            super::pattern_effects::emit_rotating_gear(&ctx),
+            super::pattern_effects::emit_rotating_gear(ctx),
             continuous
         );
 
@@ -984,7 +984,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_prism_verts",
-            super::cursor_effects::emit_cursor_prism(&ctx),
+            super::cursor_effects::emit_cursor_prism(ctx),
             continuous
         );
 
@@ -993,7 +993,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "crosshatch_pattern_verts",
-            super::pattern_effects::emit_crosshatch(&ctx),
+            super::pattern_effects::emit_crosshatch(ctx),
             continuous
         );
 
@@ -1002,7 +1002,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "cursor_moth_verts",
-            super::cursor_effects::emit_cursor_moth(&ctx),
+            super::cursor_effects::emit_cursor_moth(ctx),
             continuous
         );
 
@@ -1011,7 +1011,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Hex Grid Buffer",
-            super::pattern_effects::emit_hex_grid(&ctx),
+            super::pattern_effects::emit_hex_grid(ctx),
             continuous
         );
 
@@ -1021,7 +1021,7 @@ impl WgpuRenderer {
             render_pass,
             "Sparkle Burst Buffer",
             super::cursor_effects::emit_cursor_sparkle_burst(
-                &ctx,
+                ctx,
                 &mut self.fx.sparkle_burst.entries
             )
         );
@@ -1031,7 +1031,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Circuit Trace Buffer",
-            super::pattern_effects::emit_circuit_board(&ctx),
+            super::pattern_effects::emit_circuit_board(ctx),
             continuous
         );
 
@@ -1040,7 +1040,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Compass Rose Buffer",
-            super::cursor_effects::emit_cursor_compass_rose(&ctx),
+            super::cursor_effects::emit_cursor_compass_rose(ctx),
             continuous
         );
 
@@ -1049,7 +1049,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Warp Grid Buffer",
-            super::pattern_effects::emit_warp_grid(&ctx),
+            super::pattern_effects::emit_warp_grid(ctx),
             continuous
         );
 
@@ -1058,7 +1058,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "DNA Helix Buffer",
-            super::cursor_effects::emit_cursor_dna_helix(&ctx),
+            super::cursor_effects::emit_cursor_dna_helix(ctx),
             continuous
         );
 
@@ -1067,7 +1067,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Prism Edge Buffer",
-            super::pattern_effects::emit_prism_rainbow_edge(&ctx),
+            super::pattern_effects::emit_prism_rainbow_edge(ctx),
             continuous
         );
 
@@ -1077,7 +1077,7 @@ impl WgpuRenderer {
             render_pass,
             "Pendulum Buffer",
             super::cursor_effects::emit_cursor_pendulum(
-                &ctx,
+                ctx,
                 &mut self.fx.pendulum.last_x,
                 &mut self.fx.pendulum.last_y,
                 &mut self.fx.pendulum.swing_start
@@ -1089,7 +1089,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Shadow Buffer",
-            super::cursor_effects::emit_cursor_drop_shadow(&ctx)
+            super::cursor_effects::emit_cursor_drop_shadow(ctx)
         );
     }
 

@@ -1,5 +1,10 @@
 //! WGPU renderer primitives shared by display backends.
 
+// Renderer entry points and GPU-pipeline builders take many positional
+// parameters (geometry, colors, atlas/pipeline handles); folding them into
+// structs is a separate refactor, so this bulk category is allowed crate-wide.
+#![allow(clippy::too_many_arguments)]
+
 pub mod external_buffer;
 pub mod glyph_atlas;
 pub mod image_cache;

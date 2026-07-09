@@ -334,6 +334,8 @@ pub struct FontMetricsService {
     /// Cache: (face attrs, cluster text) → shaped glyphs with interned font
     /// identities. Same generation contract; clear-on-overflow like
     /// `shaped_run_cache`.
+    // A `type` alias for this cache value would not materially aid readability.
+    #[allow(clippy::type_complexity)]
     resolved_cluster_cache:
         HashMap<(MetricsCacheKey, String), Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)>>,
     /// Cache: `"{file}#{index}"` → a synthetic fontdb family name registered
@@ -355,6 +357,12 @@ pub struct FontMetricsService {
 fn font_pin_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENABLED.get_or_init(|| std::env::var_os("NEOMACS_DISABLE_FONT_PIN").is_none())
+}
+
+impl Default for FontMetricsService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FontMetricsService {
@@ -504,9 +512,8 @@ impl FontMetricsService {
         attrs = attrs.weight(Weight(effective_weight));
 
         // Font style
-        match font_slant_to_cosmic_style(slant) {
-            Some(style) => attrs = attrs.style(style),
-            None => {}
+        if let Some(style) = font_slant_to_cosmic_style(slant) {
+            attrs = attrs.style(style)
         }
 
         attrs
@@ -1375,9 +1382,7 @@ impl FontMetricsService {
         };
 
         // Control chars (0-31) and DEL (127) get space width
-        for i in 0..32 {
-            widths[i] = space_width;
-        }
+        widths[..32].fill(space_width);
         widths[127] = space_width;
 
         // Measure printable ASCII (32-126) using a single buffer with all chars.
@@ -1493,12 +1498,12 @@ impl FontMetricsService {
         let mut descent = (line_height.ceil() - ascent).max(0.0);
         let mut actual_line_height = (ascent + descent).max(1.0);
 
-        if let Some(layout) = buffer.line_layout(&mut self.font_system, 0) {
-            if let Some(line) = layout.first() {
-                ascent = line.max_ascent.ceil().max(1.0);
-                descent = line.max_descent.ceil().max(0.0);
-                actual_line_height = (ascent + descent).max(1.0);
-            }
+        if let Some(layout) = buffer.line_layout(&mut self.font_system, 0)
+            && let Some(line) = layout.first()
+        {
+            ascent = line.max_ascent.ceil().max(1.0);
+            descent = line.max_descent.ceil().max(0.0);
+            actual_line_height = (ascent + descent).max(1.0);
         }
 
         FontVerticalMetrics {

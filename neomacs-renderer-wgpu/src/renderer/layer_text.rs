@@ -1333,7 +1333,7 @@ impl WgpuRenderer {
                                 };
                                 (dark, light)
                             }
-                            _ => (bx_color.clone(), bx_color.clone()),
+                            _ => (*bx_color, *bx_color),
                         };
 
                         // Top

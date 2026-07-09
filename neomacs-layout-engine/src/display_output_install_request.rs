@@ -235,6 +235,8 @@ pub(crate) struct OutputFrameIdentityInstallRequest {
 }
 
 #[derive(Clone, Debug)]
+// Large payload variant; boxing is a perf hint deferred out of the lint gate.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum OutputFrameStateInstallRequest {
     Identity(OutputFrameIdentityInstallRequest),
     BackgroundColor(Color),

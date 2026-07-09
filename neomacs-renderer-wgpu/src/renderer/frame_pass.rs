@@ -28,6 +28,8 @@ pub(super) struct FrameParams<'a> {
     pub(super) cursor_visible: bool,
     pub(super) animated_cursor: &'a Option<AnimatedCursor>,
     pub(super) mouse_pos: (f32, f32),
+    // RGB-pair gradient endpoints; a dedicated type alias would add little here.
+    #[allow(clippy::type_complexity)]
     pub(super) background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     /// Logical frame size from `prepare_frame_uniforms`.
     pub(super) logical_w: f32,

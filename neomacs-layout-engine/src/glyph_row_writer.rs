@@ -130,7 +130,7 @@ fn rewrite_units_into_row(
 /// `Composite`. Returns true when the extender was merged; false when
 /// there is no preceding base glyph (caller should fall back to
 /// emitting a standalone glyph).
-fn merge_extender_into_last_glyph(area: &mut Vec<Glyph>, ch: char) -> bool {
+fn merge_extender_into_last_glyph(area: &mut [Glyph], ch: char) -> bool {
     // Walk back past padding cells (the right half of a preceding wide
     // char); the combining mark attaches to the wide base, not the
     // padding slot.
@@ -483,12 +483,12 @@ pub(crate) fn reorder_row_bidi(row: &mut GlyphRow, phys_cursor_col: Option<u16>)
     let cursor_logical_idx = row.cursor_col.and_then(|col| {
         units
             .iter()
-            .position(|unit| unit.cols.iter().any(|&idx| idx == col as usize))
+            .position(|unit| unit.cols.contains(&(col as usize)))
     });
     let phys_cursor_logical_idx = phys_cursor_col.and_then(|col| {
         units
             .iter()
-            .position(|unit| unit.cols.iter().any(|&idx| idx == col as usize))
+            .position(|unit| unit.cols.contains(&(col as usize)))
     });
 
     let visual_order = if levels.iter().all(|&level| level == 0) {

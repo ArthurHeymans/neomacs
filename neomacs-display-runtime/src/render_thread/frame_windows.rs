@@ -164,6 +164,9 @@ impl ChromeState {
 
 /// Result of a chrome interaction press.
 #[derive(Debug, Clone, Copy)]
+// The shared `Bar` suffix is domain-meaningful (menu/tool/tab BARS); renaming the
+// variants would obscure intent, so the naming lint is allowed here.
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum ChromePress {
     MenuBar(u32),
     ToolBar(u32),
@@ -1010,10 +1013,9 @@ impl GuiFrameWindowState {
             mouse_hidden_for_typing,
             ..
         } = &mut self.lifecycle
+            && *mouse_hidden_for_typing != hidden
         {
-            if *mouse_hidden_for_typing != hidden {
-                native.window.set_cursor_visible(!hidden);
-            }
+            native.window.set_cursor_visible(!hidden);
         }
         self.lifecycle.set_mouse_hidden_for_typing(hidden);
     }

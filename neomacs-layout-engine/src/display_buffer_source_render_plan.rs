@@ -664,7 +664,6 @@ impl BufferSourceOutputSetup {
                 hit_data,
                 display_snapshots,
             );
-            drop(render_services);
             *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
@@ -857,7 +856,6 @@ impl BufferSourceOutputSetup {
                 hit_data,
                 display_snapshots,
             );
-            drop(render_services);
             *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
@@ -1000,7 +998,6 @@ impl BufferSourceOutputSetup {
             hit_data,
             display_snapshots,
         );
-        drop(render_services);
         *frame_face_id_counter = face_ids.finish();
         BufferSourceRenderAttemptOutcome::Finished {
             redisplay_positions,

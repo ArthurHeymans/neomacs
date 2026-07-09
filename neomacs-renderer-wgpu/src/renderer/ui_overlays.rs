@@ -216,32 +216,32 @@ impl WgpuRenderer {
             let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
 
             // Title (root panel only)
-            if panel_idx == 0 {
-                if let Some(ref title) = menu.title {
-                    let tx = mx + padding * 2.0;
-                    for (ci, ch) in title.chars().enumerate() {
-                        let key = GlyphKey {
-                            charcode: ch as u32,
-                            face_id: FaceId::new(0),
-                            font_size_bits,
-                            font_identity: glyph_font_identity(None),
-                            x_bin: SubpixelBin::Zero,
-                            y_bin: SubpixelBin::Zero,
-                        };
-                        if let Some(handle) = glyph_atlas.get_or_create_atlas(
-                            &self.device,
-                            &self.queue,
-                            &key,
-                            None,
-                            SubpixelRequest::Disabled,
-                        ) {
-                            overlay_glyphs.push((
-                                handle,
-                                tx + (ci as f32) * char_width,
-                                my + padding,
-                                title_color,
-                            ));
-                        }
+            if panel_idx == 0
+                && let Some(ref title) = menu.title
+            {
+                let tx = mx + padding * 2.0;
+                for (ci, ch) in title.chars().enumerate() {
+                    let key = GlyphKey {
+                        charcode: ch as u32,
+                        face_id: FaceId::new(0),
+                        font_size_bits,
+                        font_identity: glyph_font_identity(None),
+                        x_bin: SubpixelBin::Zero,
+                        y_bin: SubpixelBin::Zero,
+                    };
+                    if let Some(handle) = glyph_atlas.get_or_create_atlas(
+                        &self.device,
+                        &self.queue,
+                        &key,
+                        None,
+                        SubpixelRequest::Disabled,
+                    ) {
+                        overlay_glyphs.push((
+                            handle,
+                            tx + (ci as f32) * char_width,
+                            my + padding,
+                            title_color,
+                        ));
                     }
                 }
             }
@@ -348,7 +348,7 @@ impl WgpuRenderer {
     fn render_overlay_glyphs(
         &mut self,
         view: &wgpu::TextureView,
-        glyphs: &mut Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])>,
+        glyphs: &mut [(GlyphAtlasHandle, f32, f32, [f32; 4])],
         glyph_atlas: &WgpuGlyphAtlas,
     ) {
         if glyphs.is_empty() {
@@ -2468,48 +2468,47 @@ impl WgpuRenderer {
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
                     && let Some(&image_id) = icon_textures.get(image)
+                    && let Some(cached) = self.caches.image.get(image_id)
                 {
-                    if let Some(cached) = self.caches.image.get(image_id) {
-                        let bg = cached.bind_group.clone();
-                        let verts = [
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y],
-                                tex_coords: [1.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y + icon_sz],
-                                tex_coords: [0.0, 1.0],
-                                color: tint,
-                            },
-                        ];
-                        match icon_batches.last() {
-                            Some((prev_id, _, _)) if *prev_id == image_id => {
-                                icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
-                            }
-                            _ => {
-                                icon_batches.push((image_id, bg, verts.to_vec()));
-                            }
+                    let bg = cached.bind_group.clone();
+                    let verts = [
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y],
+                            tex_coords: [1.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y + icon_sz],
+                            tex_coords: [0.0, 1.0],
+                            color: tint,
+                        },
+                    ];
+                    match icon_batches.last() {
+                        Some((prev_id, _, _)) if *prev_id == image_id => {
+                            icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
+                        }
+                        _ => {
+                            icon_batches.push((image_id, bg, verts.to_vec()));
                         }
                     }
                 }
@@ -2729,48 +2728,47 @@ impl WgpuRenderer {
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
                     && let Some(&image_id) = icon_textures.get(image)
+                    && let Some(cached) = self.caches.image.get(image_id)
                 {
-                    if let Some(cached) = self.caches.image.get(image_id) {
-                        let bg = cached.bind_group.clone();
-                        let verts = [
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y],
-                                tex_coords: [1.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y],
-                                tex_coords: [0.0, 0.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x + icon_sz, icon_y + icon_sz],
-                                tex_coords: [1.0, 1.0],
-                                color: tint,
-                            },
-                            GlyphVertex {
-                                position: [icon_x, icon_y + icon_sz],
-                                tex_coords: [0.0, 1.0],
-                                color: tint,
-                            },
-                        ];
-                        match icon_batches.last() {
-                            Some((prev_id, _, _)) if *prev_id == image_id => {
-                                icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
-                            }
-                            _ => {
-                                icon_batches.push((image_id, bg, verts.to_vec()));
-                            }
+                    let bg = cached.bind_group.clone();
+                    let verts = [
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y],
+                            tex_coords: [1.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y],
+                            tex_coords: [0.0, 0.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x + icon_sz, icon_y + icon_sz],
+                            tex_coords: [1.0, 1.0],
+                            color: tint,
+                        },
+                        GlyphVertex {
+                            position: [icon_x, icon_y + icon_sz],
+                            tex_coords: [0.0, 1.0],
+                            color: tint,
+                        },
+                    ];
+                    match icon_batches.last() {
+                        Some((prev_id, _, _)) if *prev_id == image_id => {
+                            icon_batches.last_mut().unwrap().2.extend_from_slice(&verts);
+                        }
+                        _ => {
+                            icon_batches.push((image_id, bg, verts.to_vec()));
                         }
                     }
                 }

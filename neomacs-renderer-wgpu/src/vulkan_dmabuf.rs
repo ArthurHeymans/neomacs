@@ -12,6 +12,12 @@
 //! - VK_EXT_external_memory_dma_buf
 //! - VK_EXT_image_drm_format_modifier
 
+// The ash Vulkan structs are chained by writing `p_next` after `default()` so
+// the pointer targets a local declared on the preceding line; functional-record
+// update on these external `#[repr(C)]` types is impractical, so the
+// field-reassign lint is allowed module-wide.
+#![allow(clippy::field_reassign_with_default)]
+
 #[cfg(target_os = "linux")]
 use std::os::unix::io::RawFd;
 
@@ -303,12 +309,7 @@ mod hal_import {
 
     /// Find the first compatible memory type index.
     fn find_memory_type(type_filter: u32) -> Option<u32> {
-        for i in 0..32 {
-            if (type_filter & (1 << i)) != 0 {
-                return Some(i);
-            }
-        }
-        None
+        (0..32).find(|&i| (type_filter & (1 << i)) != 0)
     }
 
     /// Duplicate an fd, returning `None` on failure.

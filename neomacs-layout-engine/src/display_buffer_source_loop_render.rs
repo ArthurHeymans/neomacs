@@ -79,10 +79,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 continue;
             }
 
-            self.render_face_checkpoint_for_context(
-                face_resolution_context.clone(),
-                active_face_state,
-            );
+            self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
 
             if !BufferSourceRenderRequest::new(
                 loop_context,
@@ -91,11 +88,8 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 active_face_state,
                 self.reborrow(),
             )
-            .render_next_and_apply(
-                source_walk,
-                face_resolution_context.clone(),
-                buffer,
-            ) {
+            .render_next_and_apply(source_walk, face_resolution_context, buffer)
+            {
                 break;
             }
         }

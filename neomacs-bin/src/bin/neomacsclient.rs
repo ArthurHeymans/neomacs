@@ -203,7 +203,7 @@ fn run_client(prog: &str, options: Options) -> Result<(), String> {
 
     #[cfg(unix)]
     {
-        return run_unix_client(prog, options);
+        run_unix_client(prog, options)
     }
 
     #[cfg(not(unix))]
@@ -441,10 +441,10 @@ fn build_request(options: &Options) -> Result<String, String> {
                 push_arg_command(&mut request, "-position", arg);
             } else {
                 push_command(&mut request, "-file");
-                if let Some(prefix) = &options.tramp_prefix {
-                    if Path::new(arg).is_absolute() {
-                        request.push_str(&quote_argument(prefix));
-                    }
+                if let Some(prefix) = &options.tramp_prefix
+                    && Path::new(arg).is_absolute()
+                {
+                    request.push_str(&quote_argument(prefix));
                 }
                 request.push_str(&quote_argument(arg));
                 request.push(' ');

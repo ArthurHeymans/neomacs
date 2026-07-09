@@ -949,72 +949,64 @@ impl VideoCache {
                     Some(sample) => {
                         timeout_count = 0;
                         frame_count += 1;
-                        if let Some(buffer) = sample.buffer() {
-                            if let Some(caps) = sample.caps() {
-                                if let Ok(info) = gst_video::VideoInfo::from_caps(caps) {
-                                    let width = info.width();
-                                    let height = info.height();
+                        if let Some(buffer) = sample.buffer()
+                            && let Some(caps) = sample.caps()
+                            && let Ok(info) = gst_video::VideoInfo::from_caps(caps)
+                        {
+                            let width = info.width();
+                            let height = info.height();
 
-                                    // DMA-BUF extraction is disabled: the Vulkan HAL
-                                    // import path (DmaBufBuffer → VkImage → wgpu texture)
-                                    // creates per-frame sync fds on AMD RADV that
-                                    // accumulate and exhaust the process fd limit.
-                                    // CPU upload via queue.write_texture() is used instead.
+                            // DMA-BUF extraction is disabled: the Vulkan HAL
+                            // import path (DmaBufBuffer → VkImage → wgpu texture)
+                            // creates per-frame sync fds on AMD RADV that
+                            // accumulate and exhaust the process fd limit.
+                            // CPU upload via queue.write_texture() is used instead.
+                            #[cfg(target_os = "linux")]
+                            let dmabuf_info: Option<DmaBufInfo> = None;
+                            #[cfg(not(target_os = "linux"))]
+                            let dmabuf_info: Option<()> = None;
+
+                            let has_dmabuf = dmabuf_info.is_some();
+                            if frame_count <= 5 || frame_count.is_multiple_of(60) {
+                                tracing::info!(
+                                    "Frame #{} for video {}, {}x{}, format={:?}, DMA-BUF: {}",
+                                    frame_count,
+                                    video_id,
+                                    width,
+                                    height,
+                                    info.format(),
+                                    has_dmabuf
+                                );
+                            }
+
+                            let data = if let Ok(map) = buffer.map_readable() {
+                                map.as_slice().to_vec()
+                            } else if has_dmabuf {
+                                tracing::debug!(
+                                    "DMA-BUF memory not mappable (expected for zero-copy)"
+                                );
+                                Vec::new()
+                            } else {
+                                tracing::warn!("Failed to map buffer and no DMA-BUF available");
+                                Vec::new()
+                            };
+
+                            if tx_puller
+                                .send(DecodedFrame {
+                                    id: frame_count as u32,
+                                    video_id,
+                                    width,
+                                    height,
+                                    data,
                                     #[cfg(target_os = "linux")]
-                                    let dmabuf_info: Option<
-                                        DmaBufInfo,
-                                    > = None;
-                                    #[cfg(not(target_os = "linux"))]
-                                    let dmabuf_info: Option<()> = None;
-
-                                    let has_dmabuf = dmabuf_info.is_some();
-                                    if frame_count <= 5 || frame_count % 60 == 0 {
-                                        tracing::info!(
-                                            "Frame #{} for video {}, {}x{}, format={:?}, DMA-BUF: {}",
-                                            frame_count,
-                                            video_id,
-                                            width,
-                                            height,
-                                            info.format(),
-                                            has_dmabuf
-                                        );
-                                    }
-
-                                    let data = if let Ok(map) = buffer.map_readable() {
-                                        map.as_slice().to_vec()
-                                    } else if has_dmabuf {
-                                        tracing::debug!(
-                                            "DMA-BUF memory not mappable (expected for zero-copy)"
-                                        );
-                                        Vec::new()
-                                    } else {
-                                        tracing::warn!(
-                                            "Failed to map buffer and no DMA-BUF available"
-                                        );
-                                        Vec::new()
-                                    };
-
-                                    if tx_puller
-                                        .send(DecodedFrame {
-                                            id: frame_count as u32,
-                                            video_id,
-                                            width,
-                                            height,
-                                            data,
-                                            #[cfg(target_os = "linux")]
-                                            dmabuf: dmabuf_info,
-                                            pts: buffer.pts().map(|p| p.nseconds()).unwrap_or(0),
-                                            duration: buffer
-                                                .duration()
-                                                .map(|d| d.nseconds())
-                                                .unwrap_or(0),
-                                        })
-                                        .is_err()
-                                    {
-                                        tracing::debug!("Frame receiver dropped, stopping puller");
-                                        break;
-                                    }
-                                }
+                                    dmabuf: dmabuf_info,
+                                    pts: buffer.pts().map(|p| p.nseconds()).unwrap_or(0),
+                                    duration: buffer.duration().map(|d| d.nseconds()).unwrap_or(0),
+                                })
+                                .is_err()
+                            {
+                                tracing::debug!("Frame receiver dropped, stopping puller");
+                                break;
                             }
                         }
                     }
@@ -1061,7 +1053,7 @@ impl VideoCache {
                             );
                             break;
                         }
-                        if timeout_count == 1 || timeout_count % 50 == 0 {
+                        if timeout_count == 1 || timeout_count.is_multiple_of(50) {
                             tracing::debug!(
                                 "Video {} pull timeout #{}, frames so far: {}",
                                 video_id,

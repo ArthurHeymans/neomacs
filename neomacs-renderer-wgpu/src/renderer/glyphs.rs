@@ -559,9 +559,9 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                 char: ch,
                 row_role,
                 ..
-            } => {
+            }
                 // Log first row chars AND any char touching y=24-32
-                if *y < 1.0 || (*y < 32.0 && *y + *height > 24.0) {
+                if (*y < 1.0 || (*y < 32.0 && *y + *height > 24.0)) => {
                     let rf = frame_glyphs.resolved_face(*face_id);
                     let fg = rf.fg;
                     let font_size = rf.font_size;
@@ -585,7 +585,6 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                     );
                     logged_count += 1;
                 }
-            }
             FrameGlyph::Stretch {
                 x,
                 y,
@@ -594,8 +593,8 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                 bg,
                 row_role,
                 ..
-            } => {
-                if *y < 32.0 && *y + *height > 24.0 {
+            }
+                if *y < 32.0 && *y + *height > 24.0 => {
                     tracing::trace!(
                         "frame_glyph[{}]: Stretch pos=({:.1},{:.1}) size=({:.1},{:.1}) bg=({:.3},{:.3},{:.3}) role={:?}",
                         i,
@@ -610,9 +609,8 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                     );
                     logged_count += 1;
                 }
-            }
-            FrameGlyph::Background { bounds, color } => {
-                if bounds.y < 32.0 && bounds.y + bounds.height > 24.0 {
+            FrameGlyph::Background { bounds, color }
+                if bounds.y < 32.0 && bounds.y + bounds.height > 24.0 => {
                     tracing::trace!(
                         "frame_glyph[{}]: Background pos=({:.1},{:.1}) size=({:.1},{:.1}) color=({:.3},{:.3},{:.3})",
                         i,
@@ -626,7 +624,6 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                     );
                     logged_count += 1;
                 }
-            }
             FrameGlyph::Border {
                 x,
                 y,
@@ -634,8 +631,8 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                 height,
                 color,
                 ..
-            } => {
-                if *y < 32.0 && *y + *height > 24.0 {
+            }
+                if *y < 32.0 && *y + *height > 24.0 => {
                     tracing::trace!(
                         "frame_glyph[{}]: Border pos=({:.1},{:.1}) size=({:.1},{:.1}) color=({:.3},{:.3},{:.3})",
                         i,
@@ -649,7 +646,6 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
                     );
                     logged_count += 1;
                 }
-            }
             _ => {}
         }
     }
@@ -958,16 +954,16 @@ impl WgpuRenderer {
         height: f32,
         clip_rect: Option<&Rect>,
     ) -> Option<Color> {
-        if let Some(face) = face {
-            if let Some(gradient) = face.background_gradient.as_deref() {
-                let bounds = Self::gradient_bounds_for_rect(x, y, width, height, clip_rect);
-                return Some(sample_gradient_color(
-                    gradient,
-                    &bounds,
-                    x + width * 0.5,
-                    y + height * 0.5,
-                ));
-            }
+        if let Some(face) = face
+            && let Some(gradient) = face.background_gradient.as_deref()
+        {
+            let bounds = Self::gradient_bounds_for_rect(x, y, width, height, clip_rect);
+            return Some(sample_gradient_color(
+                gradient,
+                &bounds,
+                x + width * 0.5,
+                y + height * 0.5,
+            ));
         }
         fallback.or_else(|| face.map(|resolved| resolved.background))
     }
@@ -1067,6 +1063,9 @@ impl WgpuRenderer {
     /// `surface_width` and `surface_height` should be the actual surface dimensions
     /// for correct coordinate transformation.
     #[allow(clippy::too_many_arguments)]
+    // The `background_gradient` parameter is an RGB-pair tuple; a type alias
+    // would not materially improve this signature.
+    #[allow(clippy::type_complexity)]
     pub fn render_frame_glyphs(
         &mut self,
         view: &wgpu::TextureView,

@@ -42,17 +42,16 @@ pub fn layout_frame_display_state(
         let mut engine = engine.borrow_mut();
         // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
         // this frame and apply it (sub-line vscroll) before re-laying.
-        if let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id) {
-            if let Some(window_id) = evaluator
+        if let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
+            && let Some(window_id) = evaluator
                 .frame_manager()
                 .get(frame_id)
                 .map(|frame| frame.selected_window)
-            {
-                // SIGN: trackpad delta_y vs scroll direction is verified on-screen
-                // (T5); flip this negation if it scrolls the wrong way.
-                let delta_px = (-delta).round() as i32;
-                let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
-            }
+        {
+            // SIGN: trackpad delta_y vs scroll direction is verified on-screen
+            // (T5); flip this negation if it scrolls the wrong way.
+            let delta_px = (-delta).round() as i32;
+            let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
         }
         engine.layout_frame_rust(evaluator, frame_id);
         engine.last_frame_display_state.take()

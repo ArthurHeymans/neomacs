@@ -172,8 +172,10 @@ struct BufferCallbackData {
     /// Flag indicating DMA-BUF frame available (prefer over raw frame)
     dmabuf_available: AtomicBool,
     /// WPE Platform display for buffer import
+    #[allow(dead_code)]
     display: *mut plat::WPEDisplay,
     /// EGL display for DMA-BUF export
+    #[allow(dead_code)]
     egl_display: *mut libc::c_void,
 }
 
@@ -214,12 +216,16 @@ pub struct WpeWebView {
     buffer_rendered_handler_id: u64,
 
     /// Signal handler ID for decide-policy
+    #[allow(dead_code)]
     decide_policy_handler_id: u64,
 
     /// Signal handler ID for load-changed
+    #[allow(dead_code)]
     load_changed_handler_id: u64,
 
-    /// DMA-BUF exporter for texture conversion
+    /// DMA-BUF exporter for texture conversion; held so its EGL export
+    /// procedures stay resident for the view's lifetime.
+    #[allow(dead_code)]
     dmabuf_exporter: DmaBufExporter,
 
     /// Whether the view needs redraw
@@ -496,7 +502,7 @@ impl WpeWebView {
         self.progress = 0.0;
 
         let c_html = CString::new(html).map_err(|_| DisplayError::WebKit("Invalid HTML".into()))?;
-        let c_base_uri = base_uri.map(|u| CString::new(u).ok()).flatten();
+        let c_base_uri = base_uri.and_then(|u| CString::new(u).ok());
 
         unsafe {
             wk::webkit_web_view_load_html(
@@ -666,24 +672,23 @@ impl WpeWebView {
         unsafe {
             if let Some(callback_data) = self.callback_data.as_ref() {
                 // Check if DMA-BUF frame is available
-                if callback_data.dmabuf_available.swap(false, Ordering::AcqRel) {
-                    if let Ok(mut guard) = callback_data.latest_dmabuf.lock() {
-                        if let Some(mut frame) = guard.take() {
-                            // Take ownership of the fds
-                            let fds = frame.take_fds();
-                            // Note: Don't clear frame_available here - pixel fallback may still need it
+                if callback_data.dmabuf_available.swap(false, Ordering::AcqRel)
+                    && let Ok(mut guard) = callback_data.latest_dmabuf.lock()
+                    && let Some(mut frame) = guard.take()
+                {
+                    // Take ownership of the fds
+                    let fds = frame.take_fds();
+                    // Note: Don't clear frame_available here - pixel fallback may still need it
 
-                            return Some(DmaBufData {
-                                fds,
-                                strides: frame.strides.clone(),
-                                offsets: frame.offsets.clone(),
-                                fourcc: frame.fourcc,
-                                modifier: frame.modifier,
-                                width: frame.width,
-                                height: frame.height,
-                            });
-                        }
-                    }
+                    return Some(DmaBufData {
+                        fds,
+                        strides: frame.strides.clone(),
+                        offsets: frame.offsets.clone(),
+                        fourcc: frame.fourcc,
+                        modifier: frame.modifier,
+                        width: frame.width,
+                        height: frame.height,
+                    });
                 }
             }
         }
@@ -696,16 +701,15 @@ impl WpeWebView {
         unsafe {
             if let Some(callback_data) = self.callback_data.as_ref() {
                 // Check if raw frame is available
-                if callback_data.frame_available.swap(false, Ordering::AcqRel) {
-                    if let Ok(mut guard) = callback_data.latest_frame.lock() {
-                        if let Some(frame) = guard.take() {
-                            return Some(RawPixelData {
-                                pixels: frame.pixels,
-                                width: frame.width,
-                                height: frame.height,
-                            });
-                        }
-                    }
+                if callback_data.frame_available.swap(false, Ordering::AcqRel)
+                    && let Ok(mut guard) = callback_data.latest_frame.lock()
+                    && let Some(frame) = guard.take()
+                {
+                    return Some(RawPixelData {
+                        pixels: frame.pixels,
+                        width: frame.width,
+                        height: frame.height,
+                    });
                 }
             }
         }
@@ -714,10 +718,8 @@ impl WpeWebView {
 
     /// Dispatch frame complete to WPE
     pub fn dispatch_frame_complete(&self) {
-        unsafe {
-            // With WPE Platform, frame complete is signaled via wpe_view_frame_complete
-            // But we may not need this as WebKit handles its own frame pacing
-        }
+        // With WPE Platform, frame complete is signaled via wpe_view_frame_complete
+        // But we may not need this as WebKit handles its own frame pacing
     }
 
     /// Send keyboard event to WebKit via WPE Platform
@@ -1390,22 +1392,22 @@ unsafe extern "C" fn decide_policy_callback(
                 "decide_policy_callback: Ignored new window request for '{}'",
                 url
             );
-            return 1; // TRUE - we handled it (by ignoring)
+            1 // TRUE - we handled it (by ignoring)
         }
 
         WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION => {
             // Normal navigation - let WebKit handle it
-            return 0; // FALSE
+            0 // FALSE
         }
 
         WEBKIT_POLICY_DECISION_TYPE_RESPONSE => {
             // Resource response - let WebKit handle it
-            return 0; // FALSE
+            0 // FALSE
         }
 
         _ => {
             // Unknown type - let WebKit handle it
-            return 0; // FALSE
+            0 // FALSE
         }
     }
 }

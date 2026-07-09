@@ -461,8 +461,8 @@ impl WgpuGlyphAtlas {
                 }
 
                 if let Some(image) = self.render_cache_key_image(cache_key, enable_subpixel) {
-                    let width = image.placement.width as u32;
-                    let height = image.placement.height as u32;
+                    let width = image.placement.width;
+                    let height = image.placement.height;
 
                     if width == 0 || height == 0 {
                         continue;

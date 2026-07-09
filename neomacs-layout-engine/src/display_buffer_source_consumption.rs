@@ -136,16 +136,16 @@ impl BufferSourceConsumptionState {
 
         let source_char = source.char_at(expected_source_pos);
         let item = source.next_cursor_item(context, replacement_mode)?;
-        if let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = &item {
-            if !self.replacement_matches(position, replacement)? {
-                tracing::error!(
-                    "BufferSourceConsumptionState: display replacement did not match \
+        if let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = &item
+            && !self.replacement_matches(position, replacement)?
+        {
+            tracing::error!(
+                "BufferSourceConsumptionState: display replacement did not match \
                          buffer walk byte {} charpos {}",
-                    position.byte_idx(),
-                    position.charpos()
-                );
-                return None;
-            }
+                position.byte_idx(),
+                position.charpos()
+            );
+            return None;
         }
         Some((item, source_char))
     }

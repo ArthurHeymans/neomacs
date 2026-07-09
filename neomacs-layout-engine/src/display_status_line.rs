@@ -86,6 +86,8 @@ fn record_mode_line_eval(format_symbol: &str) {
     }
 }
 
+// Large payload variant; boxing is a perf hint deferred out of the lint gate.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum FrameTabBarDisplayRowRender {
     Empty,
     Measured(MeasuredDisplayRow),
@@ -1091,14 +1093,13 @@ pub(crate) fn eval_status_line_format_value(
 }
 
 fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
-    if let Some(items) = list_to_vec(&entry) {
-        if items
+    if let Some(items) = list_to_vec(&entry)
+        && items
             .get(1)
             .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
-        {
-            let caption = *items.get(2)?;
-            return caption.is_string().then_some(caption);
-        }
+    {
+        let caption = *items.get(2)?;
+        return caption.is_string().then_some(caption);
     }
 
     if !entry.is_cons() {

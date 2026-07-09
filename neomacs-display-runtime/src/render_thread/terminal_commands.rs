@@ -48,10 +48,10 @@ impl RenderApp {
                 }
             }
             TerminalCommand::TerminalWrite { id, data } => {
-                if let Some(view) = self.terminal_manager.get_mut(id) {
-                    if let Err(e) = view.write(&data) {
-                        tracing::warn!("Terminal {} write error: {}", id, e);
-                    }
+                if let Some(view) = self.terminal_manager.get_mut(id)
+                    && let Err(e) = view.write(&data)
+                {
+                    tracing::warn!("Terminal {} write error: {}", id, e);
                 }
             }
             TerminalCommand::TerminalResize { id, cols, rows } => {

@@ -8,6 +8,11 @@
 //! Editor Runtime (Rust) ──► Scene Graph ──► wgpu ──► GPU
 //! ```
 
+// Backend/window entry points and GPU-plumbing helpers take many positional
+// parameters (geometry, handles, callbacks); folding them into structs is a
+// separate refactor, so this bulk category is allowed crate-wide.
+#![allow(clippy::too_many_arguments)]
+
 pub mod backend;
 pub mod core;
 pub mod thread_comm;

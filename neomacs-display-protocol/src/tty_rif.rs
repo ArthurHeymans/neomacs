@@ -18,7 +18,7 @@ use std::collections::HashMap;
 // ---------------------------------------------------------------------------
 
 /// Attributes for a single terminal cell (maps to ANSI SGR sequences).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CellAttrs {
     pub fg: Option<(u8, u8, u8)>,
     pub bg: Option<(u8, u8, u8)>,
@@ -28,20 +28,6 @@ pub struct CellAttrs {
     pub underline: u8,
     pub strikethrough: bool,
     pub inverse: bool,
-}
-
-impl Default for CellAttrs {
-    fn default() -> Self {
-        Self {
-            fg: None,
-            bg: None,
-            bold: false,
-            italic: false,
-            underline: 0,
-            strikethrough: false,
-            inverse: false,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -508,9 +494,7 @@ impl TtyRif {
         };
 
         let lines = (menu_bar.lines as usize).min(self.desired.height.saturating_sub(origin_row));
-        let width = frame_cols
-            .min(self.desired.width.saturating_sub(origin_col))
-            .max(0);
+        let width = frame_cols.min(self.desired.width.saturating_sub(origin_col));
         if lines == 0 || width == 0 {
             return;
         }
@@ -1090,7 +1074,7 @@ fn glyph_row_debug_text(row: &GlyphRow) -> String {
             match &glyph.glyph_type {
                 GlyphType::Composite { text: cluster } => text.push_str(cluster),
                 GlyphType::Stretch { width_cols } => {
-                    text.extend(std::iter::repeat(' ').take(usize::from((*width_cols).max(1))));
+                    text.extend(std::iter::repeat_n(' ', usize::from((*width_cols).max(1))));
                 }
                 _ => text.push(glyph_to_char(glyph)),
             }

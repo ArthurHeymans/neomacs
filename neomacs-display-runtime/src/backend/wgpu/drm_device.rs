@@ -169,14 +169,14 @@ pub fn find_render_node_for_adapter(
         tracing::info!("Looking for DRM device with PCI slot: {}", normalized);
 
         for dev in &devices {
-            if let Some(ref slot) = dev.pci_slot {
-                if slot == &normalized || slot.ends_with(&format!("/{}", normalized)) {
-                    tracing::info!(
-                        "Found matching DRM device by PCI slot: {:?}",
-                        dev.render_node
-                    );
-                    return Some(dev.render_node.clone());
-                }
+            if let Some(ref slot) = dev.pci_slot
+                && (slot == &normalized || slot.ends_with(&format!("/{}", normalized)))
+            {
+                tracing::info!(
+                    "Found matching DRM device by PCI slot: {:?}",
+                    dev.render_node
+                );
+                return Some(dev.render_node.clone());
             }
         }
     }
@@ -240,11 +240,7 @@ pub fn get_render_node_from_adapter_info(info: &wgpu::AdapterInfo) -> Option<Pat
         None
     };
 
-    find_render_node_for_adapter(
-        pci_bus_id,
-        Some(info.vendor as u32),
-        Some(info.device as u32),
-    )
+    find_render_node_for_adapter(pci_bus_id, Some(info.vendor), Some(info.device))
 }
 
 #[cfg(test)]

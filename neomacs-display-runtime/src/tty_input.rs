@@ -313,18 +313,18 @@ fn read_tty_events(
     let mut last_size = crossterm::terminal::size().ok();
 
     while !stop.load(Ordering::Relaxed) {
-        if let Ok(size) = crossterm::terminal::size() {
-            if last_size != Some(size) {
-                last_size = Some(size);
-                let event = InputEvent::WindowResize {
-                    width: size.0 as u32,
-                    height: size.1 as u32,
-                    emacs_frame_id: 0,
-                };
-                if tx.send(event).is_err() {
-                    tracing::warn!("tty_input: channel closed");
-                    return;
-                }
+        if let Ok(size) = crossterm::terminal::size()
+            && last_size != Some(size)
+        {
+            last_size = Some(size);
+            let event = InputEvent::WindowResize {
+                width: size.0 as u32,
+                height: size.1 as u32,
+                emacs_frame_id: 0,
+            };
+            if tx.send(event).is_err() {
+                tracing::warn!("tty_input: channel closed");
+                return;
             }
         }
 

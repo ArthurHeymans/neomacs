@@ -176,10 +176,10 @@ impl MockDisplayItemSource {
                 }
             }
         }
-        if let Some((target_cols, face_id)) = fill_to_cols {
-            if visible_cols < target_cols {
-                builder.push_text(" ".repeat(target_cols - visible_cols), face_id);
-            }
+        if let Some((target_cols, face_id)) = fill_to_cols
+            && visible_cols < target_cols
+        {
+            builder.push_text(" ".repeat(target_cols - visible_cols), face_id);
         }
         builder.finish()
     }

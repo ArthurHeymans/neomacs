@@ -567,7 +567,7 @@ pub(super) fn emit_cursor_ripple_wave(
         let cy = anim.y + anim.height / 2.0;
         // Spawn a new ripple on each frame where cursor moves (debounced by checking recent entries)
         let should_spawn = waves.is_empty()
-            || waves.last().map_or(true, |last| {
+            || waves.last().is_none_or(|last| {
                 let dx = (cx - last.x).abs();
                 let dy = (cy - last.y).abs();
                 (dx > 2.0 || dy > 2.0) && now.duration_since(last.started).as_millis() > 50
@@ -687,7 +687,7 @@ pub(super) fn emit_cursor_sonar_ping(
         let t = elapsed / entry.duration.as_secs_f32();
         for ring_idx in 0..ring_count {
             let ring_t = t - ring_idx as f32 * 0.15;
-            if ring_t < 0.0 || ring_t > 1.0 {
+            if !(0.0..=1.0).contains(&ring_t) {
                 continue;
             }
             let radius = ring_t * max_r;
@@ -1457,9 +1457,8 @@ pub(super) fn emit_cursor_lightning(
                     let mut py = cy;
                     for seg in 0..segments {
                         let seg_len = max_len / segments as f32;
-                        let jitter_angle = angle
-                            + ((h.wrapping_mul((seg + 1) as u32) >> 8) % 60) as f32 * 0.02
-                            - 0.6;
+                        let jitter_angle =
+                            angle + ((h.wrapping_mul(seg + 1) >> 8) % 60) as f32 * 0.02 - 0.6;
                         let nx = px + jitter_angle.cos() * seg_len;
                         let ny = py + jitter_angle.sin() * seg_len;
                         let alpha =

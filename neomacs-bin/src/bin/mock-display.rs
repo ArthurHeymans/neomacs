@@ -9,6 +9,10 @@
 //!   --gui       Render via wgpu GPU window instead of TTY
 //!   --dump      Dump grid as plain text (no terminal setup)
 
+// A mock frame-builder helper here takes many positional parameters; not worth
+// restructuring for this test binary's lint gate.
+#![allow(clippy::too_many_arguments)]
+
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_rif::TtyRif;
@@ -20,7 +24,6 @@ use neomacs_layout_engine::mock_frame::{
 };
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use tracing;
 
 // ===================================================================
 // Scene: Vec<FrameDisplayState> with GUI/TTY fan-out helpers
@@ -205,14 +208,14 @@ fn run_gui(demo: &str) {
     loop {
         std::thread::sleep(Duration::from_millis(100));
         while let Ok(event) = emacs_comms.input_rx.try_recv() {
-            if let InputEvent::Key { keysym, .. } = event {
-                if keysym == b'q' as u32 || keysym == 0xff1b {
-                    let _ = emacs_comms
-                        .cmd_tx
-                        .send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
-                    render_thread.join();
-                    return;
-                }
+            if let InputEvent::Key { keysym, .. } = event
+                && (keysym == b'q' as u32 || keysym == 0xff1b)
+            {
+                let _ = emacs_comms
+                    .cmd_tx
+                    .send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
+                render_thread.join();
+                return;
             }
         }
     }
