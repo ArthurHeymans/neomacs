@@ -207,7 +207,7 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .destroy_floating_webkit_from_top_level_windows(id);
@@ -338,7 +338,7 @@ impl RenderApp {
                 #[cfg(feature = "wpe-webkit")]
                 {
                     let overlay = crate::core::scene::FloatingWebKit {
-                        webkit_id: id,
+                        webkit_id: crate::core::types::WebKitId::new(id),
                         x,
                         y,
                         width,
@@ -349,7 +349,7 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
@@ -382,7 +382,7 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id != id);
+                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);

@@ -44,7 +44,7 @@ impl RenderApp {
     ) -> Option<(u32, i32, i32)> {
         floating_webkits.iter().rev().find_map(|wk| {
             if x >= wk.x && x < wk.x + wk.width && y >= wk.y && y < wk.y + wk.height {
-                Some((wk.webkit_id, (x - wk.x) as i32, (y - wk.y) as i32))
+                Some((wk.webkit_id.get(), (x - wk.x) as i32, (y - wk.y) as i32))
             } else {
                 None
             }
