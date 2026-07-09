@@ -111,6 +111,7 @@ proptest.workspace = true
 tree-sitter-json = "0.24"
 
 [build-dependencies]
+pkg-config.workspace = true
 sha2.workspace = true
 
 [[bench]]

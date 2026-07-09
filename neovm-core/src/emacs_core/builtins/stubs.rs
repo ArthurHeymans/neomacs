@@ -94,50 +94,6 @@ pub(crate) fn builtin_tty_display_pixel_height(
 }
 
 // =========================================================================
-// lcms.c stubs (no lcms in NeoVM)
-// =========================================================================
-
-pub(crate) fn builtin_lcms2_available_p(args: Vec<Value>) -> EvalResult {
-    expect_args("lcms2-available-p", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-cie-de2000", &args, 2, 5)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-xyz->jch", &args, 1, 3)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jch->xyz", &args, 1, 3)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jch->jab", &args, 1, 3)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jab->jch", &args, 1, 3)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_cam02_ucs(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-cam02-ucs", &args, 2, 4)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_lcms_temp_to_white_point(args: Vec<Value>) -> EvalResult {
-    expect_args("lcms-temp->white-point", &args, 1)?;
-    Ok(Value::NIL)
-}
-
-// =========================================================================
 // neomacsfns.c gap-fill stubs
 // =========================================================================
 

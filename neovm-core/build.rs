@@ -13,6 +13,7 @@ fn main() {
     let manifest_dir = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let project_root = manifest_dir.parent().expect("workspace root");
 
+    detect_lcms2();
     unicode_gen::ensure_generated_unicode_lisp(&manifest_dir, project_root);
     generate_x11_color_table(project_root, &manifest_dir);
 
@@ -59,6 +60,52 @@ fn main() {
             .join("src/emacs_core/jit/shim_names.rs")
             .display()
     );
+}
+
+fn detect_lcms2() {
+    println!("cargo:rustc-check-cfg=cfg(neomacs_have_lcms2)");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    println!("cargo:rerun-if-env-changed=LCMS2_NO_PKG_CONFIG");
+
+    if std::env::var_os("LCMS2_NO_PKG_CONFIG").is_some() {
+        return;
+    }
+
+    let Ok(library) = pkg_config::Config::new()
+        .cargo_metadata(false)
+        .probe("lcms2")
+    else {
+        return;
+    };
+
+    println!("cargo:rustc-cfg=neomacs_have_lcms2");
+    let candidates = lcms2_library_candidates(&library.link_paths);
+    if !candidates.is_empty() {
+        println!("cargo:rustc-env=NEOMACS_LCMS2_LIBRARY_CANDIDATES={candidates}");
+    }
+}
+
+fn lcms2_library_candidates(paths: &[PathBuf]) -> String {
+    let mut candidates = Vec::new();
+    let names: &[&str] = std::cfg_select! {
+        target_os = "windows" => &["liblcms2-2.dll", "lcms2.dll"],
+        target_os = "macos" => &["liblcms2.2.dylib", "liblcms2.dylib"],
+        target_os = "linux" => &["liblcms2.so.2", "liblcms2.so"],
+        unix => &["liblcms2.so.2", "liblcms2.so"],
+        _ => &["lcms2"],
+    };
+
+    for path in paths {
+        for name in names {
+            let candidate = path.join(name);
+            if candidate.exists() {
+                candidates.push(candidate.display().to_string());
+            }
+        }
+    }
+
+    candidates.join(":")
 }
 
 /// Parse etc/rgb.txt and generate a Rust source file with a static

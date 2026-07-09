@@ -3204,6 +3204,7 @@ dependencies = [
  "num_enum",
  "object 0.37.3",
  "parking_lot",
+ "pkg-config",
  "polling",
  "portable-pty",
  "proptest",
