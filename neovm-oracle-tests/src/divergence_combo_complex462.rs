@@ -46,12 +46,15 @@ fn div_cx462_thread_join() {
 #[test]
 fn div_cx462_thread_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity(
+    let expect = expect_test::expect![[r#""OK quit""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (let ((t1 (make-thread (lambda () (while t (thread-yield))) "looper")))
       (thread-signal t1 'quit nil)
       (thread-join t1))
+  (quit (car e))
   (error (car e)))"##,
+        expect,
     );
 }
 

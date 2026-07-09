@@ -382,6 +382,22 @@ fn test_builtin_thread_yield() {
 }
 
 #[test]
+fn test_thread_yielding_worker_can_be_signaled_and_joined() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(condition-case e
+                 (let ((worker (make-thread (lambda () (while t (thread-yield))))))
+                   (thread-signal worker 'quit nil)
+                   (thread-join worker))
+                 (quit (car e)))"#,
+        )
+        .expect("yielding worker signal form");
+    assert_eq!(result, Value::symbol("quit"));
+}
+
+#[test]
 fn test_builtin_thread_name_main() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

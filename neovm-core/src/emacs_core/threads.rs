@@ -945,9 +945,8 @@ pub(crate) fn finish_make_thread_result(
 
 /// `(thread-join THREAD)` -- wait for thread completion.
 ///
-/// Since all threads run synchronously at creation time, they are already
-/// finished by the time anyone can call join. Returns the thread's result, or
-/// re-signals the thread's terminal error the GNU way.
+/// Returns the thread's result, resuming a simulated blocked thread when needed,
+/// or re-signals a `thread-signal` error snapshot the GNU way.
 pub(crate) fn builtin_thread_join(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
@@ -1011,13 +1010,17 @@ fn resume_blocked_thread(ctx: &mut crate::emacs_core::eval::Context, thread_id: 
 }
 
 /// `(thread-yield)` -- yield the current thread.
-///
-/// No-op in our single-threaded simulation.
 pub(crate) fn builtin_thread_yield(
-    _ctx: &mut crate::emacs_core::eval::Context,
+    ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("thread-yield", &args, 0)?;
+    if ctx.threads.current_thread_id() != 0 {
+        return Err(Flow::ThreadBlocked {
+            blocker: Value::symbol("thread-yield"),
+            remaining_forms: Value::NIL,
+        });
+    }
     Ok(Value::NIL)
 }
 
