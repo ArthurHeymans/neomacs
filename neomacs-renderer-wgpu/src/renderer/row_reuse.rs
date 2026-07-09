@@ -26,7 +26,19 @@
 //!   mode-line fade, line animations)
 //! - `ReusedShifted` additionally requires the physical shift to be exactly
 //!   integral AND a power-of-two scale factor, so `position + dvpos` is
-//!   bit-exact against fresh tessellation.
+//!   bit-exact against fresh tessellation. Rows are captured VERBATIM-ONLY
+//!   (never spliced shifted) when any glyph's face has a background gradient
+//!   (the sampled color is a function of the glyph's y, which the row hash
+//!   does not cover) or when any glyph's extent touches/crosses its clip
+//!   band edge (the y-trim depends on absolute y vs the band).
+//!
+//! Residual caveat (documented, accepted): even under the power-of-two scale
+//! gate, a shifted splice can diverge from fresh tessellation by 1 ULP — and
+//! thus one subpixel bin — when the baseline y is not exactly representable
+//! on the dyadic lattice (layout's `baseline + dvpos` addition may round
+//! differently from our `position + dvpos`). The row-y key catches cell-y
+//! drift but not baseline-only rounding; the divergence is at most one
+//! subpixel rasterization bin.
 //!
 //! Cached rows depend on one layout-side invariant that cannot be keyed here:
 //! when layout marks a row `Reused`, the face ids referenced by that row
@@ -109,6 +121,10 @@ pub(super) struct RowKey {
     pub(super) frame_id: u64,
     pub(super) window_id: i64,
     pub(super) row: u32,
+    /// Which text pass the row was chunked in. Chrome rows are never cached
+    /// today (layout marks them New), but keying the pass makes cross-pass
+    /// collisions structurally impossible.
+    pub(super) overlay: bool,
 }
 
 /// A run of consecutive glyphs belonging to one (window, row) in one text
@@ -154,6 +170,7 @@ pub(super) fn chunk_text_rows(
             frame_id,
             window_id: window_id.get(),
             row: slot_id.row,
+            overlay: want_overlay,
         };
         match chunks.last_mut() {
             Some(last) if last.key == key => {
@@ -272,6 +289,10 @@ pub(super) struct CachedRow {
     origin_bits: (u32, u32),
     row_y_bits: u32,
     atlas_generation: u64,
+    /// Row may only be reused at its captured y (dy == 0): it contains
+    /// y-dependent vertex data the row hash does not cover (gradient-face
+    /// background samples, clip-band y-trims).
+    verbatim_only: bool,
     streams: RowStreams,
     tick: u64,
 }
@@ -352,6 +373,16 @@ pub(super) struct ReusePassCtx<'a> {
     pub(super) allow_store: bool,
 }
 
+/// Per-row facts only the tessellator can observe, reported back so the
+/// capture can key them.
+#[derive(Debug, Clone, Copy, Default)]
+pub(super) struct RowTessellation {
+    /// A glyph's vertex data depended on its absolute y beyond the row hash
+    /// (gradient-face background sample, clip-band y-trim/edge-touch): the
+    /// captured row must never be spliced shifted.
+    pub(super) verbatim_only: bool,
+}
+
 /// The tessellation backend the driver drives. Production implements this
 /// over the real atlas path; tests substitute a deterministic fake so the
 /// classifier/splice/assembly pipeline is exercised CPU-only.
@@ -360,7 +391,7 @@ pub(super) trait RowTessellator {
     /// page for this frame so mid-frame eviction cannot invalidate it.
     fn revalidate_and_pin(&mut self, entry: AnyAtlasEntry) -> bool;
     /// Tessellate the chunk's glyphs, appending to `out`.
-    fn tessellate(&mut self, chunk: &RowChunk, out: &mut RowStreams);
+    fn tessellate(&mut self, chunk: &RowChunk, out: &mut RowStreams) -> RowTessellation;
 }
 
 enum RowPlan {
@@ -401,6 +432,11 @@ fn classify(chunk: &RowChunk, ctx: &ReusePassCtx<'_>, cache: &RowReuseCache) -> 
     let Some(cached) = cache.rows.get(&chunk.key) else {
         return tess(true);
     };
+    if dvpos != 0.0 && cached.verbatim_only {
+        // The cached vertices bake y-dependent data (gradient samples,
+        // clip trims); only a same-y splice reproduces them.
+        return tess(true);
+    }
     if cached.row_hash != info.row_hash
         || cached.scale_bits != ctx.scale_bits
         || cached.atlas_generation != ctx.atlas_generation
@@ -478,6 +514,7 @@ pub(super) fn assemble_rows_with_reuse(
                             origin_bits: cached.origin_bits,
                             row_y_bits: chunk.row_y.to_bits(),
                             atlas_generation: ctx.atlas_generation,
+                            verbatim_only: cached.verbatim_only,
                             streams: out.segment_since(marks),
                             tick: 0,
                         },
@@ -486,12 +523,14 @@ pub(super) fn assemble_rows_with_reuse(
             }
             RowPlan::Tessellate { bailed } => {
                 let marks = out.lens();
-                tessellator.tessellate(chunk, &mut out);
+                let tessellation = tessellator.tessellate(chunk, &mut out);
                 stats.rows_tessellated += 1;
                 if bailed {
                     stats.reuse_bails += 1;
                 }
-                if let Some(capture) = capture_after_tessellation(chunk, ctx, &out, marks) {
+                if let Some(capture) =
+                    capture_after_tessellation(chunk, ctx, tessellation, &out, marks)
+                {
                     captures.push(capture);
                 }
             }
@@ -504,6 +543,7 @@ pub(super) fn assemble_rows_with_reuse(
 fn capture_after_tessellation(
     chunk: &RowChunk,
     ctx: &ReusePassCtx<'_>,
+    tessellation: RowTessellation,
     out: &RowStreams,
     marks: (usize, usize, usize, usize),
 ) -> Option<(RowKey, CachedRow)> {
@@ -526,6 +566,7 @@ fn capture_after_tessellation(
             origin_bits: origin,
             row_y_bits: chunk.row_y.to_bits(),
             atlas_generation: ctx.atlas_generation,
+            verbatim_only: tessellation.verbatim_only,
             streams: out.segment_since(marks),
             tick: 0,
         },
@@ -548,6 +589,13 @@ pub(super) fn window_origin_bits(frame_glyphs: &FrameGlyphBuffer) -> HashMap<i64
             )
         })
         .collect()
+}
+
+/// True when a glyph spanning `[y, y + height)` touches or crosses either
+/// edge of the clip band `[top, bottom)`. Such glyphs are y-trimmed (or would
+/// become trimmed under any vertical shift), so their row is verbatim-only.
+pub(super) fn glyph_extent_touches_band(y: f32, height: f32, top: f32, bottom: f32) -> bool {
+    y <= top || y + height >= bottom
 }
 
 /// True when `scale` is a positive power of two (f32 mantissa zero), which

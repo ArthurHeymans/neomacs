@@ -171,10 +171,19 @@ fn fake_glyph_quad(c: char, x: f32, y: f32, color: [f32; 4]) -> [GlyphVertex; 6]
     ]
 }
 
+/// Test knobs for the fake tessellator, mirroring the conditions the live
+/// tessellator detects (gradient faces, clip-band trims).
+#[derive(Default, Clone)]
+struct FakeConfig {
+    fail_revalidate: bool,
+    gradient_faces: std::collections::HashSet<u32>,
+    clip_band: Option<(f32, f32)>,
+}
+
 struct FakeTessellator<'a> {
     glyphs: &'a [FrameGlyph],
     want_overlay: bool,
-    fail_revalidate: bool,
+    config: FakeConfig,
     revalidated: usize,
 }
 
@@ -183,7 +192,7 @@ impl<'a> FakeTessellator<'a> {
         Self {
             glyphs,
             want_overlay: false,
-            fail_revalidate: false,
+            config: FakeConfig::default(),
             revalidated: 0,
         }
     }
@@ -192,10 +201,11 @@ impl<'a> FakeTessellator<'a> {
 impl RowTessellator for FakeTessellator<'_> {
     fn revalidate_and_pin(&mut self, _entry: AnyAtlasEntry) -> bool {
         self.revalidated += 1;
-        !self.fail_revalidate
+        !self.config.fail_revalidate
     }
 
-    fn tessellate(&mut self, chunk: &RowChunk, out: &mut RowStreams) {
+    fn tessellate(&mut self, chunk: &RowChunk, out: &mut RowStreams) -> RowTessellation {
+        let mut tessellation = RowTessellation::default();
         for glyph_index in chunk.glyphs.clone() {
             let FrameGlyph::Char {
                 window_id,
@@ -214,6 +224,14 @@ impl RowTessellator for FakeTessellator<'_> {
             };
             if row_role.is_chrome() != self.want_overlay {
                 continue;
+            }
+            if self.config.gradient_faces.contains(face_id) {
+                tessellation.verbatim_only = true;
+            }
+            if let Some((top, bottom)) = self.config.clip_band {
+                if glyph_extent_touches_band(*y, 12.0, top, bottom) {
+                    tessellation.verbatim_only = true;
+                }
             }
             let entry = fake_entry(*c);
             let fg = [*face_id as f32 / 255.0, 0.25, 0.5, 1.0];
@@ -255,6 +273,7 @@ impl RowTessellator for FakeTessellator<'_> {
                 right_overhang: 0.0,
             });
         }
+        tessellation
     }
 }
 
@@ -311,21 +330,38 @@ struct Ran {
     stats: RowReuseStats,
 }
 
-fn run_pass(
+fn run_pass_with(
     glyphs: &[FrameGlyph],
     ctx: &ReusePassCtx<'_>,
     cache: &RowReuseCache,
-    fail_revalidate: bool,
+    config: &FakeConfig,
 ) -> Ran {
     let chunks = chunk_text_rows(glyphs, false, FRAME);
     let mut tess = FakeTessellator::new(glyphs);
-    tess.fail_revalidate = fail_revalidate;
+    tess.config = config.clone();
     let (out, captures, stats) = assemble_rows_with_reuse(&chunks, ctx, cache, &mut tess);
     Ran {
         out,
         captures,
         stats,
     }
+}
+
+fn run_pass(
+    glyphs: &[FrameGlyph],
+    ctx: &ReusePassCtx<'_>,
+    cache: &RowReuseCache,
+    fail_revalidate: bool,
+) -> Ran {
+    run_pass_with(
+        glyphs,
+        ctx,
+        cache,
+        &FakeConfig {
+            fail_revalidate,
+            ..FakeConfig::default()
+        },
+    )
 }
 
 fn base_ctx<'a>(
@@ -347,16 +383,24 @@ fn base_ctx<'a>(
 
 /// Warm the cache: tessellate every row of `glyphs` (damage all-New so no
 /// reuse fires, hashes present so captures happen) and commit.
-fn warm_cache(glyphs: &[FrameGlyph], origins: &HashMap<i64, (u32, u32)>) -> RowReuseCache {
+fn warm_cache_with(
+    glyphs: &[FrameGlyph],
+    origins: &HashMap<i64, (u32, u32)>,
+    config: &FakeConfig,
+) -> RowReuseCache {
     let mut cache = RowReuseCache::default();
     let damage = all_rows(|_, _| RowDamage::New);
-    let ran = run_pass(glyphs, &base_ctx(Some(&damage), origins), &cache, false);
+    let ran = run_pass_with(glyphs, &base_ctx(Some(&damage), origins), &cache, config);
     assert_eq!(ran.stats.rows_tessellated, 4);
     assert_eq!(ran.captures.len(), 4);
     cache.stage(ran.captures);
     cache.commit_frame();
     assert_eq!(cache.len(), 4);
     cache
+}
+
+fn warm_cache(glyphs: &[FrameGlyph], origins: &HashMap<i64, (u32, u32)>) -> RowReuseCache {
+    warm_cache_with(glyphs, origins, &FakeConfig::default())
 }
 
 /// Byte-level fingerprint of everything the GPU would consume, plus the
@@ -658,6 +702,13 @@ fn adversarial_non_power_of_two_scale_never_splices_shifted() {
     let ran = run_pass(&glyphs_b, &ctx, &cache, false);
     assert_eq!(ran.stats.rows_reused_shifted, 0);
     assert_eq!(ran.stats.reuse_bails, 4);
+
+    let mut full_ctx = base_ctx(None, &origins);
+    full_ctx.scale_factor = 3.0;
+    full_ctx.scale_bits = 3.0f32.to_bits();
+    full_ctx.scale_pow2 = false;
+    let full = run_pass(&glyphs_b, &full_ctx, &RowReuseCache::default(), false);
+    assert_eq!(fingerprint(&ran.out), fingerprint(&full.out));
 }
 
 #[test]
@@ -761,6 +812,14 @@ fn row_y_mismatch_bails_verbatim_reuse() {
     let ran = run_pass(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, false);
     assert_eq!(ran.stats.rows_reused_verbatim, 0);
     assert_eq!(ran.stats.reuse_bails, 4);
+
+    let full = run_pass(
+        &glyphs_b,
+        &base_ctx(None, &origins),
+        &RowReuseCache::default(),
+        false,
+    );
+    assert_eq!(fingerprint(&ran.out), fingerprint(&full.out));
 }
 
 #[test]
@@ -789,6 +848,96 @@ fn non_contiguous_row_bails_even_when_damage_says_reused() {
     assert_eq!(ran.stats.rows_reused_verbatim, 3);
     assert_eq!(ran.stats.rows_tessellated, 2);
     assert_eq!(ran.stats.reuse_bails, 2);
+}
+
+#[test]
+fn gradient_face_rows_never_splice_shifted_but_splice_verbatim() {
+    // A face background gradient is sampled at the glyph's y and baked into
+    // vertex colors; a shifted splice would keep the old sample. Rows with
+    // gradient faces are captured verbatim-only.
+    let glyphs_a = two_window_glyphs(0.0);
+    let origins = origins();
+    // Every synthetic face id (3..8) is gradient-bearing.
+    let config = FakeConfig {
+        gradient_faces: (3..8).collect(),
+        ..FakeConfig::default()
+    };
+    let cache = warm_cache_with(&glyphs_a, &origins, &config);
+
+    // Integral shift that would otherwise splice: must bail on every row.
+    let dvpos = 3.0f32;
+    let glyphs_b = two_window_glyphs(dvpos);
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let shifted = run_pass_with(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, &config);
+    assert_eq!(shifted.stats.rows_reused_shifted, 0);
+    assert_eq!(shifted.stats.rows_tessellated, 4);
+    assert_eq!(shifted.stats.reuse_bails, 4);
+    let full = run_pass_with(
+        &glyphs_b,
+        &base_ctx(None, &origins),
+        &RowReuseCache::default(),
+        &config,
+    );
+    assert_eq!(fingerprint(&shifted.out), fingerprint(&full.out));
+
+    // Verbatim reuse (dy == 0, same sample positions) stays allowed.
+    let damage = all_rows(|_, _| RowDamage::Reused);
+    let verbatim = run_pass_with(&glyphs_a, &base_ctx(Some(&damage), &origins), &cache, &config);
+    assert_eq!(verbatim.stats.rows_reused_verbatim, 4);
+    assert_eq!(verbatim.stats.reuse_bails, 0);
+    let full_a = run_pass_with(
+        &glyphs_a,
+        &base_ctx(None, &origins),
+        &RowReuseCache::default(),
+        &config,
+    );
+    assert_eq!(fingerprint(&verbatim.out), fingerprint(&full_a.out));
+}
+
+#[test]
+fn band_edge_rows_never_splice_shifted() {
+    // Rows whose glyph extents touch the clip band edge carry y-dependent
+    // trims; they are verbatim-only.
+    let glyphs_a = two_window_glyphs(0.0);
+    let origins = origins();
+    // Band [0, 20): row 0 (y=0) touches the top edge, row 1 (y=14, quad
+    // height 12 → extent 26) crosses the bottom edge.
+    let config = FakeConfig {
+        clip_band: Some((0.0, 20.0)),
+        ..FakeConfig::default()
+    };
+    let cache = warm_cache_with(&glyphs_a, &origins, &config);
+
+    let dvpos = 2.0f32;
+    let glyphs_b = two_window_glyphs(dvpos);
+    let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
+    let ran = run_pass_with(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, &config);
+    assert_eq!(ran.stats.rows_reused_shifted, 0);
+    assert_eq!(ran.stats.rows_tessellated, 4);
+    assert_eq!(ran.stats.reuse_bails, 4);
+
+    let full = run_pass_with(
+        &glyphs_b,
+        &base_ctx(None, &origins),
+        &RowReuseCache::default(),
+        &config,
+    );
+    assert_eq!(fingerprint(&ran.out), fingerprint(&full.out));
+}
+
+#[test]
+fn glyph_extent_touches_band_flags_edges_and_crossings() {
+    // Strictly inside: safe.
+    assert!(!glyph_extent_touches_band(5.0, 10.0, 0.0, 20.0));
+    // Touching top / crossing top.
+    assert!(glyph_extent_touches_band(0.0, 10.0, 0.0, 20.0));
+    assert!(glyph_extent_touches_band(-1.0, 10.0, 0.0, 20.0));
+    // Touching bottom / crossing bottom.
+    assert!(glyph_extent_touches_band(10.0, 10.0, 0.0, 20.0));
+    assert!(glyph_extent_touches_band(15.0, 10.0, 0.0, 20.0));
+    // Fully above / below the band (fully clipped) also flags.
+    assert!(glyph_extent_touches_band(-20.0, 10.0, 0.0, 20.0));
+    assert!(glyph_extent_touches_band(30.0, 10.0, 0.0, 20.0));
 }
 
 #[test]

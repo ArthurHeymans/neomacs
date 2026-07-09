@@ -187,7 +187,11 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
         self.atlas.revalidate_and_pin(entry)
     }
 
-    fn tessellate(&mut self, chunk: &row_reuse::RowChunk, out: &mut row_reuse::RowStreams) {
+    fn tessellate(
+        &mut self,
+        chunk: &row_reuse::RowChunk,
+        out: &mut row_reuse::RowStreams,
+    ) -> row_reuse::RowTessellation {
         let frame_glyphs = self.params.frame_glyphs;
         let faces = self.params.faces;
         let face_debug_call_id = self.params.face_debug_call_id;
@@ -195,6 +199,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
         let has_line_anims = self.params.has_line_anims;
         let want_overlay = self.want_overlay;
         let enable_subpixel = self.enable_subpixel;
+        let mut tessellation = row_reuse::RowTessellation::default();
 
         for glyph_index in chunk.glyphs.clone() {
             let glyph = &frame_glyphs.glyphs[glyph_index];
@@ -236,6 +241,12 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 let overstrike = rf.overstrike;
 
                 let face = faces.get(face_id);
+                if face.is_some_and(|face| face.background_gradient.is_some()) {
+                    // sample_face_background samples the gradient at this
+                    // glyph's y; the color lands in vertex bytes, so the row
+                    // may never be spliced at a different y.
+                    tessellation.verbatim_only = true;
+                }
 
                 // Decompose physical-pixel positions into integer + subpixel bin.
                 // The bin is baked into the rasterized bitmap by swash for subpixel
@@ -335,6 +346,11 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                         let mut v1 = tex_v_max_base;
                         let top = clip.y;
                         let bottom = clip.y + clip.height;
+                        if row_reuse::glyph_extent_touches_band(y0, h0, top, bottom) {
+                            // Trimmed (or trim-prone under any shift): the
+                            // baked v-range depends on absolute y vs the band.
+                            tessellation.verbatim_only = true;
+                        }
                         if y0 < top {
                             let cut = top - y0;
                             if cut >= h0 {
@@ -604,6 +620,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 }
             }
         }
+        tessellation
     }
 }
 
