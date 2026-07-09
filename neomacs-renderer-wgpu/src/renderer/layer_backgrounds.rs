@@ -658,6 +658,19 @@ impl WgpuRenderer {
         overlay_rect_vertices
     }
 
+    pub(super) fn draw_non_overlay_backgrounds(
+        &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        non_overlay_rect_vertices: &[RectVertex],
+    ) {
+        // === Step 1: Draw non-overlay backgrounds ===
+        self.draw_rect_vertex_layer(
+            render_pass,
+            non_overlay_rect_vertices,
+            "Non-overlay Rect Buffer",
+        );
+    }
+
     /// Draw the overlay background rects and rounded box fills. Runs at the
     /// start of the overlay text pass so overlay text lands on top.
     pub(super) fn draw_overlay_background_layer(

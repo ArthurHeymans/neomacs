@@ -162,6 +162,27 @@ impl WgpuRenderer {
         }
     }
 
+    pub(super) fn draw_pre_text_cursor_layers(
+        &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        cursor_bg_vertices: &[RectVertex],
+        behind_text_cursor_vertices: &[RectVertex],
+    ) {
+        // === Step 2: Draw cursor bg rect (inverse video background) ===
+        // Drawn after window/char backgrounds but before text, so the cursor
+        // background color is visible behind the inverse-video character.
+        self.draw_rect_vertex_layer(render_pass, cursor_bg_vertices, "Cursor BG Rect Buffer");
+
+        // === Step 3: Draw animated cursor trail behind text ===
+        // The spring trail or animated rect for filled box cursor appears
+        // behind text so characters remain readable during cursor motion.
+        self.draw_rect_vertex_layer(
+            render_pass,
+            behind_text_cursor_vertices,
+            "Behind-Text Cursor Buffer",
+        );
+    }
+
     /// Draw front cursors and window borders (after text).
     pub(super) fn draw_cursor_layer(&self, ctx: &mut FramePassCtx<'_, '_>, chrome: &ChromeLayerVertices) {
         let render_pass = &mut ctx.pass;

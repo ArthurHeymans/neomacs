@@ -27,6 +27,7 @@ mod fx_state;
 mod glyphs;
 mod layer_backgrounds;
 mod layer_chrome;
+mod layer_effects;
 mod layer_media;
 mod layer_text;
 mod media;
