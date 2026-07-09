@@ -24,6 +24,7 @@ pub struct ResolvedFontId(pub u32);
 
 /// Which platform font backend produced an identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub enum FontBackendKind {
     /// Linux fontconfig / fontdb file identities.
     Fontconfig,
@@ -93,6 +94,7 @@ impl ResolvedFontIdentity {
 /// How a resolved font was chosen. Distinguishing fallback tiers keeps
 /// traces and oracle runs able to flag unexpected selection paths.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub enum FontResolutionSource {
     /// The realized face's primary font.
     FacePrimary,

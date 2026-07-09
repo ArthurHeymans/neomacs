@@ -254,6 +254,7 @@ impl Default for ScrollEffect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub enum ScrollEasing {
     /// Standard ease-out quadratic (current default).
     #[strum(

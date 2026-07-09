@@ -3,6 +3,7 @@
 use crate::effect_config::EffectsConfig;
 
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum CursorEffectArg {
     Nil,
     Bool(bool),

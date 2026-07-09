@@ -126,6 +126,7 @@ impl BoxType {
     serde::Serialize,
     serde::Deserialize,
 )]
+#[non_exhaustive]
 pub enum BoxBorderStyle {
     #[default]
     Solid = 0,

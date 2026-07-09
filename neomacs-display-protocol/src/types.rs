@@ -21,10 +21,12 @@ macro_rules! display_id_type {
         pub struct $name($raw);
 
         impl $name {
+            #[must_use]
             pub const fn new(raw: $raw) -> Self {
                 Self(raw)
             }
 
+            #[must_use]
             pub const fn get(self) -> $raw {
                 self.0
             }
@@ -278,6 +280,7 @@ pub struct Point {
 }
 
 impl Point {
+    #[must_use]
     pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
     }
@@ -308,6 +311,7 @@ pub struct Size {
 }
 
 impl Size {
+    #[must_use]
     pub const fn new(width: f32, height: f32) -> Self {
         Self { width, height }
     }
@@ -326,6 +330,7 @@ pub struct Rect {
 }
 
 impl Rect {
+    #[must_use]
     pub const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
         Self {
             x,
@@ -335,30 +340,37 @@ impl Rect {
         }
     }
 
+    #[must_use]
     pub fn from_point_size(point: Point, size: Size) -> Self {
         Self::new(point.x, point.y, size.width, size.height)
     }
 
+    #[must_use]
     pub fn origin(&self) -> Point {
         Point::new(self.x, self.y)
     }
 
+    #[must_use]
     pub fn size(&self) -> Size {
         Size::new(self.width, self.height)
     }
 
+    #[must_use]
     pub fn right(&self) -> f32 {
         self.x + self.width
     }
 
+    #[must_use]
     pub fn bottom(&self) -> f32 {
         self.y + self.height
     }
 
+    #[must_use]
     pub fn contains(&self, point: Point) -> bool {
         point.x >= self.x && point.x < self.right() && point.y >= self.y && point.y < self.bottom()
     }
 
+    #[must_use]
     pub fn intersects(&self, other: &Rect) -> bool {
         self.x < other.right()
             && self.right() > other.x
@@ -393,6 +405,7 @@ pub struct AnimatedCursor {
 /// Controls how the smooth cursor interpolates between positions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum CursorAnimStyle {
     /// Exponential decay (current default). No fixed duration; `speed` controls rate.
     Exponential = 0,

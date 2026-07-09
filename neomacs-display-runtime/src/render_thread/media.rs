@@ -803,7 +803,7 @@ fn terminal_cell_face(
 mod tests {
     use super::*;
     use crate::core::frame_glyphs::FrameGlyphBuffer;
-    use crate::core::types::{Color, FaceId, Px};
+    use crate::core::types::Color;
     use crate::terminal::content::{RenderCell, RenderCursor, TerminalContent};
     use alacritty_terminal::term::cell::Flags as CellFlags;
 
