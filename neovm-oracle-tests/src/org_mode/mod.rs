@@ -90,6 +90,7 @@ mod giga_strict;
 mod goto_workflow;
 mod habit_workflow;
 mod id_link;
+mod inline_core;
 mod inlinetask_workflow;
 mod kappa_more;
 mod keys_workflow;
