@@ -284,6 +284,45 @@ pub struct LispBufferLocalValue {
     /// `(SYMBOL . CURRENT-VALUE)` cons. Equal to `defcell` when no
     /// per-buffer binding is loaded. GNU `valcell`.
     pub valcell: Value,
+    /// [`blv_alist_epoch`] value at the last `where_buf`/`valcell`
+    /// refresh. The read fast path trusts `valcell` only while this
+    /// matches the global epoch AND `where_buf` is the current buffer —
+    /// the guard that makes GNU's same-buffer swap early-out sound here
+    /// even though some paths edit `local_var_alist` structure without
+    /// touching the BLV cache (they bump the epoch instead). Starts 0;
+    /// the global epoch starts 1, so a fresh BLV always rescans first.
+    pub alist_epoch: u64,
+}
+
+/// Global structural-mutation epoch for every buffer's `local_var_alist`:
+/// bumped (via [`note_blv_alist_structural_mutation`]) whenever an alist
+/// entry is REMOVED, REPLACED by a new cons, or the alist is rebuilt/reset
+/// behind the BLV cache's back — `kill-local-variable`,
+/// `kill-all-local-variables`, `make-local-variable`'s seed-prepend, the
+/// raw `set_local_var_alist_entry` prepend. In-place `set_cdr` writes on an
+/// existing entry do NOT bump (the cached `valcell` IS that cons, so the
+/// write flows through it), and `set_internal_localized`'s auto-create
+/// prepend does NOT bump (it re-points THIS symbol's cache itself; other
+/// symbols' cells are untouched by a prepend).
+///
+/// Coarse by design: kill/make-local are mode-setup-rare while localized
+/// reads are the session's hottest VarRef class (58% — Task 4 §2c), so
+/// over-invalidation costs one extra assq rescan per cached symbol while
+/// missing a bump would serve stale values. Relaxed ordering: Lisp mutators
+/// run one at a time (GNU thread semantics); a racing reader at worst sees
+/// the OLD epoch and rescans.
+static BLV_ALIST_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Current structural epoch (see [`BLV_ALIST_EPOCH`]).
+#[inline]
+pub(crate) fn blv_alist_epoch() -> u64 {
+    BLV_ALIST_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Record a structural `local_var_alist` mutation (see [`BLV_ALIST_EPOCH`]).
+#[inline]
+pub(crate) fn note_blv_alist_structural_mutation() {
+    BLV_ALIST_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 // ===========================================================================
@@ -375,6 +414,11 @@ fn swap_in_blv(
     current_buffer: Value,
     local_var_alist: Value,
 ) {
+    // Sample the structural epoch BEFORE the scan: if a mutation lands
+    // mid-scan (impossible today — one Lisp mutator — but cheap to order
+    // correctly), the cache records the pre-scan epoch and the next read
+    // re-validates.
+    let epoch = blv_alist_epoch();
     let Some(blv) = obarray.blv_mut(sym_id) else {
         return;
     };
@@ -385,6 +429,7 @@ fn swap_in_blv(
     blv.found = !found_cell.is_nil();
     let new_valcell = if blv.found { found_cell } else { blv.defcell };
     store_value_atomic(&mut blv.valcell, new_valcell);
+    blv.alist_epoch = epoch;
 }
 
 /// Walk an alist looking for the cons whose car is `eq` to `key`.
@@ -1599,6 +1644,9 @@ impl Obarray {
             where_buf: Value::NIL,
             defcell,
             valcell: defcell,
+            // 0 < the global epoch's initial 1: a fresh BLV never
+            // fast-path-hits before its first swap_in records reality.
+            alist_epoch: 0,
         });
         let raw = Box::into_raw(blv);
         self.blvs.push(raw);
@@ -1865,6 +1913,22 @@ impl Obarray {
                     continue;
                 }
                 SymbolRedirect::Localized => {
+                    // Same-buffer fast path (GNU `swap_in_symval_forwarding`
+                    // early-outs when `blv->where` is already the current
+                    // buffer): trust the cached `valcell` iff the cache was
+                    // loaded for THIS buffer and no structural alist
+                    // mutation happened since (`alist_epoch`). Every value
+                    // write goes through `valcell.set_cdr` on the shared
+                    // cons, so an epoch-valid cell always carries the live
+                    // value. This removes the per-read whole-alist assq that
+                    // dominates localized VarRef cost (Task 4: 58% of
+                    // session VarRefs, 60.8ns -> ~cons_cdr).
+                    if let Some(blv) = self.blv(current)
+                        && blv.alist_epoch == blv_alist_epoch()
+                        && crate::emacs_core::value::eq_value(&blv.where_buf, &current_buffer_value)
+                    {
+                        return Some(blv.valcell.cons_cdr());
+                    }
                     // Swap-in: if `where_buf` doesn't match the
                     // current buffer, scan the new buffer's
                     // local_var_alist for `(sym . val)` and update
@@ -1990,8 +2054,10 @@ impl Obarray {
         // entries without touching the BLV cache, so refresh from the
         // target alist before every LOCALIZED write.
         let key = Value::from_sym_id(sym_id);
+        let epoch = blv_alist_epoch();
         let mut cell = assq(key, new_alist);
         store_value_atomic(&mut blv.where_buf, target_buf);
+        blv.alist_epoch = epoch;
         blv.found = true;
 
         if cell.is_nil() {

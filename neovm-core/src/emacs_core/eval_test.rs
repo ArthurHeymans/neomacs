@@ -16584,6 +16584,392 @@ fn jit_compile_time_profile() {
     );
 }
 
+/// Build the Task-4 dispatch-bench caller: the `jit_bench_loop_value` skeleton
+/// with the `acc += n` body replaced by `acc = (CALLEE acc)` — an `Op::Call`
+/// per iteration on the designator in `constants[1]`. All three bench arms use
+/// THIS EXACT op sequence; only that constant differs (closure symbol / closure
+/// value / builtin symbol), so a time delta isolates callee-resolution cost.
+fn vm_bench_call_loop_caller(callee_designator: Value) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::Constant(0),   // acc = 0                  -> [n, acc]
+        Op::StackRef(1),   // loop: push n             -> [n, acc, n]
+        Op::Constant(0),   //                          -> [n, acc, n, 0]
+        Op::Gtr,           // n > 0                    -> [n, acc, t/nil]
+        Op::GotoIfNil(13), //                          -> [n, acc]
+        Op::Constant(1),   // push callee designator   -> [n, acc, f]
+        Op::StackRef(1),   // push acc                 -> [n, acc, f, acc]
+        Op::Call(1),       // r = (f acc)              -> [n, acc, r]
+        Op::StackSet(1),   // acc = r                  -> [n, acc]
+        Op::StackRef(1),   // push n                   -> [n, acc, n]
+        Op::Sub1,          //                          -> [n, acc, n-1]
+        Op::StackSet(2),   // n = n-1                  -> [n, acc]
+        Op::Goto(1),
+        Op::StackRef(0), // exit:                    -> [n, acc, acc]
+        Op::Return,
+    ];
+    f.constants = vec![Value::make_int(0), callee_designator];
+    f.max_stack = 16;
+    Value::make_bytecode(f)
+}
+
+/// Warm once, then min wall-clock of `iters` calls of `f(n)` (mirrors
+/// `jit_bench_min` without the jit feature gate — this is an interpreter
+/// dispatch bench).
+fn vm_bench_min_call(
+    ev: &mut Context,
+    f: Value,
+    n: i64,
+    want: Value,
+    iters: u32,
+) -> std::time::Duration {
+    assert_eq!(
+        ev.funcall_general_untraced(f, vec![Value::make_int(n)])
+            .unwrap(),
+        want
+    );
+    let mut best = std::time::Duration::MAX;
+    for _ in 0..iters {
+        let t = std::time::Instant::now();
+        let r = ev
+            .funcall_general_untraced(f, vec![Value::make_int(n)])
+            .unwrap();
+        best = best.min(t.elapsed());
+        assert_eq!(r, want);
+    }
+    best
+}
+
+/// Task-4 Step-2 GATE bench: per-call cost of the three `Op::Call` dispatch
+/// shapes the session profile splits — closure-via-SYMBOL (re-resolves the
+/// function cell every call: the population a per-site resolved-target cache
+/// would serve), closure-via-VALUE (no resolution: the cache's best-case
+/// ceiling, since a hit still pays its guard), and builtin-via-symbol (the
+/// already-array-indexed comparison point). Identical loop/op shape in all
+/// arms; the callee closure is `(lambda (x) (1+ x))` hand-built. The
+/// symbol-minus-value delta is the UPPER BOUND on what any resolution cache
+/// can recover per call. Run:
+///   cargo nextest run -p neovm-core --release \
+///     --run-ignored ignored-only --no-capture -E 'test(vm_bench_call_dispatch)'
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn vm_bench_call_dispatch_closure_sym_vs_val() {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    crate::test_utils::init_test_tracing();
+    // SAFETY: nextest runs each test in its own process; set before the VM
+    // reads the JIT gate so every arm stays on the Tier-0 interpreter (the
+    // dispatch path this bench measures).
+    unsafe { std::env::set_var("NEOVM_JIT", "0") };
+    let mut ev = Context::new();
+
+    // Callee closure: (lambda (x) (1+ x)) — at entry the stack is [x].
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![Op::Add1, Op::Return];
+    callee.max_stack = 4;
+    let callee_val = Value::make_bytecode(callee);
+
+    let ValueKind::Symbol(callee_sym) = Value::symbol("vm-bench-callee").kind() else {
+        panic!()
+    };
+    ev.obarray.set_symbol_function_id(callee_sym, callee_val);
+
+    let caller_sym = vm_bench_call_loop_caller(Value::symbol("vm-bench-callee"));
+    let caller_val = vm_bench_call_loop_caller(callee_val);
+    let caller_builtin = vm_bench_call_loop_caller(Value::symbol("1+"));
+
+    let n = 2_000_000i64;
+    let want = Value::make_int(n);
+    let t_sym = vm_bench_min_call(&mut ev, caller_sym, n, want, 7);
+    let t_val = vm_bench_min_call(&mut ev, caller_val, n, want, 7);
+    let t_builtin = vm_bench_min_call(&mut ev, caller_builtin, n, want, 7);
+    let per_call = |d: std::time::Duration| d.as_secs_f64() * 1e9 / n as f64;
+    panic!(
+        "BENCH call-dispatch({n} calls): closure-sym {t_sym:?} ({:.1} ns/call) | \
+         closure-val {t_val:?} ({:.1} ns/call) | builtin-sym(1+) {t_builtin:?} ({:.1} ns/call) | \
+         sym-vs-val delta {:.1} ns/call = {:.2}% of the sym arm (resolution-cache ceiling)",
+        per_call(t_sym),
+        per_call(t_val),
+        per_call(t_builtin),
+        per_call(t_sym) - per_call(t_val),
+        100.0 * (per_call(t_sym) - per_call(t_val)) / per_call(t_sym).max(1e-9),
+    );
+}
+
+/// Build the Task-4 VarRef-bench caller: the same loop skeleton with the body
+/// `acc = acc + (varref SYM)` — one `Op::VarRef` per iteration on the symbol
+/// in `constants[1]` (whose value must be the fixnum 1, so the loop result is
+/// `n`). Arms differ ONLY in which symbol `constants[1]` names.
+fn vm_bench_varref_loop_caller(var_sym: Value) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::Constant(0),   // acc = 0                  -> [n, acc]
+        Op::StackRef(1),   // loop: push n             -> [n, acc, n]
+        Op::Constant(0),   //                          -> [n, acc, n, 0]
+        Op::Gtr,           // n > 0                    -> [n, acc, t/nil]
+        Op::GotoIfNil(14), //                          -> [n, acc]
+        Op::StackRef(0),   // push acc                 -> [n, acc, acc]
+        Op::VarRef(1),     // push (symbol-value SYM)  -> [n, acc, acc, v]
+        Op::Add,           //                          -> [n, acc, acc+v]
+        Op::StackSet(1),   // acc = acc+v              -> [n, acc]
+        Op::StackRef(1),   // push n                   -> [n, acc, n]
+        Op::Sub1,          //                          -> [n, acc, n-1]
+        Op::StackSet(2),   // n = n-1                  -> [n, acc]
+        Op::Goto(1),
+        Op::StackRef(0), // exit:                    -> [n, acc, acc]
+        Op::Return,
+    ];
+    f.constants = vec![Value::make_int(0), var_sym];
+    f.max_stack = 16;
+    Value::make_bytecode(f)
+}
+
+/// Task-4 Step-2 GATE bench (BLV side): per-read cost of `Op::VarRef` on a
+/// SYMBOL_LOCALIZED buffer-local (the session's 58% class — every read runs
+/// `swap_in_blv`, an unconditional assq walk of the buffer's whole
+/// `local_var_alist`) vs a Plainval global (the direct-value fast path). The
+/// localized symbol is created FIRST so it sits DEEPEST in the ~31-entry
+/// alist, matching a font-lock/syntax-ppss-style mode buffer where the hot
+/// syntax-ppss locals predate dozens of later `make-local-variable`s. The
+/// plain arm is the floor a same-buffer swap cache could approach. Run:
+///   cargo nextest run -p neovm-core --release \
+///     --run-ignored ignored-only --no-capture -E 'test(vm_bench_varref)'
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn vm_bench_varref_localized_vs_plain() {
+    crate::test_utils::init_test_tracing();
+    // SAFETY: nextest per-process isolation; set before the VM reads the gate.
+    unsafe { std::env::set_var("NEOVM_JIT", "0") };
+    let mut ev = Context::new();
+
+    ev.eval_str("(set-buffer (get-buffer-create \"vmb\"))")
+        .expect("create bench buffer");
+    // Measured BLV first -> deepest alist position after the pads prepend.
+    ev.eval_str("(set (make-local-variable 'vmb-blv) 1)")
+        .expect("make vmb-blv buffer-local");
+    for i in 0..30 {
+        ev.eval_str(&format!("(set (make-local-variable 'vmb-pad-{i}) {i})"))
+            .expect("pad local");
+    }
+    ev.eval_str("(set 'vmb-plain 1)").expect("plain global");
+
+    let caller_blv = vm_bench_varref_loop_caller(Value::symbol("vmb-blv"));
+    let caller_plain = vm_bench_varref_loop_caller(Value::symbol("vmb-plain"));
+
+    let n = 2_000_000i64;
+    let want = Value::make_int(n);
+    let t_blv = vm_bench_min_call(&mut ev, caller_blv, n, want, 7);
+    let t_plain = vm_bench_min_call(&mut ev, caller_plain, n, want, 7);
+    let per_call = |d: std::time::Duration| d.as_secs_f64() * 1e9 / n as f64;
+    panic!(
+        "BENCH varref({n} reads, 31-local alist, blv deepest): localized {t_blv:?} \
+         ({:.1} ns/read) | plain {t_plain:?} ({:.1} ns/read) | delta {:.1} ns/read = \
+         {:.2}% of the localized arm (swap-cache ceiling)",
+        per_call(t_blv),
+        per_call(t_plain),
+        per_call(t_blv) - per_call(t_plain),
+        100.0 * (per_call(t_blv) - per_call(t_plain)) / per_call(t_blv).max(1e-9),
+    );
+}
+
+/// Build a zero-arg bytecode function whose body is exactly `Op::VarRef` on
+/// `sym` — the Task-4 BLV swap-cache tests read through THIS so every assert
+/// exercises the real interpreter fast path (`fast_path_var_ref` →
+/// `find_symbol_value_in_buffer`'s same-buffer arm), not the tree-walker.
+fn varref_reader_fn(sym: Value) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: Vec::new(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![Op::VarRef(1), Op::Return];
+    f.constants = vec![Value::NIL, sym];
+    f.max_stack = 4;
+    Value::make_bytecode(f)
+}
+
+/// Read `reader` (a [`varref_reader_fn`] value) several times and return the
+/// last result — repeated reads both WARM the BLV swap cache and prove the
+/// cached value is served consistently.
+fn read_var_warm(ev: &mut Context, reader: Value) -> Value {
+    let mut last = Value::NIL;
+    for _ in 0..3 {
+        last = ev.funcall_general_untraced(reader, vec![]).unwrap();
+    }
+    last
+}
+
+/// Task-4 BLV swap-cache invalidation tests: the same-buffer fast path in
+/// `find_symbol_value_in_buffer` must never serve a stale `valcell` across
+/// setq / kill-local-variable / kill-all-local-variables / set-default /
+/// make-local-variable / let-binding / buffer switches / the raw
+/// buffer-helper alist edits. Expected values pinned against GNU Emacs 31
+/// (`emacs --batch` probes, Task-4 report §5).
+#[test]
+fn blv_swap_cache_setq_updates_cached_read() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-a 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-a\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-a) 5)")
+        .unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-a"));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    ev.eval_str("(setq blvt-a 6)").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(6));
+}
+
+#[test]
+fn blv_swap_cache_kill_local_variable_reverts_to_default() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-b 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-b\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-b) 5)")
+        .unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-b"));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    // GNU: after kill-local-variable the read reverts to the default (1).
+    ev.eval_str("(kill-local-variable 'blvt-b)").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+}
+
+#[test]
+fn blv_swap_cache_make_local_then_set_default_keeps_snapshot() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-c 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-c\"))")
+        .unwrap();
+    // make-local WITHOUT set: GNU snapshots the default at make-local time.
+    ev.eval_str("(make-local-variable 'blvt-c)").unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-c"));
+    // Warm the cache on the local binding (currently equal to the default).
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+    // GNU pin: local read stays 1, default-value becomes 9.
+    ev.eval_str("(set-default 'blvt-c 9)").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+    assert_eq!(
+        ev.eval_str("(default-value 'blvt-c)").unwrap(),
+        Value::make_int(9)
+    );
+}
+
+#[test]
+fn blv_swap_cache_kill_all_local_variables_reverts() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-d 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-d\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-d) 5)")
+        .unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-d"));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    ev.eval_str("(kill-all-local-variables)").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+}
+
+#[test]
+fn blv_swap_cache_buffer_switch_swaps_values() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-e 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-e1\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-e) 5)")
+        .unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-e"));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-e2\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-e) 7)")
+        .unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(7));
+    ev.eval_str("(set-buffer \"blvt-e1\")").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    ev.eval_str("(set-buffer \"blvt-e2\")").unwrap();
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(7));
+}
+
+#[test]
+fn blv_swap_cache_let_binding_shadows_and_restores() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-f 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-f\"))")
+        .unwrap();
+    ev.eval_str("(set (make-local-variable 'blvt-f) 5)")
+        .unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-f"));
+    let ValueKind::Symbol(reader_sym) = Value::symbol("blvt-f-reader").kind() else {
+        panic!()
+    };
+    ev.obarray.set_symbol_function_id(reader_sym, reader);
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+    // GNU pin: inside the let the bytecode read sees 7; after, 5 again.
+    assert_eq!(
+        ev.eval_str("(let ((blvt-f 7)) (blvt-f-reader))").unwrap(),
+        Value::make_int(7)
+    );
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(5));
+}
+
+/// The raw `Buffer::set_buffer_local_by_sym_id` /
+/// `set_buffer_local_void_by_sym_id` helpers edit `local_var_alist` WITHOUT
+/// updating the BLV cache (the eval.rs specpdl restore-into-buffer shape) —
+/// exactly the paths the structural-epoch bump exists for.
+#[test]
+fn blv_swap_cache_raw_buffer_helper_edits_are_seen() {
+    let mut ev = Context::new();
+    ev.eval_str("(set-default 'blvt-g 1)").unwrap();
+    ev.eval_str("(set-buffer (get-buffer-create \"blvt-g\"))")
+        .unwrap();
+    // Localized redirect with NO local binding in this buffer yet: reads warm
+    // the cache on defcell.
+    ev.eval_str("(make-variable-buffer-local 'blvt-g)").unwrap();
+    let reader = varref_reader_fn(Value::symbol("blvt-g"));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+    let ValueKind::Symbol(sym) = Value::symbol("blvt-g").kind() else {
+        panic!()
+    };
+    // Raw helper PREPENDS a binding behind the cache's back.
+    let buf_id = ev.buffers.current_buffer_id().unwrap();
+    ev.buffers
+        .get_mut(buf_id)
+        .unwrap()
+        .set_buffer_local_by_sym_id(sym, Value::make_int(8));
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(8));
+    // Raw helper REMOVES it again behind the cache's back.
+    ev.buffers
+        .get_mut(buf_id)
+        .unwrap()
+        .set_buffer_local_void_by_sym_id(sym);
+    assert_eq!(read_var_warm(&mut ev, reader), Value::make_int(1));
+}
+
 /// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
 /// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
 /// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin

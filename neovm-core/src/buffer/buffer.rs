@@ -1481,12 +1481,17 @@ pub(crate) fn set_local_var_alist_entry(
         let entry = cursor.cons_car();
         cursor = cursor.cons_cdr();
         if entry.is_cons() && eq_value(&entry.cons_car(), &key) {
+            // In-place cdr write: a BLV valcell pointing at this cons
+            // observes the new value directly — no epoch bump needed.
             entry.set_cdr(value);
             return;
         }
     }
     let cell = Value::cons(key, value);
     *alist = Value::cons(cell, *alist);
+    // A binding now exists that a same-buffer BLV cache loaded before this
+    // prepend cannot see (it may hold defcell/found=false for this buffer).
+    crate::emacs_core::symbol::note_blv_alist_structural_mutation();
 }
 
 /// Copy Lisp-level buffer-local bindings for a cloned indirect buffer.
@@ -1523,6 +1528,7 @@ pub(crate) fn remove_local_var_alist_entry(
     let mut head = *alist;
     let mut prev: Option<Value> = None;
     let mut cursor = head;
+    let mut removed = false;
     while cursor.is_cons() {
         let entry = cursor.cons_car();
         let next = cursor.cons_cdr();
@@ -1531,12 +1537,18 @@ pub(crate) fn remove_local_var_alist_entry(
                 Some(p) => p.set_cdr(next),
                 None => head = next,
             }
+            removed = true;
         } else {
             prev = Some(cursor);
         }
         cursor = next;
     }
     *alist = head;
+    if removed {
+        // The removed cons may be some BLV's cached valcell (for this or
+        // ANOTHER buffer) — force every cached localized read to re-swap.
+        crate::emacs_core::symbol::note_blv_alist_structural_mutation();
+    }
 }
 
 /// Filter a `(perm-hook ...)` value to keep only entries that
