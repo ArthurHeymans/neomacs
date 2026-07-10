@@ -972,8 +972,51 @@ impl Drop for WpeWebView {
     }
 }
 
-/// C callback for buffer-rendered signal from WPEView
+/// Run a WPE/WebKit `extern "C"` callback body under a panic guard.
+///
+/// libwpe and WebKit invoke these callbacks synchronously across the FFI
+/// boundary in response to web-content-driven events (buffer rendered/released,
+/// frame displayed, navigation policy, load state). A Rust panic that unwound
+/// across that boundary is undefined behavior and, in practice, aborts the whole
+/// editor — so untrusted page activity must never be able to trigger one. We
+/// contain any panic here: log it once with the callback name and a best-effort
+/// payload string, then hand the C caller `neutral` so it observes an ordinary
+/// return. `neutral` is the caller-chosen safe result for the callback's return
+/// type (`()` for the void callbacks; see each call site's comment otherwise).
+fn guard_wpe_callback<T>(name: &str, neutral: T, body: impl FnOnce() -> T) -> T {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(body)) {
+        Ok(value) => value,
+        Err(payload) => {
+            let detail = payload
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "<non-string panic payload>".to_string());
+            tracing::error!(
+                "WPE callback {} panicked; contained and returning neutral value: {}",
+                name,
+                detail
+            );
+            neutral
+        }
+    }
+}
+
+/// C callback for buffer-rendered signal from WPEView.
+///
+/// Thin panic-containment shim over [`buffer_rendered_callback_impl`]; see
+/// [`guard_wpe_callback`] for why a libwpe callback must not unwind.
 unsafe extern "C" fn buffer_rendered_callback(
+    wpe_view: *mut plat::WPEView,
+    buffer: *mut plat::WPEBuffer,
+    user_data: *mut libc::c_void,
+) {
+    guard_wpe_callback("buffer_rendered_callback", (), || unsafe {
+        buffer_rendered_callback_impl(wpe_view, buffer, user_data)
+    })
+}
+
+unsafe fn buffer_rendered_callback_impl(
     _wpe_view: *mut plat::WPEView,
     buffer: *mut plat::WPEBuffer,
     user_data: *mut libc::c_void,
@@ -1169,7 +1212,20 @@ unsafe extern "C" fn buffer_rendered_callback(
 ///
 /// We only capture a CPU pixel copy (via wpe_buffer_import_to_pixels) as a
 /// fallback for headless mode where buffer-rendered doesn't fire.
+///
+/// Thin panic-containment shim over [`buffer_released_callback_impl`]; see
+/// [`guard_wpe_callback`].
 unsafe extern "C" fn buffer_released_callback(
+    wpe_view: *mut plat::WPEView,
+    buffer: *mut plat::WPEBuffer,
+    user_data: *mut libc::c_void,
+) {
+    guard_wpe_callback("buffer_released_callback", (), || unsafe {
+        buffer_released_callback_impl(wpe_view, buffer, user_data)
+    })
+}
+
+unsafe fn buffer_released_callback_impl(
     _wpe_view: *mut plat::WPEView,
     buffer: *mut plat::WPEBuffer,
     user_data: *mut libc::c_void,
@@ -1276,7 +1332,19 @@ unsafe extern "C" fn buffer_released_callback(
 /// C callback for frame-displayed notification from WebKitWebView
 /// This is called when a frame has been displayed by the backend.
 /// We use this to capture the frame since buffer-rendered doesn't fire in headless mode.
+///
+/// Thin panic-containment shim over [`frame_displayed_callback_impl`]; see
+/// [`guard_wpe_callback`].
 unsafe extern "C" fn frame_displayed_callback(
+    web_view: *mut wk::WebKitWebView,
+    user_data: *mut libc::c_void,
+) {
+    guard_wpe_callback("frame_displayed_callback", (), || unsafe {
+        frame_displayed_callback_impl(web_view, user_data)
+    })
+}
+
+unsafe fn frame_displayed_callback_impl(
     web_view: *mut wk::WebKitWebView,
     user_data: *mut libc::c_void,
 ) {
@@ -1308,7 +1376,32 @@ unsafe extern "C" fn frame_displayed_callback(
 
 /// C callback for decide-policy signal from WebKitWebView
 /// Handles new window requests (target="_blank", window.open(), etc.)
+///
+/// Thin panic-containment shim over [`decide_policy_callback_impl`]; see
+/// [`guard_wpe_callback`].
 unsafe extern "C" fn decide_policy_callback(
+    web_view: *mut wk::WebKitWebView,
+    decision: *mut wk::WebKitPolicyDecision,
+    decision_type: u32,
+    user_data: *mut libc::c_void,
+) -> i32 {
+    // Conservative neutral value on panic is `0` (GLib FALSE). `decide-policy`
+    // returns a gboolean: TRUE stops signal emission and asserts that this
+    // handler fully resolved the WebKitPolicyDecision (via use/ignore/download),
+    // while FALSE lets WebKit's built-in default handler resolve it. A panic can
+    // interrupt us before we call any decision method, so returning TRUE would
+    // leave the decision unresolved and stall the load; returning FALSE hands it
+    // to WebKit's default handler, which resolves deterministically. That is the
+    // conservative outcome, it matches what this callback already returns for the
+    // cases it declines to special-case (null decision, plain navigation,
+    // resource responses, unknown decision types), and — because neomacs wires no
+    // `create` signal — it cannot spawn an uncontrolled new WebKitWebView.
+    guard_wpe_callback("decide_policy_callback", 0, || unsafe {
+        decide_policy_callback_impl(web_view, decision, decision_type, user_data)
+    })
+}
+
+unsafe fn decide_policy_callback_impl(
     _web_view: *mut wk::WebKitWebView,
     decision: *mut wk::WebKitPolicyDecision,
     decision_type: u32,
@@ -1414,7 +1507,20 @@ unsafe extern "C" fn decide_policy_callback(
 
 /// Callback for WebKit load-changed signal
 /// load_event: WEBKIT_LOAD_STARTED=0, WEBKIT_LOAD_REDIRECTED=1, WEBKIT_LOAD_COMMITTED=2, WEBKIT_LOAD_FINISHED=3
+///
+/// Thin panic-containment shim over [`load_changed_callback_impl`]; see
+/// [`guard_wpe_callback`].
 unsafe extern "C" fn load_changed_callback(
+    web_view: *mut wk::WebKitWebView,
+    load_event: u32,
+    user_data: *mut libc::c_void,
+) {
+    guard_wpe_callback("load_changed_callback", (), || unsafe {
+        load_changed_callback_impl(web_view, load_event, user_data)
+    })
+}
+
+unsafe fn load_changed_callback_impl(
     web_view: *mut wk::WebKitWebView,
     load_event: u32,
     user_data: *mut libc::c_void,
@@ -1467,5 +1573,42 @@ unsafe extern "C" fn load_changed_callback(
     if let Some(callback) = get_load_callback() {
         let c_uri = CString::new(uri).unwrap_or_default();
         callback(callback_data.view_id, event_id, c_uri.as_ptr());
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::guard_wpe_callback;
+
+    // The five WPE callbacks themselves require a live libwpe/WebKit runtime and
+    // raw C pointers to WPE buffers/views, so they are not unit-testable here.
+    // These tests cover the one piece of new logic — the panic-containment helper
+    // — which is the whole point of the change: a panicking body must never unwind
+    // past the guard, and the normal path must be a transparent passthrough.
+
+    #[test]
+    fn ok_path_passes_value_through() {
+        assert_eq!(guard_wpe_callback("test", 0, || 42), 42);
+    }
+
+    #[test]
+    fn ok_path_runs_unit_body() {
+        let mut ran = false;
+        guard_wpe_callback("test", (), || ran = true);
+        assert!(ran, "body must run on the normal path");
+    }
+
+    #[test]
+    fn static_str_panic_returns_neutral() {
+        // A panic hook line on stderr is expected; the test still passes because
+        // the panic is contained rather than propagated.
+        assert_eq!(guard_wpe_callback("test", 7, || panic!("boom")), 7);
+    }
+
+    #[test]
+    fn string_panic_returns_neutral() {
+        // Exercises the String (owned) payload downcast branch.
+        let neutral = guard_wpe_callback("test", -1, || panic!("{}", String::from("dynamic")));
+        assert_eq!(neutral, -1);
     }
 }
