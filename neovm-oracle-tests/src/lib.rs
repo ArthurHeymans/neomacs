@@ -95,6 +95,7 @@ mod dotimes;
 mod dynamic;
 mod eieio_comprehensive;
 mod elt_aref_aset_patterns;
+mod emacsorphanage_ov;
 mod encode_decode_coding_advanced;
 mod encoding_base64_via_binary_semantics;
 mod end_of_line;
