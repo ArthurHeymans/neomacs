@@ -6,7 +6,9 @@
 
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
-use std::os::unix::io::RawFd;
+use std::os::fd::OwnedFd;
+#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc;
@@ -49,30 +51,18 @@ impl VideoState {
 
 /// DMA-BUF information for zero-copy path.
 ///
-/// Owns the file descriptor — Drop closes it automatically.
+/// Owns the file descriptor via `OwnedFd`, which closes it on drop.
 /// The fd is either dup'd from GStreamer memory or created by vaExportSurfaceHandle().
 #[cfg(target_os = "linux")]
 pub struct DmaBufInfo {
-    /// File descriptor (owned — will be closed on drop)
-    pub fd: RawFd,
+    /// Owned file descriptor — closed when this struct drops.
+    pub fd: OwnedFd,
     /// Stride (bytes per row)
     pub stride: u32,
     /// DRM fourcc format code
     pub fourcc: u32,
     /// DRM modifier
     pub modifier: u64,
-}
-
-#[cfg(target_os = "linux")]
-impl Drop for DmaBufInfo {
-    fn drop(&mut self) {
-        if self.fd >= 0 {
-            unsafe {
-                libc::close(self.fd);
-            }
-            tracing::trace!("Closed DMA-BUF fd {}", self.fd);
-        }
-    }
 }
 
 /// Decoded video frame ready for rendering
@@ -518,13 +508,21 @@ impl VideoCache {
                 // Import DMA-BUF directly as the video texture (zero-copy).
                 use crate::external_buffer::DmaBufBuffer;
 
+                // Move the owned fd out of DmaBufInfo into the buffer (ownership
+                // transfer); the buffer becomes the sole owner of the descriptor.
+                let DmaBufInfo {
+                    fd,
+                    stride,
+                    fourcc,
+                    modifier,
+                } = dmabuf;
                 let dmabuf_buffer = DmaBufBuffer::single_plane(
-                    dmabuf.fd,
+                    fd,
                     frame.width,
                     frame.height,
-                    dmabuf.stride,
-                    dmabuf.fourcc,
-                    dmabuf.modifier,
+                    stride,
+                    fourcc,
+                    modifier,
                 );
 
                 if let Some(imported_texture) = dmabuf_buffer.to_wgpu_texture(device, queue) {
@@ -748,7 +746,9 @@ impl VideoCache {
         );
 
         Some(DmaBufInfo {
-            fd,
+            // We dup'd `fd` above, so adopt it as an OwnedFd; DmaBufInfo (and
+            // then DmaBufBuffer) manages its lifetime from here.
+            fd: unsafe { OwnedFd::from_raw_fd(fd) },
             stride,
             fourcc,
             modifier: 0, // Linear modifier - VA-API typically uses linear
@@ -771,24 +771,26 @@ impl VideoCache {
         let mut export = try_export_va_dmabuf(buffer, va_display)?;
 
         // Use the first fd and plane info
-        if export.num_planes == 0 || export.fds[0] < 0 {
+        if export.num_planes == 0 || export.fds[0].is_none() {
             tracing::warn!("VA export returned no valid planes");
-            // Drop will close all valid fds automatically
+            // Dropping `export` closes all still-owned fds automatically.
             return None;
         }
 
+        // Move fds[0] out of the export into DmaBufInfo (ownership transfer).
+        // `.take()` leaves `None`, so this fd is not double-closed when `export`
+        // drops; the remaining planes (fds[1..]) still close on drop.
+        let fd = export.fds[0]
+            .take()
+            .expect("fds[0] present (checked above)");
+
         tracing::info!(
             "VA-API DMA-BUF export: fd={}, pitch={}, fourcc={:#x}, modifier={:#x}",
-            export.fds[0],
+            fd.as_raw_fd(),
             export.pitches[0],
             export.fourcc,
             export.modifier
         );
-
-        // Take ownership of fds[0] — set to -1 so VaDmaBufExport::drop skips it.
-        // VaDmaBufExport::drop will close any remaining fds (fds[1..]) automatically.
-        let fd = export.fds[0];
-        export.fds[0] = -1;
 
         Some(DmaBufInfo {
             fd,

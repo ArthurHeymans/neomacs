@@ -19,7 +19,7 @@
 #![allow(clippy::field_reassign_with_default)]
 
 #[cfg(target_os = "linux")]
-use std::os::unix::io::RawFd;
+use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 
 /// DRM format codes (fourcc)
 #[allow(dead_code)]
@@ -68,11 +68,15 @@ pub fn drm_fourcc_to_wgpu_format(fourcc: u32) -> Option<wgpu::TextureFormat> {
 pub const MAX_PLANES: usize = 4;
 
 /// Multi-plane DMA-BUF import parameters.
+///
+/// The fds are *borrowed* for the duration of the import: the importer dup()s
+/// each one before handing it to Vulkan, so it never owns or closes them. The
+/// `'a` lifetime ties these params to the owning buffer (e.g. `DmaBufBuffer`).
 #[cfg(target_os = "linux")]
 #[derive(Debug, Clone)]
-pub struct DmaBufImportParams {
-    /// DMA-BUF file descriptors, one per plane.
-    pub fds: Vec<RawFd>,
+pub struct DmaBufImportParams<'a> {
+    /// DMA-BUF file descriptors, one per plane (borrowed, not owned).
+    pub fds: Vec<BorrowedFd<'a>>,
     /// Stride (bytes per row) per plane.
     pub strides: Vec<u32>,
     /// Byte offset per plane.
@@ -100,6 +104,10 @@ mod hal_import {
 
     use super::*;
     use ash::vk;
+    // AsRawFd, BorrowedFd, FromRawFd, OwnedFd arrive via `use super::*`; only
+    // IntoRawFd (fd release on import success) and RawFd (FFI helper params) are
+    // unique to this module.
+    use std::os::fd::{IntoRawFd, RawFd};
     use std::sync::Arc;
 
     // ========================================================================
@@ -237,15 +245,18 @@ mod hal_import {
     /// "non-disjoint" and can share a single VkDeviceMemory binding.
     /// If they differ, the image needs `VK_IMAGE_CREATE_DISJOINT_BIT` and
     /// per-plane memory bindings.
-    unsafe fn are_fds_disjoint(fds: &[RawFd]) -> bool {
+    unsafe fn are_fds_disjoint(fds: &[BorrowedFd<'_>]) -> bool {
         if fds.len() <= 1 {
             return false;
         }
         let mut first_ino: u64 = 0;
         for (i, &fd) in fds.iter().enumerate() {
             let mut stat: libc::stat = std::mem::zeroed();
-            if libc::fstat(fd, &mut stat) != 0 {
-                tracing::warn!("fstat failed on DMA-BUF fd {}, assuming disjoint", fd);
+            if libc::fstat(fd.as_raw_fd(), &mut stat) != 0 {
+                tracing::warn!(
+                    "fstat failed on DMA-BUF fd {}, assuming disjoint",
+                    fd.as_raw_fd()
+                );
                 return true;
             }
             if i == 0 {
@@ -286,7 +297,7 @@ mod hal_import {
     /// The `driver_plane_count` (from the modifier query) may exceed the number
     /// of planes the buffer actually provides. Missing planes get zero layout.
     fn build_plane_layouts(
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
         driver_plane_count: u32,
     ) -> Vec<vk::SubresourceLayout> {
         (0..driver_plane_count)
@@ -312,14 +323,15 @@ mod hal_import {
         (0..32).find(|&i| (type_filter & (1 << i)) != 0)
     }
 
-    /// Duplicate an fd, returning `None` on failure.
-    unsafe fn dup_fd(fd: RawFd) -> Option<RawFd> {
+    /// Duplicate an fd into a fresh owned fd, returning `None` on failure.
+    unsafe fn dup_fd(fd: RawFd) -> Option<OwnedFd> {
         let duped = libc::dup(fd);
         if duped < 0 {
             tracing::warn!("Failed to dup DMA-BUF fd {}", fd);
             None
         } else {
-            Some(duped)
+            // `dup` returns a brand-new descriptor we exclusively own.
+            Some(OwnedFd::from_raw_fd(duped))
         }
     }
 
@@ -331,13 +343,17 @@ mod hal_import {
         allocation_size: u64,
         memory_type_index: u32,
     ) -> Option<vk::DeviceMemory> {
+        // Own the dup for the duration of the import; Vulkan consumes it only on
+        // a successful allocate_memory (see the match below).
         let fd_dup = dup_fd(fd)?;
 
         let mut import_fd_info = vk::ImportMemoryFdInfoKHR {
             s_type: vk::StructureType::IMPORT_MEMORY_FD_INFO_KHR,
             p_next: std::ptr::null(),
             handle_type: vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT,
-            fd: fd_dup,
+            // Lend the raw fd to the FFI struct; `fd_dup` stays the owner until
+            // the import outcome is known.
+            fd: fd_dup.as_raw_fd(),
             ..Default::default()
         };
 
@@ -358,12 +374,18 @@ mod hal_import {
         };
 
         match vk_device.allocate_memory(&alloc_info, None) {
-            Ok(mem) => Some(mem),
+            Ok(mem) => {
+                // Per VK_KHR_external_memory_fd: on success the implementation
+                // takes ownership of the fd. Release our OwnedFd without closing
+                // so the now driver-owned descriptor is not double-closed.
+                let _ = fd_dup.into_raw_fd();
+                Some(mem)
+            }
             Err(e) => {
                 tracing::warn!("Failed to import DMA-BUF memory (fd={}): {:?}", fd, e);
-                // Per Vulkan spec (VK_KHR_external_memory_fd): on failure the fd
-                // is NOT consumed — the caller must close it to avoid a leak.
-                libc::close(fd_dup);
+                // Per VK_KHR_external_memory_fd: on failure the fd is NOT
+                // consumed — dropping `fd_dup` here closes it, avoiding a leak.
+                drop(fd_dup);
                 None
             }
         }
@@ -377,7 +399,7 @@ mod hal_import {
     unsafe fn bind_non_disjoint(
         vk_device: &ash::Device,
         image: vk::Image,
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
     ) -> Option<Vec<vk::DeviceMemory>> {
         let mem_requirements = vk_device.get_image_memory_requirements(image);
 
@@ -391,7 +413,7 @@ mod hal_import {
         let memory_type_index = find_memory_type(mem_requirements.memory_type_bits)?;
         let memory = import_fd_as_memory(
             vk_device,
-            params.fds[0],
+            params.fds[0].as_raw_fd(),
             image,
             mem_requirements.size,
             memory_type_index,
@@ -417,7 +439,7 @@ mod hal_import {
     unsafe fn bind_disjoint(
         vk_device: &ash::Device,
         image: vk::Image,
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
         driver_plane_count: u32,
     ) -> Option<Vec<vk::DeviceMemory>> {
         let mut memories = Vec::with_capacity(driver_plane_count as usize);
@@ -457,7 +479,7 @@ mod hal_import {
             let fd_idx = (plane_idx as usize).min(params.fds.len() - 1);
             let memory = match import_fd_as_memory(
                 vk_device,
-                params.fds[fd_idx],
+                params.fds[fd_idx].as_raw_fd(),
                 image,
                 mem_req.size,
                 memory_type_index,
@@ -518,7 +540,7 @@ mod hal_import {
         vk_device: &ash::Device,
         image: vk::Image,
         memories: Vec<vk::DeviceMemory>,
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
         wgpu_format: wgpu::TextureFormat,
     ) -> wgpu::Texture {
         let resources = Arc::new(ImportedDmaBufResources {
@@ -587,7 +609,7 @@ mod hal_import {
     pub fn import_dmabuf_hal(
         device: &wgpu::Device,
         _queue: &wgpu::Queue,
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
     ) -> Option<wgpu::Texture> {
         use wgpu::hal::api::Vulkan;
 
@@ -630,7 +652,7 @@ mod hal_import {
         vk_device: &ash::Device,
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        params: &DmaBufImportParams,
+        params: &DmaBufImportParams<'_>,
         vk_format: vk::Format,
         wgpu_format: wgpu::TextureFormat,
     ) -> Option<wgpu::Texture> {
@@ -777,7 +799,7 @@ mod hal_import {
 pub fn import_dmabuf(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    params: &DmaBufImportParams,
+    params: &DmaBufImportParams<'_>,
 ) -> Option<wgpu::Texture> {
     // Try true zero-copy via HAL first
     {
@@ -799,7 +821,7 @@ pub fn import_dmabuf(
 pub fn import_dmabuf_via_mmap(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    params: &DmaBufImportParams,
+    params: &DmaBufImportParams<'_>,
 ) -> Option<wgpu::Texture> {
     // Only attempt mmap for linear buffers — tiled data can't be read linearly
     if params.modifier != drm_fourcc::DRM_FORMAT_MOD_LINEAR
@@ -821,16 +843,19 @@ pub fn import_dmabuf_via_mmap(
 
     let stride = params.strides.first().copied().unwrap_or(0);
     let offset = params.offsets.first().copied().unwrap_or(0);
-    let fd = params.fds[0];
+    // Borrowed view of the caller's fd; we dup() below and never close this one.
+    let fd = params.fds[0].as_raw_fd();
 
     let expected_size = (stride * params.height) as usize;
 
-    // Dup the fd so we don't close the original
-    let fd_dup = unsafe { libc::dup(fd) };
-    if fd_dup < 0 {
+    // Dup the fd so we don't close the original. Own the dup so it is closed on
+    // every exit path (dup failure aside), including the mmap-failure return.
+    let raw_dup = unsafe { libc::dup(fd) };
+    if raw_dup < 0 {
         tracing::warn!("import_dmabuf_via_mmap: failed to dup fd");
         return None;
     }
+    let fd_dup = unsafe { OwnedFd::from_raw_fd(raw_dup) };
 
     // mmap the DMA-BUF
     let data = unsafe {
@@ -839,12 +864,12 @@ pub fn import_dmabuf_via_mmap(
             expected_size,
             libc::PROT_READ,
             libc::MAP_SHARED,
-            fd_dup,
+            fd_dup.as_raw_fd(),
             offset as i64,
         );
 
         if ptr == libc::MAP_FAILED {
-            libc::close(fd_dup);
+            // `fd_dup` closes when it drops at function return.
             tracing::warn!("import_dmabuf_via_mmap: mmap failed");
             return None;
         }
@@ -853,10 +878,11 @@ pub fn import_dmabuf_via_mmap(
         let data = slice.to_vec();
 
         libc::munmap(ptr, expected_size);
-        libc::close(fd_dup);
 
         data
     };
+    // The mmap'd copy now lives in `data`; drop the dup to close it promptly.
+    drop(fd_dup);
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("DMA-BUF mmap texture"),

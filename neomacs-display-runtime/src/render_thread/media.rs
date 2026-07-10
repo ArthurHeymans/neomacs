@@ -158,6 +158,7 @@ impl RenderApp {
     pub(super) fn process_webkit_frames(&mut self) {
         use crate::backend::wpe::DmaBufData;
         use neomacs_renderer_wgpu::DmaBufBuffer;
+        use std::os::fd::{FromRawFd, OwnedFd};
 
         // Get mutable reference to renderer - we need to update its internal webkit cache
         let renderer = match &mut self.renderer {
@@ -178,12 +179,20 @@ impl RenderApp {
         let try_upload_dmabuf =
             |renderer: &mut WgpuRenderer, view_id: u32, dmabuf: DmaBufData| -> bool {
                 let num_planes = dmabuf.fds.len().min(4) as u32;
-                let mut fds = [-1i32; 4];
+                let mut fds: [Option<OwnedFd>; 4] = [None, None, None, None];
                 let mut strides = [0u32; 4];
                 let mut offsets = [0u32; 4];
 
                 let n = num_planes as usize;
-                fds[..n].copy_from_slice(&dmabuf.fds[..n]);
+                // `DmaBufData` carries fds already dup'd for our ownership by
+                // `take_latest_dmabuf`, and has no Drop of its own. Adopt each
+                // into an OwnedFd so the DmaBufBuffer closes them on drop —
+                // previously these descriptors leaked once copied out as raw ints.
+                for (slot, &raw) in fds[..n].iter_mut().zip(&dmabuf.fds[..n]) {
+                    if raw >= 0 {
+                        *slot = Some(unsafe { OwnedFd::from_raw_fd(raw) });
+                    }
+                }
                 strides[..n].copy_from_slice(&dmabuf.strides[..n]);
                 offsets[..n].copy_from_slice(&dmabuf.offsets[..n]);
 

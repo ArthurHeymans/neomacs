@@ -4,17 +4,18 @@
 //! using libva's vaExportSurfaceHandle() via GStreamer VA library bindings.
 
 #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-use std::os::unix::io::RawFd;
+use std::os::fd::{FromRawFd, OwnedFd};
 
 /// DMA-BUF export parameters from VA surface.
 ///
-/// Owns the exported file descriptors — Drop closes any that are still >= 0.
-/// NOT Clone: each fd must have exactly one owner.
+/// Owns the exported file descriptors: each `OwnedFd` closes on drop, and a
+/// consumer takes a plane by `Option::take`, leaving `None` so it is not
+/// double-closed. Not `Clone` — each fd has exactly one owner.
 #[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
 #[derive(Debug)]
 pub struct VaDmaBufExport {
-    /// DMA-BUF file descriptors (up to 4 objects, -1 = unused/taken)
-    pub fds: [RawFd; 4],
+    /// Owned DMA-BUF file descriptors (up to 4 objects; `None` = unused/taken).
+    pub fds: [Option<OwnedFd>; 4],
     /// Number of DRM objects returned by vaExportSurfaceHandle
     pub num_objects: u32,
     /// Number of planes
@@ -31,20 +32,6 @@ pub struct VaDmaBufExport {
     pub width: u32,
     /// Height in pixels
     pub height: u32,
-}
-
-#[cfg(all(target_os = "linux", feature = "video-dmabuf"))]
-impl Drop for VaDmaBufExport {
-    fn drop(&mut self) {
-        for i in 0..self.num_objects.min(4) as usize {
-            if self.fds[i] >= 0 {
-                unsafe {
-                    libc::close(self.fds[i]);
-                }
-                tracing::trace!("VaDmaBufExport::drop closed fd[{}]={}", i, self.fds[i]);
-            }
-        }
-    }
 }
 
 /// FFI bindings to GStreamer VA plugin and libva
@@ -179,7 +166,7 @@ pub fn try_export_va_dmabuf(
 
     // Extract DMA-BUF info from descriptor
     let mut export = VaDmaBufExport {
-        fds: [-1; 4],
+        fds: [None, None, None, None],
         num_objects: descriptor.num_objects,
         num_planes: 0,
         offsets: [0; 4],
@@ -190,9 +177,14 @@ pub fn try_export_va_dmabuf(
         height: descriptor.height,
     };
 
-    // Copy object fds (DMA-BUF handles)
+    // Adopt each exported object fd. vaExportSurfaceHandle transfers ownership
+    // of these DRM PRIME descriptors to us, so each becomes an OwnedFd that
+    // closes on drop unless a consumer takes it first.
     for i in 0..descriptor.num_objects.min(4) as usize {
-        export.fds[i] = descriptor.objects[i].fd;
+        let raw = descriptor.objects[i].fd;
+        if raw >= 0 {
+            export.fds[i] = Some(unsafe { OwnedFd::from_raw_fd(raw) });
+        }
         if i == 0 {
             export.modifier = descriptor.objects[i].drm_format_modifier;
         }

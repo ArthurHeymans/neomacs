@@ -5,6 +5,9 @@
 
 use std::sync::Arc;
 
+#[cfg(target_os = "linux")]
+use std::os::fd::OwnedFd;
+
 /// Buffer pixel format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BufferFormat {
@@ -226,10 +229,14 @@ impl ExternalBuffer for SharedMemoryBuffer {
 ///
 /// This struct supports multi-plane formats (e.g., YUV), with up to 4 planes.
 #[cfg(target_os = "linux")]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DmaBufBuffer {
-    /// DMA-BUF file descriptors per plane (up to 4).
-    pub fds: [std::os::unix::io::RawFd; 4],
+    /// Owned DMA-BUF file descriptors per plane (up to 4).
+    ///
+    /// `None` marks an unused plane slot. Each `OwnedFd` closes on drop, so the
+    /// buffer is the sole owner of its descriptors — hence this type is not
+    /// `Clone` (cloning would alias, then double-close, the fds).
+    pub fds: [Option<OwnedFd>; 4],
     /// Number of bytes per row per plane.
     pub strides: [u32; 4],
     /// Byte offset per plane.
@@ -248,9 +255,12 @@ pub struct DmaBufBuffer {
 
 #[cfg(target_os = "linux")]
 impl DmaBufBuffer {
-    /// Create a new DmaBufBuffer.
+    /// Create a new DmaBufBuffer, taking ownership of the plane fds.
+    ///
+    /// Only the first `num_planes` slots are expected to be `Some`; the rest
+    /// stay `None`. Ownership of each fd transfers into the buffer.
     pub fn new(
-        fds: [std::os::unix::io::RawFd; 4],
+        fds: [Option<OwnedFd>; 4],
         strides: [u32; 4],
         offsets: [u32; 4],
         num_planes: u32,
@@ -271,9 +281,9 @@ impl DmaBufBuffer {
         }
     }
 
-    /// Create a simple single-plane DmaBufBuffer.
+    /// Create a simple single-plane DmaBufBuffer, taking ownership of `fd`.
     pub fn single_plane(
-        fd: std::os::unix::io::RawFd,
+        fd: OwnedFd,
         width: u32,
         height: u32,
         stride: u32,
@@ -281,7 +291,7 @@ impl DmaBufBuffer {
         modifier: u64,
     ) -> Self {
         Self {
-            fds: [fd, -1, -1, -1],
+            fds: [Some(fd), None, None, None],
             strides: [stride, 0, 0, 0],
             offsets: [0, 0, 0, 0],
             num_planes: 1,
@@ -312,8 +322,28 @@ impl DmaBufBuffer {
         #[cfg(any(feature = "video-dmabuf", feature = "wpe-webkit"))]
         {
             use crate::vulkan_dmabuf::{DmaBufImportParams, import_dmabuf};
+            use std::os::fd::AsFd;
+
+            // Borrow each plane's owned fd. The Vulkan import dup()s internally
+            // and never takes ownership, so a `BorrowedFd` view tied to `self`
+            // is the correct contract — the import cannot close our fds.
+            let mut fds = Vec::with_capacity(n);
+            for plane in &self.fds[..n] {
+                match plane {
+                    Some(fd) => fds.push(fd.as_fd()),
+                    None => {
+                        tracing::warn!(
+                            "DmaBufBuffer: declared {} planes but a plane fd is missing; \
+                             skipping import",
+                            self.num_planes
+                        );
+                        return None;
+                    }
+                }
+            }
+
             let params = DmaBufImportParams {
-                fds: self.fds[..n].to_vec(),
+                fds,
                 strides: self.strides[..n].to_vec(),
                 offsets: self.offsets[..n].to_vec(),
                 num_planes: self.num_planes,
