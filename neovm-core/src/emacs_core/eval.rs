@@ -7436,7 +7436,15 @@ impl Context {
                 // A hard cap forces termination if allocation outruns marking.
                 let cap = (*heap_ptr).gc_threshold().saturating_mul(4);
                 let must_finish = (*heap_ptr).bytes_since_gc() > cap;
-                if (*heap_ptr).concurrent_mark_done() || must_finish {
+                let mark_done = (*heap_ptr).concurrent_mark_done();
+                if mark_done || must_finish {
+                    if must_finish && !mark_done {
+                        // Cap-forced: the GC thread had NOT drained — the
+                        // residual mark now runs synchronously in the
+                        // termination below. Record it so the pacer widens
+                        // its lead and the trace attributes the pause.
+                        (*heap_ptr).note_must_finish();
+                    }
                     self.terminate_concurrent_mark(heap_ptr);
                     return; // sweep deferred; cycle not done yet
                 }
@@ -7618,6 +7626,9 @@ impl Context {
         }
         let total_us = start_t0.elapsed().as_micros() as u64;
         // Pause is stamped; stats bookkeeping + probes below are off-pause.
+        let (pace_start_at, pace_lead) = self.tagged_heap.pace_probe();
+        let pace_bytes = self.tagged_heap.bytes_since_gc();
+        let pace_thr = self.tagged_heap.gc_threshold();
         #[cfg(feature = "jit")]
         let (jit_entries, jit_slots) = crate::emacs_core::jit::cache::compiled_cache_probe();
         #[cfg(not(feature = "jit"))]
@@ -7644,7 +7655,9 @@ impl Context {
             .unwrap_or(0);
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             eprintln!(
-                "NEOVM_GC concurrent_start {total_us}us [clear={}us[cons={} noncons={} \
+                "NEOVM_GC concurrent_start {total_us}us \
+                 pace[bytes={pace_bytes} thr={pace_thr} start_at={pace_start_at} \
+                 lead={pace_lead}] [clear={}us[cons={} noncons={} \
                  mapped={}] runtime={}us({}) \
                  remembered={}us({}) obsnap={obsnap_us}us roots={}us conssnap={}us \
                  vecsnap={}us jobasm={}us groups[{}] probes[{}]]",
@@ -7871,7 +7884,11 @@ impl Context {
             return self.tagged_heap.should_collect();
         }
 
-        if !self.tagged_heap.should_collect() {
+        // Paced trigger (adaptive path only): identical to `should_collect`
+        // while the measured mark-window lead is small, but starts the next
+        // concurrent mark early when recent cycles project that waiting for
+        // the full threshold would hit the `must_finish` cap mid-mark.
+        if !self.tagged_heap.should_collect_paced() {
             return false;
         }
 
@@ -7882,7 +7899,7 @@ impl Context {
         if self.tagged_heap.gc_threshold() != threshold {
             self.tagged_heap.set_gc_threshold_from_runtime(threshold);
         }
-        self.tagged_heap.should_collect()
+        self.tagged_heap.should_collect_paced()
     }
 
     /// GNU-style quit processing used from evaluator boundaries.

@@ -508,6 +508,17 @@ fn concurrent_try_mark_string(
 /// would drop its children), and the TENURED check runs before the parity
 /// claim (tenured ≡ permanently black; the flag froze at promotion, which
 /// only runs world-stopped, so the read is stable on this thread).
+/// Alpha-1/2 exponentially-weighted moving average step for the mark-start
+/// pacer's per-cycle samples. Seeds directly from the first nonzero sample.
+#[inline]
+fn ewma_half(prev: u64, sample: u64) -> u64 {
+    if prev == 0 {
+        sample
+    } else {
+        (prev / 2).saturating_add(sample / 2)
+    }
+}
+
 #[inline]
 fn concurrent_try_mark_owned(
     val: TaggedValue,
@@ -2646,6 +2657,36 @@ pub struct TaggedHeap {
     /// Approximate bytes retained by the live heap after the last sweep.
     live_bytes: usize,
 
+    /// Mark-start pacer state. The reactive `must_finish` cap
+    /// (`bytes_since_gc > gc_threshold*4`, checked by the evaluator while a
+    /// concurrent mark runs) force-terminates a mark synchronously — a full
+    /// STW residual drain — exactly during allocation storms. The pacer
+    /// instead STARTS the concurrent mark early enough that marking finishes
+    /// before the cap: each terminated mark measures its allocation rate and
+    /// wall duration, `pace_lead_bytes` = rate-EWMA x duration-EWMA projects
+    /// the allocation of the NEXT mark window, and `should_collect_paced`
+    /// moves the start trigger down to `cap - lead` (never above the
+    /// user-visible threshold, never below `threshold/4` — quiet sessions
+    /// project a small lead and keep today's trigger exactly).
+    /// Lifetime count of forced (cap-hit) mark terminations.
+    must_finish_count: u64,
+    /// Set by `note_must_finish` when the in-flight mark is being cap-forced;
+    /// consumed by `incremental_finish` (skip the biased EWMA sample, escalate
+    /// the lead instead).
+    forced_termination_pending: bool,
+    /// Wall-clock start of the in-flight concurrent mark (stamped at
+    /// `launch_concurrent_mark`, consumed at `incremental_finish`).
+    pace_mark_start: Option<std::time::Instant>,
+    /// `bytes_since_gc` at the in-flight mark's start handshake.
+    pace_mark_start_bytes: usize,
+    /// EWMA (alpha 1/2) of bytes/sec allocated during recent mark windows.
+    pace_alloc_rate_bps: u64,
+    /// EWMA (alpha 1/2) of recent concurrent-mark wall durations, in µs.
+    pace_mark_dur_us: u64,
+    /// Projected allocation during the next mark window (rate x duration),
+    /// recomputed at each clean termination; doubled on a forced one.
+    pace_lead_bytes: usize,
+
     /// Gray worklist for mark phase.
     gray_queue: Vec<TaggedValue>,
     /// Per-cycle mark bits for symbols. GNU symbols are GC-managed objects, so
@@ -3027,6 +3068,13 @@ impl TaggedHeap {
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
             live_bytes: 0,
+            must_finish_count: 0,
+            forced_termination_pending: false,
+            pace_mark_start: None,
+            pace_mark_start_bytes: 0,
+            pace_alloc_rate_bps: 0,
+            pace_mark_dur_us: 0,
+            pace_lead_bytes: 0,
             gray_queue: Vec::new(),
             marked_symbols: FxHashSet::default(),
             weak_hash_tables: Vec::new(),
@@ -3163,6 +3211,87 @@ impl TaggedHeap {
 
     pub fn should_collect(&self) -> bool {
         self.bytes_since_gc >= self.gc_threshold
+    }
+
+    /// Pacer-aware collection trigger for the ADAPTIVE (non-overridden)
+    /// safe-point path: like `should_collect`, but when the next cycle would
+    /// be a concurrent mark and recent cycles project that waiting for the
+    /// full threshold would blow the `must_finish` cap (threshold*4), the
+    /// mark starts early at `cap - projected-mark-window-allocation`.
+    /// Explicitly-overridden thresholds and the STW bootstrap path keep the
+    /// raw `should_collect` semantics.
+    pub fn should_collect_paced(&self) -> bool {
+        self.bytes_since_gc >= self.paced_mark_start_bytes()
+    }
+
+    /// The `bytes_since_gc` level at which the next concurrent mark should
+    /// start. `gc_threshold` exactly (today's trigger) unless the projected
+    /// mark-window allocation (`pace_lead_bytes`) eats into the cap headroom;
+    /// floored at `gc_threshold/4` so storms cannot degenerate into
+    /// continuous restarts, capped at `gc_threshold` so quiet sessions never
+    /// over-collect.
+    fn paced_mark_start_bytes(&self) -> usize {
+        if self.pace_lead_bytes == 0 || !self.should_run_concurrent() {
+            return self.gc_threshold;
+        }
+        let cap = self.gc_threshold.saturating_mul(4);
+        let floor = (self.gc_threshold / 4).max(1);
+        cap.saturating_sub(self.pace_lead_bytes)
+            .clamp(floor, self.gc_threshold)
+    }
+
+    /// Record that the in-flight concurrent mark is being force-terminated by
+    /// the allocation cap (`bytes_since_gc > gc_threshold*4`). Called by the
+    /// evaluator right before the forced `terminate_concurrent_mark`, so
+    /// `incremental_finish` can treat the truncated mark window accordingly.
+    pub(crate) fn note_must_finish(&mut self) {
+        self.must_finish_count += 1;
+        self.forced_termination_pending = true;
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC must_finish#{} bytes_since_gc={} threshold={} lead={}",
+                self.must_finish_count,
+                self.bytes_since_gc,
+                self.gc_threshold,
+                self.pace_lead_bytes,
+            );
+        }
+    }
+
+    /// Lifetime count of cap-forced concurrent-mark terminations.
+    pub fn must_finish_count(&self) -> u64 {
+        self.must_finish_count
+    }
+
+    /// Trace probe: (current paced start trigger, projected mark-window
+    /// allocation in bytes). For the `NEOVM_GC concurrent_start` line.
+    pub(crate) fn pace_probe(&self) -> (usize, usize) {
+        (self.paced_mark_start_bytes(), self.pace_lead_bytes)
+    }
+
+    /// Fold one terminated mark window into the pacer state. A cap-forced
+    /// termination is a truncated (biased-low) window: skip the EWMA sample
+    /// and escalate the lead instead — repeated cap hits drive the start
+    /// trigger down to its floor within a couple of cycles, while the next
+    /// clean cycle's full recompute drops the lead right back. Zero-wall
+    /// windows (no stamp / sub-µs) contribute nothing.
+    fn pace_close_mark_window(&mut self, wall_us: u64, alloc_bytes: usize, forced: bool) {
+        if forced {
+            self.pace_lead_bytes = self
+                .pace_lead_bytes
+                .saturating_mul(2)
+                .max(alloc_bytes)
+                .min(usize::MAX / 4);
+        } else if wall_us > 0 {
+            let rate_sample = ((alloc_bytes as u128).saturating_mul(1_000_000) / wall_us as u128)
+                .min(u64::MAX as u128) as u64;
+            self.pace_alloc_rate_bps = ewma_half(self.pace_alloc_rate_bps, rate_sample);
+            self.pace_mark_dur_us = ewma_half(self.pace_mark_dur_us, wall_us);
+            self.pace_lead_bytes = ((self.pace_alloc_rate_bps as u128)
+                .saturating_mul(self.pace_mark_dur_us as u128)
+                / 1_000_000)
+                .min((usize::MAX / 4) as u128) as usize;
+        }
     }
 
     pub fn gc_threshold(&self) -> usize {
@@ -5984,6 +6113,10 @@ impl TaggedHeap {
             .saturating_add(page_live_bytes)
             .saturating_add(mapped_object_live_bytes);
         self.bytes_since_gc = 0;
+        // Pacer: a stop-the-world cycle has no concurrent mark window; drop
+        // any stale stamp so the next concurrent cycle measures cleanly.
+        self.pace_mark_start = None;
+        self.forced_termination_pending = false;
 
         // End of the first partition cycle: every survivor is a permanent.
         // Promote them to the tenured old generation and blacken the dump so
@@ -6376,6 +6509,9 @@ impl TaggedHeap {
             .send(GcRequest::ConcurrentMark(job))
             .expect("neovm-gc thread is gone");
         self.handshake.last_start_jobasm_us = jobasm_t0.elapsed().as_micros() as u64;
+        // Pacer: open this cycle's mark window (closed by `incremental_finish`).
+        self.pace_mark_start = Some(std::time::Instant::now());
+        self.pace_mark_start_bytes = self.bytes_since_gc;
     }
 
     /// Stop the GC thread and fold its residual work back into the gray queue so
@@ -6669,6 +6805,33 @@ impl TaggedHeap {
         self.sweep_cons_blocks_swept = 0;
         self.sweep_noncons_freed = 0;
         self.sweep_in_progress = true;
+        // Pacer: close the mark window. Sample the allocation rate + wall
+        // duration of the just-terminated concurrent mark and project the
+        // next window's allocation (`pace_lead_bytes`).
+        let pace_wall_us = self
+            .pace_mark_start
+            .take()
+            .map(|t0| t0.elapsed().as_micros() as u64)
+            .unwrap_or(0);
+        let pace_alloc = self
+            .bytes_since_gc
+            .saturating_sub(self.pace_mark_start_bytes);
+        let forced = self.forced_termination_pending;
+        self.forced_termination_pending = false;
+        self.pace_close_mark_window(pace_wall_us, pace_alloc, forced);
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC mark_window alloc={}B wall={}us start_bytes={} forced={} \
+                 rate_ewma={}B/s dur_ewma={}us lead={}B",
+                pace_alloc,
+                pace_wall_us,
+                self.pace_mark_start_bytes,
+                forced,
+                self.pace_alloc_rate_bps,
+                self.pace_mark_dur_us,
+                self.pace_lead_bytes,
+            );
+        }
         // The triggering allocation budget is spent; the next mark fires once a
         // fresh threshold's worth has been allocated.
         self.bytes_since_gc = 0;
@@ -8467,6 +8630,95 @@ pub(crate) mod alloc_probe {
             peak_addr_set()
         ));
         out
+    }
+}
+
+#[cfg(test)]
+mod pacer_tests {
+    use super::*;
+
+    /// The paced trigger is byte-identical to `should_collect` (start at
+    /// `gc_threshold`) until the projected mark-window allocation eats into
+    /// the `must_finish` cap headroom (`threshold*4`), then moves the start
+    /// down to `cap - lead`, floored at `threshold/4`. STW-bound heaps
+    /// (pre-bootstrap) never pace.
+    #[test]
+    fn pacer_trigger_stays_at_raw_threshold_until_lead_threatens_cap() {
+        let mut heap = TaggedHeap::new();
+        heap.gc_threshold = 1_000_000;
+        heap.partition_dump = false;
+        heap.bootstrap_collected = true; // next cycle would be concurrent
+
+        // No measurement yet -> exactly today's trigger.
+        heap.pace_lead_bytes = 0;
+        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
+
+        // Quiet lead (well under the 3x-threshold headroom) -> unchanged.
+        heap.pace_lead_bytes = 2_999_999;
+        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
+
+        // Lead eats into the headroom -> start early at cap - lead.
+        heap.pace_lead_bytes = 3_500_000;
+        assert_eq!(heap.paced_mark_start_bytes(), 500_000);
+
+        // Lead beyond the whole cap -> clamped at the threshold/4 floor.
+        heap.pace_lead_bytes = 10_000_000;
+        assert_eq!(heap.paced_mark_start_bytes(), 250_000);
+
+        // Trigger comparison uses the paced level.
+        heap.bytes_since_gc = 250_000;
+        assert!(heap.should_collect_paced());
+        assert!(!heap.should_collect());
+
+        // A heap whose next cycle is STW (bootstrap not yet collected)
+        // keeps the raw threshold regardless of the lead.
+        heap.bootstrap_collected = false;
+        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
+    }
+
+    /// Forced (cap-hit) terminations escalate the lead without polluting the
+    /// EWMAs; the next clean window's full recompute drops it back, so a
+    /// post-storm quiet session over-collects at most once.
+    #[test]
+    fn pacer_lead_escalates_on_forced_termination_and_recovers_on_clean() {
+        let mut heap = TaggedHeap::new();
+        heap.gc_threshold = 1_000_000;
+
+        // First forced window seeds the lead from the truncated window's
+        // own allocation (the only lower bound available).
+        heap.pace_close_mark_window(50_000, 3_000_000, true);
+        assert_eq!(heap.pace_lead_bytes, 3_000_000);
+        assert_eq!(
+            heap.pace_alloc_rate_bps, 0,
+            "forced sample must not feed EWMA"
+        );
+        assert_eq!(heap.pace_mark_dur_us, 0, "forced sample must not feed EWMA");
+
+        // Repeated cap hits double the lead.
+        heap.pace_close_mark_window(50_000, 2_000_000, true);
+        assert_eq!(heap.pace_lead_bytes, 6_000_000);
+
+        // A clean quiet window recomputes the lead from the EWMAs directly
+        // (seeded from this first clean sample): 1KB over 10ms -> ~1KB lead.
+        heap.pace_close_mark_window(10_000, 1_024, false);
+        assert_eq!(heap.pace_alloc_rate_bps, 102_400);
+        assert_eq!(heap.pace_mark_dur_us, 10_000);
+        assert_eq!(heap.pace_lead_bytes, 1_024);
+
+        // Zero-wall windows (no stamp) leave the state untouched.
+        heap.pace_close_mark_window(0, 999_999, false);
+        assert_eq!(heap.pace_lead_bytes, 1_024);
+
+        // Steady storm converges the EWMAs toward the sample: 8MB over
+        // 100ms windows -> lead approaches 8MB (alpha 1/2 per cycle).
+        for _ in 0..8 {
+            heap.pace_close_mark_window(100_000, 8_000_000, false);
+        }
+        assert!(
+            heap.pace_lead_bytes > 7_000_000,
+            "lead should converge toward the storm's per-window allocation, got {}",
+            heap.pace_lead_bytes
+        );
     }
 }
 
