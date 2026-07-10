@@ -1386,10 +1386,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             );
         }
 
-        let command = CursorEffectCommand::new(
+        let command = CursorEffectCommand::try_new(
             name,
             args.into_iter().map(render_cursor_effect_arg).collect(),
-        );
+        )
+        .map_err(|error| error.to_string())?;
         self.send_render_command(
             RenderCommand::Config(ConfigCommand::SetCursorEffect(command)),
             "failed to set cursor effect",

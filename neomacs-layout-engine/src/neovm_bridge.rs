@@ -1064,7 +1064,10 @@ fn apply_cursor_effect_form(effects: &mut EffectsConfig, form: Value) -> bool {
     else {
         return false;
     };
-    CursorEffectCommand::new(name, args).apply_to(effects);
+    let Ok(command) = CursorEffectCommand::try_new(name, args) else {
+        return false;
+    };
+    command.apply_to(effects);
     true
 }
 
