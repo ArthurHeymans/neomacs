@@ -490,14 +490,14 @@ impl RenderApp {
                     .transitions
                     .offscreen_a
                     .as_ref()
-                    .map(|(_, view, _)| view as *const wgpu::TextureView)
+                    .map(|(_, view, _)| view.clone())
             } else {
                 render
                     .compositor
                     .transitions
                     .offscreen_b
                     .as_ref()
-                    .map(|(_, view, _)| view as *const wgpu::TextureView)
+                    .map(|(_, view, _)| view.clone())
             };
 
             if let Some(current_view) = current_view {
@@ -505,7 +505,7 @@ impl RenderApp {
                     renderer,
                     native,
                     render,
-                    unsafe { &*current_view },
+                    &current_view,
                     &frame,
                     cursor_visible,
                     root_animated_cursor,
@@ -524,14 +524,14 @@ impl RenderApp {
                     .transitions
                     .offscreen_a
                     .as_ref()
-                    .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
+                    .map(|(_, _, bg)| bg.clone())
             } else {
                 render
                     .compositor
                     .transitions
                     .offscreen_b
                     .as_ref()
-                    .map(|(_, _, bg)| bg as *const wgpu::BindGroup)
+                    .map(|(_, _, bg)| bg.clone())
             };
 
             renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
@@ -551,7 +551,7 @@ impl RenderApp {
 
             if let Some(current_bg) = current_bg {
                 renderer.blit_texture_to_view(
-                    unsafe { &*current_bg },
+                    &current_bg,
                     &surface_view,
                     native.width,
                     native.height,

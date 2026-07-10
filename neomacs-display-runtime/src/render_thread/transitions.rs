@@ -394,7 +394,7 @@ pub(super) fn render_frame_transitions(
 ) {
     let now = std::time::Instant::now();
     let current_bg = match current_offscreen_view_and_bg(transitions) {
-        Some((_, bg)) => bg as *const wgpu::BindGroup,
+        Some((_, bg)) => bg.clone(),
         None => return,
     };
 
@@ -407,7 +407,7 @@ pub(super) fn render_frame_transitions(
         renderer.render_scroll_effect(
             surface_view,
             &transition.old_bind_group,
-            unsafe { &*current_bg },
+            &current_bg,
             raw_t,
             elapsed_secs,
             1,
@@ -436,7 +436,7 @@ pub(super) fn render_frame_transitions(
         renderer.render_scroll_effect(
             surface_view,
             &transition.old_bind_group,
-            unsafe { &*current_bg },
+            &current_bg,
             raw_t,
             elapsed_secs,
             transition.direction,
