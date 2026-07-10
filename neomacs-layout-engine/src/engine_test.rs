@@ -1959,16 +1959,15 @@ fn window_layout_trace(
             } => (*window_start, *point, *window_end_pos, *window_end_bytepos),
             other => panic!("expected leaf window, got {other:?}"),
         };
-    let hit = unsafe {
-        (&*std::ptr::addr_of!(crate::hit_test::FRAME_HIT_DATA))
-            .as_ref()
+    let hit = crate::hit_test::with_frame_hit_data(|windows| {
+        windows
             .and_then(|windows| {
                 windows
                     .iter()
                     .find(|window| window.window_id == selected_window.0 as i64)
             })
             .map(WindowHitTrace::from_window)
-    };
+    });
 
     BackendLayoutTrace {
         matrix_rows: window_entry
@@ -11891,9 +11890,8 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
         .iter()
         .find(|row| row.row == 1)
         .expect("second overlay row snapshot");
-    let overlay_hit_row = unsafe {
-        (&*std::ptr::addr_of!(crate::hit_test::FRAME_HIT_DATA))
-            .as_ref()
+    let overlay_hit_row = crate::hit_test::with_frame_hit_data(|windows| {
+        windows
             .and_then(|windows| {
                 windows
                     .iter()
@@ -11906,7 +11904,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
                 })
             })
             .cloned()
-    }
+    })
     .expect("overlay hit row");
     let overlay_hit = crate::hit_test::hit_test_window_charpos(
         selected_window.0 as i64,

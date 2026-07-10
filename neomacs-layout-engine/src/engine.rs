@@ -1222,9 +1222,7 @@ impl LayoutEngine {
         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
             frame.set_display_snapshots(snapshots);
         }
-        unsafe {
-            *std::ptr::addr_of_mut!(FRAME_HIT_DATA) = Some(std::mem::take(&mut self.hit_data));
-        }
+        set_frame_hit_data(Some(std::mem::take(&mut self.hit_data)));
     }
 
     /// Simplified window layout using neovm-core data.

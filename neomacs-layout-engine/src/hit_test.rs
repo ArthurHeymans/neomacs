@@ -2,6 +2,8 @@
 //!
 //! Built during layout and queried from FFI for mouse interaction.
 
+use std::cell::RefCell;
+
 /// Per-row hit-test data: maps a Y range to a charpos range.
 #[derive(Clone, Debug)]
 pub(crate) struct HitRow {
@@ -20,9 +22,23 @@ pub(crate) struct WindowHitData {
     pub rows: Vec<HitRow>,
 }
 
-/// Global hit-test data for all windows, updated each frame.
-/// Safe to use without Mutex because layout and queries happen on the same (Emacs) thread.
-pub(crate) static mut FRAME_HIT_DATA: Option<Vec<WindowHitData>> = None;
+thread_local! {
+    /// Hit-test data for the latest frame laid out on this evaluator thread.
+    static FRAME_HIT_DATA: RefCell<Option<Vec<WindowHitData>>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn set_frame_hit_data(data: Option<Vec<WindowHitData>>) {
+    FRAME_HIT_DATA.with(|frame_data| {
+        *frame_data.borrow_mut() = data;
+    });
+}
+
+pub(crate) fn with_frame_hit_data<R>(f: impl FnOnce(Option<&[WindowHitData]>) -> R) -> R {
+    FRAME_HIT_DATA.with(|frame_data| {
+        let frame_data = frame_data.borrow();
+        f(frame_data.as_deref())
+    })
+}
 
 /// Core logic: compute charpos from pixel coordinates given window hit data.
 /// Searches all windows for the one containing (px, py).
@@ -69,22 +85,12 @@ fn window_charpos_in(data: &[WindowHitData], window_id: i64, wx: f32, wy: f32) -
 /// Searches all windows for the one containing (px, py).
 /// Returns charpos, or -1 if not found.
 pub fn hit_test_charpos_at_pixel(px: f32, py: f32) -> i64 {
-    unsafe {
-        match &*std::ptr::addr_of!(FRAME_HIT_DATA) {
-            Some(data) => charpos_at_pixel_in(data, px, py),
-            None => -1,
-        }
-    }
+    with_frame_hit_data(|data| data.map_or(-1, |data| charpos_at_pixel_in(data, px, py)))
 }
 
 /// Query charpos for a specific window at window-relative pixel coordinates.
 pub fn hit_test_window_charpos(window_id: i64, wx: f32, wy: f32) -> i64 {
-    unsafe {
-        match &*std::ptr::addr_of!(FRAME_HIT_DATA) {
-            Some(data) => window_charpos_in(data, window_id, wx, wy),
-            None => -1,
-        }
-    }
+    with_frame_hit_data(|data| data.map_or(-1, |data| window_charpos_in(data, window_id, wx, wy)))
 }
 
 #[cfg(test)]
@@ -339,25 +345,43 @@ mod tests {
         assert_eq!(window_charpos_in(&data, 1, 0.0, 25.0), 160);
     }
 
-    // --- Public API tests (verify wrappers return -1 with FRAME_HIT_DATA = None) ---
-    // These test the None path of the public functions. They are safe because
-    // they only read the global (which defaults to None).
+    // --- Public API tests ---
 
     #[test]
     fn public_charpos_at_pixel_no_data_returns_neg1() {
-        // FRAME_HIT_DATA starts as None (or may have been set by another test);
-        // we explicitly set it to None to be safe.
-        unsafe {
-            *std::ptr::addr_of_mut!(FRAME_HIT_DATA) = None;
-        }
+        set_frame_hit_data(None);
         assert_eq!(hit_test_charpos_at_pixel(0.0, 0.0), -1);
     }
 
     #[test]
     fn public_window_charpos_no_data_returns_neg1() {
-        unsafe {
-            *std::ptr::addr_of_mut!(FRAME_HIT_DATA) = None;
-        }
+        set_frame_hit_data(None);
         assert_eq!(hit_test_window_charpos(1, 0.0, 0.0), -1);
+    }
+
+    #[test]
+    fn frame_hit_data_is_isolated_per_thread() {
+        set_frame_hit_data(Some(vec![make_window(
+            1,
+            0.0,
+            10.0,
+            vec![make_row(0.0, 20.0, 10, 20)],
+        )]));
+
+        std::thread::spawn(|| {
+            assert_eq!(hit_test_window_charpos(1, 0.0, 10.0), -1);
+            set_frame_hit_data(Some(vec![make_window(
+                2,
+                0.0,
+                10.0,
+                vec![make_row(0.0, 20.0, 30, 40)],
+            )]));
+            assert_eq!(hit_test_window_charpos(2, 0.0, 10.0), 30);
+        })
+        .join()
+        .unwrap();
+
+        assert_eq!(hit_test_window_charpos(1, 0.0, 10.0), 10);
+        assert_eq!(hit_test_window_charpos(2, 0.0, 10.0), -1);
     }
 }
