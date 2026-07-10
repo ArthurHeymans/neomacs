@@ -45,6 +45,73 @@ pub(crate) mod vm_profile {
     pub(crate) const ENTRY_CALLBUILTINSYM: u8 = 2;
     pub(crate) const ENTRY_CALLBUILTIN: u8 = 3;
 
+    /// `Op::Call` callee resolution-kind classes (Task-4 counters): what the
+    /// current dispatch path does with the callee value, classified BEFORE the
+    /// call so the closure-vs-builtin split of the `Op::Call` population is
+    /// measured directly instead of derived by subtraction.
+    pub(crate) const CK_BUILTIN_SYM: u8 = 0; // symbol -> subr cell / global subr entry
+    pub(crate) const CK_CLOSURE_SYM: u8 = 1; // symbol -> bytecode cell (re-resolved per call)
+    pub(crate) const CK_OTHER_SYM: u8 = 2; // symbol -> lambda/advice/alias/autoload/void/overrides
+    pub(crate) const CK_CLOSURE_VAL: u8 = 3; // bytecode object callee (no resolution to cache)
+    pub(crate) const CK_SUBR_VAL: u8 = 4; // subr object callee
+    pub(crate) const CK_OTHER_VAL: u8 = 5; // any other callee value
+    pub(crate) const CK_COUNT: usize = 6;
+    const CK_NAMES: [&str; CK_COUNT] = [
+        "builtin-sym (symbol -> subr cell/global entry)",
+        "closure-sym (symbol -> bytecode cell; re-resolved per call)",
+        "other-sym   (lambda/advice/alias/autoload/void/overrides)",
+        "closure-val (bytecode object callee; no resolution)",
+        "subr-val    (subr object callee)",
+        "other-val   (any other callee value)",
+    ];
+
+    /// Per-site callee keys: symbols carry their SymId (tag 1 in the low
+    /// bits); non-symbol callees collapse into one bucket per value class —
+    /// a symbol-keyed call IC cannot cache them, so per-value identity churn
+    /// (fresh closures per iteration) must not masquerade as polymorphism.
+    pub(crate) const SITE_KEY_CLOSURE_VAL: u64 = 2;
+    pub(crate) const SITE_KEY_SUBR_VAL: u64 = 3;
+    pub(crate) const SITE_KEY_OTHER_VAL: u64 = 4;
+    pub(crate) fn site_key_for_symbol(id: SymId) -> u64 {
+        ((id.0 as u64) << 3) | 1
+    }
+    fn site_key_name(key: u64) -> String {
+        if key & 7 == 1 {
+            crate::emacs_core::intern::resolve_sym(SymId((key >> 3) as u32)).to_string()
+        } else {
+            match key {
+                SITE_KEY_CLOSURE_VAL => "#<closure-val>".to_string(),
+                SITE_KEY_SUBR_VAL => "#<subr-val>".to_string(),
+                _ => "#<other-val>".to_string(),
+            }
+        }
+    }
+
+    /// `Op::VarRef` resolution classes (Task-4 BLV sizing): which branch of
+    /// `fast_path_var_ref`/`lookup_var_id` the read takes. `PLAIN_NIL` is
+    /// interesting on its own: a nil-valued Plainval read still pays a
+    /// buffer-local probe (the buffer-undo-list compat shim), win or lose.
+    pub(crate) const VR_PLAIN: u8 = 0; // Plainval, non-nil, direct return
+    pub(crate) const VR_PLAIN_NIL: u8 = 1; // Plainval nil; buffer-local probe MISSED
+    pub(crate) const VR_PLAIN_NIL_BLV: u8 = 2; // Plainval nil; buffer-local probe HIT
+    pub(crate) const VR_LOCALIZED: u8 = 3; // SYMBOL_LOCALIZED (true BLV machinery)
+    pub(crate) const VR_FORWARDED: u8 = 4; // SYMBOL_FORWARDED (per-buffer/C slot)
+    pub(crate) const VR_SLOW_OTHER: u8 = 5; // unbound/alias-to-plain/error paths
+    pub(crate) const VR_COUNT: usize = 6;
+    const VR_NAMES: [&str; VR_COUNT] = [
+        "plain         (Plainval non-nil, direct)",
+        "plain-nil     (Plainval nil; BLV probe MISS — probe still paid)",
+        "plain-nil-blv (Plainval nil; BLV probe HIT — buffer-local value)",
+        "localized     (SYMBOL_LOCALIZED — true BLV machinery)",
+        "forwarded     (SYMBOL_FORWARDED — per-buffer/C slot)",
+        "slow-other    (unbound / alias-to-plain / error paths)",
+    ];
+
+    /// (function identity, call-site pc) — one bytecode `Op::Call` site.
+    type SiteId = (usize, u32);
+    /// Per-site callee histogram rows: (callee key, execution count).
+    type SiteRows = Vec<(u64, u64)>;
+
     thread_local! {
         static OP_COUNTS: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
         static SUBR_COUNTS: RefCell<HashMap<SymId, u64>> = RefCell::new(HashMap::new());
@@ -54,6 +121,19 @@ pub(crate) mod vm_profile {
         /// the STATIC callee symbol of the exact op that issued the call — the
         /// Op::Call-vs-CallBuiltinSym entry split the round-2 report needs.
         static ENTRY_COUNTS: RefCell<HashMap<(u32, u8), u64>> = RefCell::new(HashMap::new());
+        /// Execution counts per CK_* resolution kind at the Op::Call arm.
+        static CALL_KIND_COUNTS: RefCell<[u64; CK_COUNT]> = const { RefCell::new([0; CK_COUNT]) };
+        /// (function identity, call-site pc) -> per-site callee histogram.
+        /// Identity is the `&ByteCodeFunction` address: stable while alive
+        /// (non-moving GC); free-then-reuse ABA is acceptable measurement
+        /// noise. Execution-WEIGHTED, unlike the JIT `FeedbackVec` (a 3-state
+        /// lattice, per-instance, not enumerable without a heap walk) — this
+        /// is the per-site polymorphism table the T1 report flagged missing.
+        static CALL_SITES: RefCell<HashMap<SiteId, SiteRows>> = RefCell::new(HashMap::new());
+        /// (symbol, VR_* class) -> Op::VarRef read count.
+        static VARREF_COUNTS: RefCell<HashMap<(u32, u8), u64>> = RefCell::new(HashMap::new());
+        /// Reads whose resolution crossed a variable alias (any class).
+        static VARREF_ALIAS: RefCell<u64> = const { RefCell::new(0) };
     }
 
     /// Bump the per-builtin call histogram. Hooked at `subr_entry_from_value`
@@ -100,11 +180,40 @@ pub(crate) mod vm_profile {
         });
     }
 
+    /// Record one `Op::Call` execution: its CK_* resolution kind plus the
+    /// callee key under its call site (function identity, pc).
+    pub(crate) fn bump_call_site(func_ident: usize, pc: u32, key: u64, kind: u8) {
+        CALL_KIND_COUNTS.with(|c| c.borrow_mut()[kind as usize] += 1);
+        CALL_SITES.with(|c| {
+            let mut m = c.borrow_mut();
+            let per_site = m.entry((func_ident, pc)).or_default();
+            if let Some(row) = per_site.iter_mut().find(|row| row.0 == key) {
+                row.1 += 1;
+            } else {
+                per_site.push((key, 1));
+            }
+        });
+    }
+
+    /// Record one `Op::VarRef` execution under its symbol + VR_* class.
+    pub(crate) fn bump_varref(sym: SymId, class: u8, via_alias: bool) {
+        VARREF_COUNTS.with(|c| {
+            *c.borrow_mut().entry((sym.0, class)).or_insert(0) += 1;
+        });
+        if via_alias {
+            VARREF_ALIAS.with(|c| *c.borrow_mut() += 1);
+        }
+    }
+
     /// Clear the histograms (call before a measured workload).
     pub(crate) fn reset() {
         OP_COUNTS.with(|c| c.borrow_mut().clear());
         SUBR_COUNTS.with(|c| c.borrow_mut().clear());
         ENTRY_COUNTS.with(|c| c.borrow_mut().clear());
+        CALL_KIND_COUNTS.with(|c| *c.borrow_mut() = [0; CK_COUNT]);
+        CALL_SITES.with(|c| c.borrow_mut().clear());
+        VARREF_COUNTS.with(|c| c.borrow_mut().clear());
+        VARREF_ALIAS.with(|c| *c.borrow_mut() = 0);
     }
 
     /// Format the OP-MIX + SUBR-MIX (with the per-builtin entry split) into a
@@ -157,6 +266,133 @@ pub(crate) mod vm_profile {
             let _ = writeln!(
                 out,
                 "  {name:<28} {count:>12} {pct:5.2}%  {opcall:>11} {cbsym:>11} {cbtin:>8} {other:>11}"
+            );
+        }
+
+        // --- CALL-KIND: closure-vs-builtin split of the Op::Call population ---
+        let kinds = CALL_KIND_COUNTS.with(|c| *c.borrow());
+        let kind_total: u64 = kinds.iter().sum();
+        let _ = writeln!(
+            out,
+            "=== CALL-KIND [{label}]: {kind_total} Op::Call executions ==="
+        );
+        for (i, name) in CK_NAMES.iter().enumerate() {
+            let count = kinds[i];
+            let pct = 100.0 * count as f64 / kind_total.max(1) as f64;
+            let _ = writeln!(out, "  {name:<60} {count:>12}  {pct:5.2}%");
+        }
+
+        // --- CALL-SITES: execution-weighted per-site polymorphism ---
+        let sites: Vec<(SiteId, SiteRows)> =
+            CALL_SITES.with(|c| c.borrow().iter().map(|(k, v)| (*k, v.clone())).collect());
+        let site_total_execs: u64 = sites.iter().flat_map(|s| s.1.iter().map(|r| r.1)).sum();
+        let _ = writeln!(
+            out,
+            "=== CALL-SITES [{label}]: {} sites, {site_total_execs} executions ===",
+            sites.len()
+        );
+        let mut by_arity = [(0u64, 0u64); 3]; // [1, 2, >=3] -> (sites, execs)
+        let mut nonsym = (0u64, 0u64); // sites with any non-symbol callee key
+        for (_, rows) in &sites {
+            let execs: u64 = rows.iter().map(|r| r.1).sum();
+            let bucket = (rows.len().min(3)) - 1;
+            by_arity[bucket].0 += 1;
+            by_arity[bucket].1 += execs;
+            if rows.iter().any(|r| r.0 & 7 != 1) {
+                nonsym.0 += 1;
+                nonsym.1 += rows
+                    .iter()
+                    .filter(|r| r.0 & 7 != 1)
+                    .map(|r| r.1)
+                    .sum::<u64>();
+            }
+        }
+        for (i, label_txt) in ["1 callee (monomorphic)", "2 callees", ">=3 callees"]
+            .iter()
+            .enumerate()
+        {
+            let (s, e) = by_arity[i];
+            let spct = 100.0 * s as f64 / (sites.len().max(1)) as f64;
+            let epct = 100.0 * e as f64 / site_total_execs.max(1) as f64;
+            let _ = writeln!(
+                out,
+                "  {label_txt:<24} {s:>8} sites {spct:5.2}%  |  {e:>12} execs {epct:5.2}%"
+            );
+        }
+        let _ = writeln!(
+            out,
+            "  non-symbol-callee execs: {} (at {} sites) — not symbol-IC-cacheable",
+            nonsym.1, nonsym.0
+        );
+        let mut poly: Vec<&(SiteId, SiteRows)> = sites.iter().filter(|s| s.1.len() > 1).collect();
+        poly.sort_by_key(|s| std::cmp::Reverse(s.1.iter().map(|r| r.1).sum::<u64>()));
+        for ((func_ident, pc), rows) in poly.iter().take(12) {
+            let execs: u64 = rows.iter().map(|r| r.1).sum();
+            let mut rows = rows.clone();
+            rows.sort_by_key(|r| std::cmp::Reverse(r.1));
+            let callees = rows
+                .iter()
+                .map(|(k, n)| format!("{}({n})", site_key_name(*k)))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let _ = writeln!(
+                out,
+                "  poly site fn@{func_ident:#x} pc={pc} execs={execs}: {callees}"
+            );
+        }
+
+        // --- VARREF-MIX: per-class + per-symbol Op::VarRef breakdown ---
+        let varrefs: Vec<((u32, u8), u64)> =
+            VARREF_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (*k, *v)).collect());
+        let vr_total: u64 = varrefs.iter().map(|r| r.1).sum();
+        let mut vr_class = [0u64; VR_COUNT];
+        let mut per_sym: HashMap<u32, [u64; VR_COUNT]> = HashMap::new();
+        for ((sym, class), count) in &varrefs {
+            vr_class[*class as usize] += count;
+            per_sym.entry(*sym).or_default()[*class as usize] += count;
+        }
+        let _ = writeln!(
+            out,
+            "=== VARREF-MIX [{label}]: {vr_total} reads, {} distinct symbols ===",
+            per_sym.len()
+        );
+        for (i, name) in VR_NAMES.iter().enumerate() {
+            let count = vr_class[i];
+            let pct = 100.0 * count as f64 / vr_total.max(1) as f64;
+            let _ = writeln!(out, "  {name:<64} {count:>12}  {pct:5.2}%");
+        }
+        let alias = VARREF_ALIAS.with(|c| *c.borrow());
+        let _ = writeln!(out, "  via-alias (any class): {alias}");
+        let blv_value = vr_class[VR_PLAIN_NIL_BLV as usize] + vr_class[VR_LOCALIZED as usize];
+        let buffer_consulting =
+            blv_value + vr_class[VR_PLAIN_NIL as usize] + vr_class[VR_FORWARDED as usize];
+        let _ = writeln!(
+            out,
+            "  buffer-local VALUE reads (plain-nil-blv+localized): {blv_value} ({:.2}%)",
+            100.0 * blv_value as f64 / vr_total.max(1) as f64
+        );
+        let _ = writeln!(
+            out,
+            "  buffer-CONSULTING reads (+plain-nil probes+forwarded): {buffer_consulting} ({:.2}%)",
+            100.0 * buffer_consulting as f64 / vr_total.max(1) as f64
+        );
+        let mut sym_rows: Vec<(u32, [u64; VR_COUNT], u64)> = per_sym
+            .into_iter()
+            .map(|(sym, classes)| (sym, classes, classes.iter().sum::<u64>()))
+            .collect();
+        sym_rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+        let _ = writeln!(
+            out,
+            "  {:<36} {:>11} {:>6} | {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+            "symbol", "reads", "%", "plain", "pl-nil", "nil-blv", "localizd", "forward", "slow"
+        );
+        for (sym, classes, total) in sym_rows.iter().take(40) {
+            let name = crate::emacs_core::intern::resolve_sym(SymId(*sym));
+            let pct = 100.0 * *total as f64 / vr_total.max(1) as f64;
+            let _ = writeln!(
+                out,
+                "  {name:<36} {total:>11} {pct:5.2}% | {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+                classes[0], classes[1], classes[2], classes[3], classes[4], classes[5]
             );
         }
         out
@@ -1194,6 +1430,13 @@ impl<'a> Vm<'a> {
                 // -- Variable access --
                 Op::VarRef(idx) => {
                     let name_id = sym_id_at(constants, *idx);
+                    // Task-4 profiling: class + per-symbol VarRef breakdown
+                    // (the BLV-fraction counter the T1 report flagged missing).
+                    #[cfg(feature = "vm-profile")]
+                    {
+                        let (class, via_alias) = self.vm_profile_classify_varref(name_id);
+                        vm_profile::bump_varref(name_id, class, via_alias);
+                    }
                     let val = vm_try!(self.fast_path_var_ref(name_id));
                     stk_push!(val);
                 }
@@ -1266,12 +1509,24 @@ impl<'a> Vm<'a> {
                     // symbol (the find_spec_sites entry population). Resolve a
                     // subr-object callee to its SymId so both `(f x)` (symbol
                     // callee) and a spilled subr value count the same builtin.
+                    // Task-4 profiling: also record the resolution kind
+                    // (closure-vs-builtin split) and the callee under its call
+                    // site — the execution-weighted per-site polymorphism table.
                     #[cfg(feature = "vm-profile")]
-                    if let Some(id) = match func_val.kind() {
-                        ValueKind::Symbol(id) => Some(id),
-                        _ => func_val.as_subr_id(),
-                    } {
-                        vm_profile::bump_entry(id, vm_profile::ENTRY_CALL);
+                    {
+                        if let Some(id) = match func_val.kind() {
+                            ValueKind::Symbol(id) => Some(id),
+                            _ => func_val.as_subr_id(),
+                        } {
+                            vm_profile::bump_entry(id, vm_profile::ENTRY_CALL);
+                        }
+                        let (site_key, kind) = self.vm_profile_classify_call(func_val);
+                        vm_profile::bump_call_site(
+                            func as *const ByteCodeFunction as usize,
+                            (pc_local - 1) as u32,
+                            site_key,
+                            kind,
+                        );
                     }
                     // GNU `bytecode.c:Bcall` polls `maybe_quit` before
                     // entering the callee. This is observable when bytecode
@@ -4196,6 +4451,99 @@ impl<'a> Vm<'a> {
             return None;
         }
         Some((sym_id, entry, callee))
+    }
+
+    /// vm-profile only: classify how THIS `Op::Call` callee resolves on the
+    /// current dispatch path, without perturbing it — a read-only peek that
+    /// mirrors `direct_subr_call_target` + `call_function_untraced_owned`'s
+    /// kind tests. Returns (per-site callee key, CK_* class). Classified
+    /// BEFORE the call so the pre-call state is what is counted.
+    #[cfg(feature = "vm-profile")]
+    fn vm_profile_classify_call(&self, func_val: Value) -> (u64, u8) {
+        use vm_profile::*;
+        match func_val.kind() {
+            ValueKind::Veclike(VecLikeType::ByteCode) => (SITE_KEY_CLOSURE_VAL, CK_CLOSURE_VAL),
+            ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
+                (SITE_KEY_SUBR_VAL, CK_SUBR_VAL)
+            }
+            ValueKind::Symbol(sym_id) => {
+                let key = site_key_for_symbol(sym_id);
+                if self.ctx.compiler_function_overrides_active() {
+                    return (key, CK_OTHER_SYM);
+                }
+                let global_subr = || {
+                    if lookup_global_subr_entry(sym_id).is_some() {
+                        CK_BUILTIN_SYM
+                    } else {
+                        CK_OTHER_SYM
+                    }
+                };
+                let kind = match self.ctx.obarray.symbol_function_id(sym_id) {
+                    Some(cell)
+                        if matches!(
+                            cell.kind(),
+                            ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
+                        ) =>
+                    {
+                        CK_BUILTIN_SYM
+                    }
+                    Some(cell)
+                        if matches!(cell.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
+                    {
+                        CK_CLOSURE_SYM
+                    }
+                    Some(cell) if cell.is_nil() => global_subr(),
+                    None => global_subr(),
+                    _ => CK_OTHER_SYM,
+                };
+                (key, kind)
+            }
+            _ => (SITE_KEY_OTHER_VAL, CK_OTHER_VAL),
+        }
+    }
+
+    /// vm-profile only: classify which branch of `fast_path_var_ref`/
+    /// `lookup_var_id` this `Op::VarRef` read takes (read-only mirror of those
+    /// branches). Returns (VR_* class, resolution-crossed-an-alias).
+    #[cfg(feature = "vm-profile")]
+    fn vm_profile_classify_varref(&self, name_id: SymId) -> (u8, bool) {
+        use crate::emacs_core::symbol::SymbolRedirect;
+        use vm_profile::*;
+        let ob = &self.ctx.obarray;
+        let Some(sym) = ob.get_by_id(name_id) else {
+            return (VR_SLOW_OTHER, false);
+        };
+        if sym.redirect() == SymbolRedirect::Plainval {
+            // SAFETY: redirect() confirmed Plainval, so val.plain is active
+            // (same contract as fast_path_var_ref).
+            let val = unsafe { sym.val.plain };
+            if !val.is_unbound() {
+                if !val.is_nil() {
+                    return (VR_PLAIN, false);
+                }
+                if let Some(buf) = self.ctx.buffers.current_buffer()
+                    && let Some(blv) = buf.get_buffer_local_by_sym_id(name_id)
+                    && !blv.is_nil()
+                {
+                    return (VR_PLAIN_NIL_BLV, false);
+                }
+                return (VR_PLAIN_NIL, false);
+            }
+        }
+        let resolved =
+            match crate::emacs_core::builtins::symbols::resolve_variable_alias_id_in_obarray(
+                ob, name_id,
+            ) {
+                Ok(id) => id,
+                Err(_) => return (VR_SLOW_OTHER, false),
+            };
+        let via_alias = resolved != name_id;
+        let class = match ob.get_by_id(resolved).map(|s| s.redirect()) {
+            Some(SymbolRedirect::Localized) => VR_LOCALIZED,
+            Some(SymbolRedirect::Forwarded) => VR_FORWARDED,
+            _ => VR_SLOW_OTHER,
+        };
+        (class, via_alias)
     }
 
     fn resume_nonlocal(
