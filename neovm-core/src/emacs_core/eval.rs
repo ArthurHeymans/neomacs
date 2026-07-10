@@ -2716,6 +2716,58 @@ fn finish_lambda_call_in_state(
     }
 }
 
+/// Panic-safe scope for [`Context::gc_inhibit_depth`]: construction increments
+/// the depth, `Drop` decrements it, so the inhibition rebalances even when the
+/// wrapped code unwinds — a leaked increment would disable safe-point GC for
+/// the rest of the session once panics become catchable. Same ctor-sets /
+/// Drop-restores shape as
+/// [`crate::emacs_core::symbol::ObarraySymbolCellSkipGuard`]. The guard holds
+/// the only live `&mut Context` for its scope; reach it via
+/// [`GcInhibitGuard::context`].
+struct GcInhibitGuard<'a>(&'a mut Context);
+
+impl<'a> GcInhibitGuard<'a> {
+    fn enter(cx: &'a mut Context) -> Self {
+        cx.gc_inhibit_depth += 1;
+        Self(cx)
+    }
+
+    fn context(&mut self) -> &mut Context {
+        self.0
+    }
+}
+
+impl Drop for GcInhibitGuard<'_> {
+    fn drop(&mut self) {
+        self.0.gc_inhibit_depth -= 1;
+    }
+}
+
+/// Panic-safe scope for [`Context::unwind_cleanup_depth`], the flag that stops
+/// `throw-on-input` polling from throwing out of an `unwind-protect` cleanup
+/// body. Construction increments, `Drop` decrements, so a cleanup body that
+/// unwinds cannot leave the depth stuck nonzero — which would permanently
+/// disable `throw-on-input` once panics become catchable. Same shape as
+/// [`GcInhibitGuard`].
+struct UnwindCleanupGuard<'a>(&'a mut Context);
+
+impl<'a> UnwindCleanupGuard<'a> {
+    fn enter(cx: &'a mut Context) -> Self {
+        cx.unwind_cleanup_depth += 1;
+        Self(cx)
+    }
+
+    fn context(&mut self) -> &mut Context {
+        self.0
+    }
+}
+
+impl Drop for UnwindCleanupGuard<'_> {
+    fn drop(&mut self) {
+        self.0.unwind_cleanup_depth -= 1;
+    }
+}
+
 impl Default for Context {
     fn default() -> Self {
         Self::new()
@@ -7853,10 +7905,8 @@ impl Context {
     }
 
     fn with_gc_inhibited<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.gc_inhibit_depth += 1;
-        let result = f(self);
-        self.gc_inhibit_depth -= 1;
-        result
+        let mut guard = GcInhibitGuard::enter(self);
+        f(guard.context())
     }
 
     fn run_post_gc_hook(&mut self) {
@@ -14896,15 +14946,16 @@ impl Context {
                     // Entry already popped — re-entrant errors won't re-unwind.
                     let saved_lexenv = self.lexenv;
                     self.lexenv = lexenv;
-                    self.unwind_cleanup_depth += 1;
-                    let cleanup_result = if cleanup.is_cons() || cleanup.is_nil() {
-                        // Interpreter path: list of forms
-                        self.sf_progn_value(cleanup)
-                    } else {
-                        // VM path: callable (bytecode function)
-                        self.apply(cleanup, vec![])
+                    let cleanup_result = {
+                        let mut guard = UnwindCleanupGuard::enter(self);
+                        if cleanup.is_cons() || cleanup.is_nil() {
+                            // Interpreter path: list of forms
+                            guard.context().sf_progn_value(cleanup)
+                        } else {
+                            // VM path: callable (bytecode function)
+                            guard.context().apply(cleanup, vec![])
+                        }
                     };
-                    self.unwind_cleanup_depth -= 1;
                     self.lexenv = saved_lexenv;
                     cleanup_result?;
                 }

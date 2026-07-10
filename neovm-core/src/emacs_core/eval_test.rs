@@ -20481,3 +20481,64 @@ fn display_affecting_var_set_bumps_display_var_change_count() {
         "an ordinary variable must not bump the display-var counter"
     );
 }
+
+/// PS-T1 1a: `with_gc_inhibited` must rebalance `gc_inhibit_depth` when the
+/// inhibited closure panics — the manual increment/decrement pair leaked the
+/// increment on unwind, disabling safe-point GC for the rest of the session
+/// once a caller catches the panic. `GcInhibitGuard` restores it in `Drop`.
+#[test]
+fn gc_inhibit_depth_rebalances_when_inhibited_closure_panics() {
+    let mut eval = Context::new();
+    assert_eq!(eval.gc_inhibit_depth, 0);
+
+    // Normal path: nesting is visible inside, fully unwound after.
+    let observed = eval.with_gc_inhibited(|outer| {
+        let outer_depth = outer.gc_inhibit_depth;
+        let inner_depth = outer.with_gc_inhibited(|inner| inner.gc_inhibit_depth);
+        (outer_depth, inner_depth)
+    });
+    assert_eq!(observed, (1, 2));
+    assert_eq!(eval.gc_inhibit_depth, 0);
+
+    // Panic path: the closure unwinds out of the inhibited scope.
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        eval.with_gc_inhibited(|_| panic!("boom inside gc-inhibited scope"));
+    }));
+    assert!(panicked.is_err());
+    assert_eq!(
+        eval.gc_inhibit_depth, 0,
+        "a panicking inhibited closure must not leave GC inhibited"
+    );
+}
+
+/// PS-T1 1b: `UnwindCleanupGuard` must rebalance `unwind_cleanup_depth` on
+/// unwind, or a panicking `unwind-protect` cleanup body would permanently
+/// suppress `throw-on-input` polling once panics become catchable.
+#[test]
+fn unwind_cleanup_depth_rebalances_when_guard_scope_panics() {
+    let mut eval = Context::new();
+    assert_eq!(eval.unwind_cleanup_depth, 0);
+
+    // Normal path: nested guards count up and fully unwind.
+    {
+        let mut outer = UnwindCleanupGuard::enter(&mut eval);
+        assert_eq!(outer.context().unwind_cleanup_depth, 1);
+        {
+            let mut inner = UnwindCleanupGuard::enter(outer.context());
+            assert_eq!(inner.context().unwind_cleanup_depth, 2);
+        }
+        assert_eq!(outer.context().unwind_cleanup_depth, 1);
+    }
+    assert_eq!(eval.unwind_cleanup_depth, 0);
+
+    // Panic path: the guard's scope unwinds.
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _guard = UnwindCleanupGuard::enter(&mut eval);
+        panic!("boom inside cleanup scope");
+    }));
+    assert!(panicked.is_err());
+    assert_eq!(
+        eval.unwind_cleanup_depth, 0,
+        "a panicking cleanup scope must not leave throw-on-input suppressed"
+    );
+}
