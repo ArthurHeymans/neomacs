@@ -167,6 +167,28 @@ fn test_module_user_ptrp() {
     assert_eq!(result, "OK nil");
 }
 
+/// Nested module→elisp→module calls: module fn A (`mod-test-nested-outer`)
+/// env->funcalls an elisp bridge which calls module fn B
+/// (`mod-test-nested-inner`); after B returns, A's env must still reach the
+/// evaluator for a second funcall. Regression for the clear-to-NULL
+/// `MODULE_CTX` teardown, where the inner `apply_module_function` NULLed the
+/// outer call's context and the second funcall signalled "no evaluator
+/// context available for module funcall".
+#[test]
+fn test_module_nested_module_elisp_module_funcall() {
+    let so_path = build_test_module();
+    let so_path_str = so_path.to_str().unwrap();
+    let mut eval = setup_eval();
+    eval_str(&mut eval, &format!("(module-load \"{}\")", so_path_str));
+    eval_str(
+        &mut eval,
+        "(defun mod-test-nested-bridge () (mod-test-nested-inner))",
+    );
+    // Inner returns 21; outer computes (+ 21 21) with its SECOND funcall.
+    let result = eval_str(&mut eval, "(mod-test-nested-outer)");
+    assert_eq!(result, "OK 42");
+}
+
 #[test]
 fn test_module_double_load_is_noop() {
     let so_path = build_test_module();

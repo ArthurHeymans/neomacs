@@ -367,6 +367,41 @@ unsafe extern "C" fn mod_test_vector_eq(
     e.intern.unwrap()(env, b"t\0".as_ptr() as *const _)
 }
 
+unsafe extern "C" fn mod_test_nested_inner(
+    env: *mut emacs_env,
+    _nargs: isize,
+    _args: *mut emacs_value,
+    _data: *mut c_void,
+) -> emacs_value {
+    env.as_ref().unwrap().make_integer.unwrap()(env, 21)
+}
+
+/// Regression driver for nested module→elisp→module calls: the FIRST
+/// env->funcall re-enters the module via an elisp bridge
+/// (`mod-test-nested-bridge` calls `mod-test-nested-inner`); after it
+/// returns, the SECOND env->funcall must still reach the evaluator context.
+unsafe extern "C" fn mod_test_nested_outer(
+    env: *mut emacs_env,
+    _nargs: isize,
+    _args: *mut emacs_value,
+    _data: *mut c_void,
+) -> emacs_value {
+    let e = env.as_ref().unwrap();
+    let bridge = e.intern.unwrap()(env, b"mod-test-nested-bridge\0".as_ptr() as *const _);
+    let inner = e.funcall.unwrap()(env, bridge, 0, std::ptr::null_mut());
+    // A pending non-local exit means the bridge call itself failed; bail so
+    // the test reports that error rather than a follow-on one.
+    if !matches!(
+        e.non_local_exit_check.unwrap()(env),
+        emacs_funcall_exit::Return
+    ) {
+        return std::ptr::null_mut();
+    }
+    let plus = e.intern.unwrap()(env, b"+\0".as_ptr() as *const _);
+    let mut args = [inner, inner];
+    e.funcall.unwrap()(env, plus, 2, args.as_mut_ptr())
+}
+
 unsafe extern "C" fn mod_test_globref_make(
     env: *mut emacs_env,
     _nargs: isize,
@@ -493,6 +528,30 @@ pub unsafe extern "C" fn emacs_module_init(rt: *mut emacs_runtime) -> std::ffi::
             2,
             2,
             mod_test_vector_eq,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+        ),
+    );
+    bind_function(
+        e,
+        "mod-test-nested-inner",
+        env.make_function.unwrap()(
+            e,
+            0,
+            0,
+            mod_test_nested_inner,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+        ),
+    );
+    bind_function(
+        e,
+        "mod-test-nested-outer",
+        env.make_function.unwrap()(
+            e,
+            0,
+            0,
+            mod_test_nested_outer,
             std::ptr::null(),
             std::ptr::null_mut(),
         ),

@@ -1750,12 +1750,29 @@ thread_local! {
         const { std::cell::Cell::new(std::ptr::null_mut()) };
 }
 
-pub fn set_module_context(ctx: *mut Context) {
-    MODULE_CTX.with(|c| c.set(ctx));
+/// RAII installer for `MODULE_CTX`: saves the previous pointer on
+/// construction and restores it on `Drop` (precedent: [`ActiveModuleEnv`]).
+/// Restoring — rather than clearing to NULL — is what makes nested
+/// module→elisp→module calls work: when the inner `apply_module_function`
+/// returns, the outer call's context must come back, or the outer module
+/// function's next `env->funcall` finds no evaluator context. `Drop` also
+/// keeps the teardown coherent once panics become catchable.
+struct ModuleContextGuard {
+    prev: *mut Context,
 }
 
-pub fn clear_module_context() {
-    MODULE_CTX.with(|c| c.set(std::ptr::null_mut()));
+impl ModuleContextGuard {
+    fn install(ctx: *mut Context) -> Self {
+        Self {
+            prev: MODULE_CTX.with(|c| c.replace(ctx)),
+        }
+    }
+}
+
+impl Drop for ModuleContextGuard {
+    fn drop(&mut self) {
+        MODULE_CTX.with(|c| c.set(self.prev));
+    }
 }
 
 // ============================================================================
@@ -1875,10 +1892,10 @@ pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
         get_environment: Some(module_get_environment),
     });
 
-    set_module_context(ctx as *mut Context);
+    let module_ctx = ModuleContextGuard::install(ctx as *mut Context);
     let active_env = ActiveModuleEnv::push(env_priv_ptr);
     let init_code = unsafe { init_fn_ptr(&mut *rt as *mut emacs_runtime) };
-    clear_module_context();
+    drop(module_ctx);
 
     ctx.maybe_quit()?;
     let env_priv_ref = unsafe { &*env_priv_ptr };
@@ -1994,10 +2011,10 @@ pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -
         emacs_args.push(lisp_to_value(env_ptr, *arg));
     }
 
-    set_module_context(ctx as *mut Context);
+    let module_ctx = ModuleContextGuard::install(ctx as *mut Context);
     let active_env = ActiveModuleEnv::push(priv_ptr);
     let result = unsafe { subr_fn(env_ptr, nargs, emacs_args.as_mut_ptr(), data) };
-    clear_module_context();
+    drop(module_ctx);
 
     if let Err(flow) = ctx.maybe_quit() {
         unsafe {
@@ -2071,6 +2088,44 @@ mod tests {
                 finalize_storage(&mut self.priv_.storage);
             }
         }
+    }
+
+    /// `ModuleContextGuard` must restore the PREVIOUS context on drop —
+    /// nested module→elisp→module calls depend on the outer pointer coming
+    /// back — and must do the same when its scope unwinds.
+    #[test]
+    fn module_context_guard_restores_previous_on_drop_and_panic() {
+        // Fake, never-dereferenced pointers: the guard only moves them in
+        // and out of the MODULE_CTX cell.
+        let outer = 0x1000 as *mut Context;
+        let inner = 0x2000 as *mut Context;
+        let current = || MODULE_CTX.with(|c| c.get());
+
+        assert!(current().is_null());
+        {
+            let _outer_guard = ModuleContextGuard::install(outer);
+            assert_eq!(current(), outer);
+            {
+                let _inner_guard = ModuleContextGuard::install(inner);
+                assert_eq!(current(), inner);
+            }
+            assert_eq!(
+                current(),
+                outer,
+                "inner drop must restore the outer context"
+            );
+            let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _guard = ModuleContextGuard::install(inner);
+                panic!("boom under module context");
+            }));
+            assert!(panicked.is_err());
+            assert_eq!(
+                current(),
+                outer,
+                "unwinding must restore the previous context"
+            );
+        }
+        assert!(current().is_null());
     }
 
     #[test]
