@@ -2657,17 +2657,23 @@ pub struct TaggedHeap {
     /// Approximate bytes retained by the live heap after the last sweep.
     live_bytes: usize,
 
-    /// Mark-start pacer state. The reactive `must_finish` cap
-    /// (`bytes_since_gc > gc_threshold*4`, checked by the evaluator while a
-    /// concurrent mark runs) force-terminates a mark synchronously — a full
-    /// STW residual drain — exactly during allocation storms. The pacer
-    /// instead STARTS the concurrent mark early enough that marking finishes
-    /// before the cap: each terminated mark measures its allocation rate and
-    /// wall duration, `pace_lead_bytes` = rate-EWMA x duration-EWMA projects
-    /// the allocation of the NEXT mark window, and `should_collect_paced`
-    /// moves the start trigger down to `cap - lead` (never above the
-    /// user-visible threshold, never below `threshold/4` — quiet sessions
-    /// project a small lead and keep today's trigger exactly).
+    /// Mark-start pacing state — INSTRUMENTATION ONLY. The reactive
+    /// `must_finish` cap (`bytes_since_gc > gc_threshold*4`, checked by the
+    /// evaluator while a concurrent mark runs) force-terminates a mark
+    /// synchronously — a full STW residual drain. Each terminated mark
+    /// measures its window's allocation rate and wall duration into EWMAs;
+    /// `pace_lead_bytes` (rate x duration) projects the next window's
+    /// allocation, i.e. how close the workload runs to that cap. A trigger
+    /// that started marks early at `cap - lead` was built and then REVERTED
+    /// after measurement: on the replay-storm recipes the lead never
+    /// exceeded ~2% of threshold in debug and ~10.2% in release (313
+    /// concurrent starts probed, 0 activations, 0 must_finish — release
+    /// marking outruns allocation 40-50x, structural ceiling ~4-10% of the
+    /// 300% activation bar). Reintroducing it is a two-line swap in
+    /// `gc_safe_point_exact_should_collect` (see the ladder task-3/5
+    /// reports); the go-criterion is a real workload whose traced
+    /// `mark_window` lead approaches `3x threshold` or any nonzero
+    /// `must_finish_count` from this always-on field detector.
     /// Lifetime count of forced (cap-hit) mark terminations.
     must_finish_count: u64,
     /// Set by `note_must_finish` when the in-flight mark is being cap-forced;
@@ -3213,33 +3219,6 @@ impl TaggedHeap {
         self.bytes_since_gc >= self.gc_threshold
     }
 
-    /// Pacer-aware collection trigger for the ADAPTIVE (non-overridden)
-    /// safe-point path: like `should_collect`, but when the next cycle would
-    /// be a concurrent mark and recent cycles project that waiting for the
-    /// full threshold would blow the `must_finish` cap (threshold*4), the
-    /// mark starts early at `cap - projected-mark-window-allocation`.
-    /// Explicitly-overridden thresholds and the STW bootstrap path keep the
-    /// raw `should_collect` semantics.
-    pub fn should_collect_paced(&self) -> bool {
-        self.bytes_since_gc >= self.paced_mark_start_bytes()
-    }
-
-    /// The `bytes_since_gc` level at which the next concurrent mark should
-    /// start. `gc_threshold` exactly (today's trigger) unless the projected
-    /// mark-window allocation (`pace_lead_bytes`) eats into the cap headroom;
-    /// floored at `gc_threshold/4` so storms cannot degenerate into
-    /// continuous restarts, capped at `gc_threshold` so quiet sessions never
-    /// over-collect.
-    fn paced_mark_start_bytes(&self) -> usize {
-        if self.pace_lead_bytes == 0 || !self.should_run_concurrent() {
-            return self.gc_threshold;
-        }
-        let cap = self.gc_threshold.saturating_mul(4);
-        let floor = (self.gc_threshold / 4).max(1);
-        cap.saturating_sub(self.pace_lead_bytes)
-            .clamp(floor, self.gc_threshold)
-    }
-
     /// Record that the in-flight concurrent mark is being force-terminated by
     /// the allocation cap (`bytes_since_gc > gc_threshold*4`). Called by the
     /// evaluator right before the forced `terminate_concurrent_mark`, so
@@ -3263,18 +3242,19 @@ impl TaggedHeap {
         self.must_finish_count
     }
 
-    /// Trace probe: (current paced start trigger, projected mark-window
-    /// allocation in bytes). For the `NEOVM_GC concurrent_start` line.
-    pub(crate) fn pace_probe(&self) -> (usize, usize) {
-        (self.paced_mark_start_bytes(), self.pace_lead_bytes)
+    /// Trace probe: the projected mark-window allocation in bytes (the
+    /// cap-pressure field detector). For the `NEOVM_GC concurrent_start`
+    /// line; informational since the paced trigger was reverted.
+    pub(crate) fn pace_probe(&self) -> usize {
+        self.pace_lead_bytes
     }
 
-    /// Fold one terminated mark window into the pacer state. A cap-forced
-    /// termination is a truncated (biased-low) window: skip the EWMA sample
-    /// and escalate the lead instead — repeated cap hits drive the start
-    /// trigger down to its floor within a couple of cycles, while the next
-    /// clean cycle's full recompute drops the lead right back. Zero-wall
-    /// windows (no stamp / sub-µs) contribute nothing.
+    /// Fold one terminated mark window into the pacing instrumentation. A
+    /// cap-forced termination is a truncated (biased-low) window: skip the
+    /// EWMA sample and escalate the lead instead — repeated cap hits keep
+    /// the reported pressure honest, while the next clean cycle's full
+    /// recompute drops the lead right back. Zero-wall windows (no stamp /
+    /// sub-µs) contribute nothing.
     fn pace_close_mark_window(&mut self, wall_us: u64, alloc_bytes: usize, forced: bool) {
         if forced {
             self.pace_lead_bytes = self
@@ -8637,48 +8617,11 @@ pub(crate) mod alloc_probe {
 mod pacer_tests {
     use super::*;
 
-    /// The paced trigger is byte-identical to `should_collect` (start at
-    /// `gc_threshold`) until the projected mark-window allocation eats into
-    /// the `must_finish` cap headroom (`threshold*4`), then moves the start
-    /// down to `cap - lead`, floored at `threshold/4`. STW-bound heaps
-    /// (pre-bootstrap) never pace.
-    #[test]
-    fn pacer_trigger_stays_at_raw_threshold_until_lead_threatens_cap() {
-        let mut heap = TaggedHeap::new();
-        heap.gc_threshold = 1_000_000;
-        heap.partition_dump = false;
-        heap.bootstrap_collected = true; // next cycle would be concurrent
-
-        // No measurement yet -> exactly today's trigger.
-        heap.pace_lead_bytes = 0;
-        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
-
-        // Quiet lead (well under the 3x-threshold headroom) -> unchanged.
-        heap.pace_lead_bytes = 2_999_999;
-        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
-
-        // Lead eats into the headroom -> start early at cap - lead.
-        heap.pace_lead_bytes = 3_500_000;
-        assert_eq!(heap.paced_mark_start_bytes(), 500_000);
-
-        // Lead beyond the whole cap -> clamped at the threshold/4 floor.
-        heap.pace_lead_bytes = 10_000_000;
-        assert_eq!(heap.paced_mark_start_bytes(), 250_000);
-
-        // Trigger comparison uses the paced level.
-        heap.bytes_since_gc = 250_000;
-        assert!(heap.should_collect_paced());
-        assert!(!heap.should_collect());
-
-        // A heap whose next cycle is STW (bootstrap not yet collected)
-        // keeps the raw threshold regardless of the lead.
-        heap.bootstrap_collected = false;
-        assert_eq!(heap.paced_mark_start_bytes(), 1_000_000);
-    }
-
     /// Forced (cap-hit) terminations escalate the lead without polluting the
-    /// EWMAs; the next clean window's full recompute drops it back, so a
-    /// post-storm quiet session over-collects at most once.
+    /// EWMAs; the next clean window's full recompute drops it back. The lead
+    /// is the cap-pressure field detector (`mark_window`/`pace[]` trace
+    /// lines) — the paced start trigger it once fed was reverted after the
+    /// release-regime probe stayed dormant (task-3/5 reports).
     #[test]
     fn pacer_lead_escalates_on_forced_termination_and_recovers_on_clean() {
         let mut heap = TaggedHeap::new();

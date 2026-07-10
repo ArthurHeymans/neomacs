@@ -394,4 +394,27 @@ data, and a claim's field reads are ordered by the pointer chain, not by the
 bit. The canonical contract comment lives on `load_value_atomic`
 (`header.rs`). This removes the one known-benign residual TSan race
 (`gc_concurrent_leaked_subr_drop_under_pdump_verifiers`); `run-gc-tsan.sh`
-gates the surface.
+gates the surface (verified CLEAN, 100/100 tests, 0 reports, 2026-07-10).
+
+**MARK-START PACING — INSTRUMENTATION ONLY (2026-07-10):** the reactive
+`must_finish` cap (`bytes_since_gc > gc_threshold*4`, evaluator-side) can in
+principle degrade a concurrent mark to a synchronous STW residual drain when
+allocation outruns marking. Every terminated mark now measures its window
+(`launch_concurrent_mark` stamps wall + `bytes_since_gc`;
+`incremental_finish` closes it): alpha-1/2 EWMAs of allocation rate and mark
+wall duration, `pace_lead_bytes` = rate x duration = the projected
+next-window allocation, escalated (x2, EWMA-bypassing) on cap-forced
+terminations; `NEOVM_GC_TRACE=1` emits `pace[bytes/thr/lead]` on every
+concurrent start, a per-cycle `mark_window` line, and `must_finish#` events
+(plus a lifetime `must_finish_count()` counter). A paced start trigger
+(`clamp(cap - lead, threshold/4, threshold)` on the adaptive path) was built
+on this and REVERTED after two-regime measurement: debug replay storms
+peaked at lead ≈ 2% of threshold (0 must_finish across isolated + contended
+runs), and the release-profile probe stayed dormant too (313 concurrent
+starts, 0 activations, max lead/threshold 10.2% vs the 300% activation bar
+— release marking outruns release allocation 40-50x, structural ceiling
+~4-10%). GO-CRITERION for reintroducing the trigger (a two-line swap of
+`should_collect` in `gc_safe_point_exact_should_collect` plus the clamp
+helper; see ladder task-3/5 reports): any real workload whose traced
+`mark_window` lead approaches `3x threshold`, or any nonzero
+`must_finish_count` in the field.
