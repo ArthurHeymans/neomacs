@@ -3818,8 +3818,11 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     // the raw pseudo-key into the result.  Remapped sequences are processed
     // after the non-remapped ones, since non-remapped bindings are preferred.
     let mut found: Vec<Vec<Value>> = Vec::new();
+    // Membership shadow for `found`: Value's Hash follows `equal`, so the
+    // set replaces a linear deep-equal scan per candidate sequence.
+    let mut found_set: std::collections::HashSet<Vec<Value>> = std::collections::HashSet::new();
     let mut remapped_sequences: Vec<Vec<Value>> = Vec::new();
-    let mut work = sequences;
+    let mut work: std::collections::VecDeque<Vec<Value>> = sequences.into();
     let mut remapped = false;
     loop {
         if work.is_empty() {
@@ -3827,11 +3830,11 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
                 break;
             }
             // Switch over to the sequences discovered via remapping.
-            work = std::mem::take(&mut remapped_sequences);
+            work = std::mem::take(&mut remapped_sequences).into();
             remapped = true;
             continue;
         }
-        let sequence = work.remove(0);
+        let sequence = work.pop_front().expect("work checked non-empty just above");
 
         // If this is a `[remap COMMAND]` pseudo-key, replace it with the key
         // sequences that actually run COMMAND (unless NO-REMAP suppresses it).
@@ -3860,7 +3863,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         }
 
         let sequence = metize_key_sequence(&sequence);
-        if !found.iter().any(|existing| *existing == sequence) {
+        if found_set.insert(sequence.clone()) {
             found.push(sequence);
         }
     }
