@@ -57,21 +57,21 @@ impl ChildFrameManager {
         let existing = self.frames.get_mut(&frame_id.get());
 
         let glyph_count = buf.glyphs.len();
-        if let Some(entry) = existing {
-            if entry.frame == buf {
-                entry.last_updated = self.frame_counter;
-                tracing::debug!(
-                    frame_id = frame_id.get(),
-                    abs_x,
-                    abs_y,
-                    width = buf.width,
-                    height = buf.height,
-                    z_order = buf.z_order,
-                    glyphs = glyph_count,
-                    "child_frame_lifecycle: render_thread_child_buffer_unchanged"
-                );
-                return false;
-            }
+        if let Some(entry) = existing
+            && entry.frame == buf
+        {
+            entry.last_updated = self.frame_counter;
+            tracing::debug!(
+                frame_id = frame_id.get(),
+                abs_x,
+                abs_y,
+                width = buf.width,
+                height = buf.height,
+                z_order = buf.z_order,
+                glyphs = glyph_count,
+                "child_frame_lifecycle: render_thread_child_buffer_unchanged"
+            );
+            return false;
         }
 
         let existed = self.frames.contains_key(&frame_id.get());
