@@ -17,6 +17,9 @@ pub(crate) struct ChildFrameEntry {
     /// Frame counter when this entry was last updated
     #[allow(dead_code)] // read by the test-exercised prune_stale
     pub last_updated: u64,
+    /// Unique per-install stamp; the face aggregation signature uses it to
+    /// detect that this entry's frame payload was replaced.
+    pub ingest_seq: u64,
 }
 
 /// Manages all child frames for the render thread.
@@ -70,6 +73,7 @@ impl ChildFrameManager {
                 abs_x,
                 abs_y,
                 last_updated: self.frame_counter,
+                ingest_seq: super::frame_state::next_faces_ingest_seq(),
             },
         );
 

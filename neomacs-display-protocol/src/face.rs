@@ -234,7 +234,7 @@ impl From<BasicFaceId> for FaceId {
 
 /// A face defines text styling (colors, font, decorations)
 #[repr(C)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Face {
     /// Face ID
     pub id: FaceId,

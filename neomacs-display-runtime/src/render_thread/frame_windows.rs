@@ -126,6 +126,9 @@ pub(crate) struct OverlayState {
 /// Glyph composition and rendering state for a frame window.
 pub(crate) struct FrameCompositor {
     pub current_frame: Option<FrameGlyphBuffer>,
+    /// Unique per-install stamp for `current_frame`; the face aggregation
+    /// signature uses it to detect frame replacement without hashing faces.
+    pub current_frame_ingest_seq: u64,
     /// Row damage paired with `current_frame` (built from the same
     /// FrameDisplayState that frame was materialized from). Set only
     /// together with the frame via `set_current_frame` so a summary can
@@ -223,6 +226,7 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                current_frame_ingest_seq: 0,
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -259,6 +263,7 @@ impl GuiFrameRenderState {
             emacs_frame_id,
             compositor: FrameCompositor {
                 current_frame: None,
+                current_frame_ingest_seq: 0,
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
@@ -454,6 +459,7 @@ impl GuiFrameRenderState {
         row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     ) {
         self.compositor.current_frame = frame;
+        self.compositor.current_frame_ingest_seq = super::frame_state::next_faces_ingest_seq();
         self.compositor.current_row_damage = row_damage;
     }
 

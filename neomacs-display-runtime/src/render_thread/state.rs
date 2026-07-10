@@ -305,6 +305,10 @@ pub(super) struct RenderApp {
     pub(super) renderer: Option<WgpuRenderer>,
 
     pub(super) faces: HashMap<neomacs_display_protocol::types::FaceId, Face>,
+    /// Sorted (frame_id, ingest_seq) fingerprint of the frames the current
+    /// `faces` map was aggregated from; unchanged fingerprint skips the
+    /// per-render rebuild entirely.
+    pub(super) faces_signature: Vec<(u64, u64)>,
 
     pub(super) modifiers: u32,
 
@@ -402,6 +406,7 @@ impl RenderApp {
             gpu: None,
             renderer: None,
             faces: HashMap::new(),
+            faces_signature: Vec::new(),
             modifiers: 0,
             image_dimensions,
             cursor_defaults: CursorState::default(),
