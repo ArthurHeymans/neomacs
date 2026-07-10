@@ -4,8 +4,8 @@
 //! lexicographically, and `nil` has explicit list-order semantics: `nil`
 //! precedes any cons, while any cons follows `nil`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_value_lt_orders_nil_against_lists_like_gnu() {

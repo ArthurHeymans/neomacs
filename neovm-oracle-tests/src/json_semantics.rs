@@ -4,8 +4,8 @@
 //! Its `json_parse_args` walks keyword pairs from right to left so duplicate
 //! keyword values that appear first take precedence.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_json_duplicate_keyword_options_use_first_value_like_gnu() {

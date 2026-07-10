@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `suppress-keymap'.
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 #[test]
 fn oracle_suppress_keymap_mutates_digits_and_remap_contract() {

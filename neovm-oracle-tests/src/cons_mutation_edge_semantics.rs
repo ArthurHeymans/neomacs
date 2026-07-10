@@ -4,9 +4,9 @@
 //! and `nreverse` mutate cons cells in-place.  These mutations are
 //! visible to all references — eq-based identity is preserved.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // setcar / setcdr

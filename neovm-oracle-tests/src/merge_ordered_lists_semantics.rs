@@ -4,7 +4,7 @@
 //! public contract: it receives the unresolved tail, must return the head of
 //! one remaining list, and its returned candidate is used to break cycles.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_merge_ordered_lists_gnu_subr_examples() {

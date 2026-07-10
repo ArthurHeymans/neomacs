@@ -5,8 +5,8 @@
 //! parses lambda arglists directly, and signals before trying to load direct
 //! autoload conses whose FUNNAME would not be a symbol.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_func_arity_lambda_and_macro_arglist_edges() {

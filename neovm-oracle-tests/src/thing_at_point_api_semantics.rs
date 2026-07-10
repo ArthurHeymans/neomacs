@@ -4,8 +4,8 @@
 //! provider alist dispatch, and NO-PROPERTIES behavior rather than only the
 //! lower-level movement primitives used to implement things.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_thing_at_point_word_symbol_and_line_bounds() {

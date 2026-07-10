@@ -5,8 +5,8 @@
 //! URL-safe decoding is selected by the second argument and invalid input is
 //! ignored only when the third argument is non-nil.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_base64_decode_string_url_and_ignore_invalid_args() {

@@ -3,9 +3,9 @@
 //! Covers basic event symbols, single modifiers, combined modifiers,
 //! mouse event symbols, and a complex modifier decomposition table builder.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Parse basic (unmodified) event symbols

@@ -1,0 +1,31 @@
+//! File oracle parity tests.
+
+mod access_ownership_strict_edge_semantics;
+mod acl_strict_edge_semantics;
+mod attributes_strict_edge_semantics;
+mod chase_links_strict_edge_semantics;
+mod expand_wildcards_strict_edge_semantics;
+mod has_changed_strict_edge_semantics;
+mod in_directory_strict_edge_semantics;
+mod io_region_strict_edge_semantics;
+mod link_creation_strict_edge_semantics;
+mod lock_strict_edge_semantics;
+mod mode_symbolic_strict_edge_semantics;
+mod modes_strict_edge_semantics;
+mod name_absolute_strict_edge_semantics;
+mod name_case_insensitive_strict_edge_semantics;
+mod name_completion_strict_edge_semantics;
+mod name_component_strict_edge_semantics;
+mod name_concat_strict_edge_semantics;
+mod name_quote_strict_edge_semantics;
+mod name_semantics;
+mod newer_than_strict_edge_semantics;
+mod nlinks_strict_edge_semantics;
+mod predicate_strict_edge_semantics;
+mod relative_name_strict_edge_semantics;
+mod remote_local_strict_edge_semantics;
+mod repository_version_semantics;
+mod selinux_strict_edge_semantics;
+mod size_human_readable_strict_edge_semantics;
+mod times_strict_edge_semantics;
+mod truename_equal_strict_edge_semantics;

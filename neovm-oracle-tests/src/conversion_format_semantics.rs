@@ -4,8 +4,8 @@
 //! and numeric string conversion in `src/data.c`. These tests focus on exact
 //! edge behavior and error payloads rather than broad formatting examples.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_char_string_conversion_edges_and_errors() {

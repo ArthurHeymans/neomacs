@@ -5,9 +5,9 @@
 //! around floats, integers, strings (unibyte/multibyte), hash tables,
 //! and circular structures can diverge.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_eq_identical_symbols() {

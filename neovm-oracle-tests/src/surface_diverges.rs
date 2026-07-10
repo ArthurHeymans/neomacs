@@ -29,8 +29,8 @@
 //!   `adjust_for_delete` (overlay.rs:405) checks evaporate and removes
 //!   zero-width overlays.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 // ═══════════════════════════════════════════════════════════════════════
 //  D1 · Sticky property inheritance via insert-and-inherit

@@ -3,8 +3,8 @@
 //! GNU `flatten-tree` performs an iterative cons-tree traversal that drops nil
 //! leaves, keeps dotted tails, and is also exposed as `flatten-list`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_flatten_tree_basic_nil_and_dotted_leaves() {

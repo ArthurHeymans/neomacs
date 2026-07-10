@@ -5,8 +5,8 @@
 //! `lisp/simple.el`.  These tests focus on narrowing clipping and active mark
 //! behavior.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_region_bounds_clip_mark_to_current_narrowing() {

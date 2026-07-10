@@ -3,8 +3,8 @@
 //! GNU implements these in `src/lcms.c` under `#ifdef HAVE_LCMS2`; when the
 //! local GNU binary is built without LCMS2, the symbols are not fbound.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_lcms_primitives_follow_gnu_build_feature_availability() {

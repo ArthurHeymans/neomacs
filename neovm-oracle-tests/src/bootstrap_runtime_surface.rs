@@ -1,7 +1,7 @@
 //! Oracle parity tests for the full bootstrapped runtime surface.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm_expect};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm_expect};
 
 #[test]
 fn oracle_prop_full_bootstrap_core_surface() {

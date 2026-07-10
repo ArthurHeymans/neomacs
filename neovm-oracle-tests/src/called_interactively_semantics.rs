@@ -4,7 +4,7 @@
 //! `funcall-interactively` and by honoring dynamic `noninteractive` and
 //! `executing-kbd-macro` bindings for KIND `interactive`.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_called_interactively_batch_contracts() {

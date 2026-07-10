@@ -3,9 +3,9 @@
 //! GNU implements `macrop` in `src/eval.c`, `obarrayp` in `src/lread.c`,
 //! and `daemonp` in `src/emacs.c`.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_macrop_nil_for_nil() {

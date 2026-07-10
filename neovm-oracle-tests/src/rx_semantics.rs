@@ -4,8 +4,8 @@
 //! exact expansion strings and selected match behavior for local and global
 //! definitions.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_rx_to_string_core_forms() {

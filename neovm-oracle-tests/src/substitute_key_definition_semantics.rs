@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `substitute-key-definition'.
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 #[test]
 fn oracle_substitute_key_definition_direct_nested_oldmap_and_menu_items() {

@@ -4,8 +4,8 @@
 //! indexing, oldest/newest insertion modes, resize, and duplicate-removal
 //! helpers in `lisp/emacs-lisp/ring.el`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_ring_insert_ref_remove_and_wraparound() {

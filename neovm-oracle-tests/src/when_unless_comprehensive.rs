@@ -2,9 +2,9 @@
 //! truthy/falsy conditions, multiple body forms, return values, nesting,
 //! complex conditions (and/or/not), interaction with let/iteration/side effects.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // when with various truthy values (not just t)

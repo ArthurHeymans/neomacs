@@ -5,7 +5,7 @@
 //! `eval-after-load` path, so their exact file-name regexp behavior matters
 //! during startup and package loading.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_load_history_regexp_matches_suffix_rules() {

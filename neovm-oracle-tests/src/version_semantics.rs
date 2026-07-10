@@ -5,8 +5,8 @@
 //! checks and must preserve GNU's treatment of pre-release markers, snapshots,
 //! letter suffixes, and trailing zeroes.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_version_to_list_valid_forms() {

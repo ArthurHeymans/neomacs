@@ -5,8 +5,8 @@
 //! argument is used directly as the final tail.  GNU `nconc` mutates preceding
 //! list arguments and permits a non-list final argument.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_append_copies_prefix_and_shares_final_tail() {

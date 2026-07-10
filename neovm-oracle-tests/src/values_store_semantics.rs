@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` `values--store-value`.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_values_store_value_pushes_and_returns() {

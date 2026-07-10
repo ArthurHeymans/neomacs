@@ -4,9 +4,9 @@
 //! `mapcar`, nested list traversal, hash-table population from alists,
 //! and complex buffer-style operations via mapc.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // mapc returns the original list, not mapped values

@@ -3,8 +3,8 @@
 //! GNU implements these in `src/term.c`: an initial terminal frame reports
 //! 80x25 from `tty_display_dimension`, not zero dimensions.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_tty_display_pixel_dimensions_match_initial_terminal() {

@@ -5,9 +5,9 @@
 //! functions, apply spreading behavior, higher-order function composition
 //! via funcall chains, funcall-interactively, and macros (should error).
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // funcall with 0 through 10+ arguments

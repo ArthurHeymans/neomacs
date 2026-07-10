@@ -3,8 +3,8 @@
 //! GNU implements this in `src/xdisp.c`: it decodes a live window-system frame
 //! and checks X/Y are fixnums before returning glyph extents.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_remember_mouse_glyph_validates_frame_and_coordinates() {

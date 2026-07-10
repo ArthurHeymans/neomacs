@@ -5,8 +5,8 @@
 //! singleton conditions are accepted through GNU's warning macro path, and an
 //! empty body macroexpands to nil.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_ignore_error_macroexpansion_edges() {

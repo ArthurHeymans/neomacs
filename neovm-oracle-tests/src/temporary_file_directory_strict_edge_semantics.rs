@@ -5,8 +5,8 @@
 //! `mounted-file-systems`; otherwise it returns the variable
 //! `temporary-file-directory`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_temporary_file_directory_default_and_mounted_edges() {

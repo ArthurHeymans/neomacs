@@ -1,0 +1,34 @@
+//! Buffer oracle parity tests.
+
+mod base_buffer_semantics;
+mod edit_strict_edge_semantics;
+mod file_name_semantics;
+mod hash_semantics;
+mod last_name_semantics;
+mod line_statistics_semantics;
+mod list_other_buffer_semantics;
+mod local_default_value_edge_semantics;
+mod local_hook_unintern_strict_edge_semantics;
+mod local_set_state_semantics;
+mod local_symbol_identity_semantics;
+mod local_toplevel_value_semantics;
+mod local_variable_patterns;
+mod match_semantics;
+mod mgmt_strict_edge_semantics;
+mod modification_comprehensive;
+mod modified_p_semantics;
+mod movement_strict_edge_semantics;
+mod multi_operations;
+mod name;
+mod operations;
+mod operations_advanced;
+mod ops_strict_edge_semantics;
+mod position;
+mod position_patterns;
+mod search_comprehensive;
+mod search_replace_strict_edge_semantics;
+mod string;
+mod substring;
+mod substring_advanced;
+mod text_deep_edge_semantics;
+mod undo_posix_semantics;

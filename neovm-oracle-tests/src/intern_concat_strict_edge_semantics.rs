@@ -3,9 +3,9 @@
 //!
 //! GNU src/lread.c (intern), src/fns.c (concat, vconcat, reverse).
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // intern / intern-soft

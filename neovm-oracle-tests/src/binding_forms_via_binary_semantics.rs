@@ -1,8 +1,8 @@
 //! Oracle parity for Lisp binding forms via binary.
 //! Requires full bootstrap: if-let, when-let, and-let*, while-let.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_if_let_binds_via_binary() {

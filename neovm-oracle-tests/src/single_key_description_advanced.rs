@@ -3,9 +3,9 @@
 //! Covers printable characters, control characters, meta combinations,
 //! the NO-ANGLES parameter, and a complex keymap legend builder.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Printable characters: letters, digits, punctuation, space

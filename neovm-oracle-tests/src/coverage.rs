@@ -3,9 +3,9 @@
 use std::collections::{BTreeSet, HashSet};
 use std::process::Command;
 
-use super::common::live_oracle_enabled;
+use crate::common::live_oracle_enabled;
 
-use super::coverage_manifest::{
+use crate::coverage_manifest::{
     ORACLE_TESTED_NONPRIMITIVE_NAMES, ORACLE_TESTED_PRIMITIVE_NAMES,
     ORACLE_TESTED_SPECIAL_FORM_NAMES,
 };

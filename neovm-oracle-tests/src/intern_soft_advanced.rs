@@ -3,9 +3,9 @@
 //! manipulation, dynamic dispatch tables, namespace simulation, and
 //! symbol lifecycle after makunbound.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // intern-soft returns nil for non-existent symbols, intern creates them

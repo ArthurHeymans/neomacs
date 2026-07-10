@@ -1,9 +1,9 @@
 //! Oracle parity tests for `length`, `safe-length`, `proper-list-p`,
 //! `string-bytes`, `string-width`, and length comparison operations.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // length on various types

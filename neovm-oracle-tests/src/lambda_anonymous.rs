@@ -3,7 +3,7 @@
 use proptest::prelude::*;
 use std::sync::OnceLock;
 
-use super::common::{
+use crate::common::{
     ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm,
     return_if_neovm_enable_oracle_proptest_not_set,
 };

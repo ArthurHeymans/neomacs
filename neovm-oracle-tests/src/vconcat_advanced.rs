@@ -2,9 +2,9 @@
 //! no args, single list/vector/string, mixed types, nil args, element type
 //! preservation, and complex patterns like matrix flattening and interleaving.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // vconcat with no args (empty vector)

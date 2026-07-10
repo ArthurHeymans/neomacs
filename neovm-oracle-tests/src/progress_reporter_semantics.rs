@@ -4,8 +4,8 @@
 //! Emacs.  These tests observe the public hook states and accessors without
 //! depending on echo-area display.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_progress_reporter_numeric_updates_and_throttling() {

@@ -5,8 +5,8 @@
 //! `lisp/minibuffer.el`.  These tests cover list/alist/hash/function table
 //! behavior without replacing GNU's matching rules with local expectations.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_try_completion_list_and_alist_cases() {

@@ -4,8 +4,8 @@
 //! `string-replace` and then repairs copied string properties, while the
 //! inplace path mutates with `aset`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_subst_char_preserves_properties_on_multibyte_copy_path() {

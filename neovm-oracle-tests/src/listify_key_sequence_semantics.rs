@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el' `listify-key-sequence' semantics.
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 #[test]
 fn oracle_listify_key_sequence_vector_appends_elements_verbatim() {

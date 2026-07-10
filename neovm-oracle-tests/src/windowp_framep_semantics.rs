@@ -2,9 +2,9 @@
 //!
 //! GNU implements both in `src/window.c` and `src/frame.c` respectively.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_windowp_returns_t_for_window() {

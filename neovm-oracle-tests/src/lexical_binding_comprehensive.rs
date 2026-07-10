@@ -4,9 +4,9 @@
 //! nested multi-level closures, closures as higher-order function arguments,
 //! and lexical binding interaction with defvar special variables.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Lexical vs dynamic binding fundamental differences

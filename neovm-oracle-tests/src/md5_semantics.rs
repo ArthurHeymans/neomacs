@@ -5,8 +5,8 @@
 //! after encoding text with the requested coding system, not from the internal
 //! string bytes alone.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_md5_string_honors_coding_system_argument() {

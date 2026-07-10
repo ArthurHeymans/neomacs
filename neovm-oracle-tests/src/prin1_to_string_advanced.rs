@@ -3,9 +3,9 @@
 //! Tests printing of various types, nested structures, dotted pairs,
 //! hash tables, special character escaping, and roundtrip serialization.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Print various primitive types

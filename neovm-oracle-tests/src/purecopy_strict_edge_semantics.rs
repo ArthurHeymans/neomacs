@@ -3,8 +3,8 @@
 //! GNU defines `purecopy` as an obsolete function alias to `identity` in
 //! `lisp/subr.el`, so runtime calls must return the same object unchanged.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_purecopy_is_identity_alias_at_runtime() {

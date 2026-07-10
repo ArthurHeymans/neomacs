@@ -5,8 +5,8 @@
 //! `(car-safe OBJECT)`.  These tests cover the user-visible function-cell
 //! shape and error ordering without depending on loading real files.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_autoloadp_uses_interned_autoload_car_safe_semantics() {

@@ -4,8 +4,8 @@
 //! a liberal token/rule parser.  These tests pin returned decoded-time fields,
 //! tokenization, two-digit year rules, timezone parsing, and malformed input.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_parse_time_tokenize_and_rfc_dates() {

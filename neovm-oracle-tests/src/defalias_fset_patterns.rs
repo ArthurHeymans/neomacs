@@ -3,9 +3,9 @@
 //! symbol-function on various types, lifecycle transitions, function wrappers,
 //! dispatch tables with dynamic selection, and method resolution order chains.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // defalias with docstring parameter — verify docstring is stored and accessible

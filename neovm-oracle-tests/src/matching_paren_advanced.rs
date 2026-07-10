@@ -5,9 +5,9 @@
 //! `char-syntax`, nil return for non-bracket characters, and behavior across
 //! different buffer-local syntax tables.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // matching-paren for all standard bracket types

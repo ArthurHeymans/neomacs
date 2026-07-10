@@ -4,8 +4,8 @@
 //! `split-string-and-unquote` in `lisp/subr.el` using `mapconcat`,
 //! `replace-regexp-in-string`, `split-string`, and `read-from-string`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_combine_and_quote_basic_space_separator() {

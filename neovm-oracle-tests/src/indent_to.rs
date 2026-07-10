@@ -1,6 +1,6 @@
 //! Oracle parity tests for `indent-to`.
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 #[test]
 fn oracle_indent_to_respects_tab_width_and_indent_tabs_mode() {

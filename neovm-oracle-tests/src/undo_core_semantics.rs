@@ -5,8 +5,8 @@
 //! `lisp/simple.el`.  These tests pin observable low-level behavior without
 //! depending on interactive command-loop undo state.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_undo_boundary_idempotence_and_disabled_buffer() {

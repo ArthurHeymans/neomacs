@@ -1,8 +1,8 @@
 //! Oracle parity for looking-at, pos-bol, pos-eol, line-end-position edges.
 //! GNU src/search.c, src/editfns.c.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_looking_at_match() {

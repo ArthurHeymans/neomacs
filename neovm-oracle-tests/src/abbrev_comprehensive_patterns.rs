@@ -5,9 +5,9 @@
 //! `abbrev-put`. Covers complex abbrev tables, nested lookups, properties,
 //! system abbrev tables, and edge cases.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Basic abbrev table creation and predicates

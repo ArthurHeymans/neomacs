@@ -3,9 +3,9 @@
 //! buffer behavior, erase and text properties, erase+insert cycles, erase
 //! with undo, combined with save-excursion, buffer-size after erase.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // Multiple markers at various positions: all collapse to 1 after erase

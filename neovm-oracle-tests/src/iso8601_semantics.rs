@@ -4,8 +4,8 @@
 //! dates, fractional times, zones, durations, and intervals.  These tests pin
 //! the public parser entry points against GNU Emacs for valid and invalid input.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_iso8601_parse_date_variants() {

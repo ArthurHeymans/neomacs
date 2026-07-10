@@ -5,8 +5,8 @@
 //! path elements to nil, converts non-empty elements to directory syntax, and
 //! preserves historical slash-collapsing behavior for leading `//+`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_parse_colon_path_empty_env_slash_and_type_edges() {

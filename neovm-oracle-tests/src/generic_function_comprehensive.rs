@@ -5,9 +5,9 @@
 //! `cl-next-method-p`, multiple dispatch, method combination,
 //! `cl-no-applicable-method`, default methods, and method redefinition.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Basic cl-defgeneric / cl-defmethod dispatch

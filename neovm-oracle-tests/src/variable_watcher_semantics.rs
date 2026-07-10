@@ -5,8 +5,8 @@
 //! These tests cover the exact callback operation symbols, pre-write old
 //! value visibility, alias forwarding, and buffer-local WHERE reporting.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_variable_watchers_report_set_let_unlet_and_makunbound() {

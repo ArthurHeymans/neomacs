@@ -4,9 +4,9 @@
 //! `compare-strings` with all 6+ parameters, IGNORE-CASE,
 //! custom deep-equal implementation, and sort stability via equal.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // eq vs eql vs equal on all types

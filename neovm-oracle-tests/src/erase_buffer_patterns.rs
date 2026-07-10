@@ -3,9 +3,9 @@
 //! `delete-region`, interaction with `save-excursion`, buffer recycling,
 //! state diff tracking, and multi-buffer pipeline patterns.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // erase-buffer basic: empty, non-empty, already-empty buffer

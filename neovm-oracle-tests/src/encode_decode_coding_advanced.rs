@@ -4,9 +4,9 @@
 //! Covers diverse coding systems, roundtrip consistency, byte length comparisons,
 //! unmappable characters, and complex encode-manipulate-decode pipelines.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // All coding system variants: utf-8, latin-1, utf-8-unix, raw-text, etc.

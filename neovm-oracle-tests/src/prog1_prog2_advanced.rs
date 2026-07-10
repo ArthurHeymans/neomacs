@@ -5,9 +5,9 @@
 //! nesting, state-saving patterns, setup+compute+cleanup, and
 //! pipeline combinations of all three.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // prog1 returns first form, evaluates all side effects

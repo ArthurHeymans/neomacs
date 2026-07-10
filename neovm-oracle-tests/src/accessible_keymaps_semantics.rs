@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `accessible-keymaps`.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_accessible_keymaps_breadth_first_prefixes_and_filtering() {

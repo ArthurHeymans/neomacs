@@ -2,9 +2,9 @@
 //! dotted pairs, circular list detection, improper lists, deeply nested
 //! structures, combined with safe-length, and type discrimination trees.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // proper-list-p with dotted pairs, improper lists, circular lists

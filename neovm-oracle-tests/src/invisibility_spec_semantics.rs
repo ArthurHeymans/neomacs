@@ -5,7 +5,7 @@
 //! buffer-local `buffer-invisibility-spec` using exact `t`/list conversion and
 //! `delete` semantics.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_invisibility_spec_helpers_preserve_exact_state() {

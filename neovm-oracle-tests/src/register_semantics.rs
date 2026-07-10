@@ -3,8 +3,8 @@
 //! These tests cover programmatic register storage, text collection,
 //! insertion, numeric updates, marker swap-out, and descriptions.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_register_set_get_numbers_and_text_collection() {

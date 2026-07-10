@@ -1,8 +1,8 @@
 //! Oracle parity for subr interaction patterns and deep edge cases.
 //! Tests non-trivial combinations to surface subtle divergences.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- sort interaction patterns ---
 

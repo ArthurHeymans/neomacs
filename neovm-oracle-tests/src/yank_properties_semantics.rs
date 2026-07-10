@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `subr.el` yank text-property helpers.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_prop_gnu_remove_yank_excluded_properties_runs_handlers_then_removes() {

@@ -4,8 +4,8 @@
 //! and `transpose-lines` in `lisp/simple.el` through `transpose-subr`.
 //! These tests compare text, point, mark, and error behavior.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_transpose_chars_eol_and_negative_arg() {

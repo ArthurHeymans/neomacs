@@ -4,9 +4,9 @@
 //! lists, cl-mapc with multiple lists, cl-mapcan, mapping over empty lists,
 //! mapping with index tracking, nested maps, map with error handling.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // mapcar with lambdas, subrs (built-in functions), and quoted symbols

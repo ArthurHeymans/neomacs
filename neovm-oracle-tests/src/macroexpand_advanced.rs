@@ -3,9 +3,9 @@
 //! expansions, macros that expand to other macro calls, expansion with
 //! side effects, and `macroexpand-1` vs full expansion.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // macroexpand-1 vs macroexpand: single-step vs full expansion

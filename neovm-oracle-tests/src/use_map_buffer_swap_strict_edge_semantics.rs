@@ -1,8 +1,8 @@
 //! Oracle parity for use-global-map, use-local-map, buffer-swap-text.
 //! GNU src/keymap.c, src/buffer.c.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- use-global-map ---
 

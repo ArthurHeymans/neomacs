@@ -1,8 +1,8 @@
 //! Oracle parity for propertize, functionp, narrow/widen, indirect-function edge cases.
 //! GNU src/fns.c, src/data.c, src/editfns.c, src/eval.c.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, eval_oracle_and_neovm};
 
 // --- propertize ---
 

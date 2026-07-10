@@ -4,8 +4,8 @@
 //! extra parents, generated metadata, hooks, local maps, syntax tables, abbrev
 //! tables, and current-buffer `derived-mode-p` behavior.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_define_derived_mode_metadata_and_hooks() {

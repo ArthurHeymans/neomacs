@@ -1,8 +1,8 @@
 //! Oracle parity for key description + subr metadata.
 //! GNU src/keyboard.c, src/data.c, src/eval.c.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_key_description_basic() {

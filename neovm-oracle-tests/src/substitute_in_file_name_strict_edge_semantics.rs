@@ -5,8 +5,8 @@
 //! unchanged for this API, `$$` becomes `$`, and embedded absolute file names
 //! such as `//...`, `/~`, or a substituted absolute path discard the prefix.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_substitute_in_file_name_env_and_embedded_absolute_edges() {

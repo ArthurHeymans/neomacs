@@ -3,9 +3,9 @@
 //! bool-vectors, char-tables; combined mutation patterns, building data
 //! structures element-by-element, matrix access patterns.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // elt on lists, vectors, and strings with combined access

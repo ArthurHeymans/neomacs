@@ -7,8 +7,8 @@
 //! top of buffer change state.  These tests compare the observable Elisp
 //! contract rather than approximating it.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 #[test]
 fn oracle_prop_atomic_change_group_success_keeps_changes() {

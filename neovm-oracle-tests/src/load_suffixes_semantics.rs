@@ -4,7 +4,7 @@
 //! compressed representations listed in `jka-compr-load-suffixes` are skipped
 //! for module suffixes, while still being tried for `.elc` and `.el`.
 
-use super::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
+use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest_not_set};
 
 #[test]
 fn oracle_get_load_suffixes_skips_compressed_module_representations() {

@@ -5,8 +5,8 @@
 //! completions, `version-control`, `kept-old-versions`, and
 //! `kept-new-versions`; the new backup itself counts as one kept new version.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_find_backup_file_name_numbered_version_edges() {

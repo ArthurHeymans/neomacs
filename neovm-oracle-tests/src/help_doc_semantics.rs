@@ -5,8 +5,8 @@
 //! and `help-function-arglist` behavior studied from GNU `src/doc.c` and
 //! `lisp/help.el`.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_help_split_and_add_fundoc_usage() {

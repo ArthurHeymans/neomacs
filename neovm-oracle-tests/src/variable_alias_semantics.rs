@@ -5,8 +5,8 @@
 //! These tests focus on alias value migration, chain following, cycle
 //! rejection, let-bound rejection, and alias deletion.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_defvaralias_migrates_existing_alias_value_to_void_base() {

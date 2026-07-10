@@ -1,6 +1,6 @@
 //! Oracle parity tests for GNU `key-parse' and `kbd' edge semantics.
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 #[test]
 fn oracle_kbd_repeats_and_historical_macro_delimiters() {

@@ -3,9 +3,9 @@
 //! return for too-long sequences, parent keymap inheritance, sparse vs full
 //! keymaps, multi-level prefix lookup, and remapped commands.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
+use crate::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 
 // ---------------------------------------------------------------------------
 // lookup-key with string key sequences

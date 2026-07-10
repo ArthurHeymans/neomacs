@@ -3,8 +3,8 @@
 //! These focus on deterministic date parsing/formatting, leap-year and month
 //! length helpers, interval formatting, and readable seconds formatting.
 
-use super::common::assert_oracle_parity;
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::assert_oracle_parity;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
 fn oracle_prop_time_date_parse_safe_and_day_helpers() {

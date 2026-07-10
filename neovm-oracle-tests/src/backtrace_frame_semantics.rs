@@ -4,7 +4,7 @@
 //! `src/eval.c`; `backtrace-frame` and `backtrace-frames` are Lisp wrappers in
 //! `lisp/subr.el`.  The shape of evaluated frames is user-visible Elisp data.
 
-use super::common::{
+use crate::common::{
     assert_ok_eq, eval_oracle_and_neovm, return_if_neovm_enable_oracle_proptest_not_set,
 };
 

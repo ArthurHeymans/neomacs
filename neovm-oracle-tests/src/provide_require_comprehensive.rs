@@ -5,9 +5,9 @@
 //! `with-eval-after-load`, feature dependency chains, conditional
 //! feature loading patterns, and interaction with `unload-feature`.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
+use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 
-use super::common::assert_oracle_parity;
+use crate::common::assert_oracle_parity;
 
 // ---------------------------------------------------------------------------
 // Basic provide/featurep/features interaction
