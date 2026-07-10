@@ -2088,6 +2088,18 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
         next_text_change.min(next_overlay_change) as i64
     }
 
+    /// Next overlay start/end boundary strictly after `charpos`, if any.
+    /// Overlay before/after-strings anchor exactly at overlay start and end
+    /// positions, so scanning for overlay strings only needs to probe these
+    /// boundaries, not every character.
+    pub fn next_overlay_boundary_charpos_after(&self, charpos: i64) -> Option<i64> {
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
+        self.buffer
+            .layout_overlays()
+            .next_boundary_after_emacs_byte_pos(bytepos)
+            .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next) as i64)
+    }
+
     /// Check for line-spacing text property at `charpos`.
     ///
     /// Returns extra line spacing in pixels (0.0 if no property).

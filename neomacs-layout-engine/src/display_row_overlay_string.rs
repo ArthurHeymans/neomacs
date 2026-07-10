@@ -277,8 +277,27 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             return None;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        (start_charpos..end_charpos)
-            .find(|charpos| !text_props.overlay_strings_at(*charpos).is_empty())
+        // Overlay strings anchor exactly at overlay start/end positions
+        // (overlay_strings_at checks boundary equality), so walk the indexed
+        // overlay boundaries instead of probing every character in the
+        // range - the per-character scan queried the interval tree and
+        // allocated a candidate vector once per charpos.
+        let mut charpos = start_charpos;
+        loop {
+            if charpos >= end_charpos {
+                return None;
+            }
+            if !text_props.overlay_strings_at(charpos).is_empty() {
+                return Some(charpos);
+            }
+            let next = text_props.next_overlay_boundary_charpos_after(charpos)?;
+            if next <= charpos {
+                // Boundary conversion clamps to point-max; never loop in
+                // place if a boundary maps back onto the current position.
+                return None;
+            }
+            charpos = next;
+        }
     }
 
     pub(crate) fn render_at<B: LayoutBufferView>(
