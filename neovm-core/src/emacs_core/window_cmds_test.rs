@@ -6709,6 +6709,46 @@ fn scroll_up_down_updates_window_start_for_multibyte_content() {
     assert_eq!(results[0], "OK (t t (:err beginning-of-buffer 321 321))");
 }
 
+/// Reproduces the interactive `-nw` bug: `M-x view-hello-file`, `C-v` to the
+/// end of the buffer, then `M-v` appears to do nothing. Root cause: after
+/// scroll-down recomputes window-start, GNU pulls point UP into the window
+/// when it ended up BELOW the last visible line (window.c
+/// `window_scroll_line_based`: opoint at/after the bottom is moved to the
+/// start of the last visible line); point left outside the window makes the
+/// next redisplay recenter around eob, snapping the view back.
+///
+/// GNU Emacs 31.0.90 ground truth (batch, body-height pinned to match this
+/// harness), 200 x "line %03d\n" buffer, point at point-max:
+///   scroll-down => start = point-of-last-window-full, point = start of the
+///   LAST fully-visible window line (exact line start, no +1).
+#[test]
+fn scroll_down_from_eob_pulls_point_to_last_visible_line_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let ((w (selected-window)))
+           (save-current-buffer (set-buffer (window-buffer w))
+             (erase-buffer)
+             (let ((i 0))
+               (while (< i 200)
+                 (insert (format \"line %03d\\n\" i))
+                 (setq i (1+ i)))))
+           (goto-char (point-max))
+           (set-window-point w (point-max))
+           (list (window-body-height w)
+                 next-screen-context-lines
+                 (condition-case err
+                     (progn
+                       (scroll-down nil)
+                       (list :ok
+                           (line-number-at-pos (window-start w))
+                           (line-number-at-pos (window-point w))
+                           (window-start w)
+                           (window-point w)))
+                   (error (list :err (car err))))))",
+    );
+    assert_eq!(results[0], "OK (35 2 (:ok 151 185 1351 1657))");
+}
+
 /// Reproduces the observable bug reported after `C-x 2` in an
 /// interactive `neomacs -nw -Q` session: the cursor ends up on the
 /// *bottom* (newly-created) window, and both mode lines render in

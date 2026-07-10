@@ -5686,9 +5686,12 @@ fn scroll_by_lines_in_state(
             return Err(scroll_down_batch_error());
         }
         pos = line_motion_bytes(bytes, begv, zv, start, lines);
+        // GNU window_scroll_line_based: after scrolling backward, a point that
+        // fell BELOW the new window is pulled up to the start of the last
+        // fully-visible line; a point still visible stays put.
         let bottom = line_motion_bytes(bytes, begv, zv, pos, body_height);
-        if pt < bottom {
-            next_point = line_motion_bytes(bytes, begv, zv, bottom, -1).saturating_add(1);
+        if pt >= bottom {
+            next_point = line_motion_bytes(bytes, begv, zv, bottom, -1);
         }
     } else {
         pos = start;
