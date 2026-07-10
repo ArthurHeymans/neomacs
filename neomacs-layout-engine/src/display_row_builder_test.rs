@@ -5,7 +5,9 @@ use crate::display_item::{
     RenderFaceRef, SourceSpan,
 };
 use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_source::{DisplayItemSource, DisplaySourceContext, LispStringSourceCursor};
+use crate::display_source::{
+    DisplayItemSource, DisplaySourceContext, LispStringSourceCursor, LispStringSourceOrigin,
+};
 use crate::display_text_run_measurement::{
     DisplayTextRunAdvance, DisplayTextRunByteAdvance, DisplayTextRunMeasurement,
     DisplayTextRunMeasurementPlan,
@@ -432,6 +434,7 @@ fn display_row_append_cursor_appends_explicit_source_item() {
         1,
         Value::string("abc"),
         RenderFaceRef::FaceId(FaceId::new(2)),
+        LispStringSourceOrigin::Normal,
     )
     .expect("source");
     let mut context = DisplaySourceContext::empty();
@@ -466,6 +469,7 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
         1,
         Value::string("mi"),
         RenderFaceRef::FaceId(FaceId::new(2)),
+        LispStringSourceOrigin::Normal,
     )
     .expect("source");
     let mut context = DisplaySourceContext::empty();
@@ -627,6 +631,7 @@ fn display_row_builder_consumes_display_item_source() {
         1,
         Value::string("abc"),
         RenderFaceRef::FaceId(FaceId::new(2)),
+        LispStringSourceOrigin::Normal,
     )
     .expect("source");
     let mut context = DisplaySourceContext::empty();
@@ -695,6 +700,7 @@ fn display_row_writer_consumes_display_item_source() {
         1,
         Value::string("a\tb"),
         RenderFaceRef::FaceId(FaceId::new(2)),
+        LispStringSourceOrigin::Normal,
     )
     .expect("source");
     let mut context = DisplaySourceContext::empty();

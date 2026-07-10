@@ -7833,7 +7833,7 @@ fn layout_frame_rust_renders_display_replacement_tabs_as_stretches() {
 }
 
 #[test]
-fn layout_frame_rust_honors_display_replacement_string_display_properties() {
+fn layout_frame_rust_ignores_replacing_display_properties_inside_display_replacement_string() {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -7893,15 +7893,15 @@ fn layout_frame_rust_honors_display_replacement_string_display_properties() {
         .expect("text row");
 
     let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
-    assert!(
-        logical_text.contains("pa   b"),
-        "display replacement string should honor its display space, text={logical_text:?}"
+    assert_eq!(
+        logical_text, "pa b",
+        "display replacement strings should ignore nested replacing display specs"
     );
     assert!(
         text_row.glyphs[1]
             .iter()
-            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 3 })),
-        "display replacement string display property should produce a stretch, row={:?}",
+            .all(|glyph| !matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 3 })),
+        "display replacement string display property should not produce a nested stretch, row={:?}",
         text_row.glyphs[1]
     );
 }
@@ -12010,6 +12010,104 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
             .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { width_cols: 6 })),
         "overlay tab should be a stretch glyph, row={:?}",
         text_row.glyphs[1]
+    );
+}
+
+#[test]
+fn layout_frame_rust_overlay_after_string_display_replacement_renders_once() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let icon_with_nested_display = Value::string("N\t");
+        neovm_core::emacs_core::value::set_string_text_properties_for_value(
+            icon_with_nested_display,
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("display"), icon_with_nested_display]),
+            }],
+        );
+        let after_string = Value::string_with_text_properties(
+            "N\t",
+            vec![
+                StringTextPropertyRun {
+                    start: 0,
+                    end: 1,
+                    plist: Value::list(vec![
+                        Value::symbol("display"),
+                        icon_with_nested_display,
+                        Value::symbol("face"),
+                        Value::symbol("bold"),
+                    ]),
+                },
+                StringTextPropertyRun {
+                    start: 1,
+                    end: 2,
+                    plist: Value::list(vec![Value::symbol("display"), icon_with_nested_display]),
+                },
+            ],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("after-string"), after_string);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-display-replacement-once",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+
+    let logical_text = glyphs_logical_text(&text_row.glyphs[1]);
+    assert_eq!(
+        logical_text.matches('N').count(),
+        1,
+        "overlay after-string display replacement should render one icon, not duplicate it: {logical_text:?}"
+    );
+    assert!(
+        !logical_text.contains('\t'),
+        "display replacement tab should be expanded before reaching the glyph row: {logical_text:?}"
     );
 }
 

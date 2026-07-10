@@ -8,6 +8,7 @@ use crate::display_item::{
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
+    classify_display_property_modifiers_only,
 };
 use crate::display_row_append_context::DisplayRowAppendKind;
 use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
@@ -2060,6 +2061,7 @@ impl BufferDisplayReplacementStringRequest {
             self.source_id,
             self.value,
             RenderFaceRef::FaceId(fallback_face_id),
+            LispStringSourceOrigin::DisplayPropertyReplacement,
         )?;
         Some(BufferDisplayReplacementStringSource::new(
             self.replacement_source,
@@ -2091,10 +2093,27 @@ pub(crate) struct LispStringSourceCursor {
     stack: LispStringSourceStack,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LispStringSourceOrigin {
+    Normal,
+    DisplayPropertyReplacement,
+}
+
+impl LispStringSourceOrigin {
+    const fn from_display_property(self) -> bool {
+        matches!(self, Self::DisplayPropertyReplacement)
+    }
+}
+
 impl LispStringSourceCursor {
-    pub(crate) fn new(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
+    pub(crate) fn new(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+    ) -> Option<Self> {
         Some(Self {
-            stack: LispStringSourceStack::with_root(source_id, value, base_face)?,
+            stack: LispStringSourceStack::with_root(source_id, value, base_face, origin)?,
         })
     }
 
@@ -2140,8 +2159,13 @@ impl LispStringSourceStack {
         }
     }
 
-    fn with_root(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
-        let frame = LispStringSourceFrame::new(source_id, value, base_face)?;
+    fn with_root(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+    ) -> Option<Self> {
+        let frame = LispStringSourceFrame::new(source_id, value, base_face, origin)?;
         Some(Self {
             frames: vec![frame],
             next_source_id: source_id.saturating_add(1),
@@ -2160,6 +2184,7 @@ impl LispStringSourceStack {
             value,
             base_face,
             replacement_source,
+            LispStringSourceOrigin::DisplayPropertyReplacement,
         ) {
             self.frames.push(frame);
         }
@@ -2221,11 +2246,17 @@ struct LispStringSourceFrame {
     char_index: usize,
     base_face: RenderFaceRef,
     replacement_source: Option<BufferDisplayReplacementSource>,
+    from_display_property: bool,
 }
 
 impl LispStringSourceFrame {
-    fn new(source_id: u64, value: Value, base_face: RenderFaceRef) -> Option<Self> {
-        Self::new_with_replacement_source(source_id, value, base_face, None)
+    fn new(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+    ) -> Option<Self> {
+        Self::new_with_replacement_source(source_id, value, base_face, None, origin)
     }
 
     fn new_with_replacement_source(
@@ -2233,6 +2264,7 @@ impl LispStringSourceFrame {
         value: Value,
         base_face: RenderFaceRef,
         replacement_source: Option<BufferDisplayReplacementSource>,
+        origin: LispStringSourceOrigin,
     ) -> Option<Self> {
         let text = value.as_runtime_string_owned()?;
         let mut char_byte_offsets = text
@@ -2248,6 +2280,7 @@ impl LispStringSourceFrame {
             char_index: 0,
             base_face,
             replacement_source,
+            from_display_property: origin.from_display_property(),
         })
     }
 
@@ -2263,22 +2296,39 @@ impl LispStringSourceFrame {
 
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
-            self.char_index = property_end;
-            let display_property = DisplayPropertySourcePlan::new(display_prop);
-            match display_property.cursor_action(context, span, face) {
-                DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
-                    return LispStringAction::PushReplacement { value, base_face };
-                }
-                DisplayPropertySourceCursorAction::Emit(item) => {
-                    return LispStringAction::Emit(item);
-                }
-                DisplayPropertySourceCursorAction::Skip => {
-                    // `(left-fringe …)`: the covered chars (char_index already
-                    // advanced to property_end) produce no glyph.
-                    return LispStringAction::Skip;
-                }
-                DisplayPropertySourceCursorAction::FallThrough { layout } => {
-                    item_layout = layout;
+            if self.from_display_property {
+                self.char_index = property_end;
+                item_layout = classify_display_property_modifiers_only(display_prop);
+            } else {
+                let display_property = DisplayPropertySourcePlan::new(display_prop);
+                let display_end = if display_property.replacement().is_some() {
+                    self.display_value_extent(display_prop, property_end)
+                } else {
+                    property_end
+                };
+                let display_span = if display_end == property_end {
+                    span
+                } else {
+                    self.span(start, display_end)
+                };
+                match display_property.cursor_action(context, display_span, face) {
+                    DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
+                        self.char_index = display_end;
+                        return LispStringAction::PushReplacement { value, base_face };
+                    }
+                    DisplayPropertySourceCursorAction::Emit(item) => {
+                        self.char_index = display_end;
+                        return LispStringAction::Emit(item);
+                    }
+                    DisplayPropertySourceCursorAction::Skip => {
+                        self.char_index = display_end;
+                        // `(left-fringe …)`: the covered chars produce no glyph.
+                        return LispStringAction::Skip;
+                    }
+                    DisplayPropertySourceCursorAction::FallThrough { layout } => {
+                        self.char_index = property_end;
+                        item_layout = layout;
+                    }
                 }
             }
         }
@@ -2375,6 +2425,22 @@ impl LispStringSourceFrame {
         self.props
             .as_ref()?
             .get_property_at_char_pos(CharPos0::new(char_index), Value::symbol("display"))
+    }
+
+    fn display_value_extent(&self, value: Value, mut extent: usize) -> usize {
+        let char_count = self.char_count();
+        while extent < char_count {
+            match self.display_prop_at(extent) {
+                Some(next) if next.bits() == value.bits() => {
+                    extent = self
+                        .next_property_change(extent)
+                        .max(extent + 1)
+                        .min(char_count);
+                }
+                _ => break,
+            }
+        }
+        extent
     }
 
     fn face_at(&self, char_index: usize, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {

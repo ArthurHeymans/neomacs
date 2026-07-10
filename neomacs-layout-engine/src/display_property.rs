@@ -113,6 +113,17 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
     classify_single_display_spec(value)
 }
 
+/// GNU ignores replacing display specs inside strings that themselves came from
+/// a display property, while still honoring non-replacing modifiers.
+pub(crate) fn classify_display_property_modifiers_only(
+    value: Value,
+) -> DisplayTextPropertyModifiers {
+    if is_display_spec_list(&value) {
+        return classify_display_spec_list_modifiers_only(value);
+    }
+    classify_single_display_spec(value).modifiers
+}
+
 /// Iterate a list of display specs (GNU `handle_display_spec`'s cons loop),
 /// classifying each element as a single spec. GNU keeps the LAST element whose
 /// `handle_single_display_spec` reported a replacement (`replacing = rv`); we
@@ -129,12 +140,7 @@ fn classify_display_spec_list(value: Value) -> DisplayPropertyClassification {
         if let Some(element_replacement) = element.replacement {
             replacement = Some(element_replacement);
         }
-        if let Some(raise) = element.modifiers.raise {
-            modifiers.raise = Some(raise);
-        }
-        if let Some(height) = element.modifiers.height {
-            modifiers.height = Some(height);
-        }
+        merge_modifiers(&mut modifiers, element.modifiers);
     }
     // GNU suppresses inline modifiers once a replacement claims the text.
     if replacement.is_some() {
@@ -144,6 +150,17 @@ fn classify_display_spec_list(value: Value) -> DisplayPropertyClassification {
         replacement,
         modifiers,
     }
+}
+
+fn classify_display_spec_list_modifiers_only(value: Value) -> DisplayTextPropertyModifiers {
+    let Some(items) = list_to_vec(&value) else {
+        return DisplayTextPropertyModifiers::default();
+    };
+    let mut modifiers = DisplayTextPropertyModifiers::default();
+    for item in items {
+        merge_modifiers(&mut modifiers, classify_single_display_spec(item).modifiers);
+    }
+    modifiers
 }
 
 fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
@@ -191,6 +208,18 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
     DisplayPropertyClassification {
         replacement,
         modifiers,
+    }
+}
+
+fn merge_modifiers(
+    modifiers: &mut DisplayTextPropertyModifiers,
+    element: DisplayTextPropertyModifiers,
+) {
+    if let Some(raise) = element.raise {
+        modifiers.raise = Some(raise);
+    }
+    if let Some(height) = element.height {
+        modifiers.height = Some(height);
     }
 }
 

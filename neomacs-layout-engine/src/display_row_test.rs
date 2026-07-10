@@ -841,6 +841,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         1,
         value,
         RenderFaceRef::FaceId(FaceId::new(0)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("string source");
     let mut state = DisplayRowSourceState::default();
@@ -3226,9 +3227,13 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
         std::collections::HashMap::new(),
     );
     let base_face = request.base_face_ref();
-    let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, Value::string("אב"), base_face)
-            .expect("lisp string source");
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        Value::string("אב"),
+        base_face,
+        crate::display_source::LispStringSourceOrigin::Normal,
+    )
+    .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();
 
     let fragment = request
@@ -3288,6 +3293,7 @@ fn display_row_renderer_can_render_source_fragment_into_existing_row() {
         1,
         Value::string("\u{301}"),
         RenderFaceRef::FaceId(base_face_id),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
     let mut state = DisplayRowSourceState::default();

@@ -5079,6 +5079,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
         101,
         Value::string("\u{301}"),
         RenderFaceRef::FaceId(FaceId::new(7)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
@@ -5160,6 +5161,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
         101,
         Value::string("x"),
         RenderFaceRef::FaceId(FaceId::new(7)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
@@ -6044,6 +6046,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
         1,
         value,
         RenderFaceRef::FaceId(FaceId::new(0)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("string source");
 
@@ -6096,6 +6099,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
         1,
         value,
         RenderFaceRef::FaceId(FaceId::new(0)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("string source");
 
@@ -6158,6 +6162,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
         1,
         value,
         RenderFaceRef::FaceId(FaceId::new(0)),
+        crate::display_source::LispStringSourceOrigin::Normal,
     )
     .expect("string source");
     let mut source = DisplayRowSourceWalker::new(source);

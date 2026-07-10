@@ -32,7 +32,7 @@ pub(crate) use crate::display_row_render_state::{
     RenderedDisplayRow, display_row_progress,
 };
 pub(crate) use crate::display_row_source_state::DisplayRowSourceState;
-use crate::display_source::{DisplayItemSource, LispStringSourceCursor};
+use crate::display_source::{DisplayItemSource, LispStringSourceCursor, LispStringSourceOrigin};
 use crate::display_source_resolver::{DisplaySourceFaceBasis, DisplaySourceResolveParams};
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::FaceResolver;
@@ -259,6 +259,7 @@ impl DisplayRowLispStringSourceSession {
             request.source_id.raw(),
             request.value,
             RenderFaceRef::FaceId(request.base_face_id),
+            LispStringSourceOrigin::Normal,
         )?;
         Some(Self {
             source,
