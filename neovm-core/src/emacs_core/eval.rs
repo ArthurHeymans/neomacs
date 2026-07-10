@@ -45,7 +45,7 @@ use crate::buffer::{
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
-use crate::window::{FrameManager, WindowId};
+use crate::window::{FrameFullscreen, FrameManager, WindowId};
 
 /// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
 /// Mirrors the per-evaluator `gc_stress` test flag, exposed as an env hook so a
@@ -1355,6 +1355,7 @@ pub struct GuiFrameHostRequest {
     pub height: u32,
     pub title: crate::heap_types::LispString,
     pub geometry_hints: crate::window::GuiFrameGeometryHints,
+    pub fullscreen: Option<FrameFullscreen>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1540,6 +1541,13 @@ pub trait DisplayHost {
         &mut self,
         _frame_id: crate::window::FrameId,
         _geometry_hints: crate::window::GuiFrameGeometryHints,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn set_gui_frame_fullscreen(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        _fullscreen: FrameFullscreen,
     ) -> Result<(), String> {
         Ok(())
     }
@@ -6444,8 +6452,6 @@ impl Context {
             //
             // Keyboard audit Findings 1, 2, 3, 4 in
             // `drafts/keyboard-command-loop-audit.md`.
-            tracing::info!("command_loop_1: dispatching binding={}", binding);
-
             // Snapshot the previous this-command into real-last-command
             // before we overwrite (Finding 3 — GNU
             // `keyboard.c:1336-1339`).
@@ -6461,6 +6467,19 @@ impl Context {
             // this-command for execution. Finding 4.
             let remapped = self.command_remapping_for_loop(binding);
             self.assign("this-command", remapped);
+            let selected_frame_id = self
+                .frames
+                .selected_frame()
+                .map(|frame| frame.id.0)
+                .unwrap_or(0);
+            tracing::info!(
+                "command_loop_1: dispatch keys=[{}] original={} command={} selected_frame=0x{:x} current_buffer={:?}",
+                Self::command_keys_for_log(&keys),
+                Self::command_value_for_log(binding),
+                Self::command_value_for_log(remapped),
+                selected_frame_id,
+                self.buffers.current_buffer_id()
+            );
 
             // Finding 2: this-original-command stays at the original
             // (pre-remap) command for the duration of the iteration
@@ -7357,6 +7376,20 @@ impl Context {
         self.eval_symbol("this-command")
             .map(|value| format!("{}", value))
             .unwrap_or_else(|_| "<unbound>".to_string())
+    }
+
+    fn command_value_for_log(value: Value) -> String {
+        value
+            .as_symbol_name()
+            .map(str::to_owned)
+            .unwrap_or_else(|| crate::emacs_core::print::print_value(&value))
+    }
+
+    fn command_keys_for_log(keys: &[Value]) -> String {
+        keys.iter()
+            .map(crate::emacs_core::print::print_value)
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     /// Perform a full mark-and-sweep garbage collection.

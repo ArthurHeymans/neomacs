@@ -217,6 +217,16 @@ impl From<FrameRef> for u64 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowFullscreenMode {
+    None,
+    Fullboth,
+    Fullscreen,
+    Fullwidth,
+    Fullheight,
+    Maximized,
+}
+
 /// Lifecycle commands for the render thread.
 #[derive(Debug)]
 pub enum LifecycleCommand {
@@ -252,8 +262,12 @@ pub enum WindowCommand {
     /// Set the title for a specific GUI frame window.
     /// `frame.raw_id() == 0` also targets the adopted primary window.
     SetFrameWindowTitle { frame: FrameRef, title: String },
-    /// Set fullscreen mode (0=none, 1=fullscreen, 4=maximized)
-    SetWindowFullscreen { mode: u32 },
+    /// Set fullscreen/maximized state for a GUI frame window.
+    /// `frame.raw_id() == 0` also targets the adopted primary window.
+    SetWindowFullscreen {
+        frame: FrameRef,
+        mode: WindowFullscreenMode,
+    },
     /// Minimize/iconify the window
     SetWindowMinimized { minimized: bool },
     /// Set window position

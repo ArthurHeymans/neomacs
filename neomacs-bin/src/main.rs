@@ -48,6 +48,7 @@ use neomacs_display_runtime::render_thread::{
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, EmacsComms, FrameRef, InputEvent as DisplayInputEvent,
     LifecycleCommand, MediaSource, RenderCommand, ThreadComms, UiCommand, WindowCommand,
+    WindowFullscreenMode,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::FontSizing;
@@ -80,7 +81,7 @@ use neovm_core::emacs_core::{
 };
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{FrameId, FrameParam, Window};
+use neovm_core::window::{FrameFullscreen, FrameId, FrameParam, Window};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 // Variants share a `Print*` prefix by design (all are print-and-exit CLI
@@ -959,6 +960,14 @@ fn record_primary_window_resize(shared: &SharedPrimaryWindowSize, event: &Displa
 }
 
 impl PrimaryWindowDisplayHost {
+    fn frame_ref_for_gui_frame(&self, frame_id: FrameId) -> FrameRef {
+        if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
+            FrameRef::Primary
+        } else {
+            FrameRef::Frame(frame_id.0)
+        }
+    }
+
     fn send_render_command(
         &self,
         command: RenderCommand,
@@ -971,6 +980,16 @@ impl PrimaryWindowDisplayHost {
             waker.wake();
         }
         Ok(())
+    }
+}
+
+fn render_fullscreen_mode(fullscreen: FrameFullscreen) -> WindowFullscreenMode {
+    match fullscreen {
+        FrameFullscreen::Fullboth => WindowFullscreenMode::Fullboth,
+        FrameFullscreen::Fullscreen => WindowFullscreenMode::Fullscreen,
+        FrameFullscreen::Fullwidth => WindowFullscreenMode::Fullwidth,
+        FrameFullscreen::Fullheight => WindowFullscreenMode::Fullheight,
+        FrameFullscreen::Maximized => WindowFullscreenMode::Maximized,
     }
 }
 
@@ -1063,6 +1082,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             title_string
         );
         if !self.primary_window_adopted {
+            let fullscreen_frame = FrameRef::Primary;
             self.send_render_command(
                 RenderCommand::Window(WindowCommand::SetWindowTitle {
                     title: title_string.clone(),
@@ -1088,7 +1108,17 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             // source of truth until the window is fully realized.
             self.primary_window_adopted = true;
             self.primary_frame_id = Some(request.frame_id);
+            if let Some(fullscreen) = request.fullscreen {
+                self.send_render_command(
+                    RenderCommand::Window(WindowCommand::SetWindowFullscreen {
+                        frame: fullscreen_frame,
+                        mode: render_fullscreen_mode(fullscreen),
+                    }),
+                    "failed to set primary GUI frame fullscreen mode",
+                )?;
+            }
         } else {
+            let fullscreen_frame = FrameRef::Frame(request.frame_id.0);
             self.send_render_command(
                 RenderCommand::Window(WindowCommand::CreateWindow {
                     frame: FrameRef::Frame(request.frame_id.0),
@@ -1099,6 +1129,15 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 }),
                 "failed to create additional GUI window",
             )?;
+            if let Some(fullscreen) = request.fullscreen {
+                self.send_render_command(
+                    RenderCommand::Window(WindowCommand::SetWindowFullscreen {
+                        frame: fullscreen_frame,
+                        mode: render_fullscreen_mode(fullscreen),
+                    }),
+                    "failed to set GUI frame fullscreen mode",
+                )?;
+            }
         }
         self.last_window_titles
             .lock()
@@ -1245,17 +1284,29 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         frame_id: neovm_core::window::FrameId,
         geometry_hints: neovm_core::window::GuiFrameGeometryHints,
     ) -> Result<(), String> {
-        let frame = if !self.primary_window_adopted || self.primary_frame_id == Some(frame_id) {
-            FrameRef::Primary
-        } else {
-            FrameRef::Frame(frame_id.0)
-        };
+        let frame = self.frame_ref_for_gui_frame(frame_id);
         self.send_render_command(
             RenderCommand::Window(WindowCommand::SetFrameGeometryHints {
                 frame,
                 geometry_hints,
             }),
             "failed to update GUI frame geometry hints",
+        )?;
+        Ok(())
+    }
+
+    fn set_gui_frame_fullscreen(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+        fullscreen: FrameFullscreen,
+    ) -> Result<(), String> {
+        let frame = self.frame_ref_for_gui_frame(frame_id);
+        self.send_render_command(
+            RenderCommand::Window(WindowCommand::SetWindowFullscreen {
+                frame,
+                mode: render_fullscreen_mode(fullscreen),
+            }),
+            "failed to set GUI frame fullscreen mode",
         )?;
         Ok(())
     }
@@ -1831,6 +1882,11 @@ fn adopt_existing_primary_gui_frame(eval: &mut Context) -> Result<(), String> {
     else {
         return Ok(());
     };
+    let fullscreen = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.known_parameter(FrameParam::Fullscreen))
+        .and_then(|value| FrameFullscreen::from_symbol_value(&value));
     let title = frame_host_title(eval, frame_id);
     let geometry_hints = eval
         .frame_manager()
@@ -1846,6 +1902,7 @@ fn adopt_existing_primary_gui_frame(eval: &mut Context) -> Result<(), String> {
         height,
         title,
         geometry_hints,
+        fullscreen,
     })
 }
 

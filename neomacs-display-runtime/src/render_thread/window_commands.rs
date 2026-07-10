@@ -75,9 +75,15 @@ impl RenderApp {
                     );
                 }
             }
-            WindowCommand::SetWindowFullscreen { mode } => {
-                if let Some(primary_state) = self.frame_windows.primary_window_mut() {
-                    primary_state.set_fullscreen_mode(mode);
+            WindowCommand::SetWindowFullscreen { frame, mode } => {
+                let emacs_frame_id = frame.raw_id();
+                if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {
+                    window_state.set_fullscreen_mode(mode);
+                } else {
+                    tracing::warn!(
+                        "SetWindowFullscreen requested for unknown frame_id=0x{:x}",
+                        emacs_frame_id
+                    );
                 }
             }
             WindowCommand::SetWindowMinimized { minimized } => {

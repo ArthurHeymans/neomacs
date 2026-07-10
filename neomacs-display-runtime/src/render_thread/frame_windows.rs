@@ -37,6 +37,8 @@ use neomacs_renderer_wgpu::{
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
+use crate::thread_comm::WindowFullscreenMode;
+
 /// Native window/surface state for a top-level GUI frame.
 pub(crate) struct GuiFrameNativeWindowState {
     pub window: Arc<Window>,
@@ -961,25 +963,31 @@ impl GuiFrameWindowState {
         }
     }
 
-    pub(super) fn set_fullscreen_mode(&mut self, mode: u32) {
+    pub(super) fn set_fullscreen_mode(&mut self, mode: WindowFullscreenMode) {
         let FrameLifecycle::Active { native, .. } = &mut self.lifecycle else {
             return;
         };
         match mode {
-            3 => {
+            WindowFullscreenMode::Fullscreen | WindowFullscreenMode::Fullboth => {
                 native
                     .window
                     .set_fullscreen(Some(Fullscreen::Borderless(None)));
                 native.chrome.is_fullscreen = true;
             }
-            4 => {
+            WindowFullscreenMode::Maximized => {
+                native.window.set_fullscreen(None);
                 native.window.set_maximized(true);
                 native.chrome.is_fullscreen = false;
             }
-            _ => {
+            WindowFullscreenMode::None => {
                 native.window.set_fullscreen(None);
                 native.window.set_maximized(false);
                 native.chrome.is_fullscreen = false;
+            }
+            WindowFullscreenMode::Fullwidth | WindowFullscreenMode::Fullheight => {
+                tracing::warn!(
+                    "partial fullscreen modes are not implemented by the native window backend"
+                );
             }
         }
         self.render.compositor.dirty = true;

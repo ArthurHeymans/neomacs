@@ -20,7 +20,7 @@ use super::{
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
-    WindowCommand,
+    WindowCommand, WindowFullscreenMode,
 };
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
 use neovm_core::emacs_core::Context;
@@ -42,7 +42,7 @@ use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::face::FaceHeight;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
-    FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
+    FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
 };
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -641,6 +641,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
                 width_inc: 8,
                 height_inc: 16,
             },
+            fullscreen: None,
         },
     )
     .expect("adopt opening gui frame");
@@ -675,6 +676,57 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     )));
     assert!(host.primary_window_adopted);
     assert_eq!(host.primary_frame_id, Some(FrameId(0x100000001)));
+}
+
+#[test]
+fn opening_gui_frame_adoption_applies_fullscreen_mode() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let mut host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_dimensions: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+
+    neovm_core::emacs_core::DisplayHost::realize_gui_frame(
+        &mut host,
+        GuiFrameHostRequest {
+            frame_id: FrameId(0x100000001),
+            width: 960,
+            height: 640,
+            title: LispString::from_utf8("Neomacs"),
+            geometry_hints: GuiFrameGeometryHints {
+                base_width: 24,
+                base_height: 16,
+                min_width: 24,
+                min_height: 16,
+                width_inc: 8,
+                height_inc: 16,
+            },
+            fullscreen: Some(FrameFullscreen::Maximized),
+        },
+    )
+    .expect("adopt opening gui frame");
+
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert!(commands.iter().any(|cmd| matches!(
+        cmd,
+        RenderCommand::Window(WindowCommand::SetWindowFullscreen {
+            frame: FrameRef::Primary,
+            mode: WindowFullscreenMode::Maximized,
+        })
+    )));
 }
 
 #[test]
@@ -1175,6 +1227,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
                 width_inc: 13,
                 height_inc: 31,
             },
+            fullscreen: None,
         },
     )
     .expect("primary resize should succeed");

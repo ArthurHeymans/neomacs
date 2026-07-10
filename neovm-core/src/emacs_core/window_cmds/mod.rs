@@ -14,9 +14,9 @@ use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
 use crate::window::{
-    CursorTypeSymbol, FrameId, FrameManager, FrameParam, FrameParamKey, Rect, SplitDirection,
-    SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId,
-    WindowMargins, WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
+    CursorTypeSymbol, FrameFullscreen, FrameId, FrameManager, FrameParam, FrameParamKey, Rect,
+    SplitDirection, SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults,
+    WindowId, WindowMargins, WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
@@ -5241,6 +5241,7 @@ fn resize_live_gui_frame(
             height: total_height_px,
             title,
             geometry_hints,
+            fullscreen: None,
         })
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
@@ -5315,6 +5316,7 @@ fn request_live_gui_frame_resize(
             height: total_height_px,
             title,
             geometry_hints,
+            fullscreen: None,
         })
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
         return Ok(());
@@ -5374,6 +5376,7 @@ fn request_live_gui_frame_resize_and_keep_pending(
         height: total_height_px,
         title,
         geometry_hints,
+        fullscreen: None,
     })
     .map_err(|message| signal("error", vec![Value::string(message)]))?;
 
@@ -7166,6 +7169,7 @@ struct ParsedGuiFrameParams {
     parent_frame: Option<FrameId>,
     left: Option<i64>,
     top: Option<i64>,
+    fullscreen: Option<FrameFullscreen>,
     minibuffer: Option<Value>,
     internal_border_width: Option<i64>,
     child_frame_border_width: Option<i64>,
@@ -7252,6 +7256,7 @@ fn parse_gui_frame_params(value: Option<&Value>) -> ParsedGuiFrameParams {
             }
             "left" => parsed.left = pair_cdr.as_int(),
             "top" => parsed.top = pair_cdr.as_int(),
+            "fullscreen" => parsed.fullscreen = FrameFullscreen::from_symbol_value(&pair_cdr),
             "minibuffer" => parsed.minibuffer = Some(pair_cdr),
             "internal-border-width" => parsed.internal_border_width = pair_cdr.as_int(),
             "child-frame-border-width" => parsed.child_frame_border_width = pair_cdr.as_int(),
@@ -7553,6 +7558,7 @@ pub(crate) fn x_create_frame_impl(
             height: height_px,
             title: host_title,
             geometry_hints,
+            fullscreen: parsed.fullscreen,
         })
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
@@ -8267,6 +8273,23 @@ pub(crate) fn builtin_modify_frame_parameters(
                                 } else {
                                     frame.no_split = pair_cdr.is_truthy();
                                     frame.set_known_parameter(FrameParam::Unsplittable, pair_cdr);
+                                }
+                            }
+                        }
+                        FrameParamKey::Known(FrameParam::Fullscreen) => {
+                            let fullscreen = FrameFullscreen::from_symbol_value(&pair_cdr);
+                            if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.set_known_parameter(FrameParam::Fullscreen, pair_cdr);
+                            }
+                            if let Some(fullscreen) = fullscreen {
+                                let is_top_level_gui = eval.frames.get(fid).is_some_and(|frame| {
+                                    frame.effective_window_system().is_some()
+                                        && frame.parent_frame.as_frame_id().is_none()
+                                });
+                                if is_top_level_gui && let Some(host) = eval.display_host.as_mut() {
+                                    host.set_gui_frame_fullscreen(fid, fullscreen).map_err(
+                                        |message| signal("error", vec![Value::string(message)]),
+                                    )?;
                                 }
                             }
                         }

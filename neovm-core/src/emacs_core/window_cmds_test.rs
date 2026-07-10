@@ -5,7 +5,7 @@ use crate::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, Value, format
 use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_context, runtime_startup_eval_all};
-use crate::window::FrameParam;
+use crate::window::{FrameFullscreen, FrameParam};
 use std::cell::RefCell;
 use std::fs;
 use std::path::PathBuf;
@@ -114,6 +114,7 @@ struct RecordingDisplayHost {
     destroyed_gui_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     shown_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
     removed_child_frames: Rc<RefCell<Vec<crate::window::FrameId>>>,
+    fullscreen_changes: Rc<RefCell<Vec<(crate::window::FrameId, FrameFullscreen)>>>,
     geometry_hints:
         Rc<RefCell<Vec<(crate::window::FrameId, crate::window::GuiFrameGeometryHints)>>>,
     primary_size: Option<GuiFrameHostSize>,
@@ -148,6 +149,17 @@ impl DisplayHost for RecordingDisplayHost {
 
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         self.resized.borrow_mut().push(request);
+        Ok(())
+    }
+
+    fn set_gui_frame_fullscreen(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        fullscreen: FrameFullscreen,
+    ) -> Result<(), String> {
+        self.fullscreen_changes
+            .borrow_mut()
+            .push((frame_id, fullscreen));
         Ok(())
     }
 
@@ -4038,6 +4050,44 @@ fn x_create_frame_creates_opening_frame_and_notifies_host() {
 }
 
 #[test]
+fn x_create_frame_fullscreen_maximized_param_reaches_display_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let fid = ev.frames.create_frame("bootstrap", 960, 640, scratch);
+    {
+        let frame = ev.frames.get_mut(fid).expect("bootstrap frame");
+        frame.set_parameter(Value::symbol("window-system"), Value::symbol("x"));
+    }
+    ev.set_variable("terminal-frame", Value::make_frame(fid.0));
+    let host = RecordingDisplayHost::new();
+    let requests = host.realized.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("name"), Value::string("Neomacs")),
+        Value::cons(Value::symbol("fullscreen"), Value::symbol("maximized")),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+
+    let created_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", created)),
+    );
+    let frame = ev.frames.get(created_id).expect("created opening frame");
+    assert_eq!(
+        frame.known_parameter(FrameParam::Fullscreen),
+        Some(Value::symbol("maximized"))
+    );
+
+    let requests = requests.borrow();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].frame_id, created_id);
+    assert_eq!(requests[0].fullscreen, Some(FrameFullscreen::Maximized));
+}
+
+#[test]
 fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_window() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -5427,6 +5477,39 @@ fn modify_frame_parameters_width_height_resizes_live_gui_frame() {
     assert_eq!(frame.height, 400);
     assert_eq!(frame.parameter("width"), Some(Value::fixnum(80)));
     assert_eq!(frame.parameter("height"), Some(Value::fixnum(25)));
+}
+
+#[test]
+fn modify_frame_parameters_fullscreen_maximized_updates_live_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let host = RecordingDisplayHost::new();
+    let fullscreen_changes = host.fullscreen_changes.clone();
+    ev.set_display_host(Box::new(host));
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+
+    let out = ev.eval_str_each(
+        "(progn
+           (modify-frame-parameters
+            (selected-frame) '((fullscreen . maximized)))
+           (frame-parameter nil 'fullscreen))",
+    );
+
+    assert!(out[0].is_ok(), "fullscreen update failed: {:?}", out[0]);
+    assert_eq!(
+        out[0].as_ref().expect("result"),
+        &Value::symbol("maximized")
+    );
+    assert_eq!(
+        fullscreen_changes.borrow().as_slice(),
+        &[(fid, FrameFullscreen::Maximized)]
+    );
 }
 
 #[test]

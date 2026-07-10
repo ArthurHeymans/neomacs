@@ -858,12 +858,22 @@ fn render_command_set_window_title() {
 
 #[test]
 fn render_command_set_window_fullscreen() {
-    // Test all modes
-    for mode in [0u32, 1, 4] {
-        let cmd = RenderCommand::Window(WindowCommand::SetWindowFullscreen { mode });
+    for mode in [
+        WindowFullscreenMode::None,
+        WindowFullscreenMode::Fullboth,
+        WindowFullscreenMode::Fullscreen,
+        WindowFullscreenMode::Fullwidth,
+        WindowFullscreenMode::Fullheight,
+        WindowFullscreenMode::Maximized,
+    ] {
+        let cmd = RenderCommand::Window(WindowCommand::SetWindowFullscreen {
+            frame: FrameRef::Frame(99),
+            mode,
+        });
         match cmd {
-            RenderCommand::Window(WindowCommand::SetWindowFullscreen { mode: m }) => {
-                assert_eq!(m, mode)
+            RenderCommand::Window(WindowCommand::SetWindowFullscreen { frame, mode: m }) => {
+                assert_eq!(frame, FrameRef::Frame(99));
+                assert_eq!(m, mode);
             }
             other => panic!("Expected SetWindowFullscreen, got {:?}", other),
         }
