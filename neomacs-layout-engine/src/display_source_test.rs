@@ -490,6 +490,37 @@ fn lisp_string_source_cursor_resolves_face_property() {
 }
 
 #[test]
+fn lisp_string_source_cursor_renders_explicit_composition_property_replacement() {
+    let _eval = Context::new();
+    let value = Value::string_with_text_properties(
+        "* H",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("composition"),
+                Value::list(vec![
+                    Value::fixnum(0),
+                    Value::fixnum(1),
+                    Value::vector(vec![Value::fixnum('◉' as i64)]),
+                ]),
+            ]),
+        }],
+    );
+    let mut source = LispStringSourceCursor::new(
+        5,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+        LispStringSourceOrigin::Normal,
+    )
+    .expect("string source");
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["◉", " H"]);
+}
+
+#[test]
 fn lisp_string_source_cursor_resolves_display_property_through_context() {
     let _eval = Context::new();
     let display_spec = Value::list(vec![Value::symbol("image")]);
@@ -878,6 +909,98 @@ fn buffer_text_source_cursor_emits_text_runs_with_buffer_spans() {
             CharPos0::new(3),
             snapshot.layout_char_pos_to_emacs_byte_pos(CharPos0::new(3))
         )
+    );
+}
+
+#[test]
+fn buffer_text_source_cursor_renders_explicit_composition_property_replacement() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("* H");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(0));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("composition"),
+            Value::list(vec![
+                Value::fixnum(0),
+                Value::fixnum(1),
+                Value::vector(vec![Value::fixnum('◉' as i64)]),
+            ]),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["◉", " H"]);
+    assert_eq!(
+        items[0].span.end,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(1), EmacsBytePos::new(1))
+    );
+}
+
+#[test]
+fn buffer_text_source_cursor_renders_org_superstar_composition_property() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("* H");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(0));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let org_superstar_composition = Value::cons(
+            Value::cons(Value::fixnum(1), Value::fixnum('○' as i64)),
+            Value::NIL,
+        );
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("composition"),
+            org_superstar_composition,
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+
+    let items = collect_items(&mut source);
+
+    assert_eq!(item_texts(&items), ["○", " H"]);
+    assert_eq!(
+        items[0].span.end,
+        DisplaySourcePosition::buffer(buffer_id, CharPos0::new(1), EmacsBytePos::new(1))
     );
 }
 

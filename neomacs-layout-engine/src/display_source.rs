@@ -25,6 +25,7 @@ use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
 };
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::composite::composition_display_text_for_property;
 use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, list_to_vec};
 
 pub(crate) struct DisplaySourceContext<'a> {
@@ -2336,6 +2337,25 @@ impl LispStringSourceFrame {
         let Some(ch) = self.char_at(start) else {
             return LispStringAction::PopFrame;
         };
+        if let Some(composition) = self
+            .composition_prop_at(start)
+            .and_then(composition_display_text_for_property)
+        {
+            let end = start.saturating_add(composition.char_len());
+            if end <= property_end && end <= self.char_count() {
+                self.char_index = end;
+                return LispStringAction::Emit(
+                    DisplayItem::new(
+                        self.span(start, end),
+                        face,
+                        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(
+                            composition.text().to_owned(),
+                        )),
+                    )
+                    .with_layout(item_layout),
+                );
+            }
+        }
         if let Some(kind) = display_item_kind_for_text_source_char(ch) {
             self.char_index = start + 1;
             return LispStringAction::Emit(
@@ -2425,6 +2445,12 @@ impl LispStringSourceFrame {
         self.props
             .as_ref()?
             .get_property_at_char_pos(CharPos0::new(char_index), Value::symbol("display"))
+    }
+
+    fn composition_prop_at(&self, char_index: usize) -> Option<Value> {
+        self.props
+            .as_ref()?
+            .get_property_at_char_pos(CharPos0::new(char_index), Value::symbol("composition"))
     }
 
     fn display_value_extent(&self, value: Value, mut extent: usize) -> usize {

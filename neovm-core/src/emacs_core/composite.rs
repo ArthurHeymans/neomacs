@@ -307,6 +307,82 @@ fn composition_parts_any(prop: Value) -> Option<(i64, Value, Value, Option<i64>)
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompositionDisplayText {
+    text: String,
+    char_len: usize,
+}
+
+impl CompositionDisplayText {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn char_len(&self) -> usize {
+        self.char_len
+    }
+}
+
+fn composition_char_from_code(code: i64) -> Option<char> {
+    u32::try_from(code).ok().and_then(char::from_u32)
+}
+
+fn composition_components_display_text(components: Value, relative_p: bool) -> Option<String> {
+    match components.kind() {
+        ValueKind::Fixnum(code) => composition_char_from_code(code).map(|ch| ch.to_string()),
+        ValueKind::String => components.as_runtime_string_owned(),
+        ValueKind::Cons => {
+            let items = list_to_vec(&components)?;
+            composition_items_display_text(&items, relative_p)
+        }
+        _ if components.is_vector() => {
+            let items = components.as_vector_data()?;
+            composition_items_display_text(items, relative_p)
+        }
+        _ => None,
+    }
+}
+
+fn composition_items_display_text(items: &[Value], relative_p: bool) -> Option<String> {
+    if items.is_empty() {
+        return Some(String::new());
+    }
+    let glyphs: Vec<Value> = if relative_p {
+        items.to_vec()
+    } else {
+        if items.len() % 2 == 0 {
+            return None;
+        }
+        items.iter().step_by(2).copied().collect()
+    };
+    let mut text = String::new();
+    for item in glyphs {
+        let code = item.as_fixnum()?;
+        text.push(composition_char_from_code(code)?);
+    }
+    Some(text)
+}
+
+/// Decode the text a static `composition` property should display.
+///
+/// GNU redisplay drives this through `composition_it`/gstrings.  The Rust
+/// display source uses this narrower value-level helper to avoid falling back
+/// to the underlying raw buffer character for explicit replacement
+/// compositions such as org-superstar and prettify-symbols.
+pub fn composition_display_text_for_property(prop: Value) -> Option<CompositionDisplayText> {
+    let (length, components, _, registered) = composition_parts_any(prop)?;
+    if length <= 0 {
+        return None;
+    }
+    let relative_p = registered
+        .map(composition_lookup_relative)
+        .unwrap_or_else(|| composition_relative_p(components));
+    Some(CompositionDisplayText {
+        text: composition_components_display_text(components, relative_p)?,
+        char_len: usize::try_from(length).ok()?,
+    })
+}
+
 /// GNU `get_composition_id`: register a Form-A composition and rewrite the
 /// (shared) property cons in place to Form-B `(ID LENGTH COMPONENTS-VEC . MOD)`.
 /// Direct car/cdr mutation matches GNU's `XSETCAR`/`XSETCDR` — it upgrades the

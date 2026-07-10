@@ -13,6 +13,7 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::composite::composition_display_text_for_property;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextDisplayReplacementMode {
@@ -179,6 +180,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         })
     }
 
+    fn composition_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
+        self.buffer.layout_text_prop_at_emacs_byte_pos(
+            self.byte_pos(char_pos),
+            Value::symbol("composition"),
+        )
+    }
+
     /// The extent over which the resolved `display` value stays the same object,
     /// starting from `extent` (the first run end). Mirrors GNU
     /// `next_single_char_property_change(pos, Qdisplay)` so a display REPLACEMENT
@@ -336,6 +344,26 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         layout: DisplayItemLayout,
     ) -> Option<DisplayItem> {
         let ch = self.char_at(start)?;
+
+        if let Some(composition) = self
+            .composition_prop_at(start)
+            .and_then(composition_display_text_for_property)
+        {
+            let end = start.add_len(CharLen::new(composition.char_len()));
+            if end <= property_end && end <= self.end {
+                self.char_pos = end;
+                return Some(
+                    DisplayItem::new(
+                        self.span(start, end),
+                        face,
+                        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(
+                            composition.text().to_owned(),
+                        )),
+                    )
+                    .with_layout(layout),
+                );
+            }
+        }
 
         // GNU `get_next_display_element`: before the control-char / glyphless /
         // tab arms, consult the active display table.  If the char remaps to a
