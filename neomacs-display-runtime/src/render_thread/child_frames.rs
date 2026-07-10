@@ -47,15 +47,19 @@ impl ChildFrameManager {
         let frame_id = buf.frame_id;
         let abs_x = buf.parent_x;
         let abs_y = buf.parent_y;
+        let existed = self.frames.contains_key(&frame_id.get());
 
-        tracing::debug!(
+        let glyph_count = buf.glyphs.len();
+        tracing::info!(
             frame_id = frame_id.get(),
             abs_x,
             abs_y,
             width = buf.width,
             height = buf.height,
             z_order = buf.z_order,
-            "child_frame_manager: update_frame"
+            glyphs = glyph_count,
+            existed,
+            "child_frame_lifecycle: render_thread_child_buffer"
         );
 
         self.frames.insert(
@@ -76,8 +80,16 @@ impl ChildFrameManager {
     pub fn remove_frame(&mut self, frame_id: u64) -> bool {
         if self.frames.remove(&frame_id).is_some() {
             self.rebuild_render_order();
+            tracing::info!(
+                frame_id,
+                "child_frame_lifecycle: render_thread_child_removed"
+            );
             true
         } else {
+            tracing::debug!(
+                frame_id,
+                "child_frame_lifecycle: render_thread_child_remove_missing"
+            );
             false
         }
     }

@@ -1131,6 +1131,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         &mut self,
         frame_id: neovm_core::window::FrameId,
     ) -> Result<(), String> {
+        tracing::info!(
+            frame_id = frame_id.0,
+            "child_frame_lifecycle: host_send_remove"
+        );
         self.send_render_command(
             RenderCommand::Window(WindowCommand::RemoveChildFrame {
                 frame_id: frame_id.0,
@@ -1143,6 +1147,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         &mut self,
         frame_id: neovm_core::window::FrameId,
     ) -> Result<(), String> {
+        tracing::info!(
+            frame_id = frame_id.0,
+            "child_frame_lifecycle: host_send_show"
+        );
         self.send_render_command(
             RenderCommand::Window(WindowCommand::ShowChildFrame {
                 frame_id: frame_id.0,

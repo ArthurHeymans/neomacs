@@ -210,12 +210,18 @@ impl RenderApp {
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
             }
             WindowCommand::ShowChildFrame { frame_id } => {
-                tracing::debug!("Showing child frame 0x{:x}", frame_id);
+                tracing::info!(
+                    frame_id,
+                    "child_frame_lifecycle: render_thread_show_command"
+                );
                 self.frame_windows
                     .show_child_frame_in_top_level_windows(frame_id);
             }
             WindowCommand::RemoveChildFrame { frame_id } => {
-                tracing::info!("Removing child frame 0x{:x}", frame_id);
+                tracing::info!(
+                    frame_id,
+                    "child_frame_lifecycle: render_thread_remove_command"
+                );
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
             }

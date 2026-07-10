@@ -133,6 +133,7 @@ pub(crate) struct FrameCompositor {
     pub current_row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     pub child_frames: ChildFrameManager,
     hidden_child_frames: HashSet<u64>,
+    pub(super) pending_child_frame_removals_to_present: Vec<u64>,
     pub glyph_atlas: Option<WgpuGlyphAtlas>,
     pub dirty: bool,
     pub(super) visual_cursors: HashMap<i64, CursorState>,
@@ -225,6 +226,7 @@ impl GuiFrameRenderState {
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
+                pending_child_frame_removals_to_present: Vec::new(),
                 glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
                 dirty: false,
                 visual_cursors: HashMap::new(),
@@ -260,6 +262,7 @@ impl GuiFrameRenderState {
                 current_row_damage: None,
                 child_frames: ChildFrameManager::new(),
                 hidden_child_frames: HashSet::new(),
+                pending_child_frame_removals_to_present: Vec::new(),
                 glyph_atlas: None,
                 dirty: false,
                 visual_cursors: HashMap::new(),
@@ -731,6 +734,16 @@ impl GuiFrameRenderState {
         self.compositor.hidden_child_frames.insert(frame_id);
         let removed = self.compositor.child_frames.remove_frame(frame_id);
         if removed {
+            self.compositor
+                .pending_child_frame_removals_to_present
+                .push(frame_id);
+        }
+        tracing::info!(
+            frame_id,
+            removed,
+            "child_frame_lifecycle: compositor_remove"
+        );
+        if removed {
             self.compositor.dirty = true;
         }
         if self
@@ -748,7 +761,9 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn show_child_frame(&mut self, frame_id: u64) -> bool {
-        self.compositor.hidden_child_frames.remove(&frame_id)
+        let changed = self.compositor.hidden_child_frames.remove(&frame_id);
+        tracing::info!(frame_id, changed, "child_frame_lifecycle: compositor_show");
+        changed
     }
 
     pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) -> bool {

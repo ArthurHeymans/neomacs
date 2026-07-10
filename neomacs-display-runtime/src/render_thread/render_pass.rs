@@ -810,6 +810,16 @@ impl RenderApp {
                             &child_entry.frame.shaped_clusters,
                         );
                     }
+                    tracing::debug!(
+                        parent_frame_id = render.emacs_frame_id,
+                        frame_id = child_id,
+                        x = child_entry.abs_x,
+                        y = child_entry.abs_y,
+                        width = child_entry.frame.width,
+                        height = child_entry.frame.height,
+                        glyphs = child_entry.frame.glyphs.len(),
+                        "child_frame_lifecycle: render_child_frame_start"
+                    );
                     renderer.render_child_frame(
                         surface_view,
                         &child_entry.frame,
@@ -825,6 +835,11 @@ impl RenderApp {
                         child_frame_style.shadow_layers,
                         child_frame_style.shadow_offset,
                         child_frame_style.shadow_opacity,
+                    );
+                    tracing::debug!(
+                        parent_frame_id = render.emacs_frame_id,
+                        frame_id = child_id,
+                        "child_frame_lifecycle: render_child_frame_done"
                     );
                 }
             }
@@ -965,7 +980,42 @@ impl RenderApp {
                     h,
                 );
             }
+            let (child_frame_ids, removed_child_frame_ids) = self
+                .frame_windows
+                .get_mut(emacs_frame_id)
+                .map(|window_state| {
+                    let child_frame_ids = window_state
+                        .render
+                        .compositor
+                        .child_frames
+                        .sorted_for_rendering()
+                        .to_vec();
+                    let removed_child_frame_ids = std::mem::take(
+                        &mut window_state
+                            .render
+                            .compositor
+                            .pending_child_frame_removals_to_present,
+                    );
+                    (child_frame_ids, removed_child_frame_ids)
+                })
+                .unwrap_or_default();
+            if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
+                tracing::info!(
+                    parent_frame_id = emacs_frame_id,
+                    child_frame_ids = ?child_frame_ids,
+                    removed_child_frame_ids = ?removed_child_frame_ids,
+                    "child_frame_lifecycle: present_begin"
+                );
+            }
             output.present();
+            if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
+                tracing::info!(
+                    parent_frame_id = emacs_frame_id,
+                    child_frame_ids = ?child_frame_ids,
+                    removed_child_frame_ids = ?removed_child_frame_ids,
+                    "child_frame_lifecycle: present_done"
+                );
+            }
         }
     }
 }

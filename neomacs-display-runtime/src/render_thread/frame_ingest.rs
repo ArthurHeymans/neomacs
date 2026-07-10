@@ -490,6 +490,16 @@ impl RenderApp {
             }
 
             if parent_id != DisplayFrameId::new(0) {
+                tracing::info!(
+                    frame_id = frame_id.get(),
+                    parent_frame_id = parent_id.get(),
+                    width = frame.width,
+                    height = frame.height,
+                    parent_x = frame.parent_x,
+                    parent_y = frame.parent_y,
+                    glyphs = frame.glyphs.len(),
+                    "child_frame_lifecycle: render_thread_child_frame_state_received"
+                );
                 let update_transient_effects =
                     self.frame_windows.is_primary_frame_id(parent_id.get());
                 let typing_ripple_enabled = self.effects.typing_ripple.enabled;

@@ -5870,6 +5870,14 @@ fn set_frame_visibility(
     let is_gui_child_frame = eval.frames.get(fid).is_some_and(|frame| {
         frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_some()
     });
+    if is_gui_child_frame {
+        tracing::info!(
+            frame_id = fid.0,
+            was_visible,
+            visible,
+            "child_frame_lifecycle: core_visibility_change"
+        );
+    }
     if visible {
         if let Some(frame) = eval.frames.get_mut(fid) {
             frame.visible = true;
@@ -7548,6 +7556,18 @@ pub(crate) fn x_create_frame_impl(
         })
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
     }
+    if is_child_frame {
+        tracing::info!(
+            frame_id = fid.0,
+            parent_frame_id = parent_id.map(|parent| parent.0).unwrap_or(0),
+            visible = frames.get(fid).is_some_and(|frame| frame.visible),
+            width_px,
+            height_px,
+            left = parsed.left.unwrap_or(0),
+            top = parsed.top.unwrap_or(0),
+            "child_frame_lifecycle: core_created"
+        );
+    }
     if !is_child_frame && opening_frame_adoption {
         frames.select_frame(fid);
         if let Some(selected_wid) = frames.get(fid).map(|frame| frame.selected_window) {
@@ -7676,6 +7696,10 @@ pub(crate) fn delete_frame_owned(
     }
     if let Some(host) = eval.display_host.as_mut() {
         if was_gui_child_frame {
+            tracing::info!(
+                frame_id = fid.0,
+                "child_frame_lifecycle: core_delete_notify_remove"
+            );
             host.remove_gui_child_frame(fid)
                 .map_err(|message| signal("error", vec![Value::string(message)]))?;
         } else if was_top_level_gui_frame {
