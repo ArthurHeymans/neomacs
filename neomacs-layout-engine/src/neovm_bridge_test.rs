@@ -613,6 +613,35 @@ fn test_effective_cursor_spec_prefers_window_cursor_type() {
 }
 
 #[test]
+fn cursor_effect_profile_accepts_known_effect() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let profile = Value::list(vec![Value::symbol("glow"), Value::T]);
+
+    let effects = parse_cursor_effect_profile(profile).expect("known cursor effect");
+
+    assert!(effects.cursor_glow.enabled);
+}
+
+#[test]
+fn cursor_effect_profile_rejects_unknown_effect() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let profile = Value::list(vec![Value::symbol("glwo"), Value::T]);
+
+    assert!(parse_cursor_effect_profile(profile).is_none());
+}
+
+#[test]
+fn cursor_effect_profile_rejects_mixed_profile_with_unknown_effect() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let profile = Value::list(vec![
+        Value::list(vec![Value::symbol("glow"), Value::T]),
+        Value::list(vec![Value::symbol("glwo"), Value::T]),
+    ]);
+
+    assert!(parse_cursor_effect_profile(profile).is_none());
+}
+
+#[test]
 fn test_parse_cursor_spec_nil_is_no_cursor_like_gnu() {
     let spec = parse_cursor_spec(&Value::NIL).unwrap();
 

@@ -1086,7 +1086,10 @@ fn parse_cursor_effect_profile(value: Value) -> Option<EffectsConfig> {
         } else {
             let mut any = false;
             for form in forms {
-                any |= apply_cursor_effect_form(&mut effects, form);
+                if !apply_cursor_effect_form(&mut effects, form) {
+                    return None;
+                }
+                any = true;
             }
             any.then_some(effects)
         }
