@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn mouse_move_is_excluded_from_input_bridge_info_logging() {
+    let event = DisplayEvent::MouseMove {
+        x: 1.0,
+        y: 2.0,
+        modifiers: 0,
+        target_frame_id: 7,
+    };
+
+    assert!(!should_log_display_event(&event));
+}
+
+#[test]
+fn non_mouse_move_is_included_in_input_bridge_info_logging() {
+    let event = DisplayEvent::WindowFocus {
+        focused: true,
+        emacs_frame_id: 7,
+    };
+
+    assert!(should_log_display_event(&event));
+}
+
+#[test]
 fn key_release_is_dropped_by_core_transport_owner() {
     let display_event = DisplayEvent::Key {
         keysym: keyboard::XK_RETURN,

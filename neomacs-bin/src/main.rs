@@ -2496,14 +2496,19 @@ fn run_gui_evaluator_worker(
         .name("input-bridge".to_string())
         .spawn(move || {
             while let Ok(event) = display_input_rx.recv() {
-                tracing::info!("input-bridge: received display event {:?}", event);
+                let should_log = input_bridge::should_log_display_event(&event);
+                if should_log {
+                    tracing::info!("input-bridge: received display event {:?}", event);
+                }
                 record_primary_window_resize(&primary_window_size_for_input, &event);
                 if let Some(kb_event) = input_bridge::convert_display_event(&event) {
-                    tracing::info!(
-                        "input-bridge: converted display event {:?} to keyboard event {:?}",
-                        event,
-                        kb_event
-                    );
+                    if should_log {
+                        tracing::info!(
+                            "input-bridge: converted display event {:?} to keyboard event {:?}",
+                            event,
+                            kb_event
+                        );
+                    }
                     if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event
                         && key.is_default_quit_char()
                     {
@@ -2811,14 +2816,19 @@ pub fn run(mode: RuntimeMode) {
             .name("input-bridge".to_string())
             .spawn(move || {
                 while let Ok(event) = display_input_rx.recv() {
-                    tracing::info!("input-bridge: received display event {:?}", event);
+                    let should_log = input_bridge::should_log_display_event(&event);
+                    if should_log {
+                        tracing::info!("input-bridge: received display event {:?}", event);
+                    }
                     record_primary_window_resize(&primary_window_size_for_input, &event);
                     if let Some(kb_event) = input_bridge::convert_display_event(&event) {
-                        tracing::info!(
-                            "input-bridge: converted display event {:?} to keyboard event {:?}",
-                            event,
-                            kb_event
-                        );
+                        if should_log {
+                            tracing::info!(
+                                "input-bridge: converted display event {:?} to keyboard event {:?}",
+                                event,
+                                kb_event
+                            );
+                        }
                         if let neovm_core::keyboard::InputEvent::KeyPress { key, .. } = &kb_event
                             && key.is_default_quit_char()
                         {

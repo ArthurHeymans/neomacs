@@ -11,6 +11,10 @@ use neomacs_display_runtime::thread_comm::{
 use neovm_core::emacs_core::builtins::NeomacsMonitorInfo;
 use neovm_core::keyboard::{self, InputEvent as KbInputEvent, MouseButton};
 
+pub(crate) fn should_log_display_event(event: &DisplayEvent) -> bool {
+    !matches!(event, DisplayEvent::MouseMove { .. })
+}
+
 pub(crate) fn convert_monitor_infos(monitors: &[DisplayMonitorInfo]) -> Vec<NeomacsMonitorInfo> {
     monitors
         .iter()
