@@ -444,6 +444,31 @@ pub fn get_string_text_properties_table_for_value(value: Value) -> Option<TextPr
     }
 }
 
+/// Borrow a string's live interval table for a read-only comparison, with the
+/// same empty→None normalization as `get_string_text_properties_table_for_value`
+/// but WITHOUT cloning the tree.  `equal-including-properties` only reads the
+/// tables (no allocation / no GC in the walk), so the borrow stays valid for the
+/// comparison; the clone was pure waste on every propertied-string compare.
+fn string_text_props_nonempty(value: Value) -> Option<&'static TextPropertyTable> {
+    let table = string_text_props(value)?;
+    if table.is_empty() { None } else { Some(table) }
+}
+
+/// `equal-including-properties` string-interval comparison.  Two propertyless
+/// strings are trivially property-equal, so skip the interval walk entirely in
+/// that (dominant) case; otherwise compare the borrowed tables the way GNU's
+/// `compare_string_intervals` does.  Semantically identical to calling
+/// `TextPropertyTable::equal_including_property_values` with both tables — the
+/// both-`None` walk already returns `true` — just cheaper and allocation-free.
+fn string_intervals_equal_including_values(left: Value, right: Value, len: usize) -> bool {
+    let left_props = string_text_props_nonempty(left);
+    let right_props = string_text_props_nonempty(right);
+    if left_props.is_none() && right_props.is_none() {
+        return true;
+    }
+    TextPropertyTable::equal_including_property_values(left_props, right_props, len)
+}
+
 pub fn get_string_text_properties_interval_table_for_value(
     value: Value,
 ) -> Option<TextPropertyTable> {
@@ -2528,13 +2553,29 @@ pub fn try_equal_value_including_properties(
     right: &Value,
     depth: usize,
 ) -> Result<bool, Flow> {
+    try_equal_value_including_properties_swp(left, right, depth, false)
+}
+
+/// `equal-including-properties` honoring `symbols-with-pos-enabled`.  GNU's
+/// `Fequal_including_properties` funnels through the same `internal_equal`
+/// that reads the `symbols_with_pos_enabled` global, so a position-symbol is
+/// compared to its bare symbol (and to another position of the same symbol)
+/// when the flag is set — exactly like plain `equal`.  The builtin passes the
+/// live `Context` flag here; a hardcoded `false` silently diverged from GNU
+/// inside the byte-compiler, which binds the flag to `t`.
+pub fn try_equal_value_including_properties_swp(
+    left: &Value,
+    right: &Value,
+    depth: usize,
+    symbols_with_pos_enabled: bool,
+) -> Result<bool, Flow> {
     let mut seen = None;
     try_equal_value_inner(
         left,
         right,
         depth,
         &mut seen,
-        false,
+        symbols_with_pos_enabled,
         EqualKind::IncludingProperties,
     )
 }
@@ -2602,9 +2643,9 @@ fn equal_value_inner(
                         && left_string.sbytes() == right_string.sbytes()
                         && left_string.as_bytes() == right_string.as_bytes()
                         && (kind == EqualKind::Plain
-                            || TextPropertyTable::equal_including_property_values(
-                                get_string_text_properties_table_for_value(left).as_ref(),
-                                get_string_text_properties_table_for_value(right).as_ref(),
+                            || string_intervals_equal_including_values(
+                                left,
+                                right,
                                 left_string.schars(),
                             ))
                 }
@@ -2863,9 +2904,9 @@ fn try_equal_value_inner(
                         && left_string.sbytes() == right_string.sbytes()
                         && left_string.as_bytes() == right_string.as_bytes()
                         && (kind == EqualKind::Plain
-                            || TextPropertyTable::equal_including_property_values(
-                                get_string_text_properties_table_for_value(left).as_ref(),
-                                get_string_text_properties_table_for_value(right).as_ref(),
+                            || string_intervals_equal_including_values(
+                                left,
+                                right,
                                 left_string.schars(),
                             ))
                 }

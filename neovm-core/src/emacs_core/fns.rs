@@ -1241,12 +1241,15 @@ pub(crate) fn builtin_equal_including_properties(args: Vec<Value>) -> EvalResult
 }
 
 pub(crate) fn builtin_equal_including_properties_2(
-    _eval: &mut crate::emacs_core::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     left: Value,
     right: Value,
 ) -> EvalResult {
-    Ok(Value::bool_val(try_equal_value_including_properties(
-        &left, &right, 0,
+    Ok(Value::bool_val(try_equal_value_including_properties_swp(
+        &left,
+        &right,
+        0,
+        eval.symbols_with_pos_enabled,
     )?))
 }
 
