@@ -4217,22 +4217,7 @@ pub(crate) fn line_number_gutter_cols(
 
 fn display_line_number_total_lines(buffer: &Buffer) -> i64 {
     let end = buffer.total_emacs_byte_end_pos();
-    let mut pos = EmacsBytePos::ZERO;
-    let mut lines = 1_i64;
-    while pos < end {
-        if buffer.char_code_at_emacs_byte_pos(pos) == Some('\n' as u32) {
-            lines += 1;
-        }
-        let next_char = buffer
-            .emacs_byte_pos_to_char_pos_clamped(pos)
-            .add_len(CharLen::new(1));
-        let next = buffer.char_pos_to_emacs_byte_pos_clamped(next_char);
-        if next <= pos {
-            break;
-        }
-        pos = next;
-    }
-    lines
+    buffer.count_newlines_emacs_byte(EmacsBytePos::ZERO, end) as i64 + 1
 }
 
 /// (long-line-optimizations-p) -> boolean

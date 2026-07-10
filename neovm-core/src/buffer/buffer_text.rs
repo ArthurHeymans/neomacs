@@ -32,6 +32,20 @@ use super::text::{
 use super::text::{GapDebugLayout, TextBackendDebugLayout};
 use super::text_props::{ObjectIntervalRun, PropertyInterval, TextPropertyTable};
 
+#[cfg(test)]
+static CHAR_POS_TO_EMACS_BYTE_POS_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_char_pos_to_emacs_byte_pos_call_count() {
+    CHAR_POS_TO_EMACS_BYTE_POS_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn char_pos_to_emacs_byte_pos_call_count() -> usize {
+    CHAR_POS_TO_EMACS_BYTE_POS_CALLS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Last successful char↔byte conversion. Reused on a subsequent query if the
 /// buffer text has not changed since the entry was stored. Mirrors GNU
 /// `marker.c:202-203` but uses a `BufferText` content epoch rather than
@@ -2008,6 +2022,9 @@ impl BufferText {
     /// anchor-bracketed cached search. Mirrors GNU `buf_charpos_to_bytepos`
     /// (`src/marker.c:167`).
     pub fn char_pos_to_emacs_byte_pos(&self, target: CharPos0) -> EmacsBytePos {
+        #[cfg(test)]
+        CHAR_POS_TO_EMACS_BYTE_POS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let content_epoch = storage.content_epoch;

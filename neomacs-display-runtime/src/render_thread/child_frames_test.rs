@@ -112,6 +112,28 @@ fn update_frame_replaces_existing_frame() {
 }
 
 #[test]
+fn update_frame_keeps_ingest_seq_for_identical_frame() {
+    let mut mgr = ChildFrameManager::new();
+    let buf = make_child_buf(42, 30.0, 40.0, 200.0, 80.0, 2);
+
+    mgr.update_frame(buf.clone());
+    let first = mgr.frames.get(&42).unwrap().ingest_seq;
+    mgr.tick();
+
+    mgr.update_frame(buf);
+
+    let entry = mgr.frames.get(&42).unwrap();
+    assert_eq!(
+        entry.ingest_seq, first,
+        "an unchanged child frame must not look newly installed every render tick"
+    );
+    assert_eq!(
+        entry.last_updated, 1,
+        "the manager may refresh liveness without invalidating the rendered payload"
+    );
+}
+
+#[test]
 fn update_frame_abs_position_from_parent_xy() {
     let mut mgr = ChildFrameManager::new();
     let buf = make_child_buf(1, 123.5, 456.7, 300.0, 200.0, 0);

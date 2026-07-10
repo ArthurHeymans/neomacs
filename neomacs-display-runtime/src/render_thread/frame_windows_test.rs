@@ -287,6 +287,26 @@ fn frame_render_state_show_child_frame_allows_fresh_update_after_removal() {
 }
 
 #[test]
+fn frame_render_state_ignores_identical_child_frame_update() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut child = make_frame(0x99, 0x42);
+    child.parent_x = 10.0;
+    child.parent_y = 20.0;
+
+    assert!(render.update_child_frame(child.clone()));
+    render.set_dirty(false);
+
+    assert!(
+        !render.update_child_frame(child),
+        "an identical child frame packet should not dirty the compositor"
+    );
+    assert!(!render.compositor.dirty);
+}
+
+#[test]
 fn frame_render_state_remove_child_cursor_clears_preedit() {
     let Some(device) = make_test_device() else {
         return;

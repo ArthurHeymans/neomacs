@@ -101,6 +101,25 @@ fn raw_overlays_at_matches_gnu_same_start_itree_order() {
 }
 
 #[test]
+fn overlays_at_prunes_right_subtree_when_all_starts_are_after_position() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    for index in 0..2_000 {
+        let start = 10 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+
+    reset_overlays_at_node_visit_count();
+    assert!(overlays_at(&list, 0).is_empty());
+
+    let visits = overlays_at_node_visit_count();
+    assert!(
+        visits < 8,
+        "overlays_at should prune right subtrees that start after the queried position; visited {visits} nodes"
+    );
+}
+
+#[test]
 fn raw_overlays_in_matches_gnu_same_start_itree_order() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();

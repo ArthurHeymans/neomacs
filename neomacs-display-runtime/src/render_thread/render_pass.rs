@@ -1000,7 +1000,7 @@ impl RenderApp {
                 })
                 .unwrap_or_default();
             if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
-                tracing::info!(
+                tracing::debug!(
                     parent_frame_id = emacs_frame_id,
                     child_frame_ids = ?child_frame_ids,
                     removed_child_frame_ids = ?removed_child_frame_ids,
@@ -1009,7 +1009,7 @@ impl RenderApp {
             }
             output.present();
             if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
-                tracing::info!(
+                tracing::debug!(
                     parent_frame_id = emacs_frame_id,
                     child_frame_ids = ?child_frame_ids,
                     removed_child_frame_ids = ?removed_child_frame_ids,

@@ -22,6 +22,20 @@ use super::text::{TextEditRange, TextInsertion, TextReplacement};
 
 pub type Overlay = OverlayData;
 
+#[cfg(test)]
+static OVERLAYS_AT_NODE_VISITS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_overlays_at_node_visit_count() {
+    OVERLAYS_AT_NODE_VISITS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn overlays_at_node_visit_count() -> usize {
+    OVERLAYS_AT_NODE_VISITS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// Augmented interval tree node for O(log n + k) overlay queries.
 #[derive(Clone, Debug)]
 struct ItreeNode {
@@ -117,6 +131,9 @@ impl Itree {
 
     fn overlays_at_node(node: &Option<Box<ItreeNode>>, pos: EmacsBytePos, out: &mut Vec<Value>) {
         let Some(n) = node.as_ref() else { return };
+        #[cfg(test)]
+        OVERLAYS_AT_NODE_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         // If left child's max_end > pos, it might contain covering intervals
         if let Some(left) = n.left.as_ref() {
             if left.max_end > pos {
@@ -127,11 +144,8 @@ impl Itree {
         if n.start() <= pos && pos < n.end() {
             out.push(n.overlay);
         }
-        // Always visit right child
         if let Some(right) = n.right.as_ref() {
-            if right.max_end > pos || pos < n.start() {
-                Self::overlays_at_node(&n.right, pos, out);
-            } else {
+            if n.start() <= pos && right.max_end > pos {
                 Self::overlays_at_node(&n.right, pos, out);
             }
         }

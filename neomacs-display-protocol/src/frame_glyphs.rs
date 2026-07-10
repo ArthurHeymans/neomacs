@@ -124,7 +124,7 @@ pub struct MaterializedFaceData {
 }
 
 /// A single glyph to render
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FrameGlyph {
     /// Character glyph with text
     Char {
@@ -644,7 +644,7 @@ pub struct FringeBitmapData {
 }
 
 /// Stipple pattern: XBM bitmap data for tiled background patterns
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StipplePattern {
     /// Pattern width in pixels
     pub width: u32,
@@ -764,7 +764,7 @@ pub enum WindowEffectHint {
 ///
 /// With matrix-based rendering, this buffer is cleared and rebuilt from scratch
 /// each frame by the C-side matrix walker. No incremental state management needed.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct FrameGlyphBuffer {
     /// Frame dimensions
     pub width: f32,

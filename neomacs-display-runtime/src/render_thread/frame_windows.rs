@@ -783,9 +783,11 @@ impl GuiFrameRenderState {
             );
             return false;
         }
-        self.compositor.child_frames.update_frame(frame);
-        self.compositor.dirty = true;
-        true
+        let changed = self.compositor.child_frames.update_frame(frame);
+        if changed {
+            self.compositor.dirty = true;
+        }
+        changed
     }
 }
 

@@ -490,7 +490,7 @@ impl RenderApp {
             }
 
             if parent_id != DisplayFrameId::new(0) {
-                tracing::info!(
+                tracing::debug!(
                     frame_id = frame_id.get(),
                     parent_frame_id = parent_id.get(),
                     width = frame.width,

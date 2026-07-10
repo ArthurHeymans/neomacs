@@ -3256,6 +3256,35 @@ fn test_line_number_display_width() {
 }
 
 #[test]
+fn line_number_display_width_uses_byte_newline_count_not_char_pos_scan() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+
+    let frame_id = super::super::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .char_width = 8.0;
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("current buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        for _ in 0..2_000 {
+            buffer.insert("é journal line\n");
+        }
+    }
+
+    crate::buffer::buffer_text::reset_char_pos_to_emacs_byte_pos_call_count();
+    let result = builtin_line_number_display_width(&mut eval, vec![]).unwrap();
+
+    assert_eq!(result, Value::fixnum(4));
+    assert_eq!(
+        crate::buffer::buffer_text::char_pos_to_emacs_byte_pos_call_count(),
+        0,
+        "line-number width must use byte-level newline counting, not per-character byte conversion"
+    );
+}
+
+#[test]
 fn test_long_line_optimizations_p() {
     crate::test_utils::init_test_tracing();
     let result = builtin_long_line_optimizations_p(vec![]).unwrap();

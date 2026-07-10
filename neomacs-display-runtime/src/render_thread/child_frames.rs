@@ -46,14 +46,36 @@ impl ChildFrameManager {
     }
 
     /// Insert or update a child frame, recompute absolute position, rebuild render order.
-    pub fn update_frame(&mut self, buf: FrameGlyphBuffer) {
+    ///
+    /// Returns true only when the rendered payload changed. Repeated delivery of
+    /// an identical child-frame snapshot still refreshes liveness, but it must
+    /// not look like a new frame install to face-cache and dirty-redraw logic.
+    pub fn update_frame(&mut self, buf: FrameGlyphBuffer) -> bool {
         let frame_id = buf.frame_id;
         let abs_x = buf.parent_x;
         let abs_y = buf.parent_y;
-        let existed = self.frames.contains_key(&frame_id.get());
+        let existing = self.frames.get_mut(&frame_id.get());
 
         let glyph_count = buf.glyphs.len();
-        tracing::info!(
+        if let Some(entry) = existing {
+            if entry.frame == buf {
+                entry.last_updated = self.frame_counter;
+                tracing::debug!(
+                    frame_id = frame_id.get(),
+                    abs_x,
+                    abs_y,
+                    width = buf.width,
+                    height = buf.height,
+                    z_order = buf.z_order,
+                    glyphs = glyph_count,
+                    "child_frame_lifecycle: render_thread_child_buffer_unchanged"
+                );
+                return false;
+            }
+        }
+
+        let existed = self.frames.contains_key(&frame_id.get());
+        tracing::debug!(
             frame_id = frame_id.get(),
             abs_x,
             abs_y,
@@ -78,6 +100,7 @@ impl ChildFrameManager {
         );
 
         self.rebuild_render_order();
+        true
     }
 
     /// Remove a child frame by ID.
