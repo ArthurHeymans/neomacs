@@ -1364,42 +1364,95 @@ fn single_group_match_data(start: usize, end: usize) -> MatchData {
     MatchData::none(gnu_single_group_vec(Some(MatchGroup::new(start, end))))
 }
 
-fn ascii_case_fold_find(haystack: &str, needle: &str) -> Option<usize> {
-    let needle_len = needle.len();
-    if needle_len == 0 {
+/// Leftmost ASCII-case-insensitive occurrence of `needle` in `haystack`,
+/// in guaranteed O(n+m) via KMP over ASCII-folded bytes (the sliding
+/// `windows()` scan this replaces was O(n*m) on adversarial repetitive
+/// inputs). An ASCII needle byte can never fold-match a UTF-8
+/// continuation byte (>= 0x80), so on valid UTF-8 haystacks every match
+/// offset is a char boundary.
+fn ascii_fold_find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
         return Some(0);
     }
-    let haystack_bytes = haystack.as_bytes();
-    let needle_bytes = needle.as_bytes();
-    if needle_len > haystack_bytes.len() {
+    if needle.len() > haystack.len() {
         return None;
     }
+    let fold = |b: u8| b.to_ascii_lowercase();
+    // KMP failure table over the folded needle.
+    let mut table = vec![0usize; needle.len()];
+    let mut k = 0;
+    for i in 1..needle.len() {
+        let b = fold(needle[i]);
+        while k > 0 && fold(needle[k]) != b {
+            k = table[k - 1];
+        }
+        if fold(needle[k]) == b {
+            k += 1;
+        }
+        table[i] = k;
+    }
+    let mut k = 0;
+    for (i, &hb) in haystack.iter().enumerate() {
+        let hb = fold(hb);
+        while k > 0 && fold(needle[k]) != hb {
+            k = table[k - 1];
+        }
+        if fold(needle[k]) == hb {
+            k += 1;
+            if k == needle.len() {
+                return Some(i + 1 - k);
+            }
+        }
+    }
+    None
+}
 
-    haystack_bytes.windows(needle_len).position(|window| {
-        window
-            .iter()
-            .zip(needle_bytes.iter())
-            .all(|(lhs, rhs)| lhs.eq_ignore_ascii_case(rhs))
-    })
+/// Rightmost ASCII-case-insensitive occurrence: KMP over the reversed
+/// folded sequences, mapping the reversed hit back to the original start.
+fn ascii_fold_rfind_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(haystack.len());
+    }
+    let n = haystack.len();
+    let m = needle.len();
+    if m > n {
+        return None;
+    }
+    let rn = |idx: usize| needle[m - 1 - idx].to_ascii_lowercase();
+    let mut table = vec![0usize; m];
+    let mut k = 0;
+    for i in 1..m {
+        let b = rn(i);
+        while k > 0 && rn(k) != b {
+            k = table[k - 1];
+        }
+        if rn(k) == b {
+            k += 1;
+        }
+        table[i] = k;
+    }
+    let mut k = 0;
+    for i in 0..n {
+        let hb = haystack[n - 1 - i].to_ascii_lowercase();
+        while k > 0 && rn(k) != hb {
+            k = table[k - 1];
+        }
+        if rn(k) == hb {
+            k += 1;
+            if k == m {
+                return Some(n - 1 - i);
+            }
+        }
+    }
+    None
+}
+
+fn ascii_case_fold_find(haystack: &str, needle: &str) -> Option<usize> {
+    ascii_fold_find_bytes(haystack.as_bytes(), needle.as_bytes())
 }
 
 fn ascii_case_fold_rfind(haystack: &str, needle: &str) -> Option<usize> {
-    let needle_len = needle.len();
-    if needle_len == 0 {
-        return Some(haystack.len());
-    }
-    let haystack_bytes = haystack.as_bytes();
-    let needle_bytes = needle.as_bytes();
-    if needle_len > haystack_bytes.len() {
-        return None;
-    }
-
-    haystack_bytes.windows(needle_len).rposition(|window| {
-        window
-            .iter()
-            .zip(needle_bytes.iter())
-            .all(|(lhs, rhs)| lhs.eq_ignore_ascii_case(rhs))
-    })
+    ascii_fold_rfind_bytes(haystack.as_bytes(), needle.as_bytes())
 }
 
 fn unicode_case_fold_literal_find(text: &str, literal: &str) -> Option<MatchGroup> {
@@ -1505,14 +1558,6 @@ fn literal_rfind(text: &str, literal: &str, case_fold: bool) -> Option<MatchGrou
             Some(MatchGroup::new(start, start + literal.len()))
         },
     )
-}
-
-fn bytes_equal_ascii_case_fold(left: &[u8], right: &[u8]) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .zip(right.iter())
-            .all(|(l, r)| l.eq_ignore_ascii_case(r))
 }
 
 /// Decode the next character at byte offset `at`. In a unibyte target every
@@ -1627,15 +1672,13 @@ fn literal_find_emacs_bytes(
                 return Some(MatchGroup::new(0, 0));
             }
             if !case_fold {
-                return text
-                    .windows(literal.len())
-                    .position(|window| window == literal)
+                // Two-way search: O(n+m) where the previous sliding
+                // `windows()` comparison was O(n*m) on repetitive inputs.
+                return memchr::memmem::find(text, literal)
                     .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             if literal.is_ascii() {
-                return text
-                    .windows(literal.len())
-                    .position(|window| bytes_equal_ascii_case_fold(window, literal))
+                return ascii_fold_find_bytes(text, literal)
                     .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             // Unibyte target: GNU `simple_search` (search.c:1622-1633) advances
@@ -1696,20 +1739,14 @@ fn literal_rfind_emacs_bytes(
                 return Some(MatchGroup::new(text.len(), text.len()));
             }
             if !case_fold {
-                return text
-                    .windows(literal.len())
-                    .enumerate()
-                    .rev()
-                    .find(|(_, window)| *window == literal)
-                    .map(|(start, _)| MatchGroup::new(start, start + literal.len()));
+                // Reverse two-way search; the previous reversed `windows()`
+                // scan was O(n*m) and lost the memcmp specialization too.
+                return memchr::memmem::rfind(text, literal)
+                    .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             if literal.is_ascii() {
-                return text
-                    .windows(literal.len())
-                    .enumerate()
-                    .rev()
-                    .find(|(_, window)| bytes_equal_ascii_case_fold(window, literal))
-                    .map(|(start, _)| MatchGroup::new(start, start + literal.len()));
+                return ascii_fold_rfind_bytes(text, literal)
+                    .map(|start| MatchGroup::new(start, start + literal.len()));
             }
             // Unibyte target: byte-by-byte rightmost case-fold scan, mirroring
             // GNU `simple_search` reverse search.  See `literal_find_emacs_bytes`.
