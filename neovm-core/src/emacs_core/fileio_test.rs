@@ -3,7 +3,7 @@ use crate::emacs_core::eval::Context;
 use crate::emacs_core::format_eval_result;
 use crate::emacs_core::value::list_to_vec;
 use crate::test_utils::runtime_startup_eval_all;
-use std::io::Write;
+use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
@@ -1113,6 +1113,34 @@ fn test_builtin_rename_file_overwrite_semantics() {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments, got {:?}", other),
     }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn rename_file_cross_device_regular_file_copies_then_deletes_source() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join("neovm_rename_exdev_fallback");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let src = dir.join("src.txt");
+    let dst = dir.join("dst.txt");
+    fs::write(&src, b"payload").unwrap();
+
+    let attempts = std::cell::Cell::new(0);
+    rename_path_with_cross_device_fallback(&src, &dst, true, |from, to| {
+        attempts.set(attempts.get() + 1);
+        assert_eq!(from, src.as_path());
+        assert_eq!(to, dst.as_path());
+        Err(io::Error::from_raw_os_error(libc::EXDEV))
+    })
+    .unwrap();
+
+    assert_eq!(attempts.get(), 1);
+    assert!(!src.exists());
+    assert_eq!(fs::read(&dst).unwrap(), b"payload");
 
     let _ = fs::remove_dir_all(&dir);
 }

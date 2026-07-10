@@ -1531,7 +1531,68 @@ pub fn delete_file(filename: &str) -> std::io::Result<()> {
 
 /// Rename file FROM to TO.
 pub fn rename_file(from: &str, to: &str) -> std::io::Result<()> {
-    fs::rename(from, to)
+    rename_path_with_cross_device_fallback(Path::new(from), Path::new(to), true, |from, to| {
+        fs::rename(from, to)
+    })
+}
+
+fn is_cross_device_rename_error(err: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(libc::EXDEV)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
+}
+
+fn rename_path_with_cross_device_fallback<F>(
+    from_path: &Path,
+    to_path: &Path,
+    ok_if_exists: bool,
+    rename: F,
+) -> std::io::Result<()>
+where
+    F: FnOnce(&Path, &Path) -> std::io::Result<()>,
+{
+    match rename(from_path, to_path) {
+        Ok(()) => Ok(()),
+        Err(err) if is_cross_device_rename_error(&err) => {
+            rename_regular_file_by_copy_delete(from_path, to_path, ok_if_exists)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn rename_regular_file_by_copy_delete(
+    from_path: &Path,
+    to_path: &Path,
+    ok_if_exists: bool,
+) -> std::io::Result<()> {
+    let from_meta = fs::symlink_metadata(from_path)?;
+    if !from_meta.is_file() {
+        let errno = {
+            #[cfg(unix)]
+            {
+                libc::EXDEV
+            }
+            #[cfg(not(unix))]
+            {
+                18
+            }
+        };
+        return Err(std::io::Error::from_raw_os_error(errno));
+    }
+
+    if fs::symlink_metadata(to_path).is_ok() && !ok_if_exists {
+        return Err(std::io::Error::from(ErrorKind::AlreadyExists));
+    }
+
+    fs::copy(from_path, to_path)?;
+    fs::set_permissions(to_path, from_meta.permissions())?;
+    fs::remove_file(from_path)
 }
 
 /// Copy file FROM to TO.
@@ -4295,7 +4356,11 @@ pub(crate) fn builtin_rename_file(eval: &mut Context, args: Vec<Value>) -> EvalR
             Value::heap_string(to.clone()),
         ));
     }
-    fs::rename(lisp_file_name_to_path_buf(&from), &to_path).map_err(|err| {
+    let from_path = lisp_file_name_to_path_buf(&from);
+    rename_path_with_cross_device_fallback(&from_path, &to_path, ok_if_exists, |from, to| {
+        fs::rename(from, to)
+    })
+    .map_err(|err| {
         signal_file_action_error_pair_values(
             err,
             "Renaming",
