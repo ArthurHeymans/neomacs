@@ -9,7 +9,8 @@ use crate::emacs_core::error::LispCondition;
 use malachite::integer::Integer;
 use std::collections::HashMap;
 use std::ffi::{CStr, c_void};
-use std::sync::Mutex;
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
+use std::sync::{Mutex, PoisonError};
 
 use libloading::Library;
 
@@ -565,6 +566,119 @@ fn module_signal_or_throw(priv_: &emacs_env_private) -> Result<(), Flow> {
 }
 
 // ============================================================================
+// Panic containment at the module ABI boundary
+// ============================================================================
+//
+// A Rust panic that reaches an `extern "C"` boundary aborts the process, so
+// every `emacs_env` vtable primitive body runs under [`module_guard`] and the
+// two trampolines catch around the module/Lisp execution. GNU's module layer
+// reports every module-visible fault as a pending non-local exit; a caught
+// panic becomes `Signal(error, "neomacs internal error: …")` the same way.
+//
+// Containment covers panics raised by HOST code. A panic raised inside a
+// foreign Rust module's own code cannot reach these catches: such a module
+// links its own libstd, and std deliberately aborts when a Rust panic from a
+// different std instance hits `catch_unwind` (foreign-exception canary). C
+// modules cannot panic at all. That matches GNU, where a module crashing
+// internally crashes the editor.
+
+/// Best-effort text from a caught panic payload.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "<opaque panic payload>".to_string()
+    }
+}
+
+/// The `Flow` a contained panic turns into: a plain `error` signal (GNU's
+/// module layer signals `error` with a descriptive string for internal module
+/// faults), so `condition-case` handlers for `error` catch it.
+fn module_panic_flow(payload: Box<dyn std::any::Any + Send>) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(&format!(
+            "neomacs internal error: {}",
+            panic_message(&*payload)
+        ))],
+    )
+}
+
+/// True when a panic caught at the module ABI must be re-raised instead of
+/// contained (probes the installed evaluator context, if any — see
+/// `Context::module_panic_recovery_blocked`).
+fn module_panic_recovery_blocked_via_ctx() -> bool {
+    MODULE_CTX.with(|ctx_cell| {
+        let ctx_ptr = ctx_cell.get();
+        // SAFETY: same shared-read-through-MODULE_CTX discipline as
+        // `module_should_quit`; the probe only reads two flags.
+        !ctx_ptr.is_null() && unsafe { (*ctx_ptr).module_panic_recovery_blocked() }
+    })
+}
+
+/// Wraps every `extern "C"` vtable primitive body: a panic in the body is
+/// caught, recorded as a pending `error` exit on `env` (first exit wins, so an
+/// exit recorded before the panic is preserved), and the primitive returns its
+/// existing error-convention `sentinel`. If the panic left GC state suspect it
+/// is re-raised and aborts at the `extern "C"` shim — exactly the
+/// pre-containment behavior for that class.
+///
+/// `AssertUnwindSafe`: the boundary's recovery contract (state restoration in
+/// [`contain_lisp_panics`] / the trampolines, Drop-guarded host counters) is
+/// what makes the crossing states coherent; a caught panic here never resumes
+/// the broken computation.
+fn module_guard<R>(env: *mut emacs_env, sentinel: R, body: impl FnOnce() -> R) -> R {
+    match catch_unwind(AssertUnwindSafe(body)) {
+        Ok(value) => value,
+        Err(payload) => {
+            if module_panic_recovery_blocked_via_ctx() {
+                eprintln!(
+                    "neomacs: refusing to contain a module-boundary panic \
+                     (GC state suspect): {}",
+                    panic_message(&*payload)
+                );
+                resume_unwind(payload);
+            }
+            let message = format!("neomacs internal error: {}", panic_message(&*payload));
+            unsafe {
+                set_pending_signal(env, "error", Value::list(vec![Value::string(&message)]));
+            }
+            sentinel
+        }
+    }
+}
+
+/// Every call from a module primitive into the evaluator goes through here:
+/// snapshot the boundary state, run `f` under `catch_unwind`, and on a caught
+/// panic restore the evaluator to the snapshot (the restoration an `Err(Flow)`
+/// return performs frame-by-frame) and surface the panic as an `error` Flow —
+/// indistinguishable at the ABI from a Lisp signal, so it rejoins the existing
+/// `module_handle_nonlocal_exit` path.
+fn contain_lisp_panics<T>(
+    ctx: &mut Context,
+    f: impl FnOnce(&mut Context) -> Result<T, Flow>,
+) -> Result<T, Flow> {
+    let snap = ctx.module_boundary_snapshot();
+    match catch_unwind(AssertUnwindSafe(|| f(&mut *ctx))) {
+        Ok(result) => result,
+        Err(payload) => {
+            if ctx.module_panic_recovery_blocked() {
+                eprintln!(
+                    "neomacs: refusing to contain a module-boundary panic \
+                     (GC state suspect): {}",
+                    panic_message(&*payload)
+                );
+                resume_unwind(payload);
+            }
+            ctx.restore_module_boundary(&snap);
+            Err(module_panic_flow(payload))
+        }
+    }
+}
+
+// ============================================================================
 // Environment init
 // ============================================================================
 
@@ -630,80 +744,88 @@ unsafe extern "C" fn module_make_global_ref(
     env: *mut emacs_env,
     value: emacs_value,
 ) -> emacs_value {
-    if value.is_null() {
-        return std::ptr::null_mut();
-    }
-    let lisp_val = value_to_lisp(value);
-    if check_pending_non_local_exit(env) {
-        return std::ptr::null_mut();
-    }
-    GLOBAL_REFS.with(|refs| {
-        let mut refs = refs.borrow_mut();
-        for entry_opt in refs.iter_mut() {
-            if let Some(entry) = entry_opt {
-                if entry.value == lisp_val {
-                    entry.refcount += 1;
-                    return entry.tag_ptr;
+    module_guard(env, std::ptr::null_mut(), || {
+        if value.is_null() {
+            return std::ptr::null_mut();
+        }
+        let lisp_val = value_to_lisp(value);
+        if check_pending_non_local_exit(env) {
+            return std::ptr::null_mut();
+        }
+        GLOBAL_REFS.with(|refs| {
+            let mut refs = refs.borrow_mut();
+            for entry_opt in refs.iter_mut() {
+                if let Some(entry) = entry_opt {
+                    if entry.value == lisp_val {
+                        entry.refcount += 1;
+                        return entry.tag_ptr;
+                    }
                 }
             }
-        }
-        let tag = Box::into_raw(Box::new(emacs_value_tag { v: lisp_val }));
-        let entry = GlobalRefEntry {
-            value: lisp_val,
-            refcount: 1,
-            tag_ptr: tag,
-        };
-        if let Some(pos) = refs.iter().position(|e| e.is_none()) {
-            refs[pos] = Some(entry);
-        } else {
-            refs.push(Some(entry));
-        }
-        tag
+            let tag = Box::into_raw(Box::new(emacs_value_tag { v: lisp_val }));
+            let entry = GlobalRefEntry {
+                value: lisp_val,
+                refcount: 1,
+                tag_ptr: tag,
+            };
+            if let Some(pos) = refs.iter().position(|e| e.is_none()) {
+                refs[pos] = Some(entry);
+            } else {
+                refs.push(Some(entry));
+            }
+            tag
+        })
     })
 }
 
 unsafe extern "C" fn module_free_global_ref(_env: *mut emacs_env, global_value: emacs_value) {
-    if global_value.is_null() {
-        return;
-    }
-    GLOBAL_REFS.with(|refs| {
-        let mut refs = refs.borrow_mut();
-        for entry_opt in refs.iter_mut() {
-            if let Some(entry) = entry_opt {
-                if entry.tag_ptr == global_value {
-                    entry.refcount -= 1;
-                    if entry.refcount <= 0 {
-                        drop(Box::from_raw(global_value));
-                        *entry_opt = None;
+    module_guard(_env, (), || {
+        if global_value.is_null() {
+            return;
+        }
+        GLOBAL_REFS.with(|refs| {
+            let mut refs = refs.borrow_mut();
+            for entry_opt in refs.iter_mut() {
+                if let Some(entry) = entry_opt {
+                    if entry.tag_ptr == global_value {
+                        entry.refcount -= 1;
+                        if entry.refcount <= 0 {
+                            drop(Box::from_raw(global_value));
+                            *entry_opt = None;
+                        }
+                        return;
                     }
-                    return;
                 }
             }
-        }
-    });
+        });
+    })
 }
 
 // --- Non-local exits ---
 
 unsafe extern "C" fn module_non_local_exit_check(env: *mut emacs_env) -> emacs_funcall_exit {
-    if env.is_null() {
-        return emacs_funcall_exit::Return;
-    }
-    unsafe { (*env).private_members.as_ref() }
-        .map(|p| p.pending_non_local_exit)
-        .unwrap_or(emacs_funcall_exit::Return)
+    module_guard(env, emacs_funcall_exit::Return, || {
+        if env.is_null() {
+            return emacs_funcall_exit::Return;
+        }
+        unsafe { (*env).private_members.as_ref() }
+            .map(|p| p.pending_non_local_exit)
+            .unwrap_or(emacs_funcall_exit::Return)
+    })
 }
 
 unsafe extern "C" fn module_non_local_exit_clear(env: *mut emacs_env) {
-    if env.is_null() {
-        return;
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Return;
-        priv_.non_local_exit_symbol = Value::NIL;
-        priv_.non_local_exit_data = Value::NIL;
-    }
+    module_guard(env, (), || {
+        if env.is_null() {
+            return;
+        }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            priv_.pending_non_local_exit = emacs_funcall_exit::Return;
+            priv_.non_local_exit_symbol = Value::NIL;
+            priv_.non_local_exit_data = Value::NIL;
+        }
+    })
 }
 
 unsafe extern "C" fn module_non_local_exit_get(
@@ -711,22 +833,24 @@ unsafe extern "C" fn module_non_local_exit_get(
     symbol: *mut emacs_value,
     data: *mut emacs_value,
 ) -> emacs_funcall_exit {
-    if env.is_null() {
-        return emacs_funcall_exit::Return;
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        let status = priv_.pending_non_local_exit;
-        if status != emacs_funcall_exit::Return {
-            if !symbol.is_null() {
-                *symbol = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_symbol);
-            }
-            if !data.is_null() {
-                *data = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_data);
-            }
+    module_guard(env, emacs_funcall_exit::Return, || {
+        if env.is_null() {
+            return emacs_funcall_exit::Return;
         }
-        status
-    }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            let status = priv_.pending_non_local_exit;
+            if status != emacs_funcall_exit::Return {
+                if !symbol.is_null() {
+                    *symbol = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_symbol);
+                }
+                if !data.is_null() {
+                    *data = lisp_to_value_ignoring_pending_exit(env, priv_.non_local_exit_data);
+                }
+            }
+            status
+        }
+    })
 }
 
 unsafe extern "C" fn module_non_local_exit_signal(
@@ -734,15 +858,17 @@ unsafe extern "C" fn module_non_local_exit_signal(
     symbol: emacs_value,
     data: emacs_value,
 ) {
-    if env.is_null() {
-        return;
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-        priv_.non_local_exit_symbol = value_to_lisp(symbol);
-        priv_.non_local_exit_data = value_to_lisp(data);
-    }
+    module_guard(env, (), || {
+        if env.is_null() {
+            return;
+        }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+            priv_.non_local_exit_symbol = value_to_lisp(symbol);
+            priv_.non_local_exit_data = value_to_lisp(data);
+        }
+    })
 }
 
 unsafe extern "C" fn module_non_local_exit_throw(
@@ -750,15 +876,17 @@ unsafe extern "C" fn module_non_local_exit_throw(
     tag: emacs_value,
     value: emacs_value,
 ) {
-    if env.is_null() {
-        return;
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Throw;
-        priv_.non_local_exit_symbol = value_to_lisp(tag);
-        priv_.non_local_exit_data = value_to_lisp(value);
-    }
+    module_guard(env, (), || {
+        if env.is_null() {
+            return;
+        }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            priv_.pending_non_local_exit = emacs_funcall_exit::Throw;
+            priv_.non_local_exit_symbol = value_to_lisp(tag);
+            priv_.non_local_exit_data = value_to_lisp(value);
+        }
+    })
 }
 
 // --- Intern ---
@@ -767,135 +895,151 @@ unsafe extern "C" fn module_intern(
     env: *mut emacs_env,
     name: *const std::ffi::c_char,
 ) -> emacs_value {
-    if name.is_null() || !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    let cstr = unsafe { CStr::from_ptr(name) };
-    let name = LispString::from_emacs_bytes(cstr.to_bytes().to_vec());
-    let val = Value::from_sym_id(intern_lisp_string(&name));
-    lisp_to_value(env, val)
+    module_guard(env, std::ptr::null_mut(), || {
+        if name.is_null() || !module_function_begin(env) {
+            return std::ptr::null_mut();
+        }
+        let cstr = unsafe { CStr::from_ptr(name) };
+        let name = LispString::from_emacs_bytes(cstr.to_bytes().to_vec());
+        let val = Value::from_sym_id(intern_lisp_string(&name));
+        lisp_to_value(env, val)
+    })
 }
 
 // --- Type conversion ---
 
 unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> emacs_value {
-    if !module_function_begin(env) || arg.is_null() {
-        return std::ptr::null_mut();
-    }
-    let val = value_to_lisp(arg);
-    let type_name: &str = match val.kind() {
-        super::value::ValueKind::Nil | super::value::ValueKind::T => "symbol",
-        super::value::ValueKind::Fixnum(_) => "integer",
-        super::value::ValueKind::Symbol(_) => "symbol",
-        super::value::ValueKind::Cons => "cons",
-        super::value::ValueKind::String => "string",
-        super::value::ValueKind::Float => "float",
-        super::value::ValueKind::Subr(_) => "primitive-function",
-        super::value::ValueKind::Veclike(vt) => match vt {
-            VecLikeType::Vector => "vector",
-            VecLikeType::HashTable => "hash-table",
-            VecLikeType::Obarray => "obarray",
-            VecLikeType::Lambda | VecLikeType::Macro => "interpreted-function",
-            VecLikeType::ByteCode => "byte-code-function",
-            VecLikeType::Record => "record",
-            VecLikeType::WindowConfiguration => "window-configuration",
-            VecLikeType::Overlay => "overlay",
-            VecLikeType::Marker => "marker",
-            VecLikeType::Buffer => "buffer",
-            VecLikeType::Window => "window",
-            VecLikeType::Frame => "frame",
-            VecLikeType::Timer => "timer",
-            VecLikeType::Process => "process",
-            VecLikeType::Terminal => "terminal",
-            VecLikeType::Xwidget => "xwidget",
-            VecLikeType::XwidgetView => "xwidget-view",
-            VecLikeType::Subr => "primitive-function",
-            VecLikeType::Bignum => "bignum",
-            VecLikeType::SymbolWithPos => "symbol-with-pos",
-            VecLikeType::Finalizer => "finalizer",
-            VecLikeType::Sqlite => "sqlite",
-            VecLikeType::UserPtr => "user-ptr",
-            VecLikeType::ModuleFunction => "module-function",
-            VecLikeType::CharTable => "char-table",
-            VecLikeType::SubCharTable => "sub-char-table",
-        },
-        _ => "unknown",
-    };
-    let sym = Value::from_sym_id(intern(type_name));
-    lisp_to_value(env, sym)
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || arg.is_null() {
+            return std::ptr::null_mut();
+        }
+        let val = value_to_lisp(arg);
+        let type_name: &str = match val.kind() {
+            super::value::ValueKind::Nil | super::value::ValueKind::T => "symbol",
+            super::value::ValueKind::Fixnum(_) => "integer",
+            super::value::ValueKind::Symbol(_) => "symbol",
+            super::value::ValueKind::Cons => "cons",
+            super::value::ValueKind::String => "string",
+            super::value::ValueKind::Float => "float",
+            super::value::ValueKind::Subr(_) => "primitive-function",
+            super::value::ValueKind::Veclike(vt) => match vt {
+                VecLikeType::Vector => "vector",
+                VecLikeType::HashTable => "hash-table",
+                VecLikeType::Obarray => "obarray",
+                VecLikeType::Lambda | VecLikeType::Macro => "interpreted-function",
+                VecLikeType::ByteCode => "byte-code-function",
+                VecLikeType::Record => "record",
+                VecLikeType::WindowConfiguration => "window-configuration",
+                VecLikeType::Overlay => "overlay",
+                VecLikeType::Marker => "marker",
+                VecLikeType::Buffer => "buffer",
+                VecLikeType::Window => "window",
+                VecLikeType::Frame => "frame",
+                VecLikeType::Timer => "timer",
+                VecLikeType::Process => "process",
+                VecLikeType::Terminal => "terminal",
+                VecLikeType::Xwidget => "xwidget",
+                VecLikeType::XwidgetView => "xwidget-view",
+                VecLikeType::Subr => "primitive-function",
+                VecLikeType::Bignum => "bignum",
+                VecLikeType::SymbolWithPos => "symbol-with-pos",
+                VecLikeType::Finalizer => "finalizer",
+                VecLikeType::Sqlite => "sqlite",
+                VecLikeType::UserPtr => "user-ptr",
+                VecLikeType::ModuleFunction => "module-function",
+                VecLikeType::CharTable => "char-table",
+                VecLikeType::SubCharTable => "sub-char-table",
+            },
+            _ => "unknown",
+        };
+        let sym = Value::from_sym_id(intern(type_name));
+        lisp_to_value(env, sym)
+    })
 }
 
 unsafe extern "C" fn module_is_not_nil(env: *mut emacs_env, arg: emacs_value) -> bool {
-    if !module_function_begin(env) || arg.is_null() {
-        return false;
-    }
-    !value_to_lisp(arg).is_nil()
+    module_guard(env, false, || {
+        if !module_function_begin(env) || arg.is_null() {
+            return false;
+        }
+        !value_to_lisp(arg).is_nil()
+    })
 }
 
 unsafe extern "C" fn module_eq(env: *mut emacs_env, a: emacs_value, b: emacs_value) -> bool {
-    if !module_function_begin(env) || a.is_null() || b.is_null() {
-        return false;
-    }
-    value_to_lisp(a) == value_to_lisp(b)
+    module_guard(env, false, || {
+        if !module_function_begin(env) || a.is_null() || b.is_null() {
+            return false;
+        }
+        value_to_lisp(a) == value_to_lisp(b)
+    })
 }
 
 unsafe extern "C" fn module_extract_integer(env: *mut emacs_env, arg: emacs_value) -> i64 {
-    if !module_function_begin(env) || arg.is_null() {
-        return 0;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(n) = val.as_fixnum() {
-        return n;
-    }
-    if let Some(big) = val.as_bignum() {
-        if let Ok(n) = i64::try_from(big) {
+    module_guard(env, 0, || {
+        if !module_function_begin(env) || arg.is_null() {
+            return 0;
+        }
+        let val = value_to_lisp(arg);
+        if let Some(n) = val.as_fixnum() {
             return n;
         }
-        unsafe {
-            set_pending_signal(env, "overflow-error", Value::list(vec![val]));
+        if let Some(big) = val.as_bignum() {
+            if let Ok(n) = i64::try_from(big) {
+                return n;
+            }
+            unsafe {
+                set_pending_signal(env, "overflow-error", Value::list(vec![val]));
+            }
+            return 0;
         }
-        return 0;
-    }
-    unsafe {
-        set_pending_signal(
-            env,
-            "wrong-type-argument",
-            Value::list(vec![Value::symbol("integerp"), val]),
-        );
-    }
-    0
+        unsafe {
+            set_pending_signal(
+                env,
+                "wrong-type-argument",
+                Value::list(vec![Value::symbol("integerp"), val]),
+            );
+        }
+        0
+    })
 }
 
 unsafe extern "C" fn module_make_integer(env: *mut emacs_env, n: i64) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    lisp_to_value(env, Value::fixnum(n))
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
+        }
+        lisp_to_value(env, Value::fixnum(n))
+    })
 }
 
 unsafe extern "C" fn module_extract_float(env: *mut emacs_env, arg: emacs_value) -> f64 {
-    if !module_function_begin(env) || arg.is_null() {
-        return 0.0;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(f) = val.as_float() {
-        return f;
-    }
-    unsafe {
-        set_pending_signal(
-            env,
-            "wrong-type-argument",
-            Value::list(vec![Value::symbol("floatp"), val]),
-        );
-    }
-    0.0
+    module_guard(env, 0.0, || {
+        if !module_function_begin(env) || arg.is_null() {
+            return 0.0;
+        }
+        let val = value_to_lisp(arg);
+        if let Some(f) = val.as_float() {
+            return f;
+        }
+        unsafe {
+            set_pending_signal(
+                env,
+                "wrong-type-argument",
+                Value::list(vec![Value::symbol("floatp"), val]),
+            );
+        }
+        0.0
+    })
 }
 
 unsafe extern "C" fn module_make_float(env: *mut emacs_env, d: f64) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    lisp_to_value(env, Value::make_float(d))
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
+        }
+        lisp_to_value(env, Value::make_float(d))
+    })
 }
 
 // --- String ---
@@ -906,25 +1050,14 @@ unsafe extern "C" fn module_copy_string_contents(
     buf: *mut std::ffi::c_char,
     len: *mut isize,
 ) -> bool {
-    if !module_function_begin(env) || value.is_null() || len.is_null() {
-        return false;
-    }
-    let val = value_to_lisp(value);
-    let bytes = match val.as_lisp_string() {
-        Some(ls) => {
-            if !ls.is_multibyte() && !ls.as_bytes().is_ascii() {
-                unsafe {
-                    set_pending_signal(
-                        env,
-                        "wrong-type-argument",
-                        Value::list(vec![Value::symbol("unicode-string-p"), val]),
-                    );
-                }
-                return false;
-            }
-            match std::str::from_utf8(ls.as_bytes()) {
-                Ok(s) => s.as_bytes().to_vec(),
-                Err(_) => {
+    module_guard(env, false, || {
+        if !module_function_begin(env) || value.is_null() || len.is_null() {
+            return false;
+        }
+        let val = value_to_lisp(value);
+        let bytes = match val.as_lisp_string() {
+            Some(ls) => {
+                if !ls.is_multibyte() && !ls.as_bytes().is_ascii() {
                     unsafe {
                         set_pending_signal(
                             env,
@@ -934,57 +1067,70 @@ unsafe extern "C" fn module_copy_string_contents(
                     }
                     return false;
                 }
+                match std::str::from_utf8(ls.as_bytes()) {
+                    Ok(s) => s.as_bytes().to_vec(),
+                    Err(_) => {
+                        unsafe {
+                            set_pending_signal(
+                                env,
+                                "wrong-type-argument",
+                                Value::list(vec![Value::symbol("unicode-string-p"), val]),
+                            );
+                        }
+                        return false;
+                    }
+                }
             }
-        }
-        None => {
+            None => {
+                unsafe {
+                    set_pending_signal(
+                        env,
+                        "wrong-type-argument",
+                        Value::list(vec![Value::symbol("stringp"), val]),
+                    );
+                }
+                return false;
+            }
+        };
+        let required_len = bytes.len() as isize + 1;
+
+        if buf.is_null() {
             unsafe {
+                *len = required_len;
+            }
+            return true;
+        }
+
+        let buf_len = unsafe { *len };
+        if buf_len < required_len {
+            unsafe {
+                *len = required_len;
                 set_pending_signal(
                     env,
-                    "wrong-type-argument",
-                    Value::list(vec![Value::symbol("stringp"), val]),
+                    "memory-buffer-too-small",
+                    Value::list(vec![
+                        Value::fixnum(buf_len as i64),
+                        Value::fixnum(required_len as i64),
+                    ]),
                 );
             }
             return false;
         }
-    };
-    let required_len = bytes.len() as isize + 1;
-
-    if buf.is_null() {
+        if !bytes.is_empty() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr() as *const std::ffi::c_char,
+                    buf,
+                    bytes.len(),
+                );
+            }
+        }
         unsafe {
+            *buf.add(bytes.len()) = 0;
             *len = required_len;
         }
-        return true;
-    }
-
-    let buf_len = unsafe { *len };
-    if buf_len < required_len {
-        unsafe {
-            *len = required_len;
-            set_pending_signal(
-                env,
-                "memory-buffer-too-small",
-                Value::list(vec![
-                    Value::fixnum(buf_len as i64),
-                    Value::fixnum(required_len as i64),
-                ]),
-            );
-        }
-        return false;
-    }
-    if !bytes.is_empty() {
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                bytes.as_ptr() as *const std::ffi::c_char,
-                buf,
-                bytes.len(),
-            );
-        }
-    }
-    unsafe {
-        *buf.add(bytes.len()) = 0;
-        *len = required_len;
-    }
-    true
+        true
+    })
 }
 
 unsafe extern "C" fn module_make_string(
@@ -992,35 +1138,37 @@ unsafe extern "C" fn module_make_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if !module_function_begin(env) || len < 0 {
-        return std::ptr::null_mut();
-    }
-    if len > 0 && str.is_null() {
-        return std::ptr::null_mut();
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
-    let s = match std::str::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(_) => {
-            unsafe {
-                set_pending_signal(
-                    env,
-                    "wrong-type-argument",
-                    Value::list(vec![
-                        Value::symbol("utf-8-string-p"),
-                        Value::heap_string(crate::heap_types::LispString::from_unibyte(
-                            bytes.to_vec(),
-                        )),
-                    ]),
-                );
-            }
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || len < 0 {
             return std::ptr::null_mut();
         }
-    };
-    lisp_to_value(
-        env,
-        Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
-    )
+        if len > 0 && str.is_null() {
+            return std::ptr::null_mut();
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
+        let s = match std::str::from_utf8(bytes) {
+            Ok(s) => s,
+            Err(_) => {
+                unsafe {
+                    set_pending_signal(
+                        env,
+                        "wrong-type-argument",
+                        Value::list(vec![
+                            Value::symbol("utf-8-string-p"),
+                            Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                                bytes.to_vec(),
+                            )),
+                        ]),
+                    );
+                }
+                return std::ptr::null_mut();
+            }
+        };
+        lisp_to_value(
+            env,
+            Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
+        )
+    })
 }
 
 unsafe extern "C" fn module_make_unibyte_string(
@@ -1028,17 +1176,19 @@ unsafe extern "C" fn module_make_unibyte_string(
     str: *const std::ffi::c_char,
     len: isize,
 ) -> emacs_value {
-    if !module_function_begin(env) || len < 0 {
-        return std::ptr::null_mut();
-    }
-    if len > 0 && str.is_null() {
-        return std::ptr::null_mut();
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
-    let val = crate::tagged::gc::with_tagged_heap(|h| {
-        h.alloc_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()))
-    });
-    lisp_to_value(env, val)
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || len < 0 {
+            return std::ptr::null_mut();
+        }
+        if len > 0 && str.is_null() {
+            return std::ptr::null_mut();
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(str as *const u8, len as usize) };
+        let val = crate::tagged::gc::with_tagged_heap(|h| {
+            h.alloc_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()))
+        });
+        lisp_to_value(env, val)
+    })
 }
 
 // --- User pointer ---
@@ -1048,80 +1198,92 @@ unsafe extern "C" fn module_make_user_ptr(
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
     ptr: *mut c_void,
 ) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    let val = crate::tagged::gc::with_tagged_heap(|h| h.alloc_user_ptr(ptr, fin));
-    lisp_to_value(env, val)
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
+        }
+        let val = crate::tagged::gc::with_tagged_heap(|h| h.alloc_user_ptr(ptr, fin));
+        lisp_to_value(env, val)
+    })
 }
 
 unsafe extern "C" fn module_get_user_ptr(env: *mut emacs_env, arg: emacs_value) -> *mut c_void {
-    if !module_function_begin(env) || arg.is_null() {
-        return std::ptr::null_mut();
-    }
-    let val = value_to_lisp(arg);
-    match val.as_user_ptr() {
-        Some(up) => up.ptr,
-        None => {
-            if !env.is_null() {
-                unsafe {
-                    let priv_ = &mut *(*env).private_members;
-                    priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                    priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-                    priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
-                }
-            }
-            std::ptr::null_mut()
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || arg.is_null() {
+            return std::ptr::null_mut();
         }
-    }
+        let val = value_to_lisp(arg);
+        match val.as_user_ptr() {
+            Some(up) => up.ptr,
+            None => {
+                if !env.is_null() {
+                    unsafe {
+                        let priv_ = &mut *(*env).private_members;
+                        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                        priv_.non_local_exit_symbol =
+                            Value::from_sym_id(intern("wrong-type-argument"));
+                        priv_.non_local_exit_data =
+                            Value::list(vec![Value::symbol("user-ptrp"), val]);
+                    }
+                }
+                std::ptr::null_mut()
+            }
+        }
+    })
 }
 
 unsafe extern "C" fn module_set_user_ptr(env: *mut emacs_env, arg: emacs_value, ptr: *mut c_void) {
-    if !module_function_begin(env) || arg.is_null() {
-        return;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(veclike_ptr) = val.as_veclike_ptr() {
-        if val.veclike_type() == Some(VecLikeType::UserPtr) {
-            unsafe {
-                let up = veclike_ptr as *mut UserPtrObj;
-                (*up).ptr = ptr;
-            }
+    module_guard(env, (), || {
+        if !module_function_begin(env) || arg.is_null() {
             return;
         }
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
+        let val = value_to_lisp(arg);
+        if let Some(veclike_ptr) = val.as_veclike_ptr() {
+            if val.veclike_type() == Some(VecLikeType::UserPtr) {
+                unsafe {
+                    let up = veclike_ptr as *mut UserPtrObj;
+                    (*up).ptr = ptr;
+                }
+                return;
+            }
         }
-    }
+        if !env.is_null() {
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
+            }
+        }
+    })
 }
 
 unsafe extern "C" fn module_get_user_finalizer(
     env: *mut emacs_env,
     uptr: emacs_value,
 ) -> Option<unsafe extern "C" fn(*mut c_void)> {
-    if !module_function_begin(env) || uptr.is_null() {
-        return None;
-    }
-    let val = value_to_lisp(uptr);
-    match val.as_user_ptr() {
-        Some(up) => up.finalizer,
-        None => {
-            if !env.is_null() {
-                unsafe {
-                    let priv_ = &mut *(*env).private_members;
-                    priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                    priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-                    priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
-                }
-            }
-            None
+    module_guard(env, None, || {
+        if !module_function_begin(env) || uptr.is_null() {
+            return None;
         }
-    }
+        let val = value_to_lisp(uptr);
+        match val.as_user_ptr() {
+            Some(up) => up.finalizer,
+            None => {
+                if !env.is_null() {
+                    unsafe {
+                        let priv_ = &mut *(*env).private_members;
+                        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                        priv_.non_local_exit_symbol =
+                            Value::from_sym_id(intern("wrong-type-argument"));
+                        priv_.non_local_exit_data =
+                            Value::list(vec![Value::symbol("user-ptrp"), val]);
+                    }
+                }
+                None
+            }
+        }
+    })
 }
 
 unsafe extern "C" fn module_set_user_finalizer(
@@ -1129,27 +1291,29 @@ unsafe extern "C" fn module_set_user_finalizer(
     arg: emacs_value,
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {
-    if !module_function_begin(env) || arg.is_null() {
-        return;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(veclike_ptr) = val.as_veclike_ptr() {
-        if val.veclike_type() == Some(VecLikeType::UserPtr) {
-            unsafe {
-                let up = veclike_ptr as *mut UserPtrObj;
-                (*up).finalizer = fin;
-            }
+    module_guard(env, (), || {
+        if !module_function_begin(env) || arg.is_null() {
             return;
         }
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
+        let val = value_to_lisp(arg);
+        if let Some(veclike_ptr) = val.as_veclike_ptr() {
+            if val.veclike_type() == Some(VecLikeType::UserPtr) {
+                unsafe {
+                    let up = veclike_ptr as *mut UserPtrObj;
+                    (*up).finalizer = fin;
+                }
+                return;
+            }
         }
-    }
+        if !env.is_null() {
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                priv_.non_local_exit_data = Value::list(vec![Value::symbol("user-ptrp"), val]);
+            }
+        }
+    })
 }
 
 // --- Vector ---
@@ -1159,30 +1323,32 @@ unsafe extern "C" fn module_vec_get(
     vector: emacs_value,
     index: isize,
 ) -> emacs_value {
-    if !module_function_begin(env) || vector.is_null() || index < 0 {
-        return std::ptr::null_mut();
-    }
-    let val = value_to_lisp(vector);
-    if let Some(slice) = val.as_vector_data() {
-        let idx = index as usize;
-        if idx < slice.len() {
-            return lisp_to_value(env, slice[idx]);
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || vector.is_null() || index < 0 {
+            return std::ptr::null_mut();
+        }
+        let val = value_to_lisp(vector);
+        if let Some(slice) = val.as_vector_data() {
+            let idx = index as usize;
+            if idx < slice.len() {
+                return lisp_to_value(env, slice[idx]);
+            }
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
+                priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
+            }
+            return std::ptr::null_mut();
         }
         unsafe {
             let priv_ = &mut *(*env).private_members;
             priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
-            priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
+            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+            priv_.non_local_exit_data = Value::list(vec![Value::symbol("vectorp"), val]);
         }
-        return std::ptr::null_mut();
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-        priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-        priv_.non_local_exit_data = Value::list(vec![Value::symbol("vectorp"), val]);
-    }
-    std::ptr::null_mut()
+        std::ptr::null_mut()
+    })
 }
 
 unsafe extern "C" fn module_vec_set(
@@ -1191,161 +1357,182 @@ unsafe extern "C" fn module_vec_set(
     index: isize,
     value: emacs_value,
 ) {
-    if !module_function_begin(env) || vector.is_null() || index < 0 {
-        return;
-    }
-    let val = value_to_lisp(vector);
-    if val.veclike_type() == Some(VecLikeType::Vector) {
-        let idx = index as usize;
-        // Route the slot store through the barriered chokepoint. Writing the
-        // slot raw (as this did) skips the SATB pre-write log, so a concurrent
-        // mark could sweep an object whose last live reference was the
-        // overwritten slot — a use-after-free. `set_vector_slot` performs the
-        // bounds check + `note_heap_slot_write` + atomic store, returning false
-        // here only when `idx` is out of bounds.
-        if val.set_vector_slot(idx, value_to_lisp(value)) {
+    module_guard(env, (), || {
+        if !module_function_begin(env) || vector.is_null() || index < 0 {
             return;
         }
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
-            priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
+        let val = value_to_lisp(vector);
+        if val.veclike_type() == Some(VecLikeType::Vector) {
+            let idx = index as usize;
+            // Route the slot store through the barriered chokepoint. Writing the
+            // slot raw (as this did) skips the SATB pre-write log, so a concurrent
+            // mark could sweep an object whose last live reference was the
+            // overwritten slot — a use-after-free. `set_vector_slot` performs the
+            // bounds check + `note_heap_slot_write` + atomic store, returning false
+            // here only when `idx` is out of bounds.
+            if val.set_vector_slot(idx, value_to_lisp(value)) {
+                return;
+            }
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("args-out-of-range"));
+                priv_.non_local_exit_data = Value::list(vec![val, Value::fixnum(index as i64)]);
+            }
+            return;
         }
-        return;
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-        priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-        priv_.non_local_exit_data = Value::list(vec![Value::symbol("vectorp"), val]);
-    }
-}
-
-unsafe extern "C" fn module_vec_size(env: *mut emacs_env, vector: emacs_value) -> isize {
-    if !module_function_begin(env) || vector.is_null() {
-        return 0;
-    }
-    let val = value_to_lisp(vector);
-    if let Some(slice) = val.as_vector_data() {
-        return slice.len() as isize;
-    }
-    if !env.is_null() {
         unsafe {
             let priv_ = &mut *(*env).private_members;
             priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
             priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
             priv_.non_local_exit_data = Value::list(vec![Value::symbol("vectorp"), val]);
         }
-    }
-    0
+    })
+}
+
+unsafe extern "C" fn module_vec_size(env: *mut emacs_env, vector: emacs_value) -> isize {
+    module_guard(env, 0, || {
+        if !module_function_begin(env) || vector.is_null() {
+            return 0;
+        }
+        let val = value_to_lisp(vector);
+        if let Some(slice) = val.as_vector_data() {
+            return slice.len() as isize;
+        }
+        if !env.is_null() {
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                priv_.non_local_exit_data = Value::list(vec![Value::symbol("vectorp"), val]);
+            }
+        }
+        0
+    })
 }
 
 // --- Quit / Input ---
 
 unsafe extern "C" fn module_should_quit(env: *mut emacs_env) -> bool {
-    if env.is_null() || check_pending_non_local_exit(env) {
-        return false;
-    }
-    MODULE_CTX.with(|ctx_cell| {
-        let ctx_ptr = ctx_cell.get();
-        if ctx_ptr.is_null() {
+    module_guard(env, false, || {
+        if env.is_null() || check_pending_non_local_exit(env) {
             return false;
         }
-        unsafe {
-            let ctx = &*ctx_ptr;
-            ctx.quit_pending()
-        }
+        MODULE_CTX.with(|ctx_cell| {
+            let ctx_ptr = ctx_cell.get();
+            if ctx_ptr.is_null() {
+                return false;
+            }
+            unsafe {
+                let ctx = &*ctx_ptr;
+                ctx.quit_pending()
+            }
+        })
     })
 }
 
 unsafe extern "C" fn module_process_input(env: *mut emacs_env) -> emacs_process_input_result {
-    if !module_function_begin(env) {
-        return emacs_process_input_result::Quit;
-    }
-    MODULE_CTX.with(|ctx_cell| {
-        let ctx_ptr = ctx_cell.get();
-        if ctx_ptr.is_null() {
-            return emacs_process_input_result::Continue;
+    module_guard(env, emacs_process_input_result::Quit, || {
+        if !module_function_begin(env) {
+            return emacs_process_input_result::Quit;
         }
-        unsafe {
-            let ctx = &mut *ctx_ptr;
-            match ctx.maybe_quit() {
+        MODULE_CTX.with(|ctx_cell| {
+            let ctx_ptr = ctx_cell.get();
+            if ctx_ptr.is_null() {
+                return emacs_process_input_result::Continue;
+            }
+            // SAFETY: MODULE_CTX holds the live evaluator installed by the
+            // enclosing trampoline (see ModuleContextGuard).
+            let ctx = unsafe { &mut *ctx_ptr };
+            match contain_lisp_panics(ctx, |ctx| ctx.maybe_quit()) {
                 Ok(()) => emacs_process_input_result::Continue,
                 Err(flow) => {
-                    module_handle_nonlocal_exit(env, flow);
+                    unsafe {
+                        module_handle_nonlocal_exit(env, flow);
+                    }
                     emacs_process_input_result::Quit
                 }
             }
-        }
+        })
     })
 }
 
 // --- Time ---
 
 unsafe extern "C" fn module_extract_time(env: *mut emacs_env, arg: emacs_value) -> emacs_time {
-    if !module_function_begin(env) || arg.is_null() {
-        return emacs_time {
+    module_guard(
+        env,
+        emacs_time {
             tv_sec: 0,
             tv_nsec: 0,
-        };
-    }
-    let val = value_to_lisp(arg);
-    if let Some(items) = val.as_vector_data() {
-        if items.len() >= 2 {
-            let sec_high = items[0].as_fixnum().unwrap_or(0);
-            let sec_low = items[1].as_fixnum().unwrap_or(0);
-            let micros = if items.len() >= 3 {
-                items[2].as_fixnum().unwrap_or(0)
-            } else {
-                0
-            };
-            let picos = if items.len() >= 4 {
-                items[3].as_fixnum().unwrap_or(0)
-            } else {
-                0
-            };
-            let seconds = (sec_high << 16) | (sec_low as u16 as i64);
-            let nanoseconds = micros * 1000 + picos / 1000;
-            return emacs_time {
-                tv_sec: seconds as libc::time_t,
-                tv_nsec: nanoseconds as libc::c_long,
-            };
-        }
-    }
-    if let Some(n) = val.as_fixnum() {
-        return emacs_time {
-            tv_sec: n as libc::time_t,
-            tv_nsec: 0,
-        };
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("timep"), val]);
-        }
-    }
-    emacs_time {
-        tv_sec: 0,
-        tv_nsec: 0,
-    }
+        },
+        || {
+            if !module_function_begin(env) || arg.is_null() {
+                return emacs_time {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                };
+            }
+            let val = value_to_lisp(arg);
+            if let Some(items) = val.as_vector_data() {
+                if items.len() >= 2 {
+                    let sec_high = items[0].as_fixnum().unwrap_or(0);
+                    let sec_low = items[1].as_fixnum().unwrap_or(0);
+                    let micros = if items.len() >= 3 {
+                        items[2].as_fixnum().unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    let picos = if items.len() >= 4 {
+                        items[3].as_fixnum().unwrap_or(0)
+                    } else {
+                        0
+                    };
+                    let seconds = (sec_high << 16) | (sec_low as u16 as i64);
+                    let nanoseconds = micros * 1000 + picos / 1000;
+                    return emacs_time {
+                        tv_sec: seconds as libc::time_t,
+                        tv_nsec: nanoseconds as libc::c_long,
+                    };
+                }
+            }
+            if let Some(n) = val.as_fixnum() {
+                return emacs_time {
+                    tv_sec: n as libc::time_t,
+                    tv_nsec: 0,
+                };
+            }
+            if !env.is_null() {
+                unsafe {
+                    let priv_ = &mut *(*env).private_members;
+                    priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                    priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                    priv_.non_local_exit_data = Value::list(vec![Value::symbol("timep"), val]);
+                }
+            }
+            emacs_time {
+                tv_sec: 0,
+                tv_nsec: 0,
+            }
+        },
+    )
 }
 
 unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    let seconds = time.tv_sec as i64;
-    let nanoseconds = time.tv_nsec as i64;
-    let list = Value::list(vec![
-        Value::fixnum((seconds >> 16) & 0xFFFF),
-        Value::fixnum(seconds & 0xFFFF),
-        Value::fixnum(nanoseconds / 1000),
-        Value::fixnum((nanoseconds % 1000) * 1000),
-    ]);
-    lisp_to_value(env, list)
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
+        }
+        let seconds = time.tv_sec as i64;
+        let nanoseconds = time.tv_nsec as i64;
+        let list = Value::list(vec![
+            Value::fixnum((seconds >> 16) & 0xFFFF),
+            Value::fixnum(seconds & 0xFFFF),
+            Value::fixnum(nanoseconds / 1000),
+            Value::fixnum((nanoseconds % 1000) * 1000),
+        ]);
+        lisp_to_value(env, list)
+    })
 }
 
 // --- Big integer ---
@@ -1357,102 +1544,104 @@ unsafe extern "C" fn module_extract_big_integer(
     count: *mut isize,
     magnitude: *mut emacs_limb_t,
 ) -> bool {
-    if !module_function_begin(env) || arg.is_null() {
-        return false;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(n) = val.as_fixnum() {
-        unsafe {
-            if !sign.is_null() {
-                *sign = (n > 0) as std::ffi::c_int - (n < 0) as std::ffi::c_int;
-            }
+    module_guard(env, false, || {
+        if !module_function_begin(env) || arg.is_null() {
+            return false;
         }
-        if n == 0 || count.is_null() {
-            return true;
-        }
-        let abs_val = n.unsigned_abs();
-        if magnitude.is_null() {
+        let val = value_to_lisp(arg);
+        if let Some(n) = val.as_fixnum() {
             unsafe {
+                if !sign.is_null() {
+                    *sign = (n > 0) as std::ffi::c_int - (n < 0) as std::ffi::c_int;
+                }
+            }
+            if n == 0 || count.is_null() {
+                return true;
+            }
+            let abs_val = n.unsigned_abs();
+            if magnitude.is_null() {
+                unsafe {
+                    *count = 1;
+                }
+                return true;
+            }
+            if unsafe { *count } < 1 {
+                let actual = unsafe { *count };
+                unsafe {
+                    *count = 1;
+                    set_pending_signal(
+                        env,
+                        "memory-buffer-too-small",
+                        Value::list(vec![Value::fixnum(actual as i64), Value::fixnum(1)]),
+                    );
+                }
+                return false;
+            }
+            unsafe {
+                *magnitude = abs_val;
                 *count = 1;
             }
             return true;
         }
-        if unsafe { *count } < 1 {
-            let actual = unsafe { *count };
+        if val.veclike_type() == Some(VecLikeType::Bignum) {
+            let b = val.as_bignum().unwrap();
+            let is_neg = *b < Integer::from(0);
+            let abs_b = if is_neg { -b.clone() } else { b.clone() };
             unsafe {
-                *count = 1;
-                set_pending_signal(
-                    env,
-                    "memory-buffer-too-small",
-                    Value::list(vec![Value::fixnum(actual as i64), Value::fixnum(1)]),
-                );
+                if !sign.is_null() {
+                    *sign = if *b > Integer::from(0) {
+                        1
+                    } else if is_neg {
+                        -1
+                    } else {
+                        0
+                    };
+                }
             }
-            return false;
-        }
-        unsafe {
-            *magnitude = abs_val;
-            *count = 1;
-        }
-        return true;
-    }
-    if val.veclike_type() == Some(VecLikeType::Bignum) {
-        let b = val.as_bignum().unwrap();
-        let is_neg = *b < Integer::from(0);
-        let abs_b = if is_neg { -b.clone() } else { b.clone() };
-        unsafe {
-            if !sign.is_null() {
-                *sign = if *b > Integer::from(0) {
-                    1
-                } else if is_neg {
-                    -1
-                } else {
-                    0
-                };
+            if count.is_null() {
+                return true;
             }
-        }
-        if count.is_null() {
-            return true;
-        }
-        let limbs = abs_b.to_twos_complement_limbs_asc();
-        let num_limbs = limbs.len();
-        if magnitude.is_null() {
-            unsafe {
-                *count = num_limbs as isize;
+            let limbs = abs_b.to_twos_complement_limbs_asc();
+            let num_limbs = limbs.len();
+            if magnitude.is_null() {
+                unsafe {
+                    *count = num_limbs as isize;
+                }
+                return true;
             }
-            return true;
-        }
-        if unsafe { *count } < num_limbs as isize {
-            let actual = unsafe { *count };
+            if unsafe { *count } < num_limbs as isize {
+                let actual = unsafe { *count };
+                unsafe {
+                    *count = num_limbs as isize;
+                    set_pending_signal(
+                        env,
+                        "memory-buffer-too-small",
+                        Value::list(vec![
+                            Value::fixnum(actual as i64),
+                            Value::fixnum(num_limbs as i64),
+                        ]),
+                    );
+                }
+                return false;
+            }
             unsafe {
                 *count = num_limbs as isize;
-                set_pending_signal(
-                    env,
-                    "memory-buffer-too-small",
-                    Value::list(vec![
-                        Value::fixnum(actual as i64),
-                        Value::fixnum(num_limbs as i64),
-                    ]),
-                );
+                for (i, &limb) in limbs.iter().enumerate() {
+                    *magnitude.add(i) = limb;
+                }
             }
-            return false;
+            return true;
         }
-        unsafe {
-            *count = num_limbs as isize;
-            for (i, &limb) in limbs.iter().enumerate() {
-                *magnitude.add(i) = limb;
+        if !env.is_null() {
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                priv_.non_local_exit_data = Value::list(vec![Value::symbol("integerp"), val]);
             }
         }
-        return true;
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("integerp"), val]);
-        }
-    }
-    false
+        false
+    })
 }
 
 unsafe extern "C" fn module_make_big_integer(
@@ -1461,33 +1650,35 @@ unsafe extern "C" fn module_make_big_integer(
     count: isize,
     magnitude: *const emacs_limb_t,
 ) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    if sign == 0 {
-        return lisp_to_value(env, Value::fixnum(0));
-    }
-    if count == 0 {
-        return lisp_to_value(env, Value::fixnum(0));
-    }
-    if magnitude.is_null() || count < 0 {
-        return std::ptr::null_mut();
-    }
-    let limbs = unsafe { std::slice::from_raw_parts(magnitude, count as usize) };
-    if count <= 1 {
-        let single = unsafe { *magnitude };
-        if single <= i64::MAX as u64 {
-            let v = if sign >= 0 {
-                single as i64
-            } else {
-                -(single as i64)
-            };
-            return lisp_to_value(env, Value::make_int(v));
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
         }
-    }
-    let b = Integer::from_twos_complement_limbs_asc(limbs);
-    let val = Value::make_integer(if sign >= 0 { b } else { -b });
-    lisp_to_value(env, val)
+        if sign == 0 {
+            return lisp_to_value(env, Value::fixnum(0));
+        }
+        if count == 0 {
+            return lisp_to_value(env, Value::fixnum(0));
+        }
+        if magnitude.is_null() || count < 0 {
+            return std::ptr::null_mut();
+        }
+        let limbs = unsafe { std::slice::from_raw_parts(magnitude, count as usize) };
+        if count <= 1 {
+            let single = unsafe { *magnitude };
+            if single <= i64::MAX as u64 {
+                let v = if sign >= 0 {
+                    single as i64
+                } else {
+                    -(single as i64)
+                };
+                return lisp_to_value(env, Value::make_int(v));
+            }
+        }
+        let b = Integer::from_twos_complement_limbs_asc(limbs);
+        let val = Value::make_integer(if sign >= 0 { b } else { -b });
+        lisp_to_value(env, val)
+    })
 }
 
 // --- Function finalizer ---
@@ -1496,25 +1687,28 @@ unsafe extern "C" fn module_get_function_finalizer(
     env: *mut emacs_env,
     arg: emacs_value,
 ) -> Option<unsafe extern "C" fn(*mut c_void)> {
-    if !module_function_begin(env) || arg.is_null() {
-        return None;
-    }
-    let val = value_to_lisp(arg);
-    match val.as_module_function() {
-        Some(mf) => mf.finalizer,
-        None => {
-            if !env.is_null() {
-                unsafe {
-                    let priv_ = &mut *(*env).private_members;
-                    priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-                    priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-                    priv_.non_local_exit_data =
-                        Value::list(vec![Value::symbol("module-function-p"), val]);
-                }
-            }
-            None
+    module_guard(env, None, || {
+        if !module_function_begin(env) || arg.is_null() {
+            return None;
         }
-    }
+        let val = value_to_lisp(arg);
+        match val.as_module_function() {
+            Some(mf) => mf.finalizer,
+            None => {
+                if !env.is_null() {
+                    unsafe {
+                        let priv_ = &mut *(*env).private_members;
+                        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                        priv_.non_local_exit_symbol =
+                            Value::from_sym_id(intern("wrong-type-argument"));
+                        priv_.non_local_exit_data =
+                            Value::list(vec![Value::symbol("module-function-p"), val]);
+                    }
+                }
+                None
+            }
+        }
+    })
 }
 
 unsafe extern "C" fn module_set_function_finalizer(
@@ -1522,27 +1716,30 @@ unsafe extern "C" fn module_set_function_finalizer(
     arg: emacs_value,
     fin: Option<unsafe extern "C" fn(*mut c_void)>,
 ) {
-    if !module_function_begin(env) || arg.is_null() {
-        return;
-    }
-    let val = value_to_lisp(arg);
-    if let Some(veclike_ptr) = val.as_veclike_ptr() {
-        if val.veclike_type() == Some(VecLikeType::ModuleFunction) {
-            unsafe {
-                let mf = veclike_ptr as *mut ModuleFunctionObj;
-                (*mf).finalizer = fin;
-            }
+    module_guard(env, (), || {
+        if !module_function_begin(env) || arg.is_null() {
             return;
         }
-    }
-    if !env.is_null() {
-        unsafe {
-            let priv_ = &mut *(*env).private_members;
-            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-            priv_.non_local_exit_data = Value::list(vec![Value::symbol("module-function-p"), val]);
+        let val = value_to_lisp(arg);
+        if let Some(veclike_ptr) = val.as_veclike_ptr() {
+            if val.veclike_type() == Some(VecLikeType::ModuleFunction) {
+                unsafe {
+                    let mf = veclike_ptr as *mut ModuleFunctionObj;
+                    (*mf).finalizer = fin;
+                }
+                return;
+            }
         }
-    }
+        if !env.is_null() {
+            unsafe {
+                let priv_ = &mut *(*env).private_members;
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+                priv_.non_local_exit_data =
+                    Value::list(vec![Value::symbol("module-function-p"), val]);
+            }
+        }
+    })
 }
 
 // --- Pipe channel ---
@@ -1551,34 +1748,38 @@ unsafe extern "C" fn module_open_channel(
     env: *mut emacs_env,
     pipe_process: emacs_value,
 ) -> std::ffi::c_int {
-    if !module_function_begin(env) || pipe_process.is_null() {
-        return -1;
-    }
-    let process = value_to_lisp(pipe_process);
-    MODULE_CTX.with(|ctx_cell| {
-        let ctx_ptr = ctx_cell.get();
-        if ctx_ptr.is_null() {
-            unsafe {
-                set_pending_signal(
-                    env,
-                    "error",
-                    Value::list(vec![Value::string(
-                        "no evaluator context available for module open_channel",
-                    )]),
-                );
-            }
+    module_guard(env, -1, || {
+        if !module_function_begin(env) || pipe_process.is_null() {
             return -1;
         }
-        unsafe {
-            let ctx = &mut *ctx_ptr;
-            match ctx.open_channel_for_module(process) {
+        let process = value_to_lisp(pipe_process);
+        MODULE_CTX.with(|ctx_cell| {
+            let ctx_ptr = ctx_cell.get();
+            if ctx_ptr.is_null() {
+                unsafe {
+                    set_pending_signal(
+                        env,
+                        "error",
+                        Value::list(vec![Value::string(
+                            "no evaluator context available for module open_channel",
+                        )]),
+                    );
+                }
+                return -1;
+            }
+            // SAFETY: MODULE_CTX holds the live evaluator installed by the
+            // enclosing trampoline (see ModuleContextGuard).
+            let ctx = unsafe { &mut *ctx_ptr };
+            match contain_lisp_panics(ctx, |ctx| ctx.open_channel_for_module(process)) {
                 Ok(fd) => fd,
                 Err(flow) => {
-                    module_handle_nonlocal_exit(env, flow);
+                    unsafe {
+                        module_handle_nonlocal_exit(env, flow);
+                    }
                     -1
                 }
             }
-        }
+        })
     })
 }
 
@@ -1589,38 +1790,41 @@ unsafe extern "C" fn module_make_interactive(
     function: emacs_value,
     spec: emacs_value,
 ) {
-    if !module_function_begin(env) || function.is_null() {
-        return;
-    }
-    let func_val = value_to_lisp(function);
-    let spec_val = value_to_lisp(spec);
-    if let Some(veclike_ptr) = func_val.as_veclike_ptr() {
-        if func_val.veclike_type() == Some(VecLikeType::ModuleFunction) {
-            // SATB deletion barrier BEFORE clobbering the live, GC-traced
-            // `interactive_form` slot: log the pre-overwrite children so a value
-            // reachable only through the old form is retained if a concurrent
-            // mark is in flight. Owner-driven; a no-op unless a mark is active.
-            // Without it, a second make-interactive overwriting a still-reachable
-            // form mid-mark would drop it. See CONCURRENT_GC.md "Insertion
-            // coverage".
-            note_heap_write(func_val, HeapWriteKind::ModuleFunction);
-            unsafe {
-                let mf = veclike_ptr as *mut ModuleFunctionObj;
-                (*mf).interactive_form = if spec_val.is_nil() {
-                    Value::list(vec![Value::symbol("interactive")])
-                } else {
-                    Value::list(vec![Value::symbol("interactive"), spec_val])
-                };
-            }
+    module_guard(env, (), || {
+        if !module_function_begin(env) || function.is_null() {
             return;
         }
-    }
-    unsafe {
-        let priv_ = &mut *(*env).private_members;
-        priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
-        priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
-        priv_.non_local_exit_data = Value::list(vec![Value::symbol("module-function-p"), func_val]);
-    }
+        let func_val = value_to_lisp(function);
+        let spec_val = value_to_lisp(spec);
+        if let Some(veclike_ptr) = func_val.as_veclike_ptr() {
+            if func_val.veclike_type() == Some(VecLikeType::ModuleFunction) {
+                // SATB deletion barrier BEFORE clobbering the live, GC-traced
+                // `interactive_form` slot: log the pre-overwrite children so a value
+                // reachable only through the old form is retained if a concurrent
+                // mark is in flight. Owner-driven; a no-op unless a mark is active.
+                // Without it, a second make-interactive overwriting a still-reachable
+                // form mid-mark would drop it. See CONCURRENT_GC.md "Insertion
+                // coverage".
+                note_heap_write(func_val, HeapWriteKind::ModuleFunction);
+                unsafe {
+                    let mf = veclike_ptr as *mut ModuleFunctionObj;
+                    (*mf).interactive_form = if spec_val.is_nil() {
+                        Value::list(vec![Value::symbol("interactive")])
+                    } else {
+                        Value::list(vec![Value::symbol("interactive"), spec_val])
+                    };
+                }
+                return;
+            }
+        }
+        unsafe {
+            let priv_ = &mut *(*env).private_members;
+            priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+            priv_.non_local_exit_symbol = Value::from_sym_id(intern("wrong-type-argument"));
+            priv_.non_local_exit_data =
+                Value::list(vec![Value::symbol("module-function-p"), func_val]);
+        }
+    })
 }
 
 // ============================================================================
@@ -1635,63 +1839,65 @@ unsafe extern "C" fn module_make_function(
     docstring: *const std::ffi::c_char,
     data: *mut c_void,
 ) -> emacs_value {
-    if !module_function_begin(env) {
-        return std::ptr::null_mut();
-    }
-    let most_positive_fixnum = Value::MOST_POSITIVE_FIXNUM as isize;
-    let valid_arity = min_arity >= 0
-        && if max_arity < 0 {
-            min_arity <= most_positive_fixnum && max_arity == emacs_variadic_function
-        } else {
-            min_arity <= max_arity && max_arity <= most_positive_fixnum
-        };
-    if !valid_arity {
-        unsafe {
-            set_pending_signal(
-                env,
-                "invalid-arity",
-                Value::list(vec![
-                    Value::fixnum(min_arity as i64),
-                    Value::fixnum(max_arity as i64),
-                ]),
-            );
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) {
+            return std::ptr::null_mut();
         }
-        return std::ptr::null_mut();
-    }
-    let doc_val = if docstring.is_null() {
-        Value::NIL
-    } else {
-        let cstr = unsafe { CStr::from_ptr(docstring) };
-        match cstr.to_str() {
-            Ok(s) => Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
-            Err(_) => {
-                unsafe {
-                    set_pending_signal(
-                        env,
-                        "wrong-type-argument",
-                        Value::list(vec![
-                            Value::symbol("utf-8-string-p"),
-                            Value::heap_string(crate::heap_types::LispString::from_unibyte(
-                                cstr.to_bytes().to_vec(),
-                            )),
-                        ]),
-                    );
-                }
-                return std::ptr::null_mut();
+        let most_positive_fixnum = Value::MOST_POSITIVE_FIXNUM as isize;
+        let valid_arity = min_arity >= 0
+            && if max_arity < 0 {
+                min_arity <= most_positive_fixnum && max_arity == emacs_variadic_function
+            } else {
+                min_arity <= max_arity && max_arity <= most_positive_fixnum
+            };
+        if !valid_arity {
+            unsafe {
+                set_pending_signal(
+                    env,
+                    "invalid-arity",
+                    Value::list(vec![
+                        Value::fixnum(min_arity as i64),
+                        Value::fixnum(max_arity as i64),
+                    ]),
+                );
             }
+            return std::ptr::null_mut();
         }
-    };
-    let val = crate::tagged::gc::with_tagged_heap(|h| {
-        h.alloc_module_function(
-            min_arity,
-            max_arity,
-            subr as *const c_void,
-            data,
-            doc_val,
-            Value::NIL,
-        )
-    });
-    lisp_to_value(env, val)
+        let doc_val = if docstring.is_null() {
+            Value::NIL
+        } else {
+            let cstr = unsafe { CStr::from_ptr(docstring) };
+            match cstr.to_str() {
+                Ok(s) => Value::heap_string(crate::heap_types::LispString::from_utf8(s)),
+                Err(_) => {
+                    unsafe {
+                        set_pending_signal(
+                            env,
+                            "wrong-type-argument",
+                            Value::list(vec![
+                                Value::symbol("utf-8-string-p"),
+                                Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                                    cstr.to_bytes().to_vec(),
+                                )),
+                            ]),
+                        );
+                    }
+                    return std::ptr::null_mut();
+                }
+            }
+        };
+        let val = crate::tagged::gc::with_tagged_heap(|h| {
+            h.alloc_module_function(
+                min_arity,
+                max_arity,
+                subr as *const c_void,
+                data,
+                doc_val,
+                Value::NIL,
+            )
+        });
+        lisp_to_value(env, val)
+    })
 }
 
 // ============================================================================
@@ -1704,41 +1910,43 @@ unsafe extern "C" fn module_funcall(
     nargs: isize,
     args: *mut emacs_value,
 ) -> emacs_value {
-    if !module_function_begin(env) || func.is_null() {
-        return std::ptr::null_mut();
-    }
-    let func_val = value_to_lisp(func);
-    let mut lisp_args = Vec::with_capacity(nargs as usize);
-    for i in 0..nargs as usize {
-        let arg = unsafe { *args.add(i) };
-        lisp_args.push(value_to_lisp(arg));
-    }
-
-    let result = MODULE_CTX.with(|ctx_cell| {
-        let ctx_ptr = ctx_cell.get();
-        if ctx_ptr.is_null() {
-            return Err(signal(
-                "error",
-                vec![Value::string(
-                    "no evaluator context available for module funcall",
-                )],
-            ));
+    module_guard(env, std::ptr::null_mut(), || {
+        if !module_function_begin(env) || func.is_null() {
+            return std::ptr::null_mut();
         }
-        unsafe {
-            let ctx = &mut *ctx_ptr;
-            ctx.funcall_general_untraced(func_val, lisp_args)
+        let func_val = value_to_lisp(func);
+        let mut lisp_args = Vec::with_capacity(nargs as usize);
+        for i in 0..nargs as usize {
+            let arg = unsafe { *args.add(i) };
+            lisp_args.push(value_to_lisp(arg));
         }
-    });
 
-    match result {
-        Ok(ret_val) => lisp_to_value(env, ret_val),
-        Err(flow) => {
-            unsafe {
-                module_handle_nonlocal_exit(env, flow);
+        let result = MODULE_CTX.with(|ctx_cell| {
+            let ctx_ptr = ctx_cell.get();
+            if ctx_ptr.is_null() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(
+                        "no evaluator context available for module funcall",
+                    )],
+                ));
             }
-            std::ptr::null_mut()
+            // SAFETY: MODULE_CTX holds the live evaluator installed by the
+            // enclosing trampoline (see ModuleContextGuard).
+            let ctx = unsafe { &mut *ctx_ptr };
+            contain_lisp_panics(ctx, |ctx| ctx.funcall_general_untraced(func_val, lisp_args))
+        });
+
+        match result {
+            Ok(ret_val) => lisp_to_value(env, ret_val),
+            Err(flow) => {
+                unsafe {
+                    module_handle_nonlocal_exit(env, flow);
+                }
+                std::ptr::null_mut()
+            }
         }
-    }
+    })
 }
 
 // ============================================================================
@@ -1780,13 +1988,17 @@ impl Drop for ModuleContextGuard {
 // ============================================================================
 
 unsafe extern "C" fn module_get_environment(rt: *mut emacs_runtime) -> *mut emacs_env {
-    if rt.is_null() {
-        return std::ptr::null_mut();
-    }
-    unsafe {
-        let priv_ = &*(*rt).private_members;
-        priv_.env
-    }
+    // No env exists yet to record a pending exit on; a caught panic here just
+    // returns NULL (which module init code must treat as failure anyway).
+    module_guard(std::ptr::null_mut(), std::ptr::null_mut(), || {
+        if rt.is_null() {
+            return std::ptr::null_mut();
+        }
+        unsafe {
+            let priv_ = &*(*rt).private_members;
+            priv_.env
+        }
+    })
 }
 
 // ============================================================================
@@ -1919,9 +2131,12 @@ pub fn load_module(ctx: &mut Context, path: std::path::PathBuf) -> EvalResult {
         env_priv,
     };
 
+    // Heal poison rather than unwrap: the registry is a plain map with no
+    // invariant spanning the lock (an interrupted insert either happened or
+    // didn't), so a panic contained elsewhere must not wedge `module-load`.
     LOADED_MODULES
         .lock()
-        .unwrap()
+        .unwrap_or_else(PoisonError::into_inner)
         .get_or_insert_with(HashMap::new)
         .insert(path_str, loaded);
 
@@ -2011,12 +2226,48 @@ pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -
         emacs_args.push(lisp_to_value(env_ptr, *arg));
     }
 
+    // Call the module function through a "C-unwind" view of the stored
+    // pointer: ABI-identical to "C", but a panic propagating out of the callee
+    // becomes defined behavior (it reaches the catch below) instead of UB at
+    // the call site. Real C modules never unwind; host-defined module
+    // functions (and any future same-std ones) may.
+    let subr_fn_unwind: unsafe extern "C-unwind" fn(
+        env: *mut emacs_env,
+        nargs: isize,
+        args: *mut emacs_value,
+        data: *mut c_void,
+    ) -> emacs_value = unsafe { std::mem::transmute(subr_fn) };
+
+    let snap = ctx.module_boundary_snapshot();
     let module_ctx = ModuleContextGuard::install(ctx as *mut Context);
     let active_env = ActiveModuleEnv::push(priv_ptr);
-    let result = unsafe { subr_fn(env_ptr, nargs, emacs_args.as_mut_ptr(), data) };
+    let args_ptr = emacs_args.as_mut_ptr();
+    let call = catch_unwind(AssertUnwindSafe(|| unsafe {
+        subr_fn_unwind(env_ptr, nargs, args_ptr, data)
+    }));
     drop(module_ctx);
 
-    if let Err(flow) = ctx.maybe_quit() {
+    let (result, panic_flow) = match call {
+        Ok(result) => (result, None),
+        Err(payload) => {
+            if ctx.module_panic_recovery_blocked() {
+                eprintln!(
+                    "neomacs: refusing to contain a module-boundary panic \
+                     (GC state suspect): {}",
+                    panic_message(&*payload)
+                );
+                // The unwind runs the ActiveModuleEnv/env Drops; the process
+                // aborts once the panic reaches an `extern "C"` frame.
+                resume_unwind(payload);
+            }
+            ctx.restore_module_boundary(&snap);
+            (std::ptr::null_mut(), Some(module_panic_flow(payload)))
+        }
+    };
+
+    if panic_flow.is_none()
+        && let Err(flow) = ctx.maybe_quit()
+    {
         unsafe {
             module_handle_nonlocal_exit(env_ptr, flow);
         }
@@ -2024,7 +2275,12 @@ pub fn apply_module_function(ctx: &mut Context, func: Value, args: Vec<Value>) -
 
     let priv_ref = unsafe { &*priv_ptr };
     let ret = value_to_lisp(result);
-    let exit = module_signal_or_throw(priv_ref);
+    // A contained panic outranks any exit the module recorded before dying:
+    // the env's pending state was part of the computation the panic tore down.
+    let exit = match panic_flow {
+        Some(flow) => Err(flow),
+        None => module_signal_or_throw(priv_ref),
+    };
     drop(active_env);
 
     unsafe {
@@ -2239,5 +2495,246 @@ mod tests {
             priv_.non_local_exit_symbol,
             Value::symbol("memory-buffer-too-small")
         );
+    }
+
+    // ------------------------------------------------------------------
+    // PS-T4: panic containment at the module ABI boundary
+    // ------------------------------------------------------------------
+
+    use crate::emacs_core::eval::{ConditionFrame, ResumeTarget, SpecBinding};
+
+    fn string_of(value: Value) -> String {
+        String::from_utf8_lossy(value.as_lisp_string().expect("a string").as_bytes()).into_owned()
+    }
+
+    /// A host-defined module function whose panic must be caught by
+    /// `apply_module_function` — the same-std case containment exists for
+    /// (foreign Rust modules abort in their own runtime before reaching us).
+    unsafe extern "C-unwind" fn panicking_module_function(
+        _env: *mut emacs_env,
+        _nargs: isize,
+        _args: *mut emacs_value,
+        _data: *mut c_void,
+    ) -> emacs_value {
+        panic!("intentional panic from host module function");
+    }
+
+    /// A host-defined module function that runs elisp via `env->funcall`; the
+    /// elisp panics (host subr `neovm--internal-panic`), so the panic must be
+    /// contained by `module_funcall`'s `contain_lisp_panics`, surface as this
+    /// call's pending exit, and propagate out as an ordinary Lisp error.
+    unsafe extern "C" fn module_function_calling_panicking_elisp(
+        env: *mut emacs_env,
+        _nargs: isize,
+        _args: *mut emacs_value,
+        _data: *mut c_void,
+    ) -> emacs_value {
+        unsafe {
+            let e = &*env;
+            let sym = (e.intern.unwrap())(env, c"neovm--internal-panic".as_ptr());
+            (e.funcall.unwrap())(env, sym, 0, std::ptr::null_mut())
+        }
+    }
+
+    fn install_module_function(
+        ev: &mut Context,
+        name: &str,
+        func: unsafe extern "C" fn(
+            *mut emacs_env,
+            isize,
+            *mut emacs_value,
+            *mut c_void,
+        ) -> emacs_value,
+    ) {
+        let value = crate::tagged::gc::with_tagged_heap(|h| {
+            h.alloc_module_function(
+                0,
+                0,
+                func as *const c_void,
+                std::ptr::null_mut(),
+                Value::NIL,
+                Value::NIL,
+            )
+        });
+        ev.obarray.set_symbol_function(name, value);
+    }
+
+    /// `module_guard` must convert a panic into a pending `error` exit whose
+    /// message carries the marker + panic text, and return the sentinel.
+    #[test]
+    fn module_guard_converts_panic_to_pending_error() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+
+        let out = module_guard(env, 17_i64, || panic!("guard-probe-text"));
+        assert_eq!(out, 17);
+
+        let priv_ = unsafe { &*fixture.priv_ptr() };
+        assert_eq!(priv_.pending_non_local_exit, emacs_funcall_exit::Signal);
+        assert_eq!(priv_.non_local_exit_symbol, Value::symbol("error"));
+        let data = list_to_vec(&priv_.non_local_exit_data).unwrap();
+        let message = string_of(data[0]);
+        assert!(
+            message.contains("neomacs internal error") && message.contains("guard-probe-text"),
+            "unexpected message: {message}"
+        );
+    }
+
+    /// First exit wins (GNU convention): an exit recorded before the panic is
+    /// preserved by the guard's `set_pending_signal`.
+    #[test]
+    fn module_guard_preserves_earlier_pending_exit() {
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+        unsafe {
+            set_pending_signal(env, "wrong-type-argument", Value::NIL);
+        }
+
+        let _ = module_guard(env, (), || panic!("later panic"));
+
+        let priv_ = unsafe { &*fixture.priv_ptr() };
+        assert_eq!(
+            priv_.non_local_exit_symbol,
+            Value::symbol("wrong-type-argument"),
+            "the pre-panic exit must win"
+        );
+    }
+
+    /// `contain_lisp_panics` must restore every boundary-snapshot dimension
+    /// the panicked extent dirtied and surface the panic as an `error` Flow.
+    #[test]
+    fn contain_lisp_panics_restores_boundary_state() {
+        let mut ev = Context::new();
+        let spec0 = ev.specpdl.len();
+        let cond0 = ev.condition_stack.len();
+        let bc0 = ev.bc_buf.len();
+        let depth0 = ev.depth;
+
+        let result: Result<Value, Flow> = contain_lisp_panics(&mut ev, |ctx| {
+            ctx.specpdl.push(SpecBinding::Nop);
+            ctx.push_condition_frame(ConditionFrame::Catch {
+                tag: Value::symbol("neovm-test-tag"),
+                resume: ResumeTarget::InterpreterCatch,
+            });
+            ctx.bc_buf.push(Value::NIL);
+            ctx.depth += 3;
+            panic!("boundary-dirt-probe");
+        });
+
+        let Err(Flow::Signal(sig)) = result else {
+            panic!("expected a Signal flow");
+        };
+        assert_eq!(sig.symbol, intern("error"));
+        let message = string_of(sig.data[0]);
+        assert!(
+            message.contains("neomacs internal error") && message.contains("boundary-dirt-probe"),
+            "unexpected message: {message}"
+        );
+        assert_eq!(ev.specpdl.len(), spec0);
+        assert_eq!(ev.condition_stack.len(), cond0);
+        assert_eq!(ev.bc_buf.len(), bc0);
+        assert_eq!(ev.depth, depth0);
+    }
+
+    /// A panic that escaped the GC collection driver must NOT be contained:
+    /// the original payload is re-raised (and would abort at the extern "C"
+    /// shim in production).
+    #[test]
+    fn contain_lisp_panics_re_raises_when_gc_driver_was_active() {
+        let mut ev = Context::new();
+        ev.gc_driver_active = true;
+
+        let caught = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let _: Result<Value, Flow> = contain_lisp_panics(&mut ev, |_ctx| panic!("must-flee"));
+        }));
+
+        let payload = caught.expect_err("the panic must be re-raised, not contained");
+        assert_eq!(panic_message(&*payload), "must-flee");
+        ev.gc_driver_active = false;
+        assert_eq!(ev.specpdl.len(), 0);
+    }
+
+    /// End-to-end over the real dispatch: a panicking module function becomes
+    /// a `condition-case`-able `error` carrying the panic text, and afterwards
+    /// the evaluator still evaluates and a full GC still runs (Task-1 guard
+    /// regression: `gc_inhibit_depth` must be balanced).
+    #[test]
+    fn module_function_panic_is_condition_case_error_and_evaluator_survives() {
+        let mut ev = Context::new();
+        install_module_function(&mut ev, "neovm-test--panicking-module-fn", {
+            // Coerce the C-unwind fn to the vtable's "C" shape for storage;
+            // apply_module_function calls through the C-unwind view.
+            unsafe {
+                std::mem::transmute::<
+                    unsafe extern "C-unwind" fn(
+                        *mut emacs_env,
+                        isize,
+                        *mut emacs_value,
+                        *mut c_void,
+                    ) -> emacs_value,
+                    unsafe extern "C" fn(
+                        *mut emacs_env,
+                        isize,
+                        *mut emacs_value,
+                        *mut c_void,
+                    ) -> emacs_value,
+                >(panicking_module_function)
+            }
+        });
+
+        let spec0 = ev.specpdl.len();
+        let caught = ev
+            .eval_str(
+                "(condition-case err (neovm-test--panicking-module-fn) (error (car (cdr err))))",
+            )
+            .expect("condition-case must catch the contained panic");
+        let message = string_of(caught);
+        assert!(
+            message.contains("neomacs internal error")
+                && message.contains("intentional panic from host module function"),
+            "unexpected message: {message}"
+        );
+
+        assert_eq!(ev.specpdl.len(), spec0, "specpdl must be balanced");
+        assert_eq!(ev.gc_inhibit_depth, 0, "GC inhibition must be balanced");
+        let sum = ev.eval_str("(+ 1 2)").expect("evaluator must still work");
+        assert_eq!(sum, Value::fixnum(3));
+        ev.eval_str("(garbage-collect)")
+            .expect("a full GC must still run after a contained panic");
+    }
+
+    /// Panic inside module-INVOKED elisp (the `module_funcall` trampoline):
+    /// module code runs `env->funcall` on a host subr that panics; the panic
+    /// is contained at `module_funcall`, becomes this call's pending exit, and
+    /// propagates to `condition-case` like any Lisp error. Also repeats the
+    /// call to prove no poisoned-lock cascade is left behind.
+    #[test]
+    fn panic_in_module_invoked_elisp_is_contained_at_module_funcall() {
+        let mut ev = Context::new();
+        install_module_function(
+            &mut ev,
+            "neovm-test--module-calls-panicking-elisp",
+            module_function_calling_panicking_elisp,
+        );
+
+        for _ in 0..2 {
+            let caught = ev
+                .eval_str(
+                    "(condition-case err (neovm-test--module-calls-panicking-elisp) \
+                       (error (car (cdr err))))",
+                )
+                .expect("condition-case must catch the contained panic");
+            let message = string_of(caught);
+            assert!(
+                message.contains("neomacs internal error")
+                    && message.contains("neovm--internal-panic"),
+                "unexpected message: {message}"
+            );
+            let sum = ev.eval_str("(+ 20 22)").expect("evaluator must still work");
+            assert_eq!(sum, Value::fixnum(42));
+        }
+        assert_eq!(ev.gc_inhibit_depth, 0);
+        ev.eval_str("(garbage-collect)")
+            .expect("a full GC must still run after a contained panic");
     }
 }

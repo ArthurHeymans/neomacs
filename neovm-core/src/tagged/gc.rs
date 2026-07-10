@@ -6847,6 +6847,19 @@ impl TaggedHeap {
         self.sweep_in_progress
     }
 
+    /// True if a panic ever unwound while one of the collector's own locks was
+    /// held. Those critical sections live entirely inside GC machinery, so
+    /// poison proves a panic escaped mid-protocol and the heap's invariants
+    /// are unknown. Module-boundary panic containment probes this and refuses
+    /// to contain (re-raises) when it fires; the locks keep plain `.unwrap()`
+    /// at their use sites on purpose — clearing poison would assert a
+    /// coherence nothing can verify and erase the only evidence.
+    pub(crate) fn gc_locks_poisoned(&self) -> bool {
+        self.satb_shared.is_poisoned()
+            || self.deferred_veclikes.is_poisoned()
+            || self.gc_wake.0.is_poisoned()
+    }
+
     /// Advance the deferred sweep by one bounded slice: reclaim up to `budget`
     /// cons blocks and up to `budget` pending non-cons objects. Returns true
     /// (and finalizes accounting) once the whole sweep is done. New conses

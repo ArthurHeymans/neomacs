@@ -1201,6 +1201,20 @@ fn defsubr_vm_profile_dump(_eval: &mut super::eval::Context, args: Vec<Value>) -
     Ok(Value::NIL)
 }
 
+/// Internal test hook: panic with the optional MESSAGE argument. Exists so
+/// panic-containment tests (the module ABI today, JIT shims next) can
+/// originate a HOST-code panic from Lisp: a foreign Rust module's own panic
+/// cannot cross its statically linked std into our `catch_unwind`, and no
+/// legitimate Lisp input panics the evaluator on demand.
+fn defsubr_neovm_internal_panic(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    let message = args
+        .first()
+        .and_then(|v| v.as_lisp_string())
+        .map(|ls| String::from_utf8_lossy(ls.as_bytes()).into_owned())
+        .unwrap_or_else(|| "neovm--internal-panic".to_string());
+    panic!("{message}");
+}
+
 fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration) {
     if builtin.no_eval_policy != BuiltinNoEvalPolicy::Native {
         record_builtin_no_eval_policy(builtin.name, builtin.no_eval_policy);
@@ -1239,6 +1253,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(1),
         );
     }
+    ctx.defsubr(
+        "neovm--internal-panic",
+        defsubr_neovm_internal_panic,
+        0,
+        Some(1),
+    );
     ctx.defsubr_slice("apply", builtin_apply_slice, 1, None);
     ctx.defsubr_slice("funcall", builtin_funcall_slice, 1, None);
     ctx.defsubr_slice(

@@ -402,6 +402,24 @@ unsafe extern "C" fn mod_test_nested_outer(
     e.funcall.unwrap()(env, plus, 2, args.as_mut_ptr())
 }
 
+/// PS-T4 panic-containment driver: run host elisp that panics inside the
+/// host evaluator (`neovm--internal-panic`). The panic is contained at the
+/// module ABI on the host side and must come back to THIS call as an
+/// ordinary pending non-local exit. This module deliberately does not panic
+/// itself: it is built with `panic = "abort"`, and a Rust panic cannot cross
+/// between two std instances anyway — host-code panics are the containable
+/// class.
+unsafe extern "C" fn mod_test_panic_host(
+    env: *mut emacs_env,
+    _nargs: isize,
+    _args: *mut emacs_value,
+    _data: *mut c_void,
+) -> emacs_value {
+    let e = env.as_ref().unwrap();
+    let hook = e.intern.unwrap()(env, b"neovm--internal-panic\0".as_ptr() as *const _);
+    e.funcall.unwrap()(env, hook, 0, std::ptr::null_mut())
+}
+
 unsafe extern "C" fn mod_test_globref_make(
     env: *mut emacs_env,
     _nargs: isize,
@@ -552,6 +570,18 @@ pub unsafe extern "C" fn emacs_module_init(rt: *mut emacs_runtime) -> std::ffi::
             0,
             0,
             mod_test_nested_outer,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+        ),
+    );
+    bind_function(
+        e,
+        "mod-test-panic-host",
+        env.make_function.unwrap()(
+            e,
+            0,
+            0,
+            mod_test_panic_host,
             std::ptr::null(),
             std::ptr::null_mut(),
         ),

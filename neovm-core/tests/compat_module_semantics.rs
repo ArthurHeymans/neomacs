@@ -189,6 +189,40 @@ fn test_module_nested_module_elisp_module_funcall() {
     assert_eq!(result, "OK 42");
 }
 
+/// PS-T4 panic containment across the real module ABI: `mod-test-panic-host`
+/// (module .so code) runs elisp via `env->funcall` that panics inside the
+/// host evaluator. The panic must be contained at the module boundary and
+/// surface as a `condition-case`-able `error` whose message carries the
+/// "neomacs internal error" marker + the panic text — and the evaluator and
+/// full GC must keep working afterwards. Loops twice: a second identical
+/// round proves the first contained panic left no poisoned-lock cascade.
+#[test]
+fn test_module_panic_in_module_invoked_elisp_is_contained() {
+    let so_path = build_test_module();
+    let so_path_str = so_path.to_str().unwrap();
+    let mut eval = setup_eval();
+    eval_str(&mut eval, &format!("(module-load \"{}\")", so_path_str));
+
+    for round in 0..2 {
+        let caught = eval_str(
+            &mut eval,
+            "(condition-case err (mod-test-panic-host) (error (cadr err)))",
+        );
+        assert!(
+            caught.contains("neomacs internal error") && caught.contains("neovm--internal-panic"),
+            "round {round}: unexpected condition-case result: {caught}"
+        );
+        let sum = eval_str(&mut eval, "(+ 1 2)");
+        assert_eq!(sum, "OK 3", "round {round}: evaluator must still work");
+    }
+
+    let gc = eval_str(&mut eval, "(garbage-collect)");
+    assert!(
+        gc.starts_with("OK"),
+        "garbage-collect must succeed after contained panics: {gc}"
+    );
+}
+
 #[test]
 fn test_module_double_load_is_noop() {
     let so_path = build_test_module();

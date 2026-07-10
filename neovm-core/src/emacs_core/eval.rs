@@ -2104,6 +2104,14 @@ pub struct Context {
     pub(crate) gc_count: u64,
     /// Nested depth of explicit GC inhibition scopes.
     pub(crate) gc_inhibit_depth: usize,
+    /// True while the mutator-side collection driver
+    /// (`gc_collect_from_current_roots_impl`) is on the stack. Set and cleared
+    /// INLINE, deliberately not via a Drop guard: a panic that unwinds out of
+    /// the driver must LEAVE the flag set, so module-boundary panic containment
+    /// can detect "this panic escaped GC machinery — heap invariants unknown"
+    /// and re-raise instead of containing. A guard that cleared it on unwind
+    /// would erase exactly the evidence the detector exists to preserve.
+    pub(crate) gc_driver_active: bool,
     /// Stress-test mode: force GC at every safe point regardless of threshold.
     pub(crate) gc_stress: bool,
     /// Cached Lisp-visible GC tuning variables used on every safe point.
@@ -2765,6 +2773,99 @@ impl<'a> UnwindCleanupGuard<'a> {
 impl Drop for UnwindCleanupGuard<'_> {
     fn drop(&mut self) {
         self.0.unwind_cleanup_depth -= 1;
+    }
+}
+
+/// Boundary-entry snapshot of the evaluator state a propagating `Err(Flow)`
+/// would have restored frame-by-frame. The module ABI takes one before running
+/// Lisp (or module code) under `catch_unwind`; a caught panic skipped all of
+/// that per-frame restoration, so [`Context::restore_module_boundary`] replays
+/// it wholesale — the same recovery GNU performs in `unwind_to_catch`.
+///
+/// Deliberately NOT covered (see the PS-T4 design): `gc_inhibit_depth` /
+/// `unwind_cleanup_depth` (Drop-guarded, already rebalanced by the unwind),
+/// `MODULE_CTX` (Drop-guarded), and every piece of heap/GC protocol state —
+/// in particular `TAGGED_HEAP_CONCURRENT_ACTIVE`, whose recovery point is the
+/// `set_tagged_heap` resync, never a catch handler.
+pub(crate) struct ModuleBoundarySnapshot {
+    spec_depth: usize,
+    condition_len: usize,
+    bc_frames_len: usize,
+    bc_buf_len: usize,
+    backtrace_args_len: usize,
+    eval_temp_roots_len: usize,
+    sequence_temp_root_frames_len: usize,
+    vm_root_frames_len: usize,
+    depth: usize,
+    lexenv: Value,
+    macro_expansion_scope_depth: usize,
+}
+
+impl Context {
+    pub(crate) fn module_boundary_snapshot(&self) -> ModuleBoundarySnapshot {
+        ModuleBoundarySnapshot {
+            spec_depth: self.specpdl.len(),
+            condition_len: self.condition_stack.len(),
+            bc_frames_len: self.bc_frames.len(),
+            bc_buf_len: self.bc_buf.len(),
+            backtrace_args_len: self.backtrace_args_stack.len(),
+            eval_temp_roots_len: self.eval_temp_roots.len(),
+            sequence_temp_root_frames_len: self.sequence_temp_root_frames.len(),
+            vm_root_frames_len: self.vm_root_frames.len(),
+            depth: self.depth,
+            lexenv: self.lexenv,
+            macro_expansion_scope_depth: self.macro_expansion_scope_depth,
+        }
+    }
+
+    /// Restore the evaluator to `snap` after a panic was caught at a module
+    /// boundary. Mirrors GNU `unwind_to_catch`: pop dead handler frames, run
+    /// the specpdl unwind (unwind-protect cleanups, binding/buffer/lexenv
+    /// restoration), then truncate the bytecode and root side stacks and reset
+    /// the scalar depths.
+    pub(crate) fn restore_module_boundary(&mut self, snap: &ModuleBoundarySnapshot) {
+        // Handler frames above the boundary carry resume targets into frames
+        // the panic destroyed. Drop them BEFORE running cleanups so a signal
+        // raised inside a cleanup can never select a dead resume target.
+        self.condition_stack.truncate(snap.condition_len);
+        // `unbind_to_result` returns early (Err) when an unwind-protect
+        // cleanup itself signals; the failing entry was already popped, so
+        // looping makes progress and terminates. The cleanup's signal has no
+        // handler here — recovery swallows it, like GNU dropping a second
+        // error raised while unwinding to a catch.
+        while self.specpdl.len() > snap.spec_depth {
+            let before = self.specpdl.len();
+            let _ = self.unbind_to_result(snap.spec_depth);
+            if self.specpdl.len() >= before {
+                debug_assert!(false, "specpdl unwind must make progress");
+                self.specpdl.truncate(snap.spec_depth);
+                break;
+            }
+        }
+        self.bc_frames.truncate(snap.bc_frames_len);
+        self.bc_buf.truncate(snap.bc_buf_len);
+        // Normally already synced by the Backtrace arm of the unwind above;
+        // truncate again in case the panic hit between an args push and its
+        // owning specpdl entry.
+        self.backtrace_args_stack.truncate(snap.backtrace_args_len);
+        self.eval_temp_roots.truncate(snap.eval_temp_roots_len);
+        self.sequence_temp_root_frames
+            .truncate(snap.sequence_temp_root_frames_len);
+        self.vm_root_frames.truncate(snap.vm_root_frames_len);
+        self.depth = snap.depth;
+        self.lexenv = snap.lexenv;
+        self.macro_expansion_scope_depth = snap.macro_expansion_scope_depth;
+        self.lexenv_assq_cache.clear();
+        self.lexenv_special_cache.clear();
+    }
+
+    /// True when a panic caught at a module boundary must NOT be contained:
+    /// it escaped the collection driver, or poisoned a GC lock — either way
+    /// heap invariants are unknown and converting the panic into a Lisp error
+    /// would keep a possibly-torn heap mutating. Callers re-raise instead
+    /// (aborting at the `extern "C"` shim, i.e. pre-containment behavior).
+    pub(crate) fn module_panic_recovery_blocked(&self) -> bool {
+        self.gc_driver_active || self.tagged_heap.gc_locks_poisoned()
     }
 }
 
@@ -5304,6 +5405,7 @@ impl Context {
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
+            gc_driver_active: false,
             gc_stress: gc_stress_from_env(),
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
@@ -5488,6 +5590,7 @@ impl Context {
             gc_pending: false,
             gc_count: 0,
             gc_inhibit_depth: 0,
+            gc_driver_active: false,
             gc_stress: gc_stress_from_env(),
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
@@ -7490,6 +7593,17 @@ impl Context {
     /// termination + sweep. The first cycle and non-incremental builds take the
     /// stop-the-world path.
     fn gc_collect_from_current_roots_impl(&mut self, force_complete: bool) {
+        // Inline set/clear, NOT a Drop guard (see the `gc_driver_active` field
+        // doc): the body is infallible, so the trailing clear runs on every
+        // normal exit (including the body's early `return`s), while a panic
+        // escaping the body leaves the flag set for the module-boundary
+        // containment probe to see.
+        self.gc_driver_active = true;
+        self.gc_collect_from_current_roots_body(force_complete);
+        self.gc_driver_active = false;
+    }
+
+    fn gc_collect_from_current_roots_body(&mut self, force_complete: bool) {
         let start = std::time::Instant::now();
         self.lexenv_assq_cache.clear();
         self.lexenv_special_cache.clear();
