@@ -96,24 +96,46 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         let text = source_item.text_run()?;
         let start_charpos = source_item.source_step_char().start_charpos();
         let end_charpos = source_item.source_end_charpos()?;
-        let mut last_fit_split_charpos = None;
-        for char_offset in 1..text.chars().count() {
-            let split_charpos = start_charpos.saturating_add(char_offset as i64);
-            if split_charpos >= end_charpos {
-                break;
-            }
-            let (prefix, _) = source_item
+        // Valid split offsets are 1..hi (exclusive): within the run's chars
+        // and strictly before its end charpos, exactly the range the former
+        // one-char-at-a-time loop probed.
+        let hi = (text.chars().count() as i64).min(end_charpos.saturating_sub(start_charpos));
+        if hi <= 1 {
+            return None;
+        }
+        // Binary-search the largest fitting prefix instead of remeasuring
+        // every growing prefix: the old loop cloned and measured the run
+        // once per character, O(w^2) measurement plus O(w*r) cloning on
+        // long truncated lines (logs, minified files). Prefix width is
+        // monotone in prefix length for the width policies in use, so the
+        // fits predicate crosses once; the search only ever returns an
+        // offset whose prefix was measured to fit. A split failure counts
+        // as not fitting, which reproduces the old loop's abort-to-None
+        // when the very first split fails and is unreachable otherwise.
+        let mut fits_at = |split_charpos: i64| -> bool {
+            source_item
                 .clone()
-                .split_text_run_at_charpos(split_charpos, self.text_start_byte)?;
-            if self.source_display_item_fits_text_row(&prefix, append_context, source_render) {
-                last_fit_split_charpos = Some(split_charpos);
+                .split_text_run_at_charpos(split_charpos, self.text_start_byte)
+                .is_some_and(|(prefix, _)| {
+                    self.source_display_item_fits_text_row(&prefix, append_context, source_render)
+                })
+        };
+        let mut lo = 0i64; // largest verified-fitting offset; 0 = none
+        let mut hi_bound = hi; // smallest known (or assumed) non-fitting offset
+        while lo + 1 < hi_bound {
+            let mid = lo + (hi_bound - lo) / 2;
+            if fits_at(start_charpos.saturating_add(mid)) {
+                lo = mid;
             } else {
-                break;
+                hi_bound = mid;
             }
+        }
+        if lo == 0 {
+            return None;
         }
         source_item
             .clone()
-            .split_text_run_at_charpos(last_fit_split_charpos?, self.text_start_byte)
+            .split_text_run_at_charpos(start_charpos.saturating_add(lo), self.text_start_byte)
     }
 
     pub(crate) fn render_if_fits_and_apply<B: LayoutBufferView>(
