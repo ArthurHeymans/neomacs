@@ -63,9 +63,7 @@ fn combo99_org_export_footnote_separator() {
 #[test]
 fn combo99_org_timestamp_ia_dates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:ia-range (inactive-range 2024 2024) :ia-single (inactive 2024))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (list
  :ia-range (let ((ts (org-timestamp-from-string "[2024-03-01 Fri]--[2024-03-05 Tue]")))

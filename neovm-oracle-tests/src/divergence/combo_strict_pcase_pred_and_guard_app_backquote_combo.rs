@@ -20,7 +20,7 @@ fn div_v8_pcase_or_and_pred_guard_backquote() {
       (pcase 3 ((app (lambda (x) (* x 2)) doubled) doubled))
       (pcase '() ((or (pred null) `(,a . ,_)) 'empty-or-list)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function guard)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_pcase_let_let_star_multiple() {
         ((and (pred integerp) n (guard (zerop (% n 2)))) 'even)
         (_ 'odd)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) (nil nil 3) (1 2 3 4) fallback odd)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +60,7 @@ fn div_v8_pcase_pred_functions_and_maps() {
                   ((pred listp) 'list)))
               '(42 "hi" (a b))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (matched-prefix has-at le-50 c long (num str list))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

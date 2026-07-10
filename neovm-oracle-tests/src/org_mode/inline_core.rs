@@ -486,7 +486,7 @@ fn org_archive_to_sibling_normalized_timestamp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"* Active\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Finished\n:PROPERTIES:\n:ARCHIVE_TIME: <time>\n:END:\nBody\n\"""#
+        r#""OK \"* Active\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Finished\n:PROPERTIES:\n:ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]\n:END:\nBody\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

@@ -18,7 +18,9 @@ fn div_v8_calc_eval_arithmetic_modulo_rational() {
       (calc-eval "3!")
       (calc-eval "100 / 7"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"3\" \"1024\" \"2 mod 5\" \"0.833333333333\" \"53\" \"18446744073709551616\" \"6\" \"14.2857142857\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +38,9 @@ fn div_v8_calc_eval_sqrt_abs_gcd_algebraic() {
       (calc-eval "min(3, 7, 2)")
       (calc-eval "exp(0)"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"4\" \"1.41421356237\" \"5\" \"6\" \"12\" \"7\" \"2\" \"1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +57,7 @@ fn div_v8_calc_eval_trig_and_constants() {
       (calc-eval "10^3")
       (calc-eval "log(8, 2)"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"0\" \"1\" \"2 pi\" \"3\" \"0\" \"1000\" \"3\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

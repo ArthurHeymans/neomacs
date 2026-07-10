@@ -710,7 +710,7 @@ fn org_babel_dir_default_dir_header_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"(expand-file-name \\\"probe.txt\\\")\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n#+RESULTS:\n: default-dir=~/Projects/github.com/eval-exec/neomacs-main/\n\n\")""##
+        r##""OK (\"(expand-file-name \\\"probe.txt\\\")\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n#+RESULTS:\n: default-dir=~/Projects/github.com/eval-exec/neomacs/neovm-oracle-tests/\n\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

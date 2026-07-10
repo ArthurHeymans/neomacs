@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_overlay_invisible_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""SHOWN-HIDDEN-VISIBLE-HIDDEN-VISIBLEERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "VISIBLE-HIDDEN-VISIBLE-HIDDEN-VISIBLE")
@@ -47,8 +45,7 @@ fn divergence_overlay_invisible_undo() {
 fn divergence_overlay_face_priority_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA-XXXBBBB-ZZZZ-DDDD-EEEEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 89)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -93,9 +90,7 @@ fn divergence_overlay_face_priority_undo() {
 fn divergence_overlay_evaporation_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""KEEP--KEEP-DELETE-KEEPERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 17 24)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 17 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP-DELETE-KEEP-DELETE-KEEP")
@@ -133,7 +128,7 @@ fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-QQXXXX-CCCC-DDDDERR (wrong-number-of-arguments (closure ((mod-count . 1)) (ov beg end pre-len) (setq mod-count (+ mod-count 1))) 5)""#
+        r#""ERR (wrong-number-of-arguments (closure ((mod-count . 1)) (ov beg end pre-len) (setq mod-count (+ mod-count 1))) 5)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -173,7 +168,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_insert_behind_front() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""BBBBXXXAAAAAERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 22 82)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAA")
@@ -206,7 +201,7 @@ fn divergence_overlay_priority_stack_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYZZERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYZZ\" 48 49 (layer 10)) #(\"ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ\" 0 4 (layer 1) 5 8 (layer 2) 8 9 (layer 2) 10 12 (layer 3) 12 14 (layer 3) 15 16 (layer 4) 16 19 (layer 4) 20 24 (layer 5) 25 28 (layer 6) 28 29 (layer 6) 30 32 (layer 7) 32 34 (layer 7) 35 36 (layer 8) 36 39 (layer 8) 40 44 (layer 9) 45 48 (layer 10) 48 49 (layer 10)) t t nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -246,8 +241,7 @@ fn divergence_overlay_priority_stack_undo() {
 fn divergence_overlay_intangible_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""CHANGED-INTANGIBLE-AFTERERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 47)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BEFORE-INTANGIBLE-AFTER")
@@ -282,7 +276,7 @@ fn divergence_nested_overlays_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OUTER-QQINNER-XXXX-INNER-OUTERERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"OUTER-QQINNER-XXXX-INNER-OUTER\" 0 4 (level outer) 8 12 (level inner) 19 23 (level inner) 25 29 (level outer)) #(\"OUTER-INNER-CORE-INNER-OUTER\" 0 4 (level outer) 6 10 (level inner) 12 15 (level core) 17 21 (level inner) 23 27 (level outer)) t t outer t inner t core t 1 t 2 t 3 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -326,9 +320,7 @@ fn divergence_nested_overlays_undo() {
 fn deficiency_overlay_textprop_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOK (t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?A))
@@ -355,9 +347,7 @@ fn deficiency_overlay_textprop_interaction() {
 fn deficiency_overlay_merge_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""MMMMMMMMMMXXXMMMMMMMMMMMMMMMMMMMMOK (t t t nil whole t nil nil t 1 t 2 t 3 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t nil whole t nil nil t 1 t 2 t 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 30 ?M))

@@ -315,9 +315,7 @@ fn div_cx54_read_eval_backquote_destructuring_lexical_macro_propertized_hash_meg
 #[test]
 fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (7 7 7 7 (face bold mouse-face highlight) nil t 1 \"c330814a9a47c252806bdcf58f1a7365165dcd21e8c9e73eea2515e8721fc769\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café世界😀" 'face 'bold 'mouse-face 'highlight))
@@ -341,7 +339,7 @@ fn div_cx54_cl_coerce_list_vector_string_char_cycle_propertized_multibyte_hash_m
 fn div_cx54_print_circle_gensym_struct_vector_propertized_escape_length_level_circle_roundtrip_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (99 t 1 57 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

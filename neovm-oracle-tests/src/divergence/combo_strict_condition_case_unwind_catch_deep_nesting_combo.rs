@@ -17,7 +17,7 @@ fn div_v8_nested_condition_case_handler_chain() {
     (arith-error (push 'outer-arith log)))
   (nreverse log))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (outer-arith)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,6 +36,6 @@ fn div_v8_unwind_cleanup_after_throw_across_condition() {
       (push 'cleanup log)))
   (nreverse log))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught-error cleanup)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -19,7 +19,7 @@ fn div_v8_ucs_normalize_nfc_nfd_combining() {
       (ucs-normalize-string "Ω²" 'NFC)
       (ucs-normalize-string (string ?o ?̈ ?̄) 'NFC))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_ucs_normalize_nfkc_compatibility_ligatures() {
       (ucs-normalize-string "TEST" 'NFKC)
       (ucs-normalize-string "café" 'NFKC)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_ucs_normalize_hangul_region_check() {
           (ucs-normalize-string "가나다" 'NFD)
           (length (ucs-normalize-string "가" 'NFD)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (5 . 5) 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

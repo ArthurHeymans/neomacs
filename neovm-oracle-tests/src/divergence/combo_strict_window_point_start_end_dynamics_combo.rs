@@ -28,7 +28,7 @@ fn div_v8_window_point_set_start_end_dynamics() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function window-point-insertion-type)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +50,7 @@ fn div_v8_window_hscroll_vscroll_pixel_dynamics() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments window-vscroll 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -71,6 +71,6 @@ fn div_v8_window_dedicated_buffer_edges_update() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t #<killed buffer> t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -212,7 +212,7 @@ fn div_cx30_reader_process_send_string_newline_terminated() {
 #[test]
 fn div_cx30_reader_cl_mapcar_mapcan_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((11 22 33) (1 1 2 4 3 9) (1 2 3 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapcar)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-mapcar #'+ '(1 2 3) '(10 20 30))

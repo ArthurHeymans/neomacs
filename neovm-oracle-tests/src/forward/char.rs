@@ -12,7 +12,7 @@ use crate::common::{
 fn oracle_prop_forward_char_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcdOK 3""#]];
+    let expect = expect_test::expect![[r#""OK 3""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abcd\") (goto-char 1) (forward-char 2) (point))",
         expect,
@@ -29,14 +29,14 @@ fn oracle_prop_forward_char_error_cases() {
         crate::common::eval_oracle_and_neovm_expect(r#"(forward-char "x")"#, expect);
     assert_err_kind(&type_oracle, &type_neovm, "wrong-type-argument");
 
-    let expect = expect_test::expect![[r#""aERR (end-of-buffer)""#]];
+    let expect = expect_test::expect![[r#""ERR (end-of-buffer)""#]];
     let (eob_oracle, eob_neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"a\") (goto-char 1) (forward-char 10))",
         expect,
     );
     assert_err_kind(&eob_oracle, &eob_neovm, "end-of-buffer");
 
-    let expect = expect_test::expect![[r#""aERR (beginning-of-buffer)""#]];
+    let expect = expect_test::expect![[r#""ERR (beginning-of-buffer)""#]];
     let (bob_oracle, bob_neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"a\") (goto-char 1) (forward-char -1))",
         expect,

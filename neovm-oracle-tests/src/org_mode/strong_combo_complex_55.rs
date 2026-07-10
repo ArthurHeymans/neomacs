@@ -157,7 +157,7 @@ fn combo55_element_create_all_gross_types() {
 fn combo55_export_dispatcher_backends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:registered-backends (texinfo md org odt latex icalendar html ascii)) (:has-ascii nil) (:has-html nil) (:has-latex nil) (:has-md nil) (:has-texinfo nil) (:has-man nil) (:has-icalendar nil) (:has-beamer nil) (:total-backends 8))""#
+        r#""OK ((:registered-backends (odt latex icalendar html ascii)) (:has-ascii nil) (:has-html nil) (:has-latex nil) (:has-md nil) (:has-texinfo nil) (:has-man nil) (:has-icalendar nil) (:has-beamer nil) (:total-backends 5))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

@@ -120,7 +120,7 @@ fn divergence_decode_encode_coding() {
 fn divergence_char_syntax_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (119 119 32 32 40 34 92)""#]];
+    let expect = expect_test::expect![[r#""OK (119 119 32 62 40 34 92)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list (char-syntax ?a)
               (char-syntax ?0)

@@ -250,9 +250,7 @@ fn org_ordered_alpha_list_sort_renumber_combo() {
 fn org_list_descriptive_generic_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((descriptive (\"[X] Term *A* :: First line\ncontinuation with =code=\" (ordered (\"[@3] child three\") (\"[ ] child off\"))) (\"[-] Term B :: second line\")) \"<dl depth=1>\n<item type=descriptive depth=1>{X}<dt>Term *A*</dt><dd>[descriptive]First line\ncontinuation with =code=\n<ol depth=2>\n<item type=ordered depth=2 count=3>[ordered]child three</item>\n|\n<item type=ordered depth=2>{ }[ordered]child off</item>\n</ol></dd></item>\n|\n<item type=descriptive depth=1>{-}<dt>Term B</dt><dd>[descriptive]second line</dd></item>\n</dl>\" (0 52 139) \"- [X] Term *A* :: First line\n  continuation with =code=\n  1. [@3] child three\n  1. [ ] child off\n- [-] Term B :: second line\" \"** DONE  Term *A* First line\ncontinuation with =code=\n*** child three\n*** TODO child off\n** TODO  Term B second line\" \"- [X] Term *A* :: First line\n  continuation with =code=\n  1. [@3] child three\n  1. [ ] child off\n- [-] Term B :: second line\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown :backend value\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

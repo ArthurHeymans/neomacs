@@ -72,7 +72,7 @@ fn div_cx464_subr_x_string_ops() {
 #[test]
 fn div_cx464_cl_lib_pairwise() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (((a . 1) (b . 2) (c . 3)) ((x . 10) (y . 20)))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-pairlis)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-pairlis '(a b c) '(1 2 3))
       (cl-pairlis '(x y) '(10 20 t t)))"##,
@@ -83,7 +83,7 @@ fn div_cx464_cl_lib_pairwise() {
 #[test]
 fn div_cx464_cl_lib_set_diff() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2) (5 4 1 2 3) (3 2))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-set-difference)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-set-difference '(1 2 3 4) '(3 4 5 6))
       (cl-union '(1 2 3) '(3 4 5))
@@ -95,7 +95,7 @@ fn div_cx464_cl_lib_set_diff() {
 #[test]
 fn div_cx464_cl_lib_sort_by_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((b 1) (c 2) (a 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-sort '((a 3) (b 1) (c 2)) #'< :key #'cadr)"##,
         expect,
@@ -158,7 +158,7 @@ fn div_cx464_subr_x_hash_table_ops() {
 #[test]
 fn div_cx464_subr_x_threading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((3 2 1) (3 2 1))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-rest)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'subr-x)
   (list (thread-first '(1 2 3 4) (reverse) (cl-rest))

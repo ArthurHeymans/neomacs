@@ -19,7 +19,7 @@ fn div_v8_dom_tag_attr_children_strings() {
         (dom-strings node)
         (dom-text node)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (html nil nil 1 (\"hello\" \"link\") \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_dom_by_tag_class_attribute() {
         (dom-by-attribute node 'id)
         (mapcar #'dom-tag (dom-children node))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function dom-by-attribute)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +52,6 @@ fn div_v8_dom_parent_remove_child_manipulation() {
         (length (dom-children node))
         (progn (dom-remove-node node child) (length (dom-children node)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function dom-next-sibling)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

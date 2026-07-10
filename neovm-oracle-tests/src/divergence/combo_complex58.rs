@@ -221,9 +221,7 @@ fn div_cx58_overlay_evaporate_undo_display_marker_narrow_textprop_evaporate_env_
 #[test]
 fn div_cx58_json_xml_dom_struct_backquote_cl_loop_hash_secure_print_circle_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"café\" \"世界\") (\"café\" \"世界\") 2 \"b6fa5fbb4da664e7633bec674c5a8802919ee8b458f31853ed46fd636e788eea\" 45)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

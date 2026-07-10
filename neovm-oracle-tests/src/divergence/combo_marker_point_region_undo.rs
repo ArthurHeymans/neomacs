@@ -268,7 +268,7 @@ fn deficiency_region_narrow_marker_interaction() {
 fn deficiency_marker_after_goto_char_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mgu\")))\n\

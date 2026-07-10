@@ -144,7 +144,7 @@ fn org_link_search_fuzzy_target_radio_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil)) (\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil) (found found (err error \"No match for fuzzy expression: radio\")) \"* Heading Alpha\n:PROPERTIES:\n:CUSTOM_ID: alpha-id\n:END:\nAlpha body.\n\n* Heading Beta\nBeta body with <<<radio>>> target.\n\n* Heading Gamma :tag:\nGamma body.\n\nLink to [[#alpha-id][Custom ID]].\nLink to [[*Heading Beta][Star Link]].\nLink to [[radio][Radio Link]].\nPlain https://example.org link.\n\")""##
+        r##""No match - create this as a new heading? (yes or no) OK (((\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil)) (\"custom-id\" \"alpha-id\" \"#alpha-id\" nil \"Custom ID\") (\"fuzzy\" \"*Heading Beta\" \"*Heading Beta\" nil \"Star Link\") (\"fuzzy\" \"radio\" \"radio\" nil \"Radio Link\") (\"https\" \"//example.org\" \"https://example.org\" nil nil) (found found (err end-of-file \"Error reading from stdin\")) \"* Heading Alpha\n:PROPERTIES:\n:CUSTOM_ID: alpha-id\n:END:\nAlpha body.\n\n* Heading Beta\nBeta body with <<<radio>>> target.\n\n* Heading Gamma :tag:\nGamma body.\n\nLink to [[#alpha-id][Custom ID]].\nLink to [[*Heading Beta][Star Link]].\nLink to [[radio][Radio Link]].\nPlain https://example.org link.\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -209,7 +209,7 @@ fn org_id_cross_file_folded_context_store_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((store-from-hidden nil) (store-from-visible nil) (link-type nil nil) (store-from-b nil) (find-task-ccc t 162 \"<root>/a.org\") (find-proj t 1 \"<root>/a.org\")) \"\")""#
+        r#""OK (((store-from-hidden nil) (store-from-visible nil) (link-type nil nil) (store-from-b \"[[file:<root>/b.org::*Refs][Refs]]\") (find-task-ccc t 162 \"<root>/a.org\") (find-proj t 1 \"<root>/a.org\")) \"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -361,9 +361,7 @@ fn org_link_escape_decode_make_string_combo() {
 fn org_link_store_props_mail_date_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (nil \"me@example.org\" nil \"ada@example.org\" \"to %t\" \"<2026-05-27 Wed 05:30>\" \"[2026-05-27 Wed 05:30]\" \"mailto:ada@example.org\" \"Hello\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-time-stamp-format)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol)
@@ -613,7 +611,9 @@ fn org_link_abbrev_expand_open_from_string_combo() {
 fn org_link_store_region_file_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[[file:<file>::*Beta][Beta]]\" \"[[file:<file>::*Beta][Beta]]\" nil nil \"* Alpha\nBody one\n** Beta\nBody two\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

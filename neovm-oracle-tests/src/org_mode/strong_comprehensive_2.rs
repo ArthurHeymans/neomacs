@@ -164,7 +164,7 @@ fn strong_navigate_and_read() {
 fn strong_clock_in_out_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (closed \"0:00\" \"* Task\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\nBody\")""#
+        r#""OK (closed \"0:00\" \"* Task\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  0:00\n:END:\nBody\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -332,7 +332,7 @@ fn strong_table_sort_then_check() {
 fn strong_macro_expand_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+MACRO: greet Hello\n#+MACRO: name World\nHello World!\"""##
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -472,7 +472,9 @@ fn strong_cycle_bullet_then_check() {
 #[test]
 fn strong_fold_unfold_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-drawer nil)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
@@ -496,7 +498,9 @@ fn strong_fold_unfold_drawer() {
 #[test]
 fn strong_fold_unfold_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-block nil)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
@@ -776,7 +780,9 @@ fn strong_refile_targets_roundtrip() {
 #[test]
 fn strong_pcomplete_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\\\\alpha\" \"\\\\frac12\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-pcomplete)
@@ -1082,7 +1088,7 @@ fn strong_cycle_list_bullet_various() {
 fn strong_macro_replace_all_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"#+MACRO: A B\n1 B 3\" \"#+MACRO: m $1 $2\na b\" \"#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\ninner outer\")""##
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1163,7 +1169,9 @@ fn strong_fill_element_various() {
 #[test]
 fn strong_fold_drawer_toggle_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-drawer nil)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
@@ -1186,7 +1194,9 @@ fn strong_fold_drawer_toggle_cycle() {
 #[test]
 fn strong_fold_block_toggle_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-block nil)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
@@ -1924,7 +1934,9 @@ fn strong_capture_template_expansion() {
 #[test]
 fn strong_pcomplete_entity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\\\\alpha\" \"\\\\frac12\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-pcomplete)

@@ -19,7 +19,7 @@ fn div_v4_print_circle_number_table_combined() {
         (let ((print-number-table t) (prin1-to-string tree))
         (let ((print-circle t) (prin1-to-string tree))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,9 @@ fn div_v4_variable_watcher_buffer_local_combo() {
       (remove-variable-watcher 'probe-vw2 w))
     (list (nreverse log) probe-vw2 (default-value 'probe-vw2))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((set nil) (set t) (makunbound t) (set nil) (makunbound nil) (set nil)) 4 4)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -74,7 +76,9 @@ fn div_v4_indent_relative_and_electric_indent() {
           (newline-and-indent)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"foo\n  bar\nbaz\" \"(defun foo ()\nb\nody)\" \"(a\n\n b\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -98,7 +102,7 @@ fn div_v4_cl_typep_complex_specifiers() {
           (cl-typep 42 '(member 1 2 42 3))
           (cl-typep 'x '(member a b c)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -130,6 +134,6 @@ fn div_v4_overlay_modification_hooks_combo_deep() {
           (length (nreverse log))
           (eq (car (nreverse log)) (car (nreverse log))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"0YX34Z56789\" 8 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -26,7 +26,7 @@ fn div_u9_number_radix_and_fraction() {
       (< 1/3 0.34)
       (numberp 1/2))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +49,7 @@ fn div_u9_ascii_and_unibyte_edge() {
         (string= u "ABC")
         (string= (string-as-unibyte u) "ABC")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function enable-multibyte-characters)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -80,7 +80,7 @@ fn div_u9_cl_struct_inheritance_setf() {
                   (probe-inh-base-x b)
                   (condition-case err (probe-inh-child-y b) (error (car err)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -94,7 +94,9 @@ fn div_u9_pcase_lambda_destructuring() {
         (funcall fn nil 1 2 nil)
         (funcall fn nil 1 2 '(3 4 5))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) (_ a arg0 arg1) (pcase-let* (((&optional b) arg0) ((&rest c) arg1)) (list a b c))) 3)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -113,6 +115,6 @@ fn div_u9_format_mode_line_with_state_change() {
         (widen)
         (list ml1 ml2 ml3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

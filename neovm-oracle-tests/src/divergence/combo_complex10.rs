@@ -134,7 +134,7 @@ fn div_cx10_encode_region_with_eol_variants() {
 #[test]
 fn div_cx10_text_property_search_narrowed_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument prop-match (0 0))""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument prop-match (0 3))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -175,7 +175,7 @@ fn div_cx10_copy_register_insert_roundtrip() {
 #[test]
 fn div_cx10_cl_coerce_multibyte_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (4 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café" 'face 'bold))

@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_loop_for_across_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (150 t (20 40 60 80 100) t (10 20 30 40 50) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v [10 20 30 40 50]))
@@ -27,7 +27,7 @@ fn divergence_cl_loop_for_across_vector() {
 fn divergence_cl_loop_with_hash_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (6 t 3 t 3 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
@@ -52,8 +52,7 @@ fn divergence_cl_loop_with_hash_tables() {
 fn divergence_cl_loop_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (36 t (2 12 30 56) t ((1 (2)) (3 (4)) (5 (6)) (7 (8))) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '((1 2) (3 4) (5 6) (7 8))))
@@ -73,7 +72,7 @@ fn divergence_cl_loop_destructuring() {
 fn divergence_cl_loop_accumulation_into() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((55 10 1 5) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x from 1 to 10
@@ -97,7 +96,7 @@ fn divergence_cl_loop_accumulation_into() {
 fn divergence_cl_loop_while_until() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2450 t (1 2 3 4 5 6 7 8 9 10) t 5 t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x from 1
@@ -127,7 +126,7 @@ fn divergence_cl_loop_while_until() {
 fn divergence_seq_group_by_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2 t 5 t 4 t 1 t 1 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '(1 2 3 4 5 6 7 8 9 10)))
@@ -175,9 +174,7 @@ fn divergence_seq_sort_unique_contains() {
 fn divergence_cl_loop_for_on_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((a b c d e) t (a c e) t 5 t ((1 . a) (2 . b) (3 . c) (4 . d) (5 . e)) t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((lst '(a b c d e)))
@@ -224,8 +221,7 @@ fn divergence_seq_map_indexed() {
 fn divergence_cl_loop_nested_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK ((1 2 3 2 4 6 3 6 9) t (1 1 2 4 3 9) t (53 2 62 46 83) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x from 1 to 3

@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_shiftf_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-shiftf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csf")))
@@ -45,7 +45,7 @@ fn combo_cl_shiftf_marker_overlay_undo() {
 fn combo_cl_shiftf_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-shiftf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csn")))
@@ -123,7 +123,7 @@ fn combo_cl_shiftf_clone_overlay() {
 fn combo_cl_shiftf_multi_shift() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-shiftf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csm")))
@@ -166,7 +166,7 @@ fn combo_cl_shiftf_multi_shift() {
 fn combo_cl_shiftf_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-shiftf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csu")))

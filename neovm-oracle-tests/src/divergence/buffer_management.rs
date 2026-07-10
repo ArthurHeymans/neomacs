@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buffer_list_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((bufs (buffer-list)))
   (list (> (length bufs) 0)
@@ -117,7 +117,7 @@ fn divergence_buffer_modified() {
 fn divergence_buffer_size_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloOK (5 t 6 t 4)""#]];
+    let expect = expect_test::expect![[r#""OK (5 t 6 t 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -168,7 +168,7 @@ fn divergence_with_current_buffer() {
 fn divergence_buffer_swap_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""originalOK (\"original\" \"swapped\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"original\" \"swapped\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((buf (generate-new-buffer " *swap*")))
   (unwind-protect

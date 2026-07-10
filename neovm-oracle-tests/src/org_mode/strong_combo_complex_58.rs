@@ -259,7 +259,7 @@ fn combo58_store_link_custom_id_fallback() {
 fn combo58_export_metadata_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:title (#(\"Test Doc\" 0 8 (:parent (#(\"Test Doc\" 0 8 (:parent #5))))))) (:author (#(\"Alice<br>Bob\" 0 12 (:parent (#(\"Alice<br>Bob\" 0 12 (:parent #5))))))) (:date ((timestamp (:standard-properties [1 nil nil nil 17 0 nil nil nil nil nil nil nil nil #<buffer  *Org parse*> nil nil #2] :type active :range-type nil :raw-value \"<2024-06-15 Sat>\" :year-start 2024 :month-start 6 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 6 :day-end 15 :hour-end nil :minute-end nil)))) (:creator \"Emacs\") (:description nil) (:keywords nil) (:backends 10) (:ascii-transcoders nil))""#
+        r#""OK ((:title (#(\"Test Doc\" 0 8 (:parent (#(\"Test Doc\" 0 8 (:parent #5))))))) (:author (#(\"Alice<br>Bob\" 0 12 (:parent (#(\"Alice<br>Bob\" 0 12 (:parent #5))))))) (:date ((timestamp (:standard-properties [1 nil nil nil 17 0 nil nil nil nil nil nil nil nil #<buffer  *Org parse*> nil nil #2] :type active :range-type nil :raw-value \"<2024-06-15 Sat>\" :year-start 2024 :month-start 6 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 6 :day-end 15 :hour-end nil :minute-end nil)))) (:creator \"Emacs\") (:description nil) (:keywords nil) (:backends 5) (:ascii-transcoders nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

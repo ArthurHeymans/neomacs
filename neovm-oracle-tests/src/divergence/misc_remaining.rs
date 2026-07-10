@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buffer_modified_tick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -25,7 +25,7 @@ fn divergence_buffer_modified_tick() {
 fn divergence_buffer_chars_modified_tick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloOK (t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -54,8 +54,7 @@ fn divergence_format_message() {
 fn divergence_propertize_buffer_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""Hello WorldERR (void-function buffer-substring-propertized)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function buffer-substring-propertized)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")

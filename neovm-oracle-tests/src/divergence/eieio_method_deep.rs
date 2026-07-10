@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eieio_core() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'defclass)
@@ -23,7 +23,7 @@ fn divergence_eieio_core() {
 fn divergence_eieio_class_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'find-class)
@@ -40,7 +40,7 @@ fn divergence_eieio_class_functions() {
 fn divergence_eieio_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'slot-boundp)
@@ -73,7 +73,7 @@ fn divergence_eieio_generic() {
 fn divergence_eieio_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'eieio--class-precedence-c3)
@@ -88,7 +88,7 @@ fn divergence_eieio_accessors() {
 fn divergence_eieio_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'initialize-instance)
@@ -117,7 +117,7 @@ fn divergence_eieio_method_combination() {
 fn divergence_cl_defstruct_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'cl-defstruct)

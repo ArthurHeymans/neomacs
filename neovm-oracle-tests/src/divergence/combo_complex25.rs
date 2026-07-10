@@ -128,7 +128,7 @@ fn div_cx25_cl_defmethod_static_dispatch() {
 #[test]
 fn div_cx25_prin1_struct_with_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t neo-cx25-typed \"café\" 42 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

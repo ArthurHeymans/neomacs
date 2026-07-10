@@ -287,7 +287,7 @@ fn div_cx35_process_exit_code_exit_zero_correct() {
 #[test]
 fn div_cx35_char_syntax_consistency_multibyte_vs_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (119 119 119 32 40 41 46 34 46 92 46 95)""#]];
+    let expect = expect_test::expect![[r#""OK (119 119 119 32 40 41 60 34 39 92 39 95)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-syntax ?a) (char-syntax ?A) (char-syntax ?1) (char-syntax ?\s)

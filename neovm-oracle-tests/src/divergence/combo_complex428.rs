@@ -160,7 +160,7 @@ fn div_cx428_read_kbd_macro() {
 #[test]
 fn div_cx428_define_key_vector_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil elisp-byte-compile-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))

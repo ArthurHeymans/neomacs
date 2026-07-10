@@ -45,7 +45,7 @@ fn div_cx269_defmacro_with_environment() {
 #[test]
 fn div_cx269_cl_macrolet_with_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (12 12)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((double-when (cond &body body)
@@ -61,7 +61,7 @@ fn div_cx269_cl_macrolet_with_body() {
 #[test]
 fn div_cx269_cl_macrolet_with_whole() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"&whole not currently implemented\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((trace-call (&whole form name &rest args)

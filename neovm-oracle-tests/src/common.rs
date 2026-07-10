@@ -370,10 +370,11 @@ fn run_oracle_eval_inner_with_tmpdir(
     load_files: &[&str],
     shared_tmpdir: Option<&Path>,
     extra_env: &[(&str, &str)],
+    load_root: &Path,
 ) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
     let oracle_bin = oracle_emacs_path();
-    let lisp_dir = project_lisp_dir();
+    let lisp_dir = load_root.to_path_buf();
     let oracle_load_files = load_files
         .iter()
         .map(|file| lisp_dir.join(file).to_string_lossy().into_owned())
@@ -429,7 +430,7 @@ fn run_oracle_eval_inner_with_tmpdir(
 }
 
 fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[])
+    run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[], &project_lisp_dir())
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -516,6 +517,26 @@ pub(crate) fn run_oracle_eval_with_load_raw(
     }
 }
 
+/// Like `run_oracle_eval_with_load`, but loads files from an external
+/// `load_root` (e.g. a third-party package checkout) instead of the project's
+/// own `lisp/` tree. Used by the package-corpus oracle tests
+/// (e.g. `emacsorphanage_*`) to exercise real-world Elisp against both GNU
+/// Emacs and Neomacs from the same checkout.
+pub(crate) fn run_oracle_eval_with_load_root(
+    form: &str,
+    load_files: &[&str],
+    load_root: &Path,
+) -> Result<String, String> {
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => {
+            run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+        }
+        OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
+            run_oracle_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Neomacs binary subprocess evaluation
 // ---------------------------------------------------------------------------
@@ -525,9 +546,10 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     load_files: &[&str],
     shared_tmpdir: Option<&Path>,
     extra_env: &[(&str, &str)],
+    load_root: &Path,
 ) -> Result<String, String> {
     let form_path = write_oracle_form_file(form)?;
-    let lisp_dir = project_lisp_dir();
+    let lisp_dir = load_root.to_path_buf();
     let neomacs_bin = neomacs_binary_path();
     let load_files_str = load_files
         .iter()
@@ -584,7 +606,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
 }
 
 fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[])
+    run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], &project_lisp_dir())
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
@@ -777,8 +799,24 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir_expect(
     assert_oracle_parity_expect_with_runners(
         form,
         expected,
-        || run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[]),
-        || run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[]),
+        || {
+            run_neomacs_binary_eval_inner_with_tmpdir(
+                form,
+                &[],
+                Some(tmpdir.path()),
+                &[],
+                &project_lisp_dir(),
+            )
+        },
+        || {
+            run_oracle_eval_inner_with_tmpdir(
+                form,
+                &[],
+                Some(tmpdir.path()),
+                &[],
+                &project_lisp_dir(),
+            )
+        },
     );
 }
 
@@ -790,8 +828,16 @@ pub(crate) fn assert_oracle_parity_with_env_expect(
     assert_oracle_parity_expect_with_runners(
         form,
         expected,
-        || run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env),
-        || run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env),
+        || {
+            run_neomacs_binary_eval_inner_with_tmpdir(
+                form,
+                &[],
+                None,
+                extra_env,
+                &project_lisp_dir(),
+            )
+        },
+        || run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir()),
     );
 }
 
@@ -827,24 +873,32 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
         .prefix("neovm-oracle-case-")
         .tempdir()
         .expect("shared oracle tempdir should be created");
-    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
-        .expect("neomacs binary eval should run");
+    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(
+        form,
+        &[],
+        Some(tmpdir.path()),
+        &[],
+        &project_lisp_dir(),
+    )
+    .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
-        .expect("oracle eval should run");
+    let oracle =
+        run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[], &project_lisp_dir())
+            .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn assert_oracle_parity_with_env(form: &str, extra_env: &[(&str, &str)]) {
     ensure_nonempty_form(form).expect("form should not be empty");
-    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env)
-        .expect("neomacs binary eval should run");
+    let neovm =
+        run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir())
+            .expect("neomacs binary eval should run");
     if OracleMode::from_env() == OracleMode::Snapshot {
         return;
     }
-    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env)
+    let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir())
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
@@ -866,6 +920,41 @@ pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]
         return;
     }
     let oracle = run_oracle_eval_with_load_raw(form, load_files).expect("oracle eval should run");
+    assert_neovm_oracle_parity(&neovm, &oracle, form);
+}
+
+/// Snapshot/parity assertion that loads third-party files from an external
+/// `load_root` (a package checkout) rather than the project `lisp/` tree.
+/// In Snapshot mode only Neomacs runs against the inline expectation; in
+/// Verify/Refresh/Live the GNU oracle is driven from the same checkout.
+pub(crate) fn assert_oracle_parity_with_load_root_expect(
+    form: &str,
+    load_files: &[&str],
+    load_root: &Path,
+    expected: expect_test::Expect,
+) {
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root),
+        || run_oracle_eval_with_load_root(form, load_files, load_root),
+    );
+}
+
+/// Non-snapshot variant of `assert_oracle_parity_with_load_root_expect` for
+/// cases where no inline GNU expectation is kept (pure live parity).
+pub(crate) fn assert_oracle_parity_with_load_root(
+    form: &str,
+    load_files: &[&str],
+    load_root: &Path,
+) {
+    let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, load_files, None, &[], load_root)
+        .expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
+    let oracle = run_oracle_eval_with_load_root(form, load_files, load_root)
+        .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 

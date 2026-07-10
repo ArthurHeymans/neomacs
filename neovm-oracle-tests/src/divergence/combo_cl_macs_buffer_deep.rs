@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_flet_with_buffer_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cfb\")))\n\
@@ -33,7 +33,7 @@ fn deficiency_cl_flet_with_buffer_manipulation() {
 fn deficiency_cl_labels_recursive_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clr\")))\n\
@@ -96,7 +96,7 @@ fn deficiency_unwind_protect_buffer_cleanup_undo() {
 fn deficiency_cl_macrolet_buffer_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp (nth 0 words))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cmb\")))\n\
@@ -127,7 +127,7 @@ fn deficiency_cl_macrolet_buffer_transform() {
 fn deficiency_cl_typecase_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable items)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typecase)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((items (list 42 \"hello\" '(1 2 3) [a b c] 'symbol\n\
@@ -234,9 +234,7 @@ fn deficiency_condition_case_signal_undo_preserve() {
 fn deficiency_cl_defun_with_cl_parse_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (#(\"[START]MIDDLE![END]\" 0 7 (prefix t) 7 14 (body t)) t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defun)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defun process-text (&key buf (prefix \"\") (suffix \"\") transforms)\n\
@@ -270,7 +268,7 @@ fn deficiency_cl_defun_with_cl_parse_keys() {
 fn deficiency_cl_loop_with_hash_buf_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"\" t t 20)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\

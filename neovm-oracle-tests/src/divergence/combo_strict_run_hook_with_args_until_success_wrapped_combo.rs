@@ -19,7 +19,7 @@ fn div_v8_run_hook_with_args_until_success_failure() {
         (run-hook-with-args-until-failure 'probe-hook-rha 4)
         (run-hook-with-args 'probe-hook-rha 7)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (default default default nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,9 @@ fn div_v8_run_hook_wrapped_add_hook_append_depth() {
                       nil))
   (nreverse order))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure ((order)) (fn args) (setq order (cons (cons 'wrap (apply fn args)) order)) nil) 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +60,6 @@ fn div_v8_add_remove_hook_buffer_local_combination() {
           probe-hook-ar
           (default-value 'probe-hook-ar))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((fired) (fired) nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

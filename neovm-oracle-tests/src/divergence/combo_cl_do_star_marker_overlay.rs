@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_do_star_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do*)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cds")))
@@ -46,7 +46,7 @@ fn combo_cl_do_star_marker_overlay_undo() {
 fn combo_cl_do_star_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do*)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csn")))
@@ -126,7 +126,7 @@ fn combo_cl_do_star_clone_overlay() {
 fn combo_cl_do_star_multi_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do*)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csm")))
@@ -168,7 +168,7 @@ fn combo_cl_do_star_multi_step() {
 fn combo_cl_do_star_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do*)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "csu")))

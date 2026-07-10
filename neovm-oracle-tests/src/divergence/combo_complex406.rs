@@ -208,7 +208,7 @@ fn div_cx406_window_state_roundtrip() {
 #[test]
 fn div_cx406_window_at() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (#<window 1 on *scratch*> t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-at 0 0)

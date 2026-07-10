@@ -65,8 +65,7 @@ fn divergence_mode_line_vars() {
 fn divergence_mode_line_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (\"TestMode\" \" *neovm-oracle-stdout*\" nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"TestMode\" \"*scratch*\" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq mode-name "TestMode")

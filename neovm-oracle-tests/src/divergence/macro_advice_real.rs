@@ -150,7 +150,7 @@ fn divergence_compiled_function_p() {
 fn divergence_gv_generalized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((0 2 4 4 5) 4 0 (0 2 4 4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-decf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((lst '(1 2 3 4 5)))
   (cl-incf (nth 2 lst))

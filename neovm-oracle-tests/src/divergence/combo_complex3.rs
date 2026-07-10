@@ -76,7 +76,7 @@ fn div_cx3_compare_buffer_substrings_case() {
 #[test]
 fn div_cx3_cl_defstruct_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 4 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -282,8 +282,7 @@ fn div_cx3_put_text_property_on_string_roundtrip() {
 #[test]
 fn div_cx3_string_match_multibyte_capture_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 2 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 2 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

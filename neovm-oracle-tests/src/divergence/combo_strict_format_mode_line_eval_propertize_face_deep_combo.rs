@@ -19,7 +19,7 @@ fn div_v8_format_mode_line_eval_propertize_constructs() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_format_mode_line_width_truncation_combo() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil \"\" \"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_format_mode_line_face_text_property_extraction() {
           (plist-get props 'face)
           (plist-get props 'font-lock-face))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

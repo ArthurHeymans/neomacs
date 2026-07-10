@@ -7,9 +7,8 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_overlay_create_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""Hello WorldOK (bold 10 1 6 (#<overlay from 1 to 6 in  *neovm-oracle-stdout*>))""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (bold 10 1 6 (#<overlay from 1 to 6 in *scratch*>))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -29,9 +28,8 @@ fn divergence_overlay_create_props() {
 fn divergence_overlay_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""Hello WorldOK (7 12 nil (#<overlay from 7 to 12 in  *neovm-oracle-stdout*>))""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (7 12 nil (#<overlay from 7 to 12 in *scratch*>))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -49,7 +47,7 @@ fn divergence_overlay_move() {
 fn divergence_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (2 2 5 10)""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 5 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -71,7 +69,7 @@ fn divergence_overlay_priority() {
 fn divergence_overlay_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (1 0)""#]];
+    let expect = expect_test::expect![[r#""OK (1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -88,7 +86,7 @@ fn divergence_overlay_delete() {
 fn divergence_overlay_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello World Foo BarOK (3 1 0 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (3 1 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Foo Bar")
@@ -107,7 +105,7 @@ fn divergence_overlay_in_buffer() {
 fn divergence_overlay_before_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (\"[\" \"]\" 6 6)""#]];
+    let expect = expect_test::expect![[r#""OK (\"[\" \"]\" 6 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -126,7 +124,7 @@ fn divergence_overlay_before_string() {
 fn divergence_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (t \"Hello World\" \"Hello World\")""#]];
+    let expect = expect_test::expect![[r#""OK (t \"Hello World\" \"Hello World\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -143,7 +141,7 @@ fn divergence_overlay_invisible() {
 fn divergence_overlay_intangible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (t (intangible t))""#]];
+    let expect = expect_test::expect![[r#""OK (t (intangible t))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -159,7 +157,7 @@ fn divergence_overlay_intangible() {
 fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK ((test-hook-fn) (test-hook-fn2) t)""#]];
+    let expect = expect_test::expect![[r#""OK ((test-hook-fn) (test-hook-fn2) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -177,7 +175,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_next_prev() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (6 7 7 1)""#]];
+    let expect = expect_test::expect![[r#""OK (6 7 7 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")

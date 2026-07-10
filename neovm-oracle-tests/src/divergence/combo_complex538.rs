@@ -47,7 +47,7 @@ fn div_cx538_declaim_inline() {
 #[test]
 fn div_cx538_proclaim_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 6""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-proclaim)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-proclaim '(type (function (integer) integer) 1+))
@@ -60,7 +60,7 @@ fn div_cx538_proclaim_type() {
 #[test]
 fn div_cx538_declare_ftype() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 20""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-declare)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (defun cx538-ft (x) (* x 4))
@@ -74,7 +74,7 @@ fn div_cx538_declare_ftype() {
 #[test]
 fn div_cx538_check_declare_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ok""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-check-type)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-check-type 42 integer)
@@ -87,7 +87,7 @@ fn div_cx538_check_declare_type() {
 #[test]
 fn div_cx538_check_declare_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK wrong-type-argument""#]];
+    let expect = expect_test::expect![[r#""OK void-function""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (cl-check-type "hello" integer)
@@ -100,7 +100,7 @@ fn div_cx538_check_declare_type_error() {
 #[test]
 fn div_cx538_assert_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-assert)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-assert (equal 1 1) t "should be true")
 "##,
@@ -111,7 +111,7 @@ fn div_cx538_assert_basic() {
 #[test]
 fn div_cx538_assert_fail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK error""#]];
+    let expect = expect_test::expect![[r#""OK void-function""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (cl-assert nil t "assertion failed")

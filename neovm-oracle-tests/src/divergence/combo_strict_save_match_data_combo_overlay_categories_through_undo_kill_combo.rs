@@ -24,7 +24,7 @@ fn div_v2_save_match_data_deep_combo() {
           (match-beginning 0)
           (match-end 0))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((0 5) (0 5) 0 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,7 +47,9 @@ fn div_v2_overlay_categories_through_delete_undo() {
       (push (list 'after-undo (overlay-start o) (overlay-end o) (overlay-get o 'face) (length (overlays-in 1 10))) log))
     (nreverse log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((before 3 7 1) (after-delete 3 5 1) (after-undo 1 1 bold 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -71,7 +73,7 @@ fn div_v2_kill_yank_with_text_properties() {
             (get-text-property (1- (point)) 'face)
             (car kill-ring))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -101,7 +103,9 @@ fn div_v2_window_config_register_roundtrip() {
     (kill-buffer b2)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (1 t \" *probe-wcr-a*\" t t (119 #<window-configuration> #<marker in no buffer>))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -136,6 +140,7 @@ fn div_v2_buffer_swap_text_with_overlays_and_markers() {
     (kill-buffer a)
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"BBBB-content\" \"AAAA-content\" 3 3 2 2 bold italic)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

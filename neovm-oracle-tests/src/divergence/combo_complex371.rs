@@ -32,7 +32,7 @@ fn div_cx371_func_arity_of_various() {
 #[test]
 fn div_cx371_closure_capture_mutation_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 2 3 2 2 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-decf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))

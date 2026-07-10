@@ -22,7 +22,7 @@ fn div_v8_this_last_command_prefix_arg_var_sweep() {
       (boundp 'minibuffer-history-variable)
       (boundp 'extended-command-history))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_disable_command_interprogram_clipboard_var_sweep() {
       (boundp 'x-select-enable-clipboard)
       (boundp 'x-select-enable-primary))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_interactive_history_saved_var_sweep() {
       (boundp 'recentf-mode)
       (boundp 'recentf-max-saved-items))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil t nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

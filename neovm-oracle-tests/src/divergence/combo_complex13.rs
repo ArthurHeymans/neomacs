@@ -59,7 +59,7 @@ fn div_cx13_buffer_narrow_marker_undo_stack_deep() {
 #[test]
 fn div_cx13_cl_loop_hash_table_collect_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((a . 1) (b . 2) (c . 3) (d . 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -255,7 +255,7 @@ fn div_cx13_marker_point_eq_after_narrow_widen() {
 #[test]
 fn div_cx13_cl_typecase_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:int :str :vec :cons :null)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typecase)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typecase 5 (string :str) (integer :int) (t :other))

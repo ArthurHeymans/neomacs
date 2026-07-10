@@ -83,7 +83,7 @@ fn divergence_error_propagates_through_closures() {
 fn divergence_unwind_protect_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""STARTOK (\"START\" t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"START\" t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "START")
@@ -173,7 +173,7 @@ fn divergence_defining_condition_handlers() {
 fn divergence_unwind_after_buffer_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""CCCCERR (error \"test\")""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA")
@@ -199,8 +199,7 @@ fn divergence_unwind_after_buffer_modification() {
 fn divergence_error_while_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""-BBBB-CCCCOK (error \"narrowed error\" t t \"-BBBB-CCCC\")""#]];
+    let expect = expect_test::expect![[r#""OK (error \"narrowed error\" t t \"-BBBB-CCCC\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")

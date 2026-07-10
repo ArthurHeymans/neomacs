@@ -90,9 +90,7 @@ fn div_cx136_tramp_completion_availability() {
 #[test]
 fn div_cx136_tramp_method_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t (\"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"sudo\" \"sg\" \"su\" \"telnet\" \"sshx\" \"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (:errored void-variable)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -142,7 +140,7 @@ fn div_cx136_k8s_tramp_method() {
 #[test]
 fn div_cx136_tramp_get_connection_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -177,7 +175,7 @@ fn div_cx136_remote_directory_files_format() {
 #[test]
 fn div_cx136_tramp_persistency_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

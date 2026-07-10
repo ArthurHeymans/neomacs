@@ -182,7 +182,7 @@ fn divergence_set_plist_with_hash() {
 fn divergence_plist_to_alist_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 65)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pl '(:name "Alice" :age 30 :roles (admin editor))))

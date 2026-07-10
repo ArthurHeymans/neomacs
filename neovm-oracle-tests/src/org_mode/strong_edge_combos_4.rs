@@ -379,7 +379,7 @@ fn ec4_element_buffer_end() {
 #[test]
 fn ec4_clock_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-clocking-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

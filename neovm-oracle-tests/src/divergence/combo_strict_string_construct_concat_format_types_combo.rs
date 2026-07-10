@@ -20,7 +20,9 @@ fn div_v8_string_construct_concat_list_vector_chars() {
       (make-string 3 ?日)
       (concat "a" "b" "c"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"abc\" \"xyz\" \"uni код日本\" \"abc\" \"xy\" \"ABC\" \"*****\" \"日日日\" \"abc\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +44,9 @@ fn div_v8_format_s_over_records_vectors_markers() {
           (format "%s" '(a b c))
           (format "%s" (make-bool-vector 3 t)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r##""OK (\"[1 2 3]\" \"[1 2 3]\" \"#s(foo 1 2)\" \"#s(foo 1 2)\" \"[a b c]\" \"plain\" \"\\\"with quotes\\\"\" \"42\" \"(a b c)\" \"#&3\\\"\u{7}\\\"\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +66,6 @@ fn div_v8_concat_mixed_unibyte_multibyte_bytes() {
       (multibyte-string-p (concat "abc" (string ?日)))
       (aref (unibyte-string 200) 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 37)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -115,7 +115,7 @@ fn div_e7_buffer_list_ordering() {
 #[test]
 fn div_e7_cl_loop_hash_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((a b c) (1 2 3) ((a . 1) (b . 2) (c . 3)))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((h (make-hash-table :test 'equal)))

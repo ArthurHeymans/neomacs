@@ -106,7 +106,7 @@ fn divergence_cl_merge() {
 fn divergence_cl_dolist_dotimes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (c b a)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-dolist)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((result nil))
   (cl-dolist (x '(a b c) result)

@@ -69,7 +69,7 @@ fn div_cx535_mapatoms_default() {
 #[test]
 fn div_cx535_mapatoms_filter_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 27""#]];
+    let expect = expect_test::expect![[r#""OK 26""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((count 0))
   (mapatoms (lambda (s)

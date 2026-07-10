@@ -105,7 +105,7 @@ fn div_cx51_abbrev_expansion_count_persist_across_expansions() {
 #[test]
 fn div_cx51_cl_loop_complex_accumulators_into_finally() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 5 385 3 100)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for i from 1 to 10

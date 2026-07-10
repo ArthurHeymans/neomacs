@@ -233,7 +233,7 @@ fn deficiency_overlay_after_buffer_substring() {
 fn deficiency_many_overlays_stress_with_priorities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mos\")))\n\

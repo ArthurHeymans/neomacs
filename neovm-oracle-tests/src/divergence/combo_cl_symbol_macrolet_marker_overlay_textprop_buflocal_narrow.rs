@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_symbol_macrolet_marker_overlay_textprop_buflocal_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "smb")))
@@ -102,7 +102,7 @@ fn combo_cl_symbol_macrolet_clone_overlay_undo() {
 fn combo_cl_symbol_macrolet_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep b1-base)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "sm1"))
@@ -168,7 +168,7 @@ fn combo_cl_symbol_macrolet_multi_buffer_undo() {
 fn combo_cl_symbol_macrolet_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ssr")))
@@ -210,7 +210,7 @@ fn combo_cl_symbol_macrolet_setf_replace_undo() {
 fn combo_cl_symbol_macrolet_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "smo")))

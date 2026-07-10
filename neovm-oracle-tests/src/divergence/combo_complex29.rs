@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx29_reader_hash_dispatch_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (invalid-read-syntax invalid-read-syntax invalid-read-syntax \"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/program-8200-100.el\" end-of-file #'sym sym (a))""#
+        r#""OK (invalid-read-syntax invalid-read-syntax invalid-read-syntax nil end-of-file #'sym sym (a))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -42,7 +42,7 @@ fn div_cx29_reader_backquote_complex() {
 #[test]
 fn div_cx29_format_spec_special_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\" \"literal % in spec\")""#]];
+    let expect = expect_test::expect![[r#""OK (errored . void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,7 +179,7 @@ fn div_cx29_set_buffer_multibyte_nil_then_marker() {
 #[test]
 fn div_cx29_cl_defstruct_with_predicate_and_copier_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (42 t 42 error)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -236,7 +236,7 @@ fn div_cx29_decode_encode_region_no_conversion_roundtrip() {
 #[test]
 fn div_cx29_cl_loop_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 7 11)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for (a b) in '((1 2) (3 4) (5 6))
@@ -286,7 +286,7 @@ fn div_cx29_prin1_of_string_with_text_properties_circle() {
 #[test]
 fn div_cx29_set_window_start_then_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (15 71 #<buffer  *neovm-oracle-stdout*>)""#]];
+    let expect = expect_test::expect![[r#""OK (15 71 #<buffer *scratch*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx29-ws*")))

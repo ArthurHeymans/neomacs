@@ -19,7 +19,7 @@ fn div_v8_text_property_nonsticky_wrap_line_prefix_var_sweep() {
       (boundp 'show-help-function)
       (boundp 'default-transient-mark-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_defun_prompt_regexp_page_outline_regexp_var_sweep() {
       (boundp 'fill-nobreak-predicate)
       (boundp 'fill-nobreak-invisible))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_syntax_category_table_core_var_sweep() {
       (boundp 'nonascii-translation-table)
       (boundp 'character-fold-table))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t nil t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

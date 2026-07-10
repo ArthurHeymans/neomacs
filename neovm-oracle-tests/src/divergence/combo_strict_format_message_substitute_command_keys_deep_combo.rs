@@ -17,7 +17,9 @@ fn div_v8_format_message_substitute_keys_variants() {
       (substitute-command-keys "Plain text with no keys")
       (format-message "Count: %d items" 42))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Use ‘M-x’ to proceed\" \"Type C-c now\" #(\"Press C-f to move\" 6 9 (font-lock-face help-key-binding face help-key-binding)) #(\"Use C-g to abort\" 4 7 (font-lock-face help-key-binding face help-key-binding)) #(\"M-x foo is undefined\" 0 7 (font-lock-face help-key-binding face help-key-binding)) \"Plain text with no keys\" \"Count: 42 items\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -31,7 +33,9 @@ fn div_v8_substitute_command_keys_literal_faced() {
       (> (length (substitute-command-keys "\\[forward-char]")) 0)
       (format-message "Done"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\[literal] preserved\" #(\"Multiple C-f and C-b keys\" 9 12 (font-lock-face help-key-binding face help-key-binding) 17 20 (font-lock-face help-key-binding face help-key-binding)) 3 t \"Done\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,6 +50,8 @@ fn div_v8_format_message_help_echo_documentation() {
       (stringp (documentation 'car))
       (stringp (documentation-property 'car 'function-documentation)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello world\" \"Value: 42, Float: 3.14\" \"Mixed str and 7\" \"\\\\‘backtick test\" t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

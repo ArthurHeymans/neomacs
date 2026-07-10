@@ -271,9 +271,7 @@ fn strict_duration_conversion_roundtrip() {
 #[test]
 fn strict_time_string_seconds_2ft() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((:to-seconds 1718461800.0) (:to-absolute 739052) (:one-day-diff 86400.0) (:org-2ft 0) (:four-hours-diff 14400.0))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

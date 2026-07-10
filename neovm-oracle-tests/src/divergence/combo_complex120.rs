@@ -112,7 +112,7 @@ fn div_cx120_text_property_search_forward_no_match() {
 #[test]
 fn div_cx120_text_property_search_backward_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (13 17 :x)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

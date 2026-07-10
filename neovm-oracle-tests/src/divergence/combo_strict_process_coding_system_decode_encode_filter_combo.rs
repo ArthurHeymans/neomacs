@@ -23,7 +23,7 @@ fn div_v8_process_coding_system_set_decode_encode() {
         (process-encode-coding-system proc)
         (kill-buffer buf)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function process-decode-coding-system)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +49,7 @@ fn div_v8_process_filter_sentinel_reset_identity() {
           (null (process-sentinel proc))
           (kill-buffer buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -74,6 +74,6 @@ fn div_v8_process_send_string_region_query_exit() {
           (integerp (process-id proc))
           (kill-buffer buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t (run exit) t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

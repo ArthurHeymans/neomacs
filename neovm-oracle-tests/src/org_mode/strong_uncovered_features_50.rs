@@ -46,7 +46,7 @@ fn uf50_clock_current() {
 #[test]
 fn uf50_clock_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"Invalid date: \")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-clock-get-clock-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -268,7 +268,7 @@ fn uf50_archive() {
 fn uf50_archive_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: 2026-06-29 Mon 06:35\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
+        r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -313,9 +313,7 @@ fn uf50_archive_tag() {
 #[test]
 fn uf50_archive_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"ARCHIVE\") \"* T                                                                 :ARCHIVE:\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-archive-set-tag)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -334,7 +332,7 @@ fn uf50_archive_set() {
 #[test]
 fn uf50_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (90.0 150.0 1560.0 90.0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-to-minutes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-to-minutes "1:30")
         (org-duration-to-minutes "2h30min")

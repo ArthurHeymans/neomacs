@@ -8,7 +8,7 @@ fn divergence_json_like_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""{\"name\": \"Alice\", \"scores\": [95, 87, 92], \"active\": true}OK ((\"name\" \"Alice\" \"scores\" \"active\") (\"name\" \"Alice\" \"scores\" \"active\") (\"scores\" \"active\") (\"active\") t)""#
+        r#""OK ((\"name\" \"Alice\" \"scores\" \"active\") (\"name\" \"Alice\" \"scores\" \"active\") (\"scores\" \"active\") (\"active\") t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
@@ -57,9 +57,8 @@ fn divergence_csv_processing_edit() {
 fn divergence_refactor_rename_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""function newName() { return newName.helper(); }OK (2 \"function newName() { return newName.helper(); }\" t)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (2 \"function newName() { return newName.helper(); }\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"function oldName() { return oldName.helper(); }\")
@@ -79,9 +78,7 @@ fn divergence_refactor_rename_in_buffer() {
 fn divergence_org_like_heading_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""* Heading 1\nSome text\n** Heading 2\nMore text\n* Heading 3\nFinal textOK ((\"* \" \"** \" \"* \") (1 2 1) nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((\"* \" \"** \" \"* \") (1 2 1) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"* Heading 1\\nSome text\\n** Heading 2\\nMore text\\n* Heading 3\\nFinal text\")
@@ -102,9 +99,7 @@ fn divergence_org_like_heading_navigation() {
 fn duplication_code_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""def foo():\n  return 42\ndef bar():\n  return 42\ndef baz():\n  return 99OK (6 1 t 5)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (6 1 t 5)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"def foo():\\n  return 42\\ndef bar():\\n  return 42\\ndef baz():\\n  return 99\")
@@ -148,9 +143,7 @@ fn divergence_template_expansion() {
 fn divergence_log_analysis_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""[ERROR] 2024-01-15 Connection failed\n[INFO] 2024-01-15 Retry succeeded\n[WARN] 2024-01-15 Slow response\n[ERROR] 2024-01-16 Timeout\n[INFO] 2024-01-16 All clearOK (2 1 2 t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (2 1 2 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"[ERROR] 2024-01-15 Connection failed\\n\")
@@ -174,9 +167,7 @@ fn divergence_log_analysis_pattern() {
 fn divergence_extract_and_restructure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""firstName: John\nlastName: Doe\nage: 30\ncity: NYCOK (\"John\" \"Doe\" \"30\" \"NYC\" 4 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"John\" \"Doe\" \"30\" \"NYC\" 4 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"firstName: John\\nlastName: Doe\\nage: 30\\ncity: NYC\")
@@ -198,9 +189,7 @@ fn divergence_extract_and_restructure() {
 fn divergence_whitespace_normalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""  hello   world   \n\n   foo  bar  \n  baz  OK (\"hello world \n\n foo bar \n baz\" t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"hello world \n\n foo bar \n baz\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"  hello   world   \\n\\n   foo  bar  \\n  baz  \")
@@ -220,7 +209,7 @@ fn divergence_code_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""line1\nline2\nline3OK (\"// line1\n// line2\n// line3\" \"line1\nline2\nline3\" 0 t)""#
+        r#""OK (\"// line1\n// line2\n// line3\" \"// line1\n// line2\n// line3\" 0 nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn

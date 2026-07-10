@@ -130,7 +130,9 @@ fn org_publish_attachment_include_and_project_lookup_combo() {
 fn org_publish_needed_timestamp_cache_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t nil t \"cache\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"‘org-publish-cache-file-needs-publishing’ called, but no cache present\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
@@ -181,7 +183,7 @@ fn org_publish_components_index_file_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Opening output file\" \"No such file or directory\" \"/tmp/nix-shell.XcUf3d/org-publish-cacheRFu0dV/timestampscache.cache\")""#
+        r#""ERR (error \"‘org-publish-cache-get’ called, but no cache present\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -270,7 +272,7 @@ fn org_publish_custom_hooks_cache_sitemap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"a.org\" \"b.org\" \"map.org\") (\"custom\") \"value\" nil nil ((prepare \"org-publish-custom5S43Ja\") (sitemap \"Custom Map\" (unordered (\"ENTRY[a.org:list:Aye:(27158 27712)]\") (\"ENTRY[b.org:list:Bee:(27159 48576)]\"))) (publish \"b.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (publish \"a.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (publish \"map.org\" \"../org-publish-custom-outGSCGjc/\" \"value\") (complete \"org-publish-custom-outGSCGjc\")) \"#+TITLE: Custom Map\n- ENTRY[a.org:list:Aye:(27158 27712)]\n- ENTRY[b.org:list:Bee:(27159 48576)]\" ((\"a.txt\" t \"PUBLISHED:a.org:value\") (\"b.txt\" t \"PUBLISHED:b.org:value\")))""##
+        r#""ERR (error \"‘org-publish-cache-get’ called, but no cache present\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

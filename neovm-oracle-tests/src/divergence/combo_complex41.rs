@@ -381,7 +381,7 @@ fn div_cx41_read_from_string_multiple_forms_position_tracking_mega() {
 #[test]
 fn div_cx41_cl_loop_hash_keys_values_sum_filter_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (9 2085 10)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))

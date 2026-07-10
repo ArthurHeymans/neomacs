@@ -8,7 +8,7 @@ fn divergence_buflocal_var_narrow_widen_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ABCDEFGHIJOK ((buf-val global-val buf-val) (narrowed-val global-val) \"ABCDEFGHIJ\")""#
+        r#""OK ((buf-val global-val buf-val) (narrowed-val global-val) \"ABCDEFGHIJ\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -32,7 +32,7 @@ fn divergence_markers_spanning_narrow_boundary_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-XXBB-CCCC-DDDD-EEEEOK ((1 6 15 20 25) 1 6 11 16 21 \"AAAA-XXBB-CCCC-DDDD-EEEE\")""#
+        r#""OK ((1 6 15 20 25) 1 6 11 16 21 \"AAAA-XXBB-CCCC-DDDD-EEEE\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -63,9 +63,8 @@ fn divergence_markers_spanning_narrow_boundary_edit() {
 fn divergence_multi_buffer_markers_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""BUF1-CONTENTOK (5 \"BUF2YYY-CONTENTXXX\" \"BUF2YYY-CONTENTXXX\" t)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (5 \"BUF2YYY-CONTENTXXX\" \"BUF2YYY-CONTENTXXX\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BUF1-CONTENT")
@@ -95,7 +94,7 @@ fn divergence_save_excursion_restriction_window_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""LINE-2\nLINE-3\nLINOK ((21 \"LINE-3\" \"LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5\") 15 8 25 \"LINE-2\nLINE-3\nLIN\")""#
+        r#""OK ((21 \"LINE-3\" \"LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5\") 15 8 25 \"LINE-2\nLINE-3\nLIN\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -121,7 +120,7 @@ fn divergence_save_excursion_restriction_window_nested() {
 fn divergence_buflocal_tab_width_indent_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ne\ttwo\tthOK (18 18 8 8 \"ne\ttwo\tth\")""#]];
+    let expect = expect_test::expect![[r#""OK (18 18 8 8 \"ne\ttwo\tth\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
@@ -142,7 +141,7 @@ fn divergence_overlay_narrow_marker_reconcile() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAAXX-BBBB-CCCC-DDDDOK ((5 11 9 \"XX-BBBB-CCC\") 5 11 9 \"AAAAXX-BBBB-CCCC-DDDD\" bold)""#
+        r#""OK ((5 11 9 \"XX-BBBB-CCC\") 5 11 9 \"AAAAXX-BBBB-CCCC-DDDD\" bold)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -211,7 +210,7 @@ fn divergence_buffer_locals_list_after_multiple_setq_local() {
 fn divergence_undo_with_buffer_locals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""textmoreERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 49)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq test-undo-bl-xxx 'initial)

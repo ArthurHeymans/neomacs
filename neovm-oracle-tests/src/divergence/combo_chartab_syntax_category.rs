@@ -124,7 +124,7 @@ fn divergence_char_table_range() {
 fn divergence_syntax_class_of_various_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (119 t 119 t 32 t 32 t 95 t 46 t 46 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (119 t 119 t 62 nil 32 t 95 t 95 nil 60 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (char-syntax ?a)
@@ -149,9 +149,7 @@ fn divergence_syntax_class_of_various_chars() {
 fn divergence_parse_partial_sexp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(foo (bar baz) quux)ERR (wrong-type-argument number-or-marker-p nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo (bar baz) quux)")
@@ -171,9 +169,7 @@ fn divergence_parse_partial_sexp_basic() {
 fn divergence_forward_comment_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#"";; comment 1\ncode\n;; comment 2\nmore codeOK (nil 1 59 nil nil nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t 14 99 t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert ";; comment 1\ncode\n;; comment 2\nmore code")
@@ -195,7 +191,7 @@ fn divergence_forward_comment_navigation() {
 fn divergence_syntax_text_property_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abc-def ghiERR (void-variable p1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable p1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abc-def ghi")

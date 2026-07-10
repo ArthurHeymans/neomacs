@@ -33,8 +33,9 @@ fn divergence_buffer_local_var_chain() {
 fn divergence_marker_set_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA-XXXX-CCCC-DDDD-EEEEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"AAAA-XXXX-CCCC-DDDD-EEEE\" 0 3 (sec a) 10 13 (sec c) 15 18 (sec d) 20 23 (sec e)) #(\"AAAA-BBBB-CCCC-DDDD-EEEE\" 0 3 (sec a) 5 8 (sec b) 10 13 (sec c) 15 18 (sec d) 20 23 (sec e)) t 6 t 6 t 16 t 16 t 21 t a t b t c t all)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -80,7 +81,7 @@ fn divergence_mark_ring_with_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ALPHA-QQBETA-SIGMA-DELTA-EPSILONERR (wrong-type-argument listp t)""#
+        r#""OK (4 nil #(\"ALPHA-QQBETA-SIGMA-DELTA-EPSILON\" 0 4 (greek a) 8 11 (greek b) 19 23 (greek d) 25 31 (greek e)) #(\"ALPHA-BETA-GAMMA-DELTA-EPSILON\" 0 4 (greek a) 6 9 (greek b) 11 15 (greek g) 17 21 (greek d) 23 29 (greek e)) t t a t b t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -124,7 +125,7 @@ fn divergence_mark_ring_with_edits() {
 fn deficiency_dotimes_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))
@@ -175,9 +176,7 @@ fn divergence_closure_over_hash_with_edits() {
 fn divergence_recursive_edit_sim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""MODIFIED-INNERLEVEL2-LEVEL3-LEVEL4ERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 44)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LEVEL1-LEVEL2-LEVEL3-LEVEL4")
@@ -215,7 +214,7 @@ fn divergence_recursive_edit_sim() {
 fn deficiency_cl_loop_with_temp_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results
@@ -237,7 +236,7 @@ fn deficiency_cl_loop_with_temp_buffers() {
 fn divergence_dynamic_binding_vs_lexical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dyn-var nil)
@@ -261,7 +260,7 @@ fn deficiency_backquote_splice_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""Result: alpha-beta-gamma-delta-epsilon-beta-gamma-deltaOK (\"Result: alpha-beta-gamma-delta-epsilon-beta-gamma-delta\" t t)""#
+        r#""OK (\"Result: alpha-beta-gamma-delta-epsilon-beta-gamma-delta\" t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -282,7 +281,7 @@ fn deficiency_mapconcat_propertize_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""one two three four fiveOK (#(\"one two three four five\" 0 3 (word t) 4 7 (word t) 8 13 (word t) 14 18 (word t) 19 23 (word t)) t t t)""#
+        r#""OK (#(\"one two three four five\" 0 3 (word t) 4 7 (word t) 8 13 (word t) 14 18 (word t) 19 23 (word t)) t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

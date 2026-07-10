@@ -18,7 +18,7 @@ fn div_v8_cl_values_multiple_value_bind_setq() {
         (list p q r))
       (cl-nth-value 1 (cl-values 'a 'b 'c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 2 3) (10 20 30) (x y) (1 2 3) b)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,7 @@ fn div_v8_cl_values_from_function_apply() {
       (cl-multiple-value-bind (x y z) (probe-vals 5 6) (list x y z))
       (cl-nth-value 2 (probe-vals 7 8)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((3 4 12) (5 6 30) 56)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,6 +48,6 @@ fn div_v8_cl_values_zero_single_extra() {
       (cl-nth-value 0 (cl-values 'first 'second))
       (cl-nth-value 5 (cl-values 'a 'b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil (single) nil (one) first nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

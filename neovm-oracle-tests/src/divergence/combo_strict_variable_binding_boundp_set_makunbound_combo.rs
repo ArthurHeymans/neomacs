@@ -22,7 +22,7 @@ fn div_v8_variable_boundp_fboundp_symbol_value_set() {
         (let ((probe-vbind 'local)) (symbol-value 'probe-vbind))
         (symbol-value 'probe-vbind)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil initial t newval local newval)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,9 @@ fn div_v8_makunbound_fmakunbound_void_signals() {
         (condition-case err (default-value 'probe-vmu)
           (void-variable (list 'default-void (cadr err))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t nil (void-variable probe-vmu) t nil (void-function probe-fmu) (default-void probe-vmu))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +70,8 @@ fn div_v8_default_value_local_kill_buffer_local_combo() {
               (progn (kill-local-variable 'probe-dv) probe-dv)))
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (global global t local global t newdefault local newdefault)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

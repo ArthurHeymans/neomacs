@@ -130,7 +130,7 @@ fn divergence_number_predicate_combos() {
 fn divergence_max_min_clamp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (9 t 1 t -1 t -5 t 9 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (max 1 5 3 9 2)

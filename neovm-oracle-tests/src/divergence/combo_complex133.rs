@@ -150,7 +150,7 @@ fn div_cx133_describe_function_in_temp_buffer() {
 fn div_cx133_apropos_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t (marker marker-buffer marker-insertion-type marker-last-position marker-position markerp move-marker number-or-marker number-or-marker-p point-marker point-max-marker point-min-marker proced-marker-char proced-marker-regexp project-vc-extra-root-markers set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack) (set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack))""#
+        r#""OK (t (marker marker-buffer marker-insertion-type marker-last-position marker-position markerp move-marker number-or-marker number-or-marker-p point-marker point-max-marker point-min-marker project-vc-extra-root-markers set-marker set-marker-insertion-type xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack) (set-marker set-marker-insertion-type xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

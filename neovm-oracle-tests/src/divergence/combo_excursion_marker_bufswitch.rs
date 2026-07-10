@@ -8,7 +8,7 @@ fn divergence_save_excursion_marker_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAAXXX-BBBB-CCCC-DDDD-EEEEOK (28 nil 13 t #(\"AAAAXXX-BBBB-CCCC-DDDD-EEEE\" 0 3 (zone a) 12 16 (zone c)) a t c t nil 1)""#
+        r#""OK (28 nil 13 t #(\"AAAAXXX-BBBB-CCCC-DDDD-EEEE\" 0 3 (zone a) 12 16 (zone c)) a t c t nil 1)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -39,7 +39,7 @@ fn divergence_save_excursion_marker_after_edit() {
 fn divergence_buffer_switch_with_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XX-CONTENERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
@@ -175,7 +175,7 @@ fn divergence_marker_across_buffer_kill_undo() {
 fn divergence_temp_buffer_undo_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OUTEROK (\"OUTER\" t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"OUTER\" t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "OUTER")
@@ -197,9 +197,7 @@ fn divergence_temp_buffer_undo_isolation() {
 fn divergence_save_excursion_with_narrow_and_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""-BBBB-CCCC-DDDDOK (22 nil \"-BBBB-CCCC-DDDD\" 17 t nil nil nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (22 nil \"-BBBB-CCCC-DDDD\" 17 t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")

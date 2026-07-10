@@ -52,7 +52,7 @@ fn div_cx233_calc_eval_algebraic_simplification() {
 #[test]
 fn div_cx233_calc_radix_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"255\" \"16\" \"10\" \"64\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"16#FF\" \"16#10\" \"16#A\" \"16#40\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -129,7 +129,7 @@ fn div_cx233_calc_eval_trigonometric() {
 #[test]
 fn div_cx233_math_read_expr_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -146,7 +146,7 @@ fn div_cx233_math_read_expr_availability() {
 #[test]
 fn div_cx233_calc_modes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

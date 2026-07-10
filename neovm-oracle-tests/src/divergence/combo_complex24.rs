@@ -304,7 +304,7 @@ fn div_cx24_text_property_sticky_after_multiple_inserts() {
 #[test]
 fn div_cx24_cl_loop_maximize_minimize_into() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((9 1) 5 60)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(3 1 4 1 5 9 2 6) maximize x into max

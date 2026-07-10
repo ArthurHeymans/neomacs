@@ -23,8 +23,7 @@ fn calc_eval_basic() {
 fn calc_eval_frac_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (\"0.333333333333\" \"3.14285714286\" \"6.28318\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"0.333333\" \"3.14286\" \"6.28318\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'calc)
 (let ((calc-float-format '(float 6)))
@@ -49,7 +48,7 @@ fn calc_eval_funcs() {
 fn math_read_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t \"deg(pi)\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function math-integerp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'calc)
 (list (math-zerop 0) (math-integerp 5) (calc-eval "deg(pi)" ))"##,

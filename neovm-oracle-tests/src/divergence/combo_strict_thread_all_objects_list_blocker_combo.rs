@@ -20,7 +20,7 @@ fn div_v8_all_threads_list_contains_created() {
             (threadp th)))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_thread_signal_named_blocker_deep() {
               (consp (all-threads)))))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_thread_current_main_self_identity_deep() {
           (eq (current-thread) (main-thread)))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

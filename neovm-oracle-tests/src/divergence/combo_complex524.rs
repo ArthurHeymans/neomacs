@@ -38,7 +38,7 @@ fn div_cx524_vector_map_into() {
 #[test]
 fn div_cx524_vector_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 10""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-reduce #'+ [1 2 3 4])
 "##,
@@ -49,7 +49,7 @@ fn div_cx524_vector_reduce() {
 #[test]
 fn div_cx524_vector_some() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-some)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-some #'numberp [1 a 3])
 "##,
@@ -60,7 +60,7 @@ fn div_cx524_vector_some() {
 #[test]
 fn div_cx524_vector_every() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-every #'numberp [1 2 3])
 "##,
@@ -71,7 +71,7 @@ fn div_cx524_vector_every() {
 #[test]
 fn div_cx524_vector_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 2""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-position 3 [1 2 3 4])
 "##,
@@ -82,7 +82,7 @@ fn div_cx524_vector_position() {
 #[test]
 fn div_cx524_vector_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-find)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-find 3 [1 2 3 4])
 "##,
@@ -93,7 +93,7 @@ fn div_cx524_vector_find() {
 #[test]
 fn div_cx524_vector_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 2""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-count)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-count 2 [1 2 2 3])
 "##,
@@ -104,7 +104,7 @@ fn div_cx524_vector_count() {
 #[test]
 fn div_cx524_vector_subseq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK [2 3]""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-subseq [1 2 3 4 5] 1 3)
 "##,

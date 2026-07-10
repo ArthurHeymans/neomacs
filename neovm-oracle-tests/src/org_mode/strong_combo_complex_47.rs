@@ -13,7 +13,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo47_plan_clock_replan_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init (\"Task\")) (:after-schedule (\"s\")) (:after-deadline ((\"S\" \"D\"))) (:after-props (\"2:30\" \"dev\")) (:clocking-p t) (:clocking-p-after nil) (:clock-entries 1) (:after-child ((\"S\" \"D\") (\"S\" nil))) (:buffer \"* Task\nDEADLINE: <2024-03-15 Fri> SCHEDULED: <2024-03-01 Fri>\n:PROPERTIES:\n:EFFORT:   2:30\n:CATEGORY: dev\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\n** Sub-task\nSCHEDULED: <2024-03-10 Sun>\n:PROPERTIES:\n:EFFORT:   1:00\n:END:\n\"))""#
+        r#""OK ((:init (\"Task\")) (:after-schedule (\"s\")) (:after-deadline ((\"S\" \"D\"))) (:after-props (\"2:30\" \"dev\")) (:clocking-p t) (:clocking-p-after nil) (:clock-entries 1) (:after-child ((\"S\" \"D\") (\"S\" nil))) (:buffer \"* Task\nDEADLINE: <2024-03-15 Fri> SCHEDULED: <2024-03-01 Fri>\n:PROPERTIES:\n:EFFORT:   2:30\n:CATEGORY: dev\n:END:\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  0:00\n:END:\n\n** Sub-task\nSCHEDULED: <2024-03-10 Sun>\n:PROPERTIES:\n:EFFORT:   1:00\n:END:\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

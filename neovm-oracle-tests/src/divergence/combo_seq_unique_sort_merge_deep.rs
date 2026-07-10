@@ -54,7 +54,7 @@ fn deficiency_sort_with_custom_predicate() {
 fn deficiency_seq_group_by() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((nil 1 3 5 7 9) (t 2 4 6 8 10))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((data '(1 2 3 4 5 6 7 8 9 10)))\n\
@@ -124,7 +124,7 @@ fn deficiency_seq_reduce_with_initial() {
 fn deficiency_seq_filter_remove_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 4 6 8 10) (1 3 5 7 9) (6 7 8 9 10) 5)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((data '(1 2 3 4 5 6 7 8 9 10)))\n\

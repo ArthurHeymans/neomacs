@@ -21,7 +21,7 @@ fn div_v8_undo_boundary_undo_redo_sequence() {
       (list s1 s2 (buffer-string)
             (buffer-modified-p)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"abcdef\" \"abc\" \"abcdef\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_undo_only_primitive_undo_stepwise() {
       (primitive-undo 1 buffer-undo-list)
       (list full after-undo (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"123\" \"1\" \"12\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_undo_list_structure_after_operations() {
             (> after-delete after-insert)
             (consp buffer-undo-list)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function buffer-undo-list)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

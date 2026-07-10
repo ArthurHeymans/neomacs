@@ -50,7 +50,7 @@ fn div_cx217_ispell_availability() {
 #[test]
 fn div_cx217_ispell_local_dictionary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -82,7 +82,7 @@ fn div_cx217_spell_fu_availability() {
 #[test]
 fn div_cx217_flyspell_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -98,7 +98,7 @@ fn div_cx217_flyspell_predicates() {
 #[test]
 fn div_cx217_flyspell_correct_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

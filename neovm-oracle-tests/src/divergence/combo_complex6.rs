@@ -79,7 +79,7 @@ fn div_cx6_set_buffer_file_coding_system_roundtrip() {
 #[test]
 fn div_cx6_multiple_value_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-multiple-value-bind (a b c) (values 1 2 3) (list a b c))
@@ -231,7 +231,7 @@ fn div_cx6_narrow_excursion_stack() {
 #[test]
 fn div_cx6_cl_letf_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (99 5)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

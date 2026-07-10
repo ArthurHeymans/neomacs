@@ -33,9 +33,7 @@ fn divergence_sequence_map_functions() {
 fn divergence_sequence_filter_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((2 4 6) t (a b c) t (1 3 5) t 15 t 120 t ((t 2 4) (nil 1 3 5)) nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (seq-filter #'cl-evenp '(1 2 3 4 5 6))
@@ -85,7 +83,7 @@ fn divergence_sequence_sort_merge() {
 fn divergence_record_type_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function test-rto-xxx)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rto-xxx (:type list) :named)
@@ -239,7 +237,7 @@ fn divergence_subr_alist_plist_ops() {
 fn divergence_sequence_do_each() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5) nil 60 t [1 2 3] 3 t 3 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-oddp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))

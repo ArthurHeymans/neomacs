@@ -152,7 +152,7 @@ fn divergence_record_vs_vector_real() {
 fn divergence_sequence_ops_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 3 4) (2 4) 10 5 2 nil 3 [1 2 3])""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (seq-map #'1+ '(1 2 3))

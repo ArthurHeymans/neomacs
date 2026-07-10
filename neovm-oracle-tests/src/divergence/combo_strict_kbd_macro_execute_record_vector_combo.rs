@@ -15,7 +15,7 @@ fn div_v8_execute_kbd_macro_vector_insert() {
         (point)
         (length (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\" 6 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,7 @@ fn div_v8_kmacro_counter_call_macro() {
         (buffer-string)
         kmacro-counter))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t \"A0B\" 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,6 +45,6 @@ fn div_v8_execute_kbd_macro_keys_repeat() {
   (list (buffer-string)
         (= (length (buffer-string)) 6)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"ababab\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

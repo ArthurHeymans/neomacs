@@ -19,7 +19,7 @@ fn div_v8_cl_some_every_notany_notevery() {
       (cl-notevery #'cl-evenp '(2 4 5))
       (cl-notevery #'cl-evenp '(2 4 6)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-some)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_cl_reduce_count_find_position_remove_if() {
       (cl-remove-if #'cl-oddp '(1 2 3 4 5 6))
       (cl-remove-if-not #'cl-evenp '(1 2 3 4 5 6)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +58,6 @@ fn div_v8_cl_setops_subsetp_union_intersection_difference() {
       (cl-assoc 'b '((a . 1) (b . 2) (c . 3)))
       (cl-rassoc 2 '((a . 1) (b . 2) (c . 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subsetp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

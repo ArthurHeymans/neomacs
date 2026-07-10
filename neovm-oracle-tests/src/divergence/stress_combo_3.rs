@@ -97,7 +97,7 @@ fn divergence_deep_let_bindings() {
 fn divergence_interleaved_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""123ABCDEFGHIJ456OK (\"123ABCDEFGHIJ456\" 17 16)""#]];
+    let expect = expect_test::expect![[r#""OK (\"123ABCDEFGHIJ456\" 17 16)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -114,7 +114,7 @@ fn divergence_interleaved_ops() {
 fn divergence_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (5 1)""#]];
+    let expect = expect_test::expect![[r#""OK (5 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -130,7 +130,7 @@ fn divergence_many_overlays() {
 fn divergence_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (0 nil 1 nil 2)""#]];
+    let expect = expect_test::expect![[r#""OK (0 nil 1 nil 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -149,7 +149,7 @@ fn divergence_many_text_props() {
 fn divergence_stress_combo_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""llo WoOK (#(\"llo Wo\" 0 3 (face bold)) bold 1)""#]];
+    let expect = expect_test::expect![[r#""OK (#(\"llo Wo\" 0 3 (face bold)) bold 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")

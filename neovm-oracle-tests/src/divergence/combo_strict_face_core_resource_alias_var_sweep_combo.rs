@@ -21,7 +21,7 @@ fn div_v8_face_new_frame_defaults_remapping_var_sweep() {
       (boundp 'face-font-registry-alternatives)
       (boundp 'face-alias-alist))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t t t t nil t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_face_definition_face_attribute_resolved_var_sweep() {
       (boundp 'x-use-underline-position-properties)
       (boundp 'x-underline-at-descent-line))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil t nil t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -61,6 +61,6 @@ fn div_v8_face_attr_constants_support_var_sweep() {
       (boundp 'initial-window-system)
       (boundp 'window-setup-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil nil nil nil nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

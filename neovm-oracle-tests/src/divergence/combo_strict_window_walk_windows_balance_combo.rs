@@ -27,7 +27,7 @@ fn div_v8_walk_windows_next_previous_balance() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +49,7 @@ fn div_v8_window_combination_resize_after_split() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,6 +72,6 @@ fn div_v8_get_lru_window_get_largest_window() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

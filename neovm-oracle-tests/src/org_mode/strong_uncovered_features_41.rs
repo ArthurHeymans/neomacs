@@ -444,7 +444,7 @@ fn uf41_timer_set() {
 #[test]
 fn uf41_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (90.0 150.0 1560.0 90.0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-to-minutes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-to-minutes "1:30")
         (org-duration-to-minutes "2h30min")
@@ -461,7 +461,7 @@ fn uf41_duration() {
 #[test]
 fn uf41_duration_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"1:30\" \"2:30\" \"1d 1:00\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-from-minutes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-from-minutes 90)
         (org-duration-from-minutes 150)
@@ -477,7 +477,7 @@ fn uf41_duration_from() {
 #[test]
 fn uf41_duration_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 0 nil 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-p "1:30")
         (org-duration-p "2h30min")

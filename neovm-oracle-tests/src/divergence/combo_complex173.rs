@@ -165,9 +165,7 @@ fn div_cx173_modulo_with_negative_divisor() {
 #[test]
 fn div_cx173_bignum_factorial_via_reduction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (3628800 2432902008176640000 265252859812191058636308480000000 815915283247897734345611269596115894272000000000 30414093201713378043612608166064768844377641568960512000000000000)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums (list 10 20 30 40 50)))

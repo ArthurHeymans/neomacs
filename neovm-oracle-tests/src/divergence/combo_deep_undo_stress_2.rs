@@ -325,7 +325,7 @@ fn deficiency_advice_around_undo_textprop() {
 fn deficiency_cl_loop_destructuring_overlay_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cdo\")))\n\

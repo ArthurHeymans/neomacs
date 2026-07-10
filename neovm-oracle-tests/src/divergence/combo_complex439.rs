@@ -84,7 +84,7 @@ fn div_cx439_overlay_lists_display_column() {
 #[test]
 fn div_cx439_string_collate_local_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil \"test\")""#]];
+    let expect = expect_test::expect![[r#""OK (t \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (let ((s1 (make-local-variable 'neo-cx439-loc)))
@@ -112,7 +112,7 @@ fn div_cx439_frame_process_display() {
 #[test]
 fn div_cx439_time_locale_casefold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((501485566126885707972608 . 0) nil t)""#]];
+    let expect = expect_test::expect![[r#""OK ((501485566126885707972608 . 0) t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((case-fold-search t))
   (list (condition-case e (encode-time 30.5 30 14 16 6 2026 nil) (error (car e)))

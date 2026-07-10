@@ -225,7 +225,7 @@ fn deficiency_kill_sentence_syntax_undo() {
 fn deficiency_indent_syntax_based_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"isu\")))\n\

@@ -8,7 +8,7 @@ fn divergence_overlay_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""Hello World!OK (10 5 (#<overlay from 1 to 6 in  *neovm-oracle-stdout*> #<overlay from 4 to 12 in  *neovm-oracle-stdout*>) 2)""#
+        r#""OK (10 5 (#<overlay from 1 to 6 in *scratch*> #<overlay from 4 to 12 in *scratch*>) 2)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -31,8 +31,7 @@ fn divergence_overlay_priority() {
 fn divergence_overlay_start_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGHIJOK (3 7 #<buffer  *neovm-oracle-stdout*> t)""#]];
+    let expect = expect_test::expect![[r#""OK (3 7 #<buffer *scratch*> t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -49,7 +48,7 @@ fn divergence_overlay_start_end() {
 fn divergence_overlay_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (1 4)""#]];
+    let expect = expect_test::expect![[r#""OK (1 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -65,7 +64,7 @@ fn divergence_overlay_move() {
 fn divergence_overlay_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello World!OK (t t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World!")
@@ -82,7 +81,7 @@ fn divergence_overlay_invisible() {
 fn divergence_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCXDEFGHOK (after before)""#]];
+    let expect = expect_test::expect![[r#""OK (after before)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -102,7 +101,7 @@ fn divergence_overlay_modification_hooks() {
 fn divergence_overlay_insert_in_front() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABXXCDEFGHOK (5 8 \"ABXXCDEFGH\")""#]];
+    let expect = expect_test::expect![[r#""OK (5 8 \"ABXXCDEFGH\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -120,7 +119,7 @@ fn divergence_overlay_insert_in_front() {
 fn divergence_overlay_insert_behind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEYYFGHOK (3 8 \"ABCDEYYFGH\")""#]];
+    let expect = expect_test::expect![[r#""OK (3 8 \"ABCDEYYFGH\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -138,7 +137,7 @@ fn divergence_overlay_insert_behind() {
 fn divergence_overlay_list_in_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (3 1 1 0)""#]];
+    let expect = expect_test::expect![[r#""OK (3 1 1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -157,7 +156,7 @@ fn divergence_overlay_list_in_range() {
 fn divergence_delete_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHOK (nil nil bold nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil bold nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -176,7 +175,7 @@ fn divergence_delete_overlay() {
 fn divergence_next_overlay_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (2 7 9 7)""#]];
+    let expect = expect_test::expect![[r#""OK (2 7 9 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")

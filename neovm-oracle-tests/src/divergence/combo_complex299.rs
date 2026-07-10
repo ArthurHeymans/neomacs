@@ -40,7 +40,7 @@ fn div_cx299_process_thread_query() {
 fn div_cx299_network_interface_info_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 14825 37298 63684 12398 0]))""#
+        r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 17455 22788 18505 15291 0]))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

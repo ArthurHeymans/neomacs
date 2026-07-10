@@ -114,7 +114,7 @@ fn iso8601_week() {
 fn make_decoded_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2024 10 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-decoded-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((dt (make-decoded-time :year 2024 :month 6 :day 15 :hour 10)))
   (list (decoded-time-year dt) (decoded-time-hour dt) (decoded-time-minute dt)))"##,

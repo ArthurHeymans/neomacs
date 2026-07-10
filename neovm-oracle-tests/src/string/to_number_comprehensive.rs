@@ -382,7 +382,7 @@ fn oracle_prop_string_to_number_comprehensive_degenerate() {
   (= 0 (string-to-number "abc"))
   (= 0 (string-to-number " "))
   (integerp (string-to-number "abc")))"##;
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable 0x)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

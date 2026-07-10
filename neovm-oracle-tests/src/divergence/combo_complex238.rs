@@ -241,7 +241,7 @@ fn div_cx238_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_
 #[test]
 fn div_cx238_mega_5_all_subsystem_final_ultimate_chaos_record_hash_coding_advice_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)

@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_record_type_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rec-xxx (:type list)) a b c)
@@ -125,7 +125,7 @@ fn divergence_closure_let_binding_evaluation_order() {
 fn divergence_record_vector_accessor_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 59)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rva-xxx (:type vector)) x y z)

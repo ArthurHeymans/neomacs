@@ -21,7 +21,9 @@ fn div_v8_current_time_zone_format_z_explicit() {
                 (format-time-string "%Y-%m-%dT%H:%M:%S%z" fixed))))
     (set-time-zone-rule tz)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"UTC\" \"+0000\" 0 \"UTC\" \"2025-03-15T12:00:00+0000\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +42,9 @@ fn div_v8_timezone_make_date_arpa_standard_offset() {
                 (current-time-zone fixed))))
     (set-time-zone-rule tz)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Sat, 15 Mar 2025 09:30:00 +0000\" \"20250315T093000\" (0 30 9 15 3 2025 6 nil 0) (0 \"UTC\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +63,6 @@ fn div_v8_set_time_zone_rule_restore_roundtrip() {
             (list utc-z pst-z (>= (length utc-z) 4) (>= (length pst-z) 4)))))
     (set-time-zone-rule tz)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"0500\" \"2100\" t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

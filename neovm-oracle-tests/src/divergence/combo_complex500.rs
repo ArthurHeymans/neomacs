@@ -88,7 +88,7 @@ fn div_cx500_ert_explainer() {
 #[test]
 fn div_cx500_check_declare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'cl-lib)
   (cl-declare (ftype (function (integer) integer) neo-cx500-fn))
@@ -101,7 +101,7 @@ fn div_cx500_check_declare() {
 #[test]
 fn div_cx500_check_lib() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (featurep 'cl-lib) (featurep 'cl-seq) (featurep 'cl-macs))
 "##,

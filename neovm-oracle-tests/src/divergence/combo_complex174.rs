@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx174_char_syntax_matrix_per_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((97 119) (65 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 40) (125 41) (34 34) (39 46) (96 46) (59 46) (44 46) (46 46) (92 92) (63 46) (33 46) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46) (94 46))""#
+        r#""OK ((97 119) (65 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 95) (125 95) (34 34) (39 39) (96 39) (59 60) (44 39) (46 95) (92 92) (63 95) (33 95) (35 39) (36 95) (37 95) (38 95) (42 95) (43 95) (60 95) (62 95) (64 95) (47 95) (124 95) (126 95) (94 95))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -114,7 +114,7 @@ fn div_cx174_char_table_range_query_complex() {
 #[test]
 fn div_cx174_with_syntax_table_local_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (119 95 46 95)""#]];
+    let expect = expect_test::expect![[r#""OK (119 95 95 95)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((before-at (char-syntax ?@))

@@ -3,7 +3,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo93_org_babel_with_header_args_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:eval-when-bound nil :resolve-reference-fbound t :number-p-fbound t)""#
+        r#""OK (:eval-when-bound nil :resolve-reference-fbound nil :number-p-fbound t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ob-core) (list

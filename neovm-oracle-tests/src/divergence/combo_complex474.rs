@@ -53,7 +53,7 @@ fn div_cx474_smerge_basic() {
 #[test]
 fn div_cx474_diff_mode_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (fundamental-mode fundamental-mode)""#]];
+    let expect = expect_test::expect![[r#""OK (lisp-interaction-mode nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'diff-mode)
   (list major-mode (derived-mode-p 'fundamental-mode)))

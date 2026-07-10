@@ -83,7 +83,7 @@ fn combo_eieio_bufswap_basic_with_objects() {
 fn combo_eieio_bufswap_with_narrow_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (cl-no-applicable-method bs-count nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bs-count)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass swap-ctx ()

@@ -130,7 +130,7 @@ fn div_cx131_desktop_save_buffer_format() {
 #[test]
 fn div_cx131_bookmark_default_file_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-variable)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -146,7 +146,7 @@ fn div_cx131_bookmark_default_file_path() {
 #[test]
 fn div_cx131_history_variables_savehist_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

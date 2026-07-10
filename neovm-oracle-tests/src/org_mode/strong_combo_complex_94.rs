@@ -80,7 +80,7 @@ fn combo94_org_babel_row_col_indexing() {
 #[test]
 fn combo94_org_timestamp_special_dates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 7 126)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (list
  :feb28 (let ((ts (org-timestamp-from-string "<2024-02-28 Wed>")))

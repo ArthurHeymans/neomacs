@@ -39,7 +39,9 @@ fn divergence_buflocal_closure_advice_chain() {
 fn divergence_buflocal_marker_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""oriINSERTEDginalERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"oriINSERTEDginal\" 0 3 (part first) 12 15 (part second)) 12 14 #(\"original\" 0 3 (part first) 4 7 (part second)) t 4 t 6 t first t second t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-bmu-xxx)
@@ -105,7 +107,7 @@ fn divergence_keymap_closure_advice_interact() {
 fn divergence_buflocal_overlay_textprop_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""STATUS-HEREERR (invalid-read-syntax \")\" 26 35)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 26 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-boat-state-xxx)
@@ -171,7 +173,7 @@ fn divergence_buflocal_regex_match_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""abc KEY123 def KEY456 ghiOK (((5 11 \"KEY123\" nil) (16 22 \"KEY456\" nil)) t t t nil nil search t t t)""#
+        r#""OK (((5 11 \"KEY123\" nil) (16 22 \"KEY456\" nil)) t t t nil nil search t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -207,7 +209,7 @@ fn divergence_buflocal_regex_match_overlay() {
 fn divergence_undo_buflocal_marker_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ZZ-MIDDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-ubmc-data-xxx)

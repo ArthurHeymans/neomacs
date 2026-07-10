@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 45)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-labels ((test-fact-xxx (n)
@@ -27,7 +27,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_flet_temporary_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 34)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-fo-xxx (x) (* x 2))
@@ -48,7 +48,7 @@ fn divergence_cl_flet_temporary_override() {
 fn divergence_cl_macrolet_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 6 30)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-macrolet ((test-swap-xxx (a b)
@@ -64,7 +64,7 @@ fn divergence_cl_macrolet_expansion() {
 fn divergence_cl_symbol_macrolet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 42)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-symbol-macrolet ((test-pi-xxx 31415))
@@ -82,7 +82,7 @@ fn divergence_cl_symbol_macrolet() {
 fn divergence_cl_the_and_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 41)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-the)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-the integer (+ 1 2))
@@ -120,7 +120,7 @@ fn divergence_cl_eval_when() {
 fn divergence_cl_locally_declarations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 44)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-locally)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-locally
@@ -163,7 +163,7 @@ fn divergence_cl_assoc_rassoc_extended() {
 fn divergence_cl_subseq_substitute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 59)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-subseq '(1 2 3 4 5) 1 4)

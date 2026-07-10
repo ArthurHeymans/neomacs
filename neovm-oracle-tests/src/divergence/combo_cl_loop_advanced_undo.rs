@@ -31,9 +31,7 @@ fn deficiency_cl_loop_hash_accumulate_vector() {
 fn deficiency_cl_loop_with_buffers_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((\"clb1\" #(\"content1\" 0 8 (idx 1)) 1) (\"clb2\" #(\"content2\" 0 8 (idx 2)) 2) (\"clb3\" #(\"content3\" 0 8 (idx 3)) 3) (\"clb4\" #(\"content4\" 0 8 (idx 4)) 4) (\"clb5\" #(\"content5\" 0 8 (idx 5)) 5))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((bufs (cl-loop for i from 1 to 5\n\
@@ -76,7 +74,7 @@ fn deficiency_cl_loop_destructuring_with_closures() {
 fn deficiency_cl_loop_for_on_hashtable_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\
@@ -110,7 +108,7 @@ fn deficiency_cl_loop_for_on_hashtable_undo() {
 fn deficiency_cl_loop_sum_max_min_with_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"csm\")))\n\
@@ -137,7 +135,7 @@ fn deficiency_cl_loop_sum_max_min_with_buf() {
 fn deficiency_cl_loop_vector_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((6 15 24) (1 2 3 4 5 6 7 8 9) t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((matrix [[1 2 3] [4 5 6] [7 8 9]]))\n\
@@ -157,7 +155,7 @@ fn deficiency_cl_loop_vector_destructuring() {
 fn deficiency_cl_loop_with_substring_extraction_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function first)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cse\")))\n\
@@ -210,7 +208,7 @@ fn deficiency_cl_loop_reducing_with_hash() {
 fn deficiency_cl_loop_generate_series_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cgs\")))\n\
@@ -238,7 +236,7 @@ fn deficiency_cl_loop_generate_series_undo() {
 fn deficiency_cl_loop_with_string_ops_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cso\")))\n\

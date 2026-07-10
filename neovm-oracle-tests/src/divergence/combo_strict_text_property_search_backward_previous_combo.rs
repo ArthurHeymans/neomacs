@@ -20,7 +20,7 @@ fn div_v8_text_property_search_backward_prop_match() {
           (and m (prop-match-end m))
           (and m (prop-match-value m)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function text-property-search-backward)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_previous_single_char_property_change_ranges() {
         (previous-char-property-change 20)
         (previous-char-property-change 2)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (16 12 3 16 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +60,6 @@ fn div_v8_text_property_search_predicate_not_equal() {
               (and m2 (prop-match-value m2))
               (and m3 (prop-match-value m3)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (bold bold underline)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

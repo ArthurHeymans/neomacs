@@ -30,7 +30,9 @@ fn div_v8_advice_around_before_after_order_log() {
         (advice-remove 'probe-adv-target before)
         (advice-remove 'probe-adv-target after)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (10 (around-enter before primary after around-exit) #[128 \"\\304\\300\\301\u{3}#\\207\" [#[(fn x) ((push 'around-enter probe-adv-log) (let ((r (funcall fn x))) (push 'around-exit probe-adv-log) r)) (t)] #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[(x) ((push 'after probe-adv-log)) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[(x) ((push 'before probe-adv-log)) (t)] #[(x) ((push 'primary probe-adv-log) (* x 2)) (t)] :before nil apply] 4 advice] :after nil apply] 5 advice] :around nil apply] 5 advice] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[(x) ((push 'before probe-adv-log)) (t)] #[(x) ((push 'primary probe-adv-log) (* x 2)) (t)] :before nil apply] 4 advice] #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[(x) ((push 'after probe-adv-log)) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[(x) ((push 'before probe-adv-log)) (t)] #[(x) ((push 'primary probe-adv-log) (* x 2)) (t)] :before nil apply] 4 advice] :after nil apply] 5 advice])""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,7 +59,7 @@ fn div_v8_advice_mapc_filter_after_remove() {
                   (advice-member-p a2 'probe-adv-mapc-target))
           (advice-remove 'probe-adv-mapc-target a2))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 0 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -77,6 +79,8 @@ fn div_v8_advice_filter_interpret_args_return_value() {
         (advice-remove 'probe-adv-flt filter-args)
         (advice-remove 'probe-adv-flt filter-return)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) (x y) (list (* x 10) (* y 10))) 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

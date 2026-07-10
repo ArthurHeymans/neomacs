@@ -82,7 +82,7 @@ fn div_cx480_customize_options() {
 #[test]
 fn div_cx480_widget_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""hello\nOK nil""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (widget-match-inline (widget-create 'editable-field "hello") '(hello)))
@@ -132,8 +132,7 @@ fn div_cx480_custom_save() {
 #[test]
 fn div_cx480_widget_color() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""Color: red            [ Choose ]  (sample)\nOK color""#]];
+    let expect = expect_test::expect![[r#""OK color""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (widget-type (widget-create 'color "red")))
@@ -145,7 +144,7 @@ fn div_cx480_widget_color() {
 #[test]
 fn div_cx480_widget_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""[ ]OK nil""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (widget-value (widget-create 'checkbox nil)))
@@ -157,7 +156,7 @@ fn div_cx480_widget_checkbox() {
 #[test]
 fn div_cx480_widget_radio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""( ) A\n( ) B\n( ) C\nOK nil""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (let ((w (widget-create 'radio-button-choice
@@ -171,7 +170,7 @@ fn div_cx480_widget_radio() {
 #[test]
 fn div_cx480_widget_menu_choice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""choice: invalid (nil)\nOK nil""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (let ((w (widget-create 'menu-choice '(item "A") '(item "B"))))
@@ -185,7 +184,7 @@ fn div_cx480_widget_menu_choice() {
 fn div_cx480_widget_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""click meOK (link :args nil :value \"click me\" :button-prefix \"\" :button-suffix \"\" :button-overlay #<overlay from 1 to 9 in  *neovm-oracle-stdout*> :from #<marker (moves after insertion) at 1 in  *neovm-oracle-stdout*> :to #<marker at 9 in  *neovm-oracle-stdout*>)""#
+        r#""OK (link :args nil :value \"click me\" :button-prefix \"\" :button-suffix \"\" :button-overlay #<overlay from 1 to 9 in *scratch*> :from #<marker (moves after insertion) at 1 in *scratch*> :to #<marker at 9 in *scratch*>)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)

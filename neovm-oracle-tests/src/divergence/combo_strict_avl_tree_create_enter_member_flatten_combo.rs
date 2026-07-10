@@ -21,7 +21,7 @@ fn div_v8_avl_tree_enter_member_flatten_height() {
         (avl-tree-empty tree)
         (avl-tree-height tree)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function avl-tree-height)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_avl_tree_delete_root_min_max() {
         (avl-tree-flatten tree)
         (avl-tree-delete-all tree 8)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function avl-tree-delete-all)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_avl_tree_map_copy_size() {
           (avl-tree-size tree)
           (avl-tree-flatten tree))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((30 40 50 60 70) 5 (6 4 7 3 5))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

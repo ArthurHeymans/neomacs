@@ -21,7 +21,7 @@ fn div_v8_thread_make_alive_join() {
               result))
     (error (list 'caught (car err) result))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil \"probe-thread\" ran ran)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_mutex_lock_unlock_condition_variable() {
               (mutex-name mx))))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +58,6 @@ fn div_v8_thread_main_thread_current_signal() {
             (eq (current-thread) (current-thread))))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

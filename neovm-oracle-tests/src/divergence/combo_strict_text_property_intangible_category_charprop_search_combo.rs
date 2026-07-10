@@ -22,7 +22,7 @@ fn div_v8_text_property_intangible_category_stacked() {
         (get-char-property 7 'font-lock-face)
         (get-char-property 9 'font-lock-face)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil bold cat-x t italic nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +46,7 @@ fn div_v8_char_property_change_search_ranges() {
         (text-property-not-all 1 21 'face nil)
         (text-property-any 1 21 'face 'underline)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 7 11 21 14 11 3 14 11 3 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,6 +72,8 @@ fn div_v8_property_stickiness_deletion_rear_front() {
           (text-properties-at 5)
           (length (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((rear-nonsticky nil face bold) (front-sticky nil face italic) (front-sticky nil face italic) (face underline)) #(\"BBB\" 0 3 (front-sticky nil face italic)) #(\"AAACCC\" 0 3 (rear-nonsticky nil face bold) 3 5 (face underline)) (rear-nonsticky nil face bold) (face underline) (face underline) 6)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

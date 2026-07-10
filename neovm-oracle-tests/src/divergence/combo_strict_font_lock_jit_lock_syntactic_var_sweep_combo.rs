@@ -25,7 +25,7 @@ fn div_v8_font_lock_maximum_decoration_support_var_sweep() {
       (boundp 'font-lock-defaults)
       (boundp 'font-lock-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t nil t t t t t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_jit_lock_context_stealth_defer_var_sweep() {
       (boundp 'font-lock-extend-after-change-region-function)
       (boundp 'syntax-beginning-function))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +68,6 @@ fn div_v8_syntax_comment_parse_sexp_var_sweep() {
       (boundp 'forward-sexp-function)
       (boundp 'multibyte-syntax-as-symbol))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

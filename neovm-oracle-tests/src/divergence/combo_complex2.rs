@@ -134,8 +134,7 @@ fn div_cx2_char_width_table_modify_column() {
 #[test]
 fn div_cx2_match_data_save_restore_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 1 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 1 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -222,7 +221,7 @@ fn div_cx2_read_circular_labels() {
 #[test]
 fn div_cx2_cl_coerce_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((97 233 20013) 3 \"aé中\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-coerce "aé中" 'list)

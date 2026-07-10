@@ -23,7 +23,7 @@ fn div_v8_buffer_match_p_modes_visiting() {
     (kill-buffer b1)
     (kill-buffer b2)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_buffer_local_variables_listing_boundp() {
                 (buffer-local-value 'probe-blv-var b))))
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t (probe-blv-var . local) t t nil local)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,8 @@ fn div_v8_buffer_match_p_name_regexp_file() {
     (kill-buffer b1)
     (kill-buffer b2)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument stringp (name . \" *probe-name-a*\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

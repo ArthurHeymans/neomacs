@@ -45,7 +45,7 @@ fn div_cx229_mailcap_availability() {
 #[test]
 fn div_cx229_mime_type_to_extension() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -152,7 +152,7 @@ fn div_cx229_rfc2047_encode_decode_headers() {
 #[test]
 fn div_cx229_server_running_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

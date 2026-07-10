@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_nested_backrefs_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""start\nkey=abc\nkey=def\nkey=abc\nkey=ghi\nendOK ((\"abc\" \"def\" \"abc\" \"ghi\") 4 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((\"abc\" \"def\" \"abc\" \"ghi\") 4 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"start\\nkey=abc\\nkey=def\\nkey=abc\\nkey=ghi\\nend\")
@@ -69,7 +67,7 @@ fn divergence_regex_greedy_vs_lazy() {
 fn divergence_regex_with_escaped_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (nil \"ce: $\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((text \"price: $19.99 (tax: $3.80) total: $23.79\"))
   (list (string-match \"\\\\\\\\$\\\\([0-9.]+\\\\)\" text)
@@ -177,7 +175,7 @@ fn divergence_regex_multiline_dot() {
 fn divergence_regex_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAA match1 BBB match2 CCCOK (\"1\" \"2\" 5 11)""#]];
+    let expect = expect_test::expect![[r#""OK (\"1\" \"2\" 5 11)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA match1 BBB match2 CCC\")

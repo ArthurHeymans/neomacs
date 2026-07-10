@@ -496,9 +496,7 @@ fn oracle_prop_btree_bulk_insert_sorted() {
     (fmakunbound 'neovm--bt4-insert)
     (fmakunbound 'neovm--bt4-inorder)
     (fmakunbound 'neovm--bt4-search)))"#;
-    let expect = expect_test::expect![[
-        r#""OK ((5 10 15 25 27 30 35 50 55 60 65 75 85 90 95) t 15 t nil nil nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

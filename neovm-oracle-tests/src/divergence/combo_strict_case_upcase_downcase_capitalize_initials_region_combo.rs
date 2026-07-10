@@ -18,7 +18,9 @@ fn div_v8_case_upcase_downcase_capitalize_string() {
       (downcase "ABCdef123GHI")
       (upcase "abc123def"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"HELLO WORLD\" \"hello world\" \"Hello World Foo\" \"Hello World Foo\" \"The QUICK Brown\" \"Abc Def\" \"abcdef123ghi\" \"ABC123DEF\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +45,9 @@ fn div_v8_case_region_upcase_downcase_capitalize() {
         (upcase-initials-region 1 16)
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"HELLO world\" \"hello WORLD\" \"Hello World foo\" \"Hello World Foo\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +68,8 @@ fn div_v8_case_multibyte_accented_and_table() {
         (downcase-region 1 10)
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"HÉLLO WÖRLD\" \"héllo wörld\" \"Naïve Café Résumé\" \"Ñandú Über\" \"CAFÉ RÉSUMÉ\" \"österreicH\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

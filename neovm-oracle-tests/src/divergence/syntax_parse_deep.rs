@@ -23,7 +23,7 @@ fn divergence_syntax_table_functions() {
 fn divergence_char_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (119 32 40 41 34 46)""#]];
+    let expect = expect_test::expect![[r#""OK (119 32 40 41 34 60)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (char-syntax ?a)
@@ -40,9 +40,7 @@ fn divergence_char_syntax() {
 fn divergence_parse_partial_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(foo (bar baz) quux)ERR (scan-error \"Unbalanced parentheses\" 1 21)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (scan-error \"Unbalanced parentheses\" 1 21)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo (bar baz) quux)")
@@ -58,7 +56,7 @@ fn divergence_parse_partial_sexp() {
 fn divergence_forward_sexps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""(foo bar) (baz quux)OK (10 21 11 1)""#]];
+    let expect = expect_test::expect![[r#""OK (10 21 11 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo bar) (baz quux)")
@@ -77,9 +75,7 @@ fn divergence_forward_sexps() {
 fn divergence_scan_lists_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(a (b c) d (e (f g) h) i)ERR (scan-error \"Unbalanced parentheses\" 1 26)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (scan-error \"Unbalanced parentheses\" 1 26)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(a (b c) d (e (f g) h) i)")
@@ -95,7 +91,7 @@ fn divergence_scan_lists_deep() {
 fn divergence_forward_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""foo ; comment\nbarOK (nil 18 nil 18)""#]];
+    let expect = expect_test::expect![[r#""OK (nil 18 nil 18)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo ; comment\nbar")
@@ -127,9 +123,7 @@ fn divergence_syntax_class() {
 fn divergence_indent_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(defun foo ()\n  (bar))OK (t t (1 1 17 nil nil nil 0 nil nil (1) nil))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t (1 1 17 nil nil nil 0 nil nil (1) nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(defun foo ()\n  (bar))")
@@ -144,7 +138,7 @@ fn divergence_indent_parse() {
 fn divergence_matching_paren() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t 41 40 nil 125)""#]];
+    let expect = expect_test::expect![[r#""OK (t 41 40 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'matching-paren)
@@ -160,7 +154,7 @@ fn divergence_matching_paren() {
 fn divergence_syntax_ppss() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""(foo \"bar\\\"baz\" quux)OK (1 nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo \"bar\\\"baz\" quux)")

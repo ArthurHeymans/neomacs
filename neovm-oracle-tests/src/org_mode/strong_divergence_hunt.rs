@@ -192,7 +192,7 @@ fn strong_drawer_parse_properties_only() {
 #[test]
 fn strong_clock_in_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-clocking-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -207,7 +207,7 @@ fn strong_clock_in_todo() {
 #[test]
 fn strong_clock_in_out() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-clocking-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

@@ -28,7 +28,7 @@ fn div_v8_floor_ceiling_round_truncate_mod_sign_rules() {
       (mod 7 3)
       (% 7 3))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 -3 -3 3 -2 2 2 -2 2 -2 2 -2 -1 1 1 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +52,7 @@ fn div_v8_bignum_factorial_fixnum_boundary() {
       (gcd (expt 2 20) (expt 2 30))
       (logand (expt 2 64) (1- (expt 2 64))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function gcd)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -78,6 +78,6 @@ fn div_v8_float_nan_inf_frexp_ldexp_copysign_fma() {
         (isnan (sqrt -1.0))
         (/ 0.0 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function fma)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

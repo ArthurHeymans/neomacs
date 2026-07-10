@@ -131,7 +131,7 @@ fn divergence_directory_listing() {
 fn divergence_insert_file_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (11 \"Hello World\")""#]];
+    let expect = expect_test::expect![[r#""OK (11 \"Hello World\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp (make-temp-file \"test-read-\")))
   (write-region \"Hello World\" nil tmp nil 'silent)

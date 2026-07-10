@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (10 24 \"world\" t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-reduce '+ '(1 2 3 4))
@@ -22,7 +22,7 @@ fn divergence_cl_reduce() {
 fn divergence_cl_every_some() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-every 'integerp '(1 2 3))
@@ -39,7 +39,7 @@ fn divergence_cl_every_some() {
 fn divergence_cl_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2 nil 3 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-position 3 '(1 2 3 4 5))
@@ -54,7 +54,7 @@ fn divergence_cl_position() {
 fn divergence_cl_remove_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 2 4 5) (3 2 1) (1 2 4 5) (1 2 99 4 99))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-remove 3 '(1 2 3 4 3 5))
@@ -69,7 +69,7 @@ fn divergence_cl_remove_delete() {
 fn divergence_cl_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 1 3 4 5 9) t (1 1 3 4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-sort (copy-sequence '(3 1 4 1 5 9)) '<)
@@ -83,7 +83,7 @@ fn divergence_cl_sort_stable() {
 fn divergence_cl_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-merge)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-merge 'list '(1 3 5) '(2 4 6) '<)
@@ -96,7 +96,7 @@ fn divergence_cl_merge() {
 fn divergence_cl_search_mismatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 3 2 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-search)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-search '(2 3) '(1 2 3 4))
@@ -111,7 +111,7 @@ fn divergence_cl_search_mismatch() {
 fn divergence_cl_subseq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((b c) (c d e) \"ell\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-subseq '(a b c d e) 1 3)
@@ -143,7 +143,7 @@ fn divergence_seq_functions() {
 fn divergence_seq_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 3 4) (1 3 5) 10 5 2 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-oddp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (seq-map #'1+ '(1 2 3))

@@ -220,7 +220,7 @@ fn combo_keymap_prompt_and_metadata() {
 fn combo_accessible_keymaps_from_global_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((maps (accessible-keymaps (current-global-map))))

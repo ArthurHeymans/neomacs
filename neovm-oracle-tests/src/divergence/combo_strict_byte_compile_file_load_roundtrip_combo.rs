@@ -25,7 +25,7 @@ fn div_v8_byte_compile_file_load_call_roundtrip() {
     (when (file-exists-p src) (delete-file src))
     (when (file-exists-p elc) (delete-file elc))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t 84 t)""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -50,7 +50,7 @@ fn div_v8_byte_compile_file_macro_defun_roundtrip() {
     (when (file-exists-p src) (delete-file src))
     (when (file-exists-p elc) (delete-file elc))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t 50 t)""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_load_file_eval_after_load_feature() {
             (featurep 'probe-lf))
     (when (file-exists-p src) (delete-file src))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t loaded t)""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }

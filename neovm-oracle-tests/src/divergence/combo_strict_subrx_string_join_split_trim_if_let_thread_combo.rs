@@ -24,7 +24,9 @@ fn div_v8_subrx_string_join_split_trim() {
       (string-blank-p "   ")
       (string-blank-p "x"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"a-b-c\" \"only\" \"\" (\"a\" \"b\" \"c\" \"d\") (\"a\" \"b\" \"c\" \"d\") (\"a\" \"b\" \"c\") \"hello world\" \"hello\" \"world\" t nil 0 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +44,7 @@ fn div_v8_subrx_if_let_when_let_thread() {
       (thread-last 5 (* 2) (+ 3))
       (thread-first 1 (+ 10) (* 2) (- 5)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (10 else 3 30 nil 13 13 17)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +65,6 @@ fn div_v8_subrx_hash_table_keys_values_emptiness() {
         (hash-table-empty-p (make-hash-table))
         (hash-table-empty-p h)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 (a b c) (2 1) t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

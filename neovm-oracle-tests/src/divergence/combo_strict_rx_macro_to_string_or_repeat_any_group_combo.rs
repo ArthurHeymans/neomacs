@@ -21,7 +21,9 @@ fn div_v8_rx_to_string_seq_repeat_any_group() {
       (match-string 1 "key:42rest")
       (rx-to-string '(seq "v" (opt "1") "=" (0+ digit))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\(?:foo[[:digit:]]+bar\\\\)\" \"[a-c]\\\\{3\\\\}\" \"[[:digit:]]\\\\{1,3\\\\}\" \"\\\\(?:bird\\\\|cat\\\\|dog\\\\)\" \"\\\\(?:\\\\<[[:word:]]+\\\\>\\\\)\" \"\\\\(key:[[:digit:]]+\\\\)\" 0 \"42\" \"\\\\(?:v1?=[[:digit:]]*\\\\)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +42,9 @@ fn div_v8_rx_named_groups_interval_submatch() {
       (rx-to-string '(seq "x" (max-n 2 digit) "y"))
       (rx-to-string '(seq "a" (minimal-match (zero-or-more nonl)) "z")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"rx ‘group-n’ requires a positive number as first argument\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +64,6 @@ fn div_v8_rx_pcase_and_backreference_constructs() {
       (list (match-string 1 "id=99 name=abc")
             (match-string 2 "id=99 name=abc")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Unknown rx symbol ‘field’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -21,7 +21,9 @@ fn div_v8_re_search_forward_accumulate_multi_group() {
             results))
     (nreverse results)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 5 1 4 \"foo\" \"1\") (6 10 6 9 \"bar\" \"2\") (11 15 11 14 \"baz\" \"3\") (16 20 16 19 \"foo\" \"4\") (21 25 21 24 \"bar\" \"5\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +44,8 @@ fn div_v8_match_data_save_set_restore_isolation() {
           (progn (set-match-data nil) (match-data))
           (progn (set-match-data outer) (match-string 1 "abc aXc")))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((0 3 1 2) \"b\" ((0 3 1 2) \"y\") (0 3 1 2) nil \"b\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +62,6 @@ fn div_v8_re_search_backward_match_substitute_replacement() {
           (match-string 1)
           (match-substitute-replacement "[\\1\\2]"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (13 \"e5\" \"e\" \"[e5]\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

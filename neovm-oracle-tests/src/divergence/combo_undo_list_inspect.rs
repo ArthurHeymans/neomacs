@@ -194,7 +194,7 @@ fn deficiency_undo_after_kill_all_undo_records() {
 fn deficiency_undo_complex_nested_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ucn\")))\n\

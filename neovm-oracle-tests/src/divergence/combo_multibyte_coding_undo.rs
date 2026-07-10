@@ -105,7 +105,7 @@ fn deficiency_encode_decode_region_undo() {
 fn deficiency_char_syntax_multibyte_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"csm\")))\n\
@@ -131,7 +131,7 @@ fn deficiency_char_syntax_multibyte_combo() {
 fn deficiency_buffer_position_multibyte_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bpm\")))\n\
@@ -303,7 +303,7 @@ fn deficiency_apply_macro_undo_textprop() {
 fn deficiency_mapconcat_over_intervals_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mci\")))\n\

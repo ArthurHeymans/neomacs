@@ -17,7 +17,7 @@ fn div_v8_format_spec_expand_alist_percent_missing() {
         (format-spec "no specs at all" spec)
         (format-spec "%u-%u-%h" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid format character: ‘%z’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_format_spec_make_and_padding_flags() {
       (format-spec "trunc %5s|" '((?s . "toolong")))
       (format-spec "key=%( g=%)" '((?u . "v"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-spec-make)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +49,8 @@ fn div_v8_format_spec_multibyte_special_chars() {
         (format-spec "tab\there" spec)
         (format-spec "newline\nhere" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"name=日本語 drink=café\" 3 \"café-café\" \"tab\there\" \"newline\nhere\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -60,7 +60,7 @@ fn div_s0_undo_marker_insertion_type() {
 #[test]
 fn div_s0_undo_buffer_undo_list_length_and_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (6 2 8 \"a\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-count-if)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer

@@ -145,7 +145,7 @@ fn divergence_case_changes() {
 fn divergence_string_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t \"olleh\" (3 2 1) [3 2 1])""#]];
+    let expect = expect_test::expect![[r#""OK (nil t \"olleh\" (3 2 1) [3 2 1])""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'string-reverse)

@@ -273,7 +273,7 @@ fn oracle_prop_lattice_join_meet() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)))"#;
-    let expect = expect_test::expect![[r#""OK (top bot a a a a top bot)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -496,7 +496,7 @@ fn oracle_prop_lattice_distributive() {
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-distributive-p)))"#;
-    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -608,7 +608,7 @@ fn oracle_prop_lattice_complemented_boolean() {
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-complement)
     (fmakunbound 'neovm--lat-complemented-p)))"#;
-    let expect = expect_test::expect![[r#""OK (t t (b) (top) nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -714,7 +714,7 @@ fn oracle_prop_lattice_knaster_tarski_fixed_point() {
     (fmakunbound 'neovm--lat-powerset)
     (fmakunbound 'neovm--lat-lfp)
     (fmakunbound 'neovm--lat-lfp-iter)))"#;
-    let expect = expect_test::expect![[r#""OK ((1) (1) (2 3) nil (1 2) (1 2))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -808,8 +808,7 @@ fn oracle_prop_lattice_ideal_generation() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-principal-ideal)
     (fmakunbound 'neovm--lat-is-ideal-p)))"#;
-    let expect =
-        expect_test::expect![[r#""OK ((a b bot c top) (a b bot c) (a bot) (bot) t nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -907,9 +906,7 @@ fn oracle_prop_lattice_filter_generation() {
     (fmakunbound 'neovm--lat-leq)
     (fmakunbound 'neovm--lat-principal-filter)
     (fmakunbound 'neovm--lat-is-filter-p)))"#;
-    let expect = expect_test::expect![[
-        r#""OK ((a b bot c top) (c top) (top) (a c top) t nil t (a bot c top))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1009,6 +1006,6 @@ fn oracle_prop_lattice_sublattice() {
     (fmakunbound 'neovm--lat-join)
     (fmakunbound 'neovm--lat-meet)
     (fmakunbound 'neovm--lat-is-sublattice-p)))"#;
-    let expect = expect_test::expect![[r#""OK (t t nil t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

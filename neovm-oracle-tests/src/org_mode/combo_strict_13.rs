@@ -267,7 +267,7 @@ fn strict_element_cache_reset() {
 #[test]
 fn strict_timestamp_dayname_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 62)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

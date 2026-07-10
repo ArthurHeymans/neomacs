@@ -131,7 +131,7 @@ fn combo_eieio_defmethod_dispatch_change_class() {
 fn combo_eieio_defmethod_multi_dispatch_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Unknown specializer base-handler\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-action ()

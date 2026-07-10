@@ -700,7 +700,7 @@ fn combo_called_interactively_in_timer_callback() {
 fn combo_timer_list_management_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (4 3 3 2 t nil t nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (3 2 3 2 t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((t1 (run-with-timer 10 nil 'ignore))

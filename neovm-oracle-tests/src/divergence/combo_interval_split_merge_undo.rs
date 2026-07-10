@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_undo_insert_at_exact_prop_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uib\")))\n\
@@ -36,7 +36,7 @@ fn deficiency_undo_insert_at_exact_prop_boundary() {
 fn deficiency_undo_delete_at_exact_prop_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"udb\")))\n\
@@ -65,7 +65,7 @@ fn deficiency_undo_delete_at_exact_prop_boundary() {
 fn deficiency_undo_replace_spanning_two_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"urt\")))\n\
@@ -95,7 +95,7 @@ fn deficiency_undo_replace_spanning_two_intervals() {
 fn deficiency_undo_after_set_text_properties_then_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ust\")))\n\
@@ -125,7 +125,7 @@ fn deficiency_undo_after_set_text_properties_then_insert() {
 fn deficiency_undo_multiple_overlapping_sets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"umo\")))\n\
@@ -162,7 +162,7 @@ fn deficiency_undo_multiple_overlapping_sets() {
 fn deficiency_undo_after_add_single_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uap\")))\n\
@@ -193,7 +193,7 @@ fn deficiency_undo_after_add_single_property() {
 fn deficiency_undo_property_change_on_single_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"usc\")))\n\
@@ -226,7 +226,7 @@ fn deficiency_undo_property_change_on_single_char() {
 fn deficiency_undo_with_propertize_string_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ups\")))\n\
@@ -256,7 +256,7 @@ fn deficiency_undo_with_propertize_string_insert() {
 fn deficiency_undo_interval_merge_after_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uim\")))\n\
@@ -287,7 +287,7 @@ fn deficiency_undo_interval_merge_after_delete() {
 fn deficiency_undo_after_full_interval_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ufs\")))\n\

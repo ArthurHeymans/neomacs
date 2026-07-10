@@ -23,7 +23,7 @@ fn div_v8_skip_chars_forward_backward_ranges_negation() {
         (back (progn (skip-chars-backward "^a-z") (point))))
     (list s1 s2 s3 s4 s5 back)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (4 7 10 13 15 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_skip_syntax_forward_classes() {
     (list w ws1 in-cmt after-cmt
           (save-excursion (goto-char 1) (skip-syntax-forward "^ ") (point)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (10 11 11 13 10)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,7 +62,8 @@ fn div_v8_regexp_char_classes_alpha_alnum_space_punct() {
         (string-match "[^[:alpha:][:space:]]+" s)
         (match-string 0 s)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (0 \"Hello\" 7 \"World\" 6 \" \" 5 \",\" 5 \",\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -84,7 +85,7 @@ fn div_v8_char_fold_to_regexp_ascii_equiv() {
         ;; nil-safe: char-fold-to-regexp of plain ASCII letter
         (regexp-quote (char-fold-to-regexp "naive"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 97)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -105,6 +106,8 @@ fn div_v8_char_category_table_and_syntax_class_lookup() {
         (char-syntax ?\")
         (char-syntax ?;)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#&128\"\\0\\0\\0\\0\\0@\\0\\0\\0\u{10}\\0\\0\u{2}\u{10}\u{4}\\0\" #&128\"\\0\\0\\0\\0\\0@@\\0\\0\\0\\0\\0\u{2}\u{10}\u{4}\\0\" #&128\"\\0\\0\\0\\0\\0@\\0\\0\\0\\0\\0\\0\u{2}\u{10}\\0\\0\" #&128\"\\0\\0\\0\\0\\0@\\0\\0\\0\u{10}\\0\\0\u{2}\u{10}\u{4}\\0\" nil #&128\"\\0\\0\\0\\0\\0@\\0\\0\\0\u{10}\\0\\0\u{2}\u{10}\u{6}\\0\" 119 32 40 34 60)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

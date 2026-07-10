@@ -7,8 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_insert_delete_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""The  slowquick brown foxOK \"The  slowquick brown fox\"""#]];
+    let expect = expect_test::expect![[r#""OK \"The  slowquick brown fox\"""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"The quick brown fox\")
@@ -28,7 +27,7 @@ fn divergence_insert_delete_replacement() {
 fn divergence_buffer_substring_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (bold bold nil italic italic nil)""#]];
+    let expect = expect_test::expect![[r#""OK (bold bold nil italic italic nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -48,7 +47,7 @@ fn divergence_buffer_substring_props() {
 fn divergence_replace_match_backref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello worldOK (\"hello\" \"world\" 1 6 7 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"world\" 1 6 7 12)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"hello world\")
@@ -68,7 +67,7 @@ fn divergence_replace_match_backref() {
 fn divergence_narrow_edit_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABxyCDEFGHIJOK (\"ABxyCDEFGHIJ\" 1 13)""#]];
+    let expect = expect_test::expect![[r#""OK (\"ABxyCDEFGHIJ\" 1 13)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -86,7 +85,7 @@ fn divergence_narrow_edit_widen() {
 fn divergence_overlay_layered_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (bold italic 1 10 2)""#]];
+    let expect = expect_test::expect![[r#""OK (bold italic 1 10 2)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -110,7 +109,7 @@ fn divergence_overlay_layered_props() {
 fn divergence_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAABBBCCCERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 38)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA\")
@@ -131,7 +130,7 @@ fn divergence_undo_chain() {
 fn divergence_marker_after_multiple_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""123CDEFGHXYZIJOK (8 6 6 \"123CDEFGHXYZIJ\")""#]];
+    let expect = expect_test::expect![[r#""OK (8 6 6 \"123CDEFGHXYZIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -155,7 +154,7 @@ fn divergence_textprop_after_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""foo quux bazOK (#(\"foo quux baz\" 0 4 (test-prop original) 8 12 (test-prop original)) original nil original original)""#
+        r#""OK (#(\"foo quux baz\" 0 4 (test-prop original) 8 12 (test-prop original)) original nil original original)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
@@ -177,7 +176,7 @@ fn divergence_textprop_after_replace() {
 fn divergence_case_change_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HELLo worldERR (invalid-read-syntax \")\" 9 38)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 9 38)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"hello WORLD\")
@@ -196,8 +195,7 @@ fn divergence_case_change_operations() {
 fn divergence_rectangle_extract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGH\nIJKLMNOP\nQRSTUVWXOK ((\"BC\") 1 (\"AB\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((\"BC\") 1 (\"AB\"))""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGH\\nIJKLMNOP\\nQRSTUVWX\")

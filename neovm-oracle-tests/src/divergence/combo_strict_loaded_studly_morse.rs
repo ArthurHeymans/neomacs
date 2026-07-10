@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_p6_studlify_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/studly.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/studly.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -29,7 +29,7 @@ fn div_p6_studlify_region() {
 fn div_p6_morse_and_unmorse_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/morse.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/morse.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

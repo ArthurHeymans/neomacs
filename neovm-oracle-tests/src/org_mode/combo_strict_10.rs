@@ -196,7 +196,7 @@ fn strict_emphasize_region() {
 #[test]
 fn strict_today_current_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 20 42)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

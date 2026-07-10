@@ -20,7 +20,7 @@ fn div_v8_get_char_code_property_general_category() {
       (get-char-code-property ?, 'general-category)
       (get-char-code-property ?\n 'general-category))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (Lu Ll Nd Zs Ll Lo Pc Po Cc)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_get_char_code_property_numeric_script_bidi() {
       (get-char-code-property ?A 'uppercase)
       (get-char-code-property ?5 'bidi-class))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 nil nil nil nil nil L nil nil EN)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_char_script_chars_and_decimal_digit_value() {
       (get-char-code-property ?\n 'name)
       (get-char-code-property ?a 'old-name))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function char-script-chars)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

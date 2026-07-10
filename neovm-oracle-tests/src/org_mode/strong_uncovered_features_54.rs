@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf54_trim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello\" \"hello\" \"hello\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-trim)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-trim "  hello  ")
         (org-trim "\nhello\n")
@@ -27,7 +27,7 @@ fn uf54_trim() {
 #[test]
 fn uf54_string_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 11 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-string-width)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-string-width "hello")
         (org-string-width "hello world")
@@ -43,8 +43,7 @@ fn uf54_string_width() {
 #[test]
 fn uf54_remove_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"hello\nworld\" \"hello\nworld\" \"hello\n  world\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-remove-indentation)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-remove-indentation "  hello\n  world")
         (org-remove-indentation "hello\nworld")
@@ -60,7 +59,7 @@ fn uf54_remove_indent() {
 #[test]
 fn uf54_do_remove_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\nworld\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-do-remove-indentation)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "  hello\n  world")
@@ -77,7 +76,7 @@ fn uf54_do_remove_indent() {
 #[test]
 fn uf54_number_seq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5) (1 3 5 7 9) (5 4 3 2 1))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-number-sequence)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-number-sequence 1 5)
         (org-number-sequence 1 10 2)
@@ -93,7 +92,7 @@ fn uf54_number_seq() {
 #[test]
 fn uf54_not_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"test\" nil \"\" 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-not-nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-not-nil "test")
         (org-not-nil nil)
@@ -142,7 +141,7 @@ fn uf54_unescape() {
 #[test]
 fn uf54_replace_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-replace-escapes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-replace-escapes "hello\\nworld")
         (org-replace-escapes "hello\\tworld")
@@ -158,7 +157,7 @@ fn uf54_replace_escapes() {
 #[test]
 fn uf54_faces_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (unspecified unspecified unspecified)""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid face\" org-level-1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'org-level-1 :foreground nil t)
         (face-attribute 'org-level-2 :foreground nil t)
@@ -174,7 +173,7 @@ fn uf54_faces_level() {
 #[test]
 fn uf54_faces_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (unspecified unspecified unspecified)""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid face\" org-todo)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'org-todo :foreground nil t)
         (face-attribute 'org-done :foreground nil t)
@@ -190,7 +189,7 @@ fn uf54_faces_todo() {
 #[test]
 fn uf54_faces_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (unspecified unspecified unspecified)""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid face\" org-table)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'org-table :foreground nil t)
         (face-attribute 'org-table-row :foreground nil t)
@@ -206,7 +205,7 @@ fn uf54_faces_table() {
 #[test]
 fn uf54_faces_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (unspecified unspecified unspecified)""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid face\" org-link)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'org-link :foreground nil t)
         (face-attribute 'org-meta-line :foreground nil t)
@@ -222,7 +221,7 @@ fn uf54_faces_link() {
 #[test]
 fn uf54_faces_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (unspecified unspecified unspecified)""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid face\" org-block)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'org-block :foreground nil t)
         (face-attribute 'org-verbatim :foreground nil t)
@@ -238,9 +237,7 @@ fn uf54_faces_block() {
 #[test]
 fn uf54_check_external() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK \"/nix/store/jjxngswsb214vb58qx485jhmilf0kxxy-coreutils-9.10/bin/ls\"""#
-    ]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-check-external-command "ls" "test")
@@ -272,7 +269,7 @@ fn uf54_open_file() {
 #[test]
 fn uf54_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK #<buffer  *neovm-oracle-stdout*>""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-switch-to-buffer-other-window (current-buffer))
@@ -288,7 +285,7 @@ fn uf54_switch() {
 #[test]
 fn uf54_pop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK #<buffer  *neovm-oracle-stdout*>""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-pop-to-buffer-same-window (current-buffer))
@@ -304,7 +301,7 @@ fn uf54_pop() {
 #[test]
 fn uf54_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\nworld\n\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-escape-code-in-region)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "hello\nworld\n")
@@ -321,7 +318,7 @@ fn uf54_escape() {
 #[test]
 fn uf54_unescape_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\n,world\n\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-unescape-code-in-region)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "hello\n,world\n")

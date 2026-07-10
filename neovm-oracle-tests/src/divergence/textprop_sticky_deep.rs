@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_sticky_insert_between_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAABBBOK (bold italic italic)""#]];
+    let expect = expect_test::expect![[r#""OK (bold italic italic)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "AAA" 'face 'bold 'rear-nonsticky t))
@@ -24,7 +24,7 @@ fn divergence_sticky_delete_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAABBBBOK (bold italic #(\"AAABBBB\" 0 3 (face bold) 3 7 (face italic)))""#
+        r#""OK (bold italic #(\"AAABBBB\" 0 3 (face bold) 3 7 (face italic)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -43,7 +43,7 @@ fn divergence_sticky_insert_with_default_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""_XX__OK (nil bold nil nil #(\"_XX__\" 1 3 (face bold front-sticky t rear-nonsticky nil)))""#
+        r#""OK (nil bold nil nil #(\"_XX__\" 1 3 (face bold front-sticky t rear-nonsticky nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -63,7 +63,7 @@ fn divergence_sticky_insert_with_default_props() {
 fn divergence_sticky_propagate_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXXYYXOK (bold nil nil bold)""#]];
+    let expect = expect_test::expect![[r#""OK (bold nil nil bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "XXXX" 'face 'bold 'rear-nonsticky '(face)))
@@ -82,7 +82,7 @@ fn divergence_text_props_after_replace_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""foo QUX bazOK (bold nil bold #(\"foo QUX baz\" 0 4 (face bold) 7 11 (face bold)))""#
+        r#""OK (bold nil bold #(\"foo QUX baz\" 0 4 (face bold) 7 11 (face bold)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -103,7 +103,7 @@ fn divergence_text_props_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""Hello WorldOK (bold italic #(\"Hello World\" 0 6 (face bold) 6 10 (face italic) 10 11 (rear-nonsticky t face italic)))""#
+        r#""OK (bold italic #(\"Hello World\" 0 6 (face bold) 6 10 (face italic) 10 11 (rear-nonsticky t face italic)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -138,7 +138,7 @@ fn divergence_text_props_substring_no_props() {
 fn divergence_sticky_multi_prop_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXYYOK (bold highlight nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (bold highlight nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "XX" 'face 'bold 'mouse-face 'highlight))
@@ -155,7 +155,7 @@ fn divergence_sticky_multi_prop_insert() {
 fn divergence_text_props_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""field1nofieldfield2OK (f1 nil nil 1 7)""#]];
+    let expect = expect_test::expect![[r#""OK (f1 nil nil 1 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "field1" 'field 'f1))
@@ -175,7 +175,7 @@ fn divergence_text_props_intangibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""beforeintangibleafterOK (t t nil #(\"beforeintangibleafter\" 6 16 (intangible t)))""#
+        r#""OK (t t nil #(\"beforeintangibleafter\" 6 16 (intangible t)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

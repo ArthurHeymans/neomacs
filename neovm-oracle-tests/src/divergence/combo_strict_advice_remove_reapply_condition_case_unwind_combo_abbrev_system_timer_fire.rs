@@ -21,7 +21,7 @@ fn div_v5_advice_reapply_after_fset_redefinition() {
           (list r1 r2 r3 (nreverse log))))
     (fmakunbound 'probe-adv-rd)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +46,7 @@ fn div_v5_condition_case_unwind_catch_deep_combo() {
         (error (push (cons 'caught (cdr err)) log))))
   (nreverse log))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 1 2 caught-inner cleanup)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -73,7 +73,9 @@ fn div_v5_abbrev_system_table_interaction() {
           (expand-abbrev)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t exp1 nil \"expanded1\" \"expanded2\" \"expanded1\" \"expanded2\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -102,7 +104,7 @@ fn div_v5_window_size_change_functions_hook() {
       (setq window-size-change-functions nil)
       (delete-other-windows))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 t 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -121,6 +123,8 @@ fn div_v5_coding_system_priority_set_prefer() {
             (memq 'utf-8 after-utf8)
             (memq 'latin-1 after-utf8)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (utf-8 iso-latin-1 utf-8 (utf-8 iso-latin-1 iso-2022-7bit iso-2022-7bit-lock iso-2022-8bit-ss2 emacs-mule raw-text iso-2022-jp in-is13194-devanagari chinese-iso-8bit utf-8-auto utf-8-with-signature utf-16 utf-16be-with-signature utf-16le-with-signature utf-16be utf-16le japanese-shift-jis chinese-big5 undecided) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -118,7 +118,7 @@ fn org_ctags_enable_create_visit_interactive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil (\"org-ctags-find-tag\" \"org-ctags-visit-buffer-or-file\" \"org-ctags-append-topic\" \"org-ctags-fail-silently\") org-ctags-find-tag-at-point (\"Alpha\" \"Beta Tag\" \"Fresh Topic\") (\"main.org\" 3 33) (\"Alpha\" \"New Topic\") (\"Alpha\") \"ctags --langdef=orgmode --langmap=orgmode:.org --regex-orgmode=/\\\\<\\\\<\\\\(\\\\[\\\\^\\\\<\\\\>\\\\]\\\\+\\\\)\\\\>\\\\>/\\\\\\\\1/d\\\\,definition/ -f <root>/TAGS -e -R <root>/*\" nil \"Existing.org\" (\"Created.org\" \"* <<Created>>\nCreated body for Created.\n\n\") nil nil)""#
+        r#""OK (nil (\"org-ctags-find-tag\" \"org-ctags-visit-buffer-or-file\" \"org-ctags-append-topic\" \"org-ctags-fail-silently\") org-ctags-find-tag-at-point (\"Alpha\" \"Beta Tag\" \"Fresh Topic\") (\"main.org\" 3 33) nil (\"Alpha\") \"ctags --langdef=orgmode --langmap=orgmode:.org --regex-orgmode=/\\\\<\\\\<\\\\(\\\\[\\\\^\\\\<\\\\>\\\\]\\\\+\\\\)\\\\>\\\\>/\\\\\\\\1/d\\\\,definition/ -f <root>/TAGS -e -R <root>/*\" 54 \"Existing.org\" (\"Created.org\" \"* <<Created>>\nCreated body for Created.\n\n\") nil nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -380,7 +380,7 @@ fn org_mks_nested_special_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""Title\n\n[a]...  Alpha prefix...\n[b]     Beta direct\n[c]...  Nested prefix...\n-------------------------------------------------------------------------------\n[?]     Help\n[!]     Bang\nOK ((\"b\" \"Beta direct\" beta) (\"ab\" \"Alpha two\" alpha-two) (error \"no more keys\") \"!\" (\"aa\" \"Alpha one\" alpha-one :payload 1) (\"b\" \"Beta direct\" beta) (user-error \"Abort\") (14) (\"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\") 10 (\"\" \"\" \"\" \"\" \"\" \"Invalid key: `\t'\" \"\" \"\" \"Invalid key: `z'\" \"\" \"\" \"\") nil nil)""#
+        r#""OK ((\"b\" \"Beta direct\" beta) (\"ab\" \"Alpha two\" alpha-two) (error \"no more keys\") \"!\" (\"aa\" \"Alpha one\" alpha-one :payload 1) (\"b\" \"Beta direct\" beta) (user-error \"Abort\") (14) (\"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\" \"*Org Select*\") 10 (\"\" \"\" \"\" \"\" \"\" \"Invalid key: `\t'\" \"\" \"\" \"Invalid key: `z'\" \"\" \"\" \"\") nil nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

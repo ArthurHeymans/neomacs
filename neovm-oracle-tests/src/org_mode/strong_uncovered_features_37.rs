@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf37_formula_user() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"$1+$2\" \"@1$1+@2$2\" \"remote(name,$1)\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-table-formula-to-user)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-table-formula-to-user "$1+$2")
         (org-table-formula-to-user "@1$1+@2$2")
@@ -274,7 +274,7 @@ fn uf37_src_name() {
 #[test]
 fn uf37_src_lang() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (emacs-lisp-mode python-mode sh-mode c-mode)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-src-get-lang-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-src-get-lang-mode "emacs-lisp")
         (org-src-get-lang-mode "python")

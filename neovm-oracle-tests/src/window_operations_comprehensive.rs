@@ -28,7 +28,7 @@ fn oracle_prop_window_selected_window_basic_properties() {
        (point-matches (= (window-point w) (point))))
   (list is-window is-live same-again buf-is-current has-point point-matches))
 "#;
-    let expect = expect_test::expect![[r#""OK (t t t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

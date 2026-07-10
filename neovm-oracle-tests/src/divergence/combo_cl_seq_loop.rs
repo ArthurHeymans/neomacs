@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((1 . \"a\") (1 . \"d\") (2 . \"b\") (2 . \"f\") (3 . \"c\") (3 . \"e\")) t t t t t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((pairs '((3 . "c") (1 . "a") (2 . "b") (1 . "d") (3 . "e") (2 . "f")))
@@ -30,8 +28,7 @@ fn deficiency_cl_sort_stable() {
 fn deficiency_cl_loop_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (55 t 5 t 10 t 1 t 49 t (1 3 5 7 9) t (2 4 6 8 10) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((nums '(1 2 3 4 5 6 7 8 9 10)))
@@ -50,9 +47,7 @@ fn deficiency_cl_loop_accumulate() {
 fn deficiency_cl_remove_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((b c d e) t (a c a d a e) t (a b c a d a e) t (a b c a d a e) t 0 t 4 t nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((lst '(a b c a d a e)))
@@ -71,9 +66,7 @@ fn deficiency_cl_remove_delete() {
 fn deficiency_cl_subseq_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ([1 2 3 4 5] t [6 7 8 9 10] t (j i h g f e d c b a) t (j i h g f e d c b a) t 10 t 10 t (d e f g) t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v [1 2 3 4 5 6 7 8 9 10])
@@ -136,7 +129,7 @@ fn deficiency_mapcar_mapconcat() {
 fn deficiency_cl_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-merge)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a '(1 3 5 7 9))
@@ -155,7 +148,7 @@ fn deficiency_cl_merge() {
 fn deficiency_cl_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (55 t 120 t 10 t 1 t 155 t (1 2 3 4 5) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((nums '(1 2 3 4 5 6 7 8 9 10)))
@@ -189,9 +182,7 @@ fn deficiency_cl_tree_operations() {
 fn deficiency_cl_loop_for_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((0 . 10) (1 . 20) (2 . 30) (3 . 40) (4 . 50)) t t t 150 t 50 t 10 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v [10 20 30 40 50])

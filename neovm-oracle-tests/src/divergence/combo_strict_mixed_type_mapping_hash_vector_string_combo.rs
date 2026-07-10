@@ -17,7 +17,7 @@ fn div_v8_mixed_type_mapcar_can_concat_strings() {
       (mapconcat #'identity '("a" "b" "c") "-")
       (mapconcat #'char-to-string "hello" ""))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcan 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_hash_table_map_keys_values_sorted() {
         (vals (sort (hash-table-values h) #'<)))
     (list keys vals (hash-table-count h))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,6 +50,8 @@ fn div_v8_seq_map_filter_over_mixed_types() {
       (seq-map-indexed #'cons '(a b c))
       (seq-reduce #'+ '(1 2 3 4) 0))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((2 3 4) (\"x\" \"y\" \"z\") (2 4 6) ((a . 0) (b . 1) (c . 2)) 10)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

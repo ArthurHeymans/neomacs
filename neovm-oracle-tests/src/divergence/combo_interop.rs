@@ -139,7 +139,7 @@ fn divergence_funcall_compose_with_condition_case() {
 fn deficiency_obarray_map_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (3 t (test-ob-a-xxx test-ob-b-xxx))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((syms '(test-ob-a-xxx test-ob-b-xxx test-ob-c-xxx)))
   (dolist (s syms) (set s (intern (symbol-name s))))

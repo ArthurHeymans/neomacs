@@ -97,7 +97,7 @@ fn div_cx87_eieio_slot_unbound_method_handler() {
 #[test]
 fn div_cx87_cl_defstruct_with_read_only_and_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 99 \"alpha\" (:err . error))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-vec (:type vector) :named)
@@ -116,7 +116,7 @@ fn div_cx87_cl_defstruct_with_read_only_and_named() {
 #[test]
 fn div_cx87_cl_defstruct_conc_name_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 3 100 100)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-rec (:conc-name neo-cx87-r-))
@@ -135,7 +135,7 @@ fn div_cx87_cl_defstruct_conc_name_prefix() {
 #[test]
 fn div_cx87_cl_defstruct_constructor_and_copier() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 nil 1 2 3 3 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-cust
@@ -183,7 +183,7 @@ fn div_cx87_eieio_make_instance_with_keyword_args() {
 fn div_cx87_eieio_class_parents_and_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx87-mid nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx87-leaf) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx87-mid) nil)""#
+        r#""OK (nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx87-mid nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx87-leaf) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx87-mid) nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

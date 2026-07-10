@@ -32,7 +32,9 @@ fn div_u4_variable_watcher_buffer_local_combo() {
           probe-vw-var
           (default-value 'probe-vw-var))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((set nil) (set nil) (set \" *temp*\") (makunbound \" *temp*\") (set nil) (makunbound nil) (set nil)) 5 5)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,7 +66,7 @@ fn div_u4_narrow_undo_textprop_marker_combo() {
               (buffer-substring 1 5)))
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (setting-constant nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -97,7 +99,7 @@ fn div_u4_cl_loop_destructure_hash_accumulator_combo() {
                  else collect c into odds
                  finally (return (list evens odds)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -123,7 +125,8 @@ fn div_u4_save_excursion_restriction_with_insert_and_undo() {
           (> (length buffer-undo-list) undo-count)
           (buffer-substring 1 10))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"IGINSERTEDINAL TEXT HERE\" 25 nil t \"IGINSERTE\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -147,6 +150,6 @@ fn div_u4_face_remapping_and_text_scale_combo() {
                           (length face-remapping-alist)))))
     (kill-buffer b))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

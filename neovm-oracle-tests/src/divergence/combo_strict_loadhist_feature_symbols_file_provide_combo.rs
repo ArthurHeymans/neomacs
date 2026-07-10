@@ -17,7 +17,7 @@ fn div_v8_featurep_provide_require_basic() {
         (consp (memq 'probe-feat-a features))
         (provided-mode-derived-p 'prog-mode 'fundamental-mode)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,8 @@ fn div_v8_feature_file_and_load_history_lookup() {
       (consp load-history)
       (> (length load-history) 0))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (error \"subr is not a currently loaded feature\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +50,6 @@ fn div_v8_autoload_p_function_introspection() {
         (or (subrp sfn) (byte-code-function-p sfn)))
       (commandp 'forward-char))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

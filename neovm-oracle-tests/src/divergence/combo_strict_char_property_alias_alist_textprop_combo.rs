@@ -22,7 +22,7 @@ fn div_v8_char_property_alias_alist_delegate() {
                 char-property-alias-alist))
       (setq char-property-alias-alist saved))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (bold nil nil ((fontified . face)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_char_property_alias_chain_multi_level() {
                 (get-char-property 1 'c)))
       (setq char-property-alias-alist saved))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (original-val nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_char_property_alias_real_override() {
                 (get-text-property 3 'alias)))
       (setq char-property-alias-alist saved))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (real-val nil real-val alias-val)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

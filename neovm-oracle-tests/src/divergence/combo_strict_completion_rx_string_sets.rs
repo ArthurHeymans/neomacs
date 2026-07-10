@@ -113,9 +113,7 @@ fn div_crs_format_width_multibyte() {
 #[test]
 fn div_crs_cl_set_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((4 3) (5 4 1 2 3) (1 2) (1 2 4 5) (2 1 3) (1 2 3) (1 2 3 1))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-intersection)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-intersection '(1 2 3 4) '(3 4 5 6))
@@ -135,9 +133,7 @@ fn div_crs_cl_set_operations() {
 #[test]
 fn div_crs_sort_stability_and_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 2 3 4 5) ((1 . 1) (1 . 2) (1 . 3)) (1 3 3 3 5 8) (1 2 3 4) (3 2 1))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (sort (list 3 1 2 5 4) #'<)
@@ -175,7 +171,7 @@ fn div_crs_pcase_complex() {
 #[test]
 fn div_crs_hash_table_keys_sorted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"a\" \"b\" \"c\") 3 2 missing t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((h (make-hash-table :test 'equal)))

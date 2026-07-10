@@ -12,14 +12,14 @@ use crate::common::{
 fn oracle_prop_forward_line_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""a\nb\nc\nOK 0""#]];
+    let expect = expect_test::expect![[r#""OK 0""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"a\\nb\\nc\\n\") (goto-char 1) (forward-line 1))",
         expect,
     );
     assert_ok_eq("0", &oracle, &neovm);
 
-    let expect = expect_test::expect![[r#""a\nb\nc\nOK 7""#]];
+    let expect = expect_test::expect![[r#""OK 7""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn (erase-buffer) (insert \"a\\nb\\nc\\n\") (goto-char 1) (forward-line 10))",
         expect,

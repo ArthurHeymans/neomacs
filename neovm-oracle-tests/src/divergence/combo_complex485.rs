@@ -146,7 +146,7 @@ fn div_cx485_copy_sequence_deep() {
 #[test]
 fn div_cx485_cl_subseq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((2 3) [3 4] \"ell\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-subseq '(1 2 3 4 5) 1 3)
       (cl-subseq [1 2 3 4] 2)

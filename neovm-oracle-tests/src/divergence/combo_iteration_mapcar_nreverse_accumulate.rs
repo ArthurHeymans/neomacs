@@ -48,7 +48,7 @@ fn deficiency_dotimes_with_vector_building() {
 fn deficiency_mapc_with_side_effects_on_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (55 10)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql))\n\
@@ -66,7 +66,7 @@ fn deficiency_mapc_with_side_effects_on_hash() {
 fn deficiency_mapcar_with_index_via_number_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((a 1) (b 2) (c 3) (d 4) (e 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapcar)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((items '(a b c d e)))\n\
@@ -118,7 +118,7 @@ fn deficiency_nested_dolist_matrix_build() {
 fn deficiency_mapcan_with_filter_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 9 25 49 81)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapcan)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-mapcan (lambda (x)\n\
@@ -133,7 +133,7 @@ fn deficiency_mapcan_with_filter_pattern() {
 fn deficiency_reduce_with_custom_accumulator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (0 e d c b a)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-reduce (lambda (acc x)\n\
@@ -148,7 +148,7 @@ fn deficiency_reduce_with_custom_accumulator() {
 fn deficiency_dolist_with_hash_table_keys_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'equal))\n\

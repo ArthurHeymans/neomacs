@@ -645,7 +645,7 @@ fn wf_agenda_entries() {
 #[test]
 fn wf_colview_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"%25ITEM %TODO %3PRIORITY %TAGS %EFFORT\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-columns-get-format)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

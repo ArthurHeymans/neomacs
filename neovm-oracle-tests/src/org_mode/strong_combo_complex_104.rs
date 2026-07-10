@@ -83,7 +83,7 @@ fn combo104_org_sort_reverse() {
 #[test]
 fn combo104_org_timestamp_extract_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function list:y)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn(require'org)(let((ts(org-timestamp-from-string"<2024-12-25 Wed 15:45>")))(list:y(org-element-property:year-start ts):m(org-element-property:month-start ts):d(org-element-property:day-start ts):h(org-element-property:hour-start ts):min(org-element-property:minute-start ts))))"##,
         expect,

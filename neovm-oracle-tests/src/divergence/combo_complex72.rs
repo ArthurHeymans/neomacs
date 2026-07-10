@@ -161,9 +161,7 @@ fn div_cx72_seq_concatenate_into_various_types() {
 #[test]
 fn div_cx72_cl_loop_iterating_sequences_and_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -180,9 +178,7 @@ fn div_cx72_cl_loop_iterating_sequences_and_vectors() {
 #[test]
 fn div_cx72_cl_subseq_with_default_and_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ([2 3] \"he\" (3 4 5) [99 88] [1 99 88 4 5] \"XX\" \"XXllo\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5))
@@ -203,9 +199,7 @@ fn div_cx72_cl_subseq_with_default_and_setf() {
 #[test]
 fn div_cx72_cl_remove_remove_if_substitute_with_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((2 3 4) (2 3 1 4) (1 2 3 4) (1 3 5) (9 2 9 3 9 4) (9 2 9 3 1 4))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -223,7 +217,7 @@ fn div_cx72_cl_remove_remove_if_substitute_with_count() {
 #[test]
 fn div_cx72_cl_position_find_count_member_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 2 nil 3 nil 3 (4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list

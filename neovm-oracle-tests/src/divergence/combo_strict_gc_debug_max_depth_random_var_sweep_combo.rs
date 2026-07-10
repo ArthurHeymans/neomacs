@@ -22,7 +22,7 @@ fn div_v8_gc_threshold_percentage_messages_var_sweep() {
       (boundp 'memory-signal-data)
       (boundp 'cons-cells-consed))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_debug_on_error_quit_signal_hook_var_sweep() {
       (boundp 'command-debug-status)
       (boundp 'eval-expression-debug-on-error))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t t t nil nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_random_seed_misc_runtime_var_sweep() {
       (boundp 'float-pi)
       (boundp 'most-positive-fixnum))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

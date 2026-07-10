@@ -410,7 +410,7 @@ fn div_cx402_split_string_multibyte_sep() {
 #[test]
 fn div_cx402_window_text_pixel_size_invisible_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((12 . 1) 12 1)""#]];
+    let expect = expect_test::expect![[r#""OK ((0 . 0) 0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

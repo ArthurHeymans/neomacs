@@ -21,7 +21,7 @@ fn div_v8_register_clipboard_interprogram_var_sweep() {
       (boundp 'interprogram-cut-function)
       (boundp 'interprogram-paste-function))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_kill_ring_yank_handler_var_sweep() {
       (boundp 'buffer-substring-filters)
       (boundp 'rectangle-mark-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_narrow_region_transient_mark_var_sweep() {
       (boundp 'point-before-scroll)
       (boundp 'cache-long-line-scans))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t t t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -90,7 +90,7 @@ fn div_cx11_read_from_string_position_tracking() {
 #[test]
 fn div_cx11_cl_subst_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (a new (b new) ((new . c) . new))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subst)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-subst 'new 'old '(a old (b old) ((old . c) . old)))

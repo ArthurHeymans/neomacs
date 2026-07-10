@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_chain_50_edits_markers_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""XAXAAAAAXXAAAAAAXXAAAAAXAXAAAAAAXAAAAAAXAAAAAAAAAAAAAAAAAAAAOK (60 t t 5 t nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (60 t t 5 t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 50 ?A))
@@ -42,8 +40,7 @@ fn divergence_undo_chain_50_edits_markers_overlays() {
 fn divergence_undo_after_textprop_overlay_rearrange() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAA-BBBB-CCCC-DDDD-EEEE-FFFFERR (args-out-of-range 1 30)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE-FFFF")
@@ -78,8 +75,9 @@ fn divergence_undo_after_textprop_overlay_rearrange() {
 fn divergence_undo_with_narrow_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ZZ-BBBB-CCCC-DDDD-EEEEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (7 17 #(\"ZZ-BBBB-CCCC-DDDD-EEEE\" 2 7 (tag first) 8 17 (tag second)) 5 15 #(\"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" 0 4 (tag first) 4 9 (tag first) 10 19 (tag second)) first t second t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF")
@@ -112,7 +110,9 @@ fn divergence_undo_with_narrow_marker_tracking() {
 fn divergence_undo_with_overlay_evaporate_and_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABGHIJXXXXERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((nil t \"ABGHIJ\" t) #(\"ABCDEFGHIJ\" 2 6 (color blue)) t blue t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -142,9 +142,7 @@ fn divergence_undo_with_overlay_evaporate_and_reinsert() {
 fn divergence_undo_after_kill_rectangle_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""line1-\nline2-BBine3-CCCne4-DDD\nERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1-AAA\nline2-BBB\nline3-CCC\nline4-DDD\n")
@@ -178,9 +176,8 @@ fn divergence_undo_after_kill_rectangle_insert() {
 fn divergence_undo_preserves_overlay_priority_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""AAAA-BBBBXXXX-CCCC-DDDD-EEEEERR (wrong-type-argument listp t)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3) (1 2 3) t \"AAAA-BBBB-CCCC-DDDD-EEEE\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -222,7 +219,9 @@ fn divergence_undo_preserves_overlay_priority_order() {
 fn divergence_undo_with_insert_behind_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""STARTMIDDLE+-ENDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (13 6 #(\"STARTMIDDLE+-END\" 0 4 (part start) 12 15 (part end)) 6 6 #(\"START-END\" 0 4 (part start) 5 8 (part end)) t t start t end t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "START-END")
@@ -255,8 +254,9 @@ fn divergence_undo_with_insert_behind_marker() {
 fn divergence_undo_with_textprop_intervention() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAAXXXX-BBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"AAAAXXXX-BBBB-CCCC-DDDD\" 0 3 (type override) 3 4 (type override) 8 12 (type override) 12 13 (type override) 13 17 (type override) 17 20 (type override)) override nil #(\"AAAA-BBBB-CCCC-DDDD\" 0 3 (type override) 3 4 (type override) 4 8 (type override) 8 9 (type override) 9 13 (type override) 13 16 (type override)) override override #(\"AAAA-BBBB-CCCC-DDDD\" 0 3 (type override) 3 4 (type override) 4 8 (type override) 8 9 (type override) 9 13 (type override) 13 16 (type override)) override nil override nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -328,7 +328,9 @@ fn divergence_multiple_undo_boundaries_interleaved() {
 fn divergence_undo_with_prop_change_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"ABCDEFGH\" 0 3 (state changed) 3 4 (state initial) 4 7 (state also-changed)) after changed also-changed #(\"ABCDEFGH\" 0 3 (state changed) 3 4 (state initial) 4 7 (state initial)) changed initial after)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")

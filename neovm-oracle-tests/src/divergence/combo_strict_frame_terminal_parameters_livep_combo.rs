@@ -20,7 +20,7 @@ fn div_v8_frame_selected_framep_livep_list() {
         (frame-live-p (selected-frame))
         (terminal-live-p (frame-terminal f))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Unknown terminal type\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_frame_parameters_subset_terminal_name() {
         (stringp (terminal-name (frame-terminal f)))
         (eq (frame-terminal f) (frame-terminal f))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function terminalp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,7 @@ fn div_v8_frame_modify_restore_parameter_visible() {
     (when (stringp saved)
       (modify-frame-parameters f (list (cons 'title saved))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"probe-frame-title\" nil (#<buffer *scratch*>))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

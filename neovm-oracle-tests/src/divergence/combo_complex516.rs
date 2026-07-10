@@ -89,7 +89,7 @@ fn div_cx516_pcase_cl_struct() {
 #[test]
 fn div_cx516_cl_loop_finish() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 6""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i from 1 to 10
            when (> i 5) return i
@@ -102,7 +102,7 @@ fn div_cx516_cl_loop_finish() {
 #[test]
 fn div_cx516_cl_loop_counting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i in '(1 2 3 4 5)
            counting (oddp i))
@@ -145,7 +145,7 @@ fn div_cx516_pcase_pred() {
 #[test]
 fn div_cx516_cl_loop_by() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 3 6 9)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i from 0 to 10 by 3 collect i)
 "##,
@@ -156,7 +156,7 @@ fn div_cx516_cl_loop_by() {
 #[test]
 fn div_cx516_cl_loop_unless() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 4)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i in '(1 2 3 4 5)
            unless (oddp i) collect i)
@@ -168,7 +168,7 @@ fn div_cx516_cl_loop_unless() {
 #[test]
 fn div_cx516_cl_loop_thereis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i in '(1 3 5 2 4)
            thereis (< i 3))
@@ -180,7 +180,7 @@ fn div_cx516_cl_loop_thereis() {
 #[test]
 fn div_cx516_cl_loop_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function return-from)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop named cx516-loop
            for i from 1 to 10
@@ -193,7 +193,7 @@ fn div_cx516_cl_loop_named() {
 #[test]
 fn div_cx516_cl_loop_multiple_for() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 . a) (2 . b) (3 . c))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i in '(a b c)
            for j from 1

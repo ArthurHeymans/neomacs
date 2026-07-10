@@ -33,7 +33,7 @@ fn div_v8_search_replace_var_existence_boundp_sweep() {
       (boundp 'isearch-word)
       (boundp 'lazy-highlight-buffer))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,7 +55,7 @@ fn div_v8_isearch_facility_var_existence_sweep() {
       (boundp 'char-fold-exclude)
       (boundp 'search-whitespace-regexp))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_search_spaces_regexp_defined_default_value() {
       (boundp 'search-whitespace-regexp)
       (and (boundp 'search-whitespace-regexp) (default-value 'search-whitespace-regexp)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t \"[ \t]+\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

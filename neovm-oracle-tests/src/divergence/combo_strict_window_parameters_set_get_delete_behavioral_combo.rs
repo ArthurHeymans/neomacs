@@ -21,7 +21,8 @@ fn div_v8_window_parameter_set_get_list() {
         (consp (window-parameters w))
         (assq 'probe-param-1 (window-parameters w))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (val-1 42 (nested list) nil t (probe-param-1 . val-1))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +40,7 @@ fn div_v8_window_parameter_override_delete_survive_config() {
           (window-parameter w 'probe-new)
           (eq w (selected-window)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (survived nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +59,6 @@ fn div_v8_window_parameters_in_window_state_get_put() {
             (windowp w2)
             (eq w w2)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

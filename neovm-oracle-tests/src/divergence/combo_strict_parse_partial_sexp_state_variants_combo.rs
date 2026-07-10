@@ -24,7 +24,9 @@ fn div_v8_parse_partial_sexp_string_comment_state() {
           (funcall probe "nested")
           (funcall probe ")))"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 12 34 nil nil 0 nil 17 (1) nil) (1 1 17 nil t nil 0 nil 25 (1) nil) (2 40 41 34 nil nil 0 nil 45 (1 40) nil) (3 51 52 nil nil nil 0 nil nil (1 40 51) nil) (0 nil 1 nil nil nil 0 nil nil nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +47,9 @@ fn div_v8_parse_partial_sexp_nesting_depth_quote_backquote() {
           (funcall probe ",baz")
           (funcall probe "qux"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((3 7 10 nil nil nil 0 nil nil (1 6 7) nil) (2 14 20 nil nil nil 0 nil nil (1 14) nil) (3 25 31 nil nil nil 0 nil nil (1 14 25) nil) (3 36 37 nil nil nil 0 nil nil (1 14 36) nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +68,6 @@ fn div_v8_syntax_ppss_cache_invalidation_across_edit() {
             (nth 1 ppss2)
             (nth 3 ppss2)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 2 4 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_text_property_interval_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""AAAAAAAAAABBBBBBBBBBCCCCCCCCCCOK ((1 10 1) (10 21 bridge) (21 30 3) (30 nil nil))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((1 10 1) (10 21 bridge) (21 30 3) (30 nil nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAAAAAABBBBBBBBBBCCCCCCCCCC")
@@ -33,7 +31,7 @@ fn divergence_text_property_interval_merge() {
 fn divergence_overlay_stacking_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (t t t (100 200 300))""#]];
+    let expect = expect_test::expect![[r#""OK (t t t (100 200 300))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -65,7 +63,7 @@ fn divergence_textprop_front_sticky_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAXA-BBBYBOK (nil nil t nil #(\"AAAXA-BBBYB\" 0 3 (sticky-front t) 5 9 (sticky-front nil)))""#
+        r#""OK (nil nil t nil #(\"AAAXA-BBBYB\" 0 3 (sticky-front t) 5 9 (sticky-front nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -90,8 +88,7 @@ fn divergence_textprop_front_sticky_insert() {
 fn divergence_remove_list_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGHIJOK (nil nil t bold t bold t t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t bold t bold t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -118,9 +115,7 @@ fn divergence_remove_list_properties() {
 fn divergence_overlay_invisible_text_adjustment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""AAAA-BBBB-CCCC-DDDD-EEEEOK (\"AAAA-BBBB-CCCC-DDDD-EEEE\" 2 t 5 9 10 14 24)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"AAAA-BBBB-CCCC-DDDD-EEEE\" 2 t 5 9 10 14 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -142,8 +137,7 @@ fn divergence_overlay_invisible_text_adjustment() {
 fn divergence_textprop_category_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGHIJOK (bold bold nil test-cat-xxx nil t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (bold bold nil test-cat-xxx nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (put 'test-cat-xxx 'face 'bold)
@@ -169,7 +163,7 @@ fn divergence_textprop_category_inheritance() {
 fn divergence_overlay_before_string_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""MIDDLEOK (t t 1 6 \"MIDDLE\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t 1 6 \"MIDDLE\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MIDDLE")
@@ -191,7 +185,7 @@ fn divergence_overlay_before_string_after_string() {
 fn divergence_textprop_search_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAA-BBBB-CCCC-DDDD-EEEEOK (1 10 1 10 t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (1 10 1 10 t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBBB-CCCC-DDDD-EEEE")
@@ -214,8 +208,7 @@ fn divergence_textprop_search_property() {
 fn divergence_set_text_properties_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGHIJOK (nil t italic t nil t nil t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t italic t nil t nil t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -240,8 +233,7 @@ fn divergence_set_text_properties_overwrite() {
 fn divergence_overlay_move_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDD-EEEEOK (1 4 10 14 movable t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (1 4 10 14 movable t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")

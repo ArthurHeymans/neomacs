@@ -8,7 +8,7 @@ fn divergence_parse_partial_sexp_multi_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""(defun foo (x y)\n  (list (+ x 1)\n        (* y 2)))OK ((1 0 nil nil) (15 2 nil nil) (20 1 nil nil) (30 3 nil nil) (45 3 nil nil))""#
+        r#""OK ((1 0 nil nil) (15 2 nil nil) (20 1 nil nil) (30 3 nil nil) (45 3 nil nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -27,8 +27,7 @@ fn divergence_parse_partial_sexp_multi_position() {
 fn divergence_scan_lists_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""(a (b (c)) d) (e f) (g)OK (14 14 nil \"(a (b (c)) d)\" \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (14 14 nil \"(a (b (c)) d)\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(a (b (c)) d) (e f) (g)")
@@ -47,8 +46,7 @@ fn divergence_scan_lists_forward_backward() {
 fn divergence_forward_kill_sexp_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""(aaa  ccc ddd eee)OK (2 7 15 \"(aaa  ccc ddd eee)\" \"bbb\")""#]];
+    let expect = expect_test::expect![[r#""OK (2 7 15 \"(aaa  ccc ddd eee)\" \"bbb\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(aaa bbb ccc ddd eee)")
@@ -68,8 +66,7 @@ fn divergence_forward_kill_sexp_with_markers() {
 fn divergence_syntax_ppss_comment_string_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""(foo \"string here\" bar ; comment\n  baz)OK (12 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (21 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo \"string here\" bar ; comment\n  baz)")
@@ -91,7 +88,7 @@ fn divergence_syntax_ppss_comment_string_state() {
 fn divergence_narrowed_forward_sexp_across_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""(aaa (bbb (ccc) ddd) eee)OK (21)""#]];
+    let expect = expect_test::expect![[r#""OK (21)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(aaa (bbb (ccc) ddd) eee)")
@@ -112,7 +109,7 @@ fn divergence_unbalanced_parens_scan_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""(foo (bar baz)ERR (wrong-type-argument number-or-marker-p \"Unbalanced parentheses\")""#
+        r#""ERR (wrong-type-argument number-or-marker-p \"Unbalanced parentheses\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -133,9 +130,7 @@ fn divergence_unbalanced_parens_scan_error() {
 fn divergence_beginning_end_of_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(defun a () \"doc\" body)\n(defun b (x) body2)\n(defun c () body3)OK (25 45 \"(defun b (x) body2)\n\" t 1)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (25 45 \"(defun b (x) body2)\n\" t 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(defun a () \"doc\" body)\n(defun b (x) body2)\n(defun c () body3)")
@@ -155,7 +150,7 @@ fn divergence_thing_at_point_sexp_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""(foo bar (baz quux)) hello-world 42OK (\"(foo bar (baz quux))\" t (1 . 21) t \"hello-world\" t (22 . 33))""#
+        r#""OK (\"(foo bar (baz quux))\" t (1 . 21) t \"hello-world\" t (22 . 33))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -180,7 +175,7 @@ fn divergence_thing_at_point_sexp_types() {
 fn divergence_insert_balanced_undo_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""(MIDDLE)ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"(MIDDLE)\" 4 \"(MIDDLE)\" 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MIDDLE")
@@ -203,9 +198,7 @@ fn divergence_insert_balanced_undo_markers() {
 fn divergence_check_parens_via_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(foo (bar))\n(baz quux)\n(unbalanced (openOK (unbalanced \"Unmatched bracket or quote\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (unbalanced \"Unmatched bracket or quote\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo (bar))\n(baz quux)\n(unbalanced (open")

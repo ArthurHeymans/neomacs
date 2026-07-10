@@ -131,7 +131,7 @@ fn div_cx220_mega_all_subsystem_ultimate_stress_2() {
 #[test]
 fn div_cx220_mega_all_subsystem_ultimate_stress_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)

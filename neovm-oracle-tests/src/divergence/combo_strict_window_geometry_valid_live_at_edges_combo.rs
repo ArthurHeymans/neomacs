@@ -22,7 +22,7 @@ fn div_v8_window_valid_live_at_edges_geometry() {
         (consp (window-inside-edges w))
         (consp (window-pixel-edges w))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t #<window 1 on *scratch*> t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +46,7 @@ fn div_v8_window_root_child_sibling_walk() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function window-root)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,6 +67,6 @@ fn div_v8_window_total_body_pixel_size_ratio() {
           (>= body-w 1)
           (>= body-h 1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

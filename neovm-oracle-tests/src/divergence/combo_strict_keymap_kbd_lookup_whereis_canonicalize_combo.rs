@@ -25,7 +25,9 @@ fn div_v8_keymap_define_lookup_kbd_vector() {
         (lookup-key map [f7])
         (eq (lookup-key map (kbd "M-x")) 'extended)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (cmd-a cmd-a nil (keymap (2 . cmd-b) (1 . cmd-a)) refresh f6-cmd nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +50,9 @@ fn div_v8_whereis_internal_key_binding_active_maps() {
         (keymapp map)
         (keymapp 'not-a-map)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Key sequence C-c C-a C-d starts with non-prefix key C-c C-a\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,6 +76,7 @@ fn div_v8_keymap_prefix_text_parent_keymap_canonicalize() {
         (lookup-key child [9])
         (lookup-key parent "a")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (parent-a child-b t nil nil child-b nil nil parent-a)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

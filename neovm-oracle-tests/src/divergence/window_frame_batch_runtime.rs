@@ -49,7 +49,7 @@ fn frame_parameters() {
 fn get_buffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (eq (get-buffer-window (current-buffer)) (selected-window))
         (windowp (get-buffer-window))

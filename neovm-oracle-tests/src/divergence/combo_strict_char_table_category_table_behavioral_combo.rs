@@ -20,7 +20,7 @@ fn div_v8_char_table_range_query_uniform_spans() {
         (char-table-range ct '(?A . ?Z))
         (char-table-range ct '(?a . ?z))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (word nil upper nil upper word)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_category_table_modify_doc_string_set() {
         (category-set-mnemonics (char-category-set ?a cat))
         (char-category-set ?z cat)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function category-doc-string)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,7 @@ fn div_v8_char_table_extra_slot_parent_inherit_behavioral() {
         (char-table-range child ?5)
         (eq (char-table-parent child) ct)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (child-a child-default child-default child-default t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

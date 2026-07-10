@@ -44,7 +44,7 @@ fn deficiency_undo_property_only_change_no_text() {
 fn deficiency_undo_insert_then_set_props_separate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uis\")))\n\
@@ -139,7 +139,7 @@ fn deficiency_undo_prop_change_on_empty_buffer_then_insert() {
 fn deficiency_undo_overlapping_prop_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uop\")))\n\
@@ -176,7 +176,7 @@ fn deficiency_undo_overlapping_prop_changes() {
 fn deficiency_undo_prop_then_insert_crossing_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"upi\")))\n\
@@ -208,7 +208,7 @@ fn deficiency_undo_prop_then_insert_crossing_boundary() {
 fn deficiency_undo_many_small_prop_changes_then_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"umc\")))\n\
@@ -310,7 +310,7 @@ fn deficiency_undo_with_remove_list_props() {
 fn deficiency_undo_interleaved_prop_and_text_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uit\")))\n\

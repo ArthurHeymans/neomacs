@@ -140,7 +140,7 @@ fn divergence_accessible_keymaps() {
 fn divergence_local_key_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (keymapp (current-local-map))

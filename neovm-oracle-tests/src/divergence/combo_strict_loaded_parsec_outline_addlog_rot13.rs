@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_h8_parsec_collect_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/parsec.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -30,7 +30,7 @@ fn div_h8_parsec_collect_regexp() {
 fn div_h8_parsec_choice_and_many() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/parsec.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -69,7 +69,7 @@ fn div_h8_outline_levels() {
 fn div_h8_add_log_current_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/progmodes/add-log.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/progmodes/add-log.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

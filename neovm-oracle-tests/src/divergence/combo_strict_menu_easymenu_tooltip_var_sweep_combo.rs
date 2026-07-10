@@ -21,7 +21,7 @@ fn div_v8_menu_bar_final_items_update_hook_var_sweep() {
       (boundp 'tooltip-functions)
       (boundp 'tooltip-hide-delay))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil nil nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_menu_item_shortcut_checkbox_var_sweep() {
       (boundp 'tooltip-x-offset)
       (boundp 'tooltip-y-offset))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_popup_menu_dialog_box_var_sweep() {
       (boundp 'tooltip-use-effort-mode)
       (boundp 'lazy-unfontify))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil t t nil nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

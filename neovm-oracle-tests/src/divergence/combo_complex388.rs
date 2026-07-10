@@ -46,7 +46,7 @@ fn div_cx388_window_pixel_edges_full() {
 #[test]
 fn div_cx388_frame_pixel_dimensions_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t t (0 1 80 24) (0 1 80 23))""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t (0 0 80 24) (0 0 80 23))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((frame (selected-frame)))

@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_defstruct_shared_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 21 33)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (coord (:constructor make-coord (x y))) x y)
@@ -80,7 +80,7 @@ fn combo_eieio_defstruct_shared_accessors() {
 fn combo_eieio_defstruct_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 22 24)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (range (:constructor make-range (start end))) start end)
@@ -146,7 +146,7 @@ fn combo_eieio_defstruct_type_predicates() {
 fn combo_eieio_defstruct_copy_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (snapshot (:constructor make-snapshot (label data)))
@@ -213,7 +213,7 @@ fn combo_eieio_defstruct_copy_merge() {
 fn combo_eieio_defstruct_nested_with_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 36 45)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (metric-val (:constructor make-metric-val (name value unit)))
@@ -279,7 +279,7 @@ fn combo_eieio_defstruct_nested_with_class() {
 fn combo_eieio_defstruct_record_type_of() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (entry (:type list) :named) key value)

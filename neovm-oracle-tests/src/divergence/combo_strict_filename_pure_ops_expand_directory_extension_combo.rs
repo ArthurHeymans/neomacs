@@ -24,7 +24,9 @@ fn div_v8_filename_decompose_extension_dotfiles() {
       (file-name-nondirectory "/a/b/")
       (file-name-nondirectory ""))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"/a/b/\" \"c.txt\" \"/a/b/c.tar\" \"gz\" \"/a/b/c\" nil \"/a/b/.bashrc\" nil nil \"gz\" \"\" \"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +42,9 @@ fn div_v8_directory_filename_as_directory_roundtrip() {
       (directory-file-name (file-name-as-directory "/x/y"))
       (file-name-as-directory (directory-file-name "/x/y/")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"/a/b/c\" \"/a/b/c\" \"/\" \"/a/b/c/\" \"/\" \"/x/y\" \"/x/y/\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +68,8 @@ fn div_v8_expand_filename_relative_parent_abs_home() {
         (file-name-quoted-p "/normal/path")
         (convert-standard-filename "/a/b/c.txt")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user/projects/app/d/f\" \"/a/b/x\" \"/a/b/y\" \"/abs/path\" \"/home/user/projects/app/local\" \"/home/user/projects/app/sub/final\" t nil t t t nil \"/a/b/c.txt\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

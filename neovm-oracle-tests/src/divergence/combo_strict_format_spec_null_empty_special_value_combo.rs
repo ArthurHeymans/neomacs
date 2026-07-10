@@ -15,7 +15,7 @@ fn div_v8_format_spec_null_empty_number_values() {
         (format-spec "%e" spec)
         (format-spec "%d" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid format character: ‘%n’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -28,7 +28,7 @@ fn div_v8_format_spec_make_with_equals_and_spaces() {
       (format-spec-make "with space=v")
       (length (format-spec-make "a=1 b=2 c=3")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-spec-make)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,6 +42,6 @@ fn div_v8_format_spec_unknown_spec_preservation() {
         (format-spec "no specs at all" spec)
         (format-spec "" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid format character: ‘%z’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -138,7 +138,7 @@ fn div_cx17_read_circle_circular_cons() {
 #[test]
 fn div_cx17_cl_remf_plist_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((pl (copy-tree '(:a 1 :b 2 :c 3))))
@@ -277,7 +277,7 @@ fn div_cx17_condition_case_error_data_format() {
 #[test]
 fn div_cx17_cl_coerce_number_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 65)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-coerce 65 'string)

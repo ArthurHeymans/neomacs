@@ -21,7 +21,7 @@ fn div_v8_display_table_make_glyph_aset_aref() {
         (aref dt ?z)
         (eq (aref dt ?c) nil)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil 4194304 [65 66] nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_standard_current_display_table_binding() {
               (aref standard-display-table ?x)))
     (setq standard-display-table saved)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable current-display-table)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_glyphless_char_display_standard_display_set() {
         (vectorp dt)
         (length (make-glyph-code ?X 'bold))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 4194392)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

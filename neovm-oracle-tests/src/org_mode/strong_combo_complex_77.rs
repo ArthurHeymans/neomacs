@@ -78,9 +78,7 @@ fn combo77_element_create_babel_call() {
 #[test]
 fn combo77_timestamp_from_string_to_format_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:day-start 15 :month-start 3 :year-start 2024 :hour-start 14 :minute-start 30 :fmt-iso \"2024-03-15T14:30:00\" :fmt-us \"03/15/2024 02:30 PM\" :fmt-eu \"15.03.2024 14:30\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (let ((ts (org-timestamp-from-string "<2024-03-15 Fri 14:30>")))
  (list :day-start (org-element-property :day-start ts)

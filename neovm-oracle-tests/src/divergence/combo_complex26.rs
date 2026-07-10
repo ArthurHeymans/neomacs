@@ -63,7 +63,7 @@ fn div_cx26_hash_table_custom_test_prin1() {
 #[test]
 fn div_cx26_cl_coerce_edge_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"Unknown type char\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-coerce 65 'char)
@@ -121,7 +121,7 @@ fn div_cx26_syntax_pp_after_modification() {
 #[test]
 fn div_cx26_seq_reduce_max_extensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 9 1 4 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'seq)
@@ -220,7 +220,7 @@ fn div_cx26_overlay_after_string_then_buffer_substring_props() {
 #[test]
 fn div_cx26_cl_setf_on_aref_vector_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK [5 4 99 0 1]""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-rotatef)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5)))

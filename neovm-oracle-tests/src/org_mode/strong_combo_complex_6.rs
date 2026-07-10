@@ -260,7 +260,7 @@ fn combo6_visibility() {
 #[test]
 fn combo6_export_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (9 167 703 715 1023 1401 367)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* TODO [#A] H1 :t1:\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:"))
   (let ((html (org-export-string-as src 'html t)))

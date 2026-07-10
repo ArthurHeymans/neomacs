@@ -30,7 +30,7 @@ fn div_v8_overlay_put_get_at_in_priority() {
           (overlayp o1)
           (overlayp 'not-overlay))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 7 bold 5 2 3 (3 5 8) t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +52,7 @@ fn div_v8_overlay_move_delete_reinsert_evaporate() {
           (length (overlays-in 1 10))
           (overlay-buffer o2))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 8 1 0 0 1 #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -73,6 +73,7 @@ fn div_v8_overlay_before_after_string_nested_edge() {
           (let ((zero-len (make-overlay 4 4)))
             (list (overlay-start zero-len) (overlay-end zero-len))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"<<<\" \">>>\" t #<overlay in no buffer> (4 4))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

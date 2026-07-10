@@ -16,7 +16,7 @@ fn div_v8_assoc_defaults_with_test_recurse() {
         (assoc-default "z" al nil t)
         (assoc-default 2 (mapcar (lambda (c) (cons (cdr c) (car c))) al))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 nil nil nil \"b\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,8 @@ fn div_v8_assq_rassq_delete_all_isolation() {
         al
         (eq delq al)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (((a . 1) (c . 3)) ((a . 1) (c . 3)) ((a . 1) (c . 3)) t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +50,6 @@ fn div_v8_assoc_string_case_fold_with_default() {
         (assoc-string 2 al)
         (rassoc "apple" al)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments assoc-string 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

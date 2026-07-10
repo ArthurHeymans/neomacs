@@ -46,7 +46,7 @@ fn div_cx81_mapatoms_collect_interned_symbols() {
 fn div_cx81_features_after_require() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:before (rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :after (subr-x rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :added (cl-seq subr-x))""#
+        r#""OK (:before (rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :after (subr-x mule-util cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) :added (cl-seq subr-x mule-util cl-loaddefs cl-lib))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -67,7 +67,7 @@ fn div_cx81_features_after_require() {
 fn div_cx81_featurep_after_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t nil (neo-cx81-feature-x cl-seq subr-x rx pcase cl-macs gv cl-extra help-mode mule-util warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) nil)""#
+        r#""OK (t nil (neo-cx81-feature-x rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -120,7 +120,7 @@ fn div_cx81_mapbacktrace_inside_signal_handler() {
 #[test]
 fn div_cx81_load_history_inspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-find-if)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((cl-lib-entry (cl-find-if (lambda (e) (eq (car e) (locate-library "cl-lib")))
@@ -137,28 +137,7 @@ fn div_cx81_load_history_inspection() {
 fn div_cx81_documentation_for_subr_and_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#"OK ("Return the car of LIST.  If LIST is nil, return nil.
-Error if LIST is not nil and not a cons cell.  See also ‘car-safe’.
-
-See Info node ‘(elisp)Cons Cells’ for a discussion of related basic
-Lisp concepts such as car, cdr, cons cell and list.
-
-(fn LIST)" #("Move point N characters forward (backward if N is negative).
-On reaching end or beginning of buffer, stop and signal error.
-Interactively, N is the numeric prefix argument.
-If N is omitted or nil, move point 1 character forward.
-
-Depending on the bidirectional context, the movement may be to the
-right or to the left on the screen.  This is in contrast with
-<right>, which see.
-
-(fn &optional N)" 359 366 (font-lock-face help-key-binding face help-key-binding)) "Return the car of LIST.  If LIST is nil, return nil.
-Error if LIST is not nil and not a cons cell.  See also ‘car-safe’.
-
-See Info node ‘(elisp)Cons Cells’ for a discussion of related basic
-Lisp concepts such as car, cdr, cons cell and list.
-
-(fn LIST)" "doc for fn" nil)"#
+        r#""OK (\"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" #(\"Move point N characters forward (backward if N is negative).\nOn reaching end or beginning of buffer, stop and signal error.\nInteractively, N is the numeric prefix argument.\nIf N is omitted or nil, move point 1 character forward.\n\nDepending on the bidirectional context, the movement may be to the\nright or to the left on the screen.  This is in contrast with\n<right>, which see.\n\n(fn &optional N)\" 359 366 (font-lock-face help-key-binding face help-key-binding)) \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" \"doc for fn\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

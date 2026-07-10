@@ -23,7 +23,7 @@ fn div_v8_electric_indent_delete_selection_global_toggle() {
     (when (null electric-indent-mode) (electric-indent-mode (if ei 1 -1)))
     (when (null delete-selection-mode) (delete-selection-mode (if ds 1 -1)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_subword_show_paren_buffer_local_toggle() {
             result)))
     (when (null show-paren-mode) (show-paren-mode (if sp 1 -1)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +62,6 @@ fn div_v8_global_mode_state_predicates() {
       (booleanp column-number-mode)
       (boundp 'global-hl-line-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable subword-mode)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -23,7 +23,7 @@ fn div_v8_buffer_file_name_truename_coding_var_sweep() {
       (boundp 'buffer-save-without-query)
       (boundp 'buffer-read-only))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_save_hook_format_write_file_var_sweep() {
       (boundp 'fontification-functions)
       (boundp 'file-local-name))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_buffer_name_list_default_directory_var_sweep() {
       (boundp 'change-major-mode-hook)
       (boundp 'set-buffer-major-mode-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -131,7 +131,7 @@ fn strong_x_sp() {
 fn strong_x_hl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (nil 65 (\"t\") (timestamp (:standard-properties [30 nil nil nil 42 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil)""#
+        r#""OK (\"TODO\" 65 (\"t\") (timestamp (:standard-properties [30 nil nil nil 42 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -179,7 +179,7 @@ fn strong_x_exp() {
 fn strong_x_ec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:todo nil :pri 65 :tags (\"t\")) (:todo \"PLANNING\" :pri nil :tags (\"n\") :title \"C\"))""#
+        r#""OK ((:todo \"TODO\" :pri 65 :tags (\"t\")) (:todo \"DONE\" :pri 66 :tags (\"n\") :title \"C\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

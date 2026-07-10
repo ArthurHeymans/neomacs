@@ -20,7 +20,7 @@ fn div_v8_cl_coerce_ldiff_tailp() {
       (cl-tailp '(3 4) '(1 2 3 4))
       (cl-tailp '(2 4) '(1 2 3 4)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_cl_rempf_getf_substitute_fill() {
         (cl-fill (list 0 0 0) 5)
         (cl-fill (list 0 0 0 0) 7 :start 1 :end 3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function copy-list)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_cl_pairlis_pairlis_adjoin_tree_equal_copy_tree() {
       (cl-copy-tree '(1 (2 (3 4)) 5))
       (cl-copy-list '(1 2 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-copy-tree)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

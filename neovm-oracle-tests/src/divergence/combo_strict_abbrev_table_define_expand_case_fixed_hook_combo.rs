@@ -21,7 +21,7 @@ fn div_v8_abbrev_table_define_symbol_expansion() {
         (abbrev-expansion "btw" table)
         (abbrev-expansion "xp" table)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t ab nil \"about\" \"by the way\" \"expand\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +50,7 @@ fn div_v8_expand_abbrev_case_fixed_hook_invocation() {
           (expand-abbrev)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"about\" \"hooked\" (fired) \"ABOUT\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +68,6 @@ fn div_v8_clear_abbrev_table_count_and_properties() {
           (abbrev-symbol "cd" table)
           (abbrev-table-p table))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 \"cooldown\" nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

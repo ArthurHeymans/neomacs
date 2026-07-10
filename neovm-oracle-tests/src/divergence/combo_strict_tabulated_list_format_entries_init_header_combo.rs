@@ -26,7 +26,7 @@ fn div_v8_tabulated_list_mode_format_entries_init() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument arrayp (\"Name\" 20 t))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +48,7 @@ fn div_v8_tabulated_list_print_entries_renders() {
     (kill-buffer (current-buffer))
     (list line-count has-header)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,6 +72,6 @@ fn div_v8_tabulated_list_get_entry_id_at_pos() {
     (kill-buffer (current-buffer))
     (list entry-id (vectorp entry))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

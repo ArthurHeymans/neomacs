@@ -17,7 +17,7 @@ fn div_v8_xml_parse_nested_attributes_children() {
           (cadar parsed)
           (length (cddar parsed)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (root ((attr . \"val\") (num . \"42\")) 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,7 @@ fn div_v8_xml_parse_mixed_text_entities_unicode() {
           (xml-get-children parsed 'missing)
           (caddr parsed))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (doc nil \"Hello & goodbye <tag> café 日本語\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +52,6 @@ fn div_v8_xml_get_attribute_children_helpers() {
           (xml-get-attribute (car items) 'n)
           (mapcar (lambda (i) (caddr i)) items))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

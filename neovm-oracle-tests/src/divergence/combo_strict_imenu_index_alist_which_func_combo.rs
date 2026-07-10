@@ -20,7 +20,7 @@ fn div_v8_imenu_index_alist_elisp_defuns() {
           (assoc "probe-foo" idx)
           (assoc "probe-bar" idx))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function imenu--index-alist)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_imenu_rescan_and_subindex() {
     (list (assq '*Rescan* idx)
           (sort (delq nil (mapcar (lambda (e) (car e)) idx)) #'string<))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function imenu--index-alist)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,6 +54,6 @@ fn div_v8_which_function_mode_basic() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function imenu--index-alist)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

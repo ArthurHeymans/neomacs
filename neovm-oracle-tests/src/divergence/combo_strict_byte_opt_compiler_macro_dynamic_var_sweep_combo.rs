@@ -21,7 +21,7 @@ fn div_v8_byte_compile_warnings_dynamic_var_sweep() {
       (boundp 'emacs-lisp-file-regexp)
       (boundp 'lexical-binding))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_compiler_macro_defalias_advice_var_sweep() {
       (boundp 'make-autoload)
       (boundp 'byte-compile-defm))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t t nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_lexical_dynbind_eval_module_var_sweep() {
       (boundp 'module-env-type)
       (boundp 'module-assertions))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t t t nil t nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

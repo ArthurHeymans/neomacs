@@ -20,7 +20,7 @@ fn div_v8_mutex_with_mutex_acquire_release_owner() {
             'done))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_condition_variable_signal_notify() {
             'after))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +53,6 @@ fn div_v8_mutex_unlock_without_lock_error() {
       'unexpected-success)
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught error)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

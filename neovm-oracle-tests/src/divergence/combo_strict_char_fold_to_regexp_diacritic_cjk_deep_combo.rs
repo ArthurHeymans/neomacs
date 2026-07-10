@@ -18,7 +18,7 @@ fn div_v8_char_fold_to_regexp_diacritic_cjk() {
       (length (char-fold-to-regexp ?e))
       (stringp (char-fold-to-regexp ?a)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 97)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_char_fold_search_match_diacritic_insensitive() {
             (re-search-forward re2 nil t))
           (match-string 0))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 \"café\" 11 \"naïve\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +52,6 @@ fn div_v8_char_fold_spare_include_exclude_table() {
       (consp (char-fold-sparse ?a char-fold-table))
       (stringp (char-fold-to-regexp "test"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function char-fold-sparse)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

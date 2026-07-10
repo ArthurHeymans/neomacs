@@ -137,7 +137,7 @@ fn divergence_read_key_sequence() {
 fn divergence_accessed_keymaps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (keymapp (current-global-map))

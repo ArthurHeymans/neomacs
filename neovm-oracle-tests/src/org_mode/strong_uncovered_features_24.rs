@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf24_table_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2) (3 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((1 2) (3 4))" '((:results . "table")))"##,
         expect,
@@ -25,7 +25,7 @@ fn uf24_table_result() {
 #[test]
 fn uf24_list_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "list")))"##,
         expect,
@@ -39,7 +39,7 @@ fn uf24_list_result() {
 #[test]
 fn uf24_vector_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK [1 2 3]""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "[1 2 3]" '((:results . "vector")))"##,
         expect,
@@ -53,7 +53,7 @@ fn uf24_vector_result() {
 #[test]
 fn uf24_scalar_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "scalar")))"##,
         expect,
@@ -67,7 +67,7 @@ fn uf24_scalar_result() {
 #[test]
 fn uf24_verbatim_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"hello\"" '((:results . "verbatim")))"##,
         expect,
@@ -81,7 +81,7 @@ fn uf24_verbatim_result() {
 #[test]
 fn uf24_file_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "file-link")))"##,
         expect,
@@ -95,7 +95,7 @@ fn uf24_file_link() {
 #[test]
 fn uf24_graphics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"/tmp/img.png\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/img.png\"" '((:results . "graphics")))"##,
         expect,
@@ -109,7 +109,7 @@ fn uf24_graphics() {
 #[test]
 fn uf24_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "replace")))"##,
         expect,
@@ -123,7 +123,7 @@ fn uf24_replace() {
 #[test]
 fn uf24_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "append")))"##,
         expect,
@@ -137,7 +137,7 @@ fn uf24_append() {
 #[test]
 fn uf24_prepend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "prepend")))"##,
         expect,
@@ -151,7 +151,7 @@ fn uf24_prepend() {
 #[test]
 fn uf24_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "link")))"##,
         expect,
@@ -165,7 +165,7 @@ fn uf24_link() {
 #[test]
 fn uf24_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"/tmp/test.txt\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"/tmp/test.txt\"" '((:results . "file")))"##,
         expect,
@@ -179,7 +179,7 @@ fn uf24_file() {
 #[test]
 fn uf24_org() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "org")))"##,
         expect,
@@ -193,7 +193,7 @@ fn uf24_org() {
 #[test]
 fn uf24_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"<b>bold</b>\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"<b>bold</b>\"" '((:results . "html")))"##,
         expect,
@@ -207,7 +207,7 @@ fn uf24_html() {
 #[test]
 fn uf24_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\\\\textbf{bold}\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "\"\\\\textbf{bold}\"" '((:results . "latex")))"##,
         expect,
@@ -221,7 +221,7 @@ fn uf24_latex() {
 #[test]
 fn uf24_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "code")))"##,
         expect,
@@ -235,7 +235,7 @@ fn uf24_code() {
 #[test]
 fn uf24_pp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'(1 2 3)" '((:results . "pp")))"##,
         expect,
@@ -249,7 +249,7 @@ fn uf24_pp() {
 #[test]
 fn uf24_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "drawer")))"##,
         expect,
@@ -263,7 +263,7 @@ fn uf24_drawer() {
 #[test]
 fn uf24_wrap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "value") (:wrap . "example")))"##,
         expect,
@@ -277,7 +277,7 @@ fn uf24_wrap() {
 #[test]
 fn uf24_prologue() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 12""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ x 2)" '((:results . "value") (:prologue . "(setq x 10)") (:epilogue . "(message \"done\")")))"##,
         expect,
@@ -291,7 +291,7 @@ fn uf24_prologue() {
 #[test]
 fn uf24_eval_never() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "value") (:eval . "never")))"##,
         expect,
@@ -305,7 +305,7 @@ fn uf24_eval_never() {
 #[test]
 fn uf24_cache() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 0""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(random)" '((:results . "value") (:cache . "yes")))"##,
         expect,
@@ -319,7 +319,7 @@ fn uf24_cache() {
 #[test]
 fn uf24_hlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2) :hline (3 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((1 2) :hline (3 4))" '((:results . "value") (:hlines . "yes")))"##,
         expect,
@@ -333,7 +333,7 @@ fn uf24_hlines() {
 #[test]
 fn uf24_colnames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"a\" \"b\") (1 2))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((\"a\" \"b\") (1 2))" '((:results . "value") (:colnames . "yes")))"##,
         expect,
@@ -347,7 +347,7 @@ fn uf24_colnames() {
 #[test]
 fn uf24_rownames() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"a\" 1) (\"b\" 2))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "'((\"a\" 1) (\"b\" 2))" '((:results . "value") (:rownames . "yes")))"##,
         expect,

@@ -27,7 +27,7 @@ fn divergence_indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""  line1\n    line2\n      line3\nOK (\"    line1\n      line2\n\tline3\n\" \"  line1\n    line2\n      line3\n\" 0 10 0 8)""#
+        r#""OK (\"    line1\n      line2\n\tline3\n\" \"  line1\n    line2\n      line3\n\" 0 10 0 8)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -49,7 +49,7 @@ fn divergence_indent_rigidly() {
 fn divergence_delete_indentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""  hello worldOK (\"  hello world\" nil 2 8 t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"  hello world\" nil 2 8 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "  hello\n  world")
@@ -68,9 +68,7 @@ fn divergence_delete_indentation() {
 fn divergence_thing_at_point_line_sentence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""First sentence.  Second sentence.  Third sentence.OK (\"Second sentence.\" (18 . 34) t t t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"Second sentence.\" (18 . 34) t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "First sentence.  Second sentence.  Third sentence.")
@@ -92,9 +90,7 @@ fn divergence_thing_at_point_line_sentence() {
 fn divergence_justify_current_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""This is a short test lineOK (\"This is a short test line\" t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"This is a short test line\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fill-column 30))
@@ -130,9 +126,7 @@ fn divergence_comment_kill_comment() {
 fn divergence_indent_line_to() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""    hello\n\tworld\ntest\nERR (invalid-read-syntax \")\" 12 49)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 49)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello\nworld\ntest\n")
@@ -154,8 +148,7 @@ fn divergence_indent_line_to() {
 fn divergence_move_to_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""short\nmedium length\nlonger line here\nOK (5 5 nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (5 5 nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "short\nmedium length\nlonger line here\n")
@@ -177,7 +170,7 @@ fn divergence_move_to_column() {
 fn divergence_comment_pad() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""codeOK ((nil \"\") nil t \"code\" t)""#]];
+    let expect = expect_test::expect![[r#""OK ((\";\" \"\") t t \"code\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "code")
@@ -195,7 +188,7 @@ fn divergence_comment_pad() {
 fn divergence_region_active_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (3 8 t t \"CDEFG\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (3 8 t t \"CDEFG\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")

@@ -8,7 +8,7 @@ fn divergence_multibyte_insert_marker_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AééBC€OK (\"A\\303\\251\\303\\251BC\" 1 8 7 \"A\\303\\251\\303\\251BC\\342\\202\\254\" 10 8 nil)""#
+        r#""OK (\"A\\303\\251\\303\\251BC\" 1 8 7 \"A\\303\\251\\303\\251BC\\342\\202\\254\" 10 8 nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -36,7 +36,7 @@ fn divergence_multibyte_insert_marker_positions() {
 fn divergence_encode_decode_buffer_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello é World €OK (nil 18 15 nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil 18 15 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello \xc3\xa9 World \xe2\x82\xac")
@@ -56,7 +56,7 @@ fn divergence_encode_decode_buffer_roundtrip() {
 fn divergence_buffer_local_marker_encoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AééBCDEOK (3 t 7 t \"A\\303\\251\\303\\251BCDE\")""#]];
+    let expect = expect_test::expect![[r#""OK (3 t 7 t \"A\\303\\251\\303\\251BCDE\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-blm-pos-xxx 0)
@@ -80,7 +80,7 @@ fn divergence_buffer_local_marker_encoding() {
 fn divergence_charset_conversion_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XéàùOK (nil nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "\xc3\xa9\xc3\xa0\xc3\xb9")
@@ -124,7 +124,7 @@ fn divergence_substring_multibyte_boundary() {
 fn divergence_narrow_multibyte_search_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAA�\u{a9bbb}�\u{a0ccc}ERR (args-out-of-range 4 10)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 4 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA\xc3\xa9BBB\xc3\xa0CCC")
@@ -146,7 +146,7 @@ fn divergence_narrow_multibyte_search_marker() {
 fn divergence_replace_multibyte_preserves_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""A�છ�\u{a0c}OK (\"A\\303છ\\303\u{a0c}\" (1 2 3 4 5))""#]];
+    let expect = expect_test::expect![[r#""OK (\"A\\303છ\\303\u{a0c}\" (1 2 3 4 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "A\xc3\xa9B\xc3\xa0C")
@@ -189,7 +189,9 @@ fn divergence_case_change_multibyte() {
 fn divergence_buffer_multibyte_undo_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""STéARTàERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"ST\\303\\251ART\\303\\240\" 9 \"ST\\303\\251ART\" 7 \"ST\\303\\251ART\" 7 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "START")
@@ -216,9 +218,7 @@ fn divergence_buffer_multibyte_undo_sequence() {
 fn divergence_char_after_multibyte_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""A�છ�\u{a0c}�\u{b9d}OK (65 4194243 2715 4194243 2572 t nil nil nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (65 4194243 2715 4194243 2572 t nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "A\xc3\xa9B\xc3\xa0C\xc3\xb9D")

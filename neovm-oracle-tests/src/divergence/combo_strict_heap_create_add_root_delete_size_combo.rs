@@ -21,7 +21,9 @@ fn div_v8_heap_min_priority_order() {
         (heap-delete-root h)
         (heap-root h)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"heap\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +41,9 @@ fn div_v8_heap_drain_sorted_order() {
           (heap-empty h)
           (heap-size h))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"heap\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +59,8 @@ fn div_v8_heap_max_priority_and_strings() {
         (heap-root h)
         (heap-size h)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"heap\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

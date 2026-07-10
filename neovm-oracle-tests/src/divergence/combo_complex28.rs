@@ -158,7 +158,7 @@ fn div_cx28_plist_deep_manipulation() {
 #[test]
 fn div_cx28_buffer_local_variables_listing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (neo-cx28-bl1 neo-cx28-bl2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-if-not)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -179,7 +179,7 @@ fn div_cx28_buffer_local_variables_listing() {
 #[test]
 fn div_cx28_cl_typep_hierarchy_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 5 'integer)

@@ -118,7 +118,7 @@ fn div_cx301_flymake_diagnostic_creation() {
 #[test]
 fn div_cx301_compile_error_regexp_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp absoft)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable compilation-error-regexp-alist)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((test-lines '("file.el:42:10:Error: undefined variable"

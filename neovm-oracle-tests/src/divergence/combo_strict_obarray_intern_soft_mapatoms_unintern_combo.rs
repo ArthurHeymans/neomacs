@@ -24,7 +24,7 @@ fn div_v8_obarray_intern_soft_mapatoms() {
         (obarrayp 'not-obarray)
         (obarrayp [0 0 0])))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_unintern_symbol_plist_reintern() {
             (eq s1 s2))
           (intern-soft "probe-key" ob))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +60,6 @@ fn div_v8_global_obmap_default_obarray_intern_soft() {
         (unintern "probe-global-sym-xyz" obarray)
         (intern-soft "probe-global-sym-xyz")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t \"probe-global-sym-xyz\" nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

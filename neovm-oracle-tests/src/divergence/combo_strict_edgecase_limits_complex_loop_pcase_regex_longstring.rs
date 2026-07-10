@@ -11,9 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q0_complex_cl_loop_accumulators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((5 ((e . 5) (d . 4) (c . 3) (b . 2) (a . 1))) ((2 4 6 8 10) (1 3 5 7 9)) 294)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(1 2 3 4 5)

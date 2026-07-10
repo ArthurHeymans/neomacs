@@ -24,7 +24,7 @@ fn div_v8_minibuffer_completion_styles_var_sweep() {
       (boundp 'completions-sort)
       (boundp 'enable-recursive-minibuffers))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_history_case_ignore_read_vars_sweep() {
       (boundp 'minibuffer-local-filename-completion-map)
       (boundp 'read-expression-map))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_completion_style_table_var_sweep() {
       (boundp 'completion-list-compare)
       (boundp 'tmm--completion-table-cache))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t nil t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

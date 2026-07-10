@@ -65,8 +65,9 @@ fn divergence_eieio_buffer_undo_with_tracking() {
 fn divergence_overlay_textprop_advice_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAA-XXYYY-CCC-DDD-EEEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"AAA-XXYYY-CCC-DDD-EEE\" 0 2 (group a) 10 12 (group c) 14 16 (group d) 18 20 (group e)) (nil t nil nil nil) #(\"AAA-BBB-CCC-DDD-EEE\" 0 2 (group a) 4 6 (group b) 8 10 (group c) 12 14 (group d) 16 18 (group e)) t 1 t 2 t 3 t 4 t 5 t a t b t c t d t e t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE")
@@ -182,8 +183,9 @@ fn divergence_multi_buffer_overlay_sync() {
 fn divergence_prop_change_undo_with_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (warning error t t #(\"AAAA-BBBB-CCCC-DDDD\" 0 3 (face bold) 3 4 (face nil) 4 7 (face italic) 7 8 (face nil) 8 11 (face underline) 11 12 (face nil) 12 15 (face default) 15 16 (face nil)) nil bold t italic t underline t default t error nil highlighted t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")

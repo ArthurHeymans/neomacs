@@ -10,14 +10,14 @@ use crate::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_goto_char_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcOK 2""#]];
+    let expect = expect_test::expect![[r#""OK 2""#]];
     let (oracle_ret, neovm_ret) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abc\") (goto-char 2))",
         expect,
     );
     assert_ok_eq("2", &oracle_ret, &neovm_ret);
 
-    let expect = expect_test::expect![[r#""abcOK 2""#]];
+    let expect = expect_test::expect![[r#""OK 2""#]];
     let (oracle_point, neovm_point) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abc\") (goto-char 2) (point))",
         expect,

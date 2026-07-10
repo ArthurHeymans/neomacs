@@ -225,7 +225,7 @@ fn div_cx503_ol_shared_properties() {
 #[test]
 fn div_cx503_ol_end_before_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK #<overlay from 1 to 1 in  *neovm-oracle-stdout*>""#]];
+    let expect = expect_test::expect![[r#""OK #<overlay from 1 to 1 in *scratch*>""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (make-overlay 5 3)

@@ -239,7 +239,7 @@ fn combo1_props_crud() {
 fn combo1_todo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"PROG\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:cycle nil) (:content #(\"* H\" 0 3 (org-todo-head \"TODO\"))))""#
+        r#""OK ((:init nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:cycle #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:cycle nil) (:cycle #(\"TODO\" 0 4 (org-todo-head \"TODO\"))) (:content #(\"* TODO H\" 0 8 (org-todo-head \"TODO\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -268,7 +268,7 @@ fn combo1_todo_cycle() {
 fn combo1_src_execute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK ((:init \"#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC\") (:after-exec \"#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC\") (:results nil))""##
+        r#""Evaluate this emacs-lisp code block on your system? (yes or no) OK nil""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

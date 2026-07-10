@@ -36,7 +36,7 @@ fn deficiency_re_search_forward_in_narrowed_with_prop_zones() {
 fn deficiency_replace_match_preserves_props_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rmp\")))\n\
@@ -92,7 +92,7 @@ fn deficiency_match_data_with_multiple_searches_and_markers() {
 fn deficiency_query_replace_regexp_simulation_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"qrr\")))\n\

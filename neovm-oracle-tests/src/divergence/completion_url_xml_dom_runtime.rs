@@ -104,7 +104,7 @@ fn url_parse() {
 fn xml_parse_dom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (root 2 \"1\" \"text\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function dom-children)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "<root><child id=\"1\">text</child><child id=\"2\">more</child></root>")

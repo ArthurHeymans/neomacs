@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx430_get_buffer_window_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK (#<window 1 on *scratch*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (current-buffer)))
@@ -27,7 +27,7 @@ fn div_cx430_get_buffer_window_list() {
 #[test]
 fn div_cx430_window_at_coords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK #<window 1 on *scratch*>""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (window-at 0 0)
@@ -115,7 +115,7 @@ fn div_cx430_window_child_parent() {
 #[test]
 fn div_cx430_window_left_column_top() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -193,7 +193,7 @@ fn div_cx430_frame_char_dimensions() {
 #[test]
 fn div_cx430_window_pixelwise() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-pixel-left (selected-window))
@@ -270,7 +270,7 @@ fn div_cx430_char_table_default() {
 #[test]
 fn div_cx430_force_mode_line_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil (0 0 107260 779000))""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (force-mode-line-update nil)

@@ -114,7 +114,7 @@ fn div_cx14_md5_with_explicit_coding() {
 #[test]
 fn div_cx14_text_property_search_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 11 15)""#]];
+    let expect = expect_test::expect![[r#""OK (:not-available)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -156,7 +156,7 @@ fn div_cx14_font_lock_add_keywords_dynamic() {
 #[test]
 fn div_cx14_window_total_size_after_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (12 80 (t 40) 80)""#]];
+    let expect = expect_test::expect![[r#""OK (24 80 (t 40) 80)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

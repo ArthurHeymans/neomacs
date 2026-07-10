@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_multiple_value_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cmv")))
@@ -45,7 +45,7 @@ fn combo_cl_multiple_value_marker_overlay_undo() {
 fn combo_cl_multiple_value_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cvn")))
@@ -123,7 +123,7 @@ fn combo_cl_multiple_value_clone_overlay() {
 fn combo_cl_multiple_value_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cmm")))
@@ -168,7 +168,7 @@ fn combo_cl_multiple_value_multi() {
 fn combo_cl_multiple_value_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cmo")))

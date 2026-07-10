@@ -38,7 +38,7 @@ fn strict_property_empty_value_and_key() {
 #[test]
 fn strict_timestamp_end_of_month() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function org-element-property:day-start)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn(require'org)(list :jan31(let((ts(org-timestamp-from-string"<2024-01-31 Wed>")))(org-element-property:day-start ts)):mar31(let((ts(org-timestamp-from-string"<2024-03-31 Sun>")))(org-element-property:day-start ts)):apr30(let((ts(org-timestamp-from-string"<2024-04-30 Tue>")))(org-element-property:day-start ts))))"##,
         expect,

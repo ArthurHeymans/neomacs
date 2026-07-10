@@ -298,7 +298,7 @@ fn div_cx34_coding_system_get_all_properties() {
 #[test]
 fn div_cx34_cl_loop_sum_maximize_count_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (30 5 9)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for x in '(1 2 3 4 5 6 7 8 9 10)

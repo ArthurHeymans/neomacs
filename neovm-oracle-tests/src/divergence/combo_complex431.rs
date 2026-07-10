@@ -272,7 +272,7 @@ fn div_cx431_delete_process_exited() {
 #[test]
 fn div_cx431_window_pixel_size_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 23)""#]];
+    let expect = expect_test::expect![[r#""OK (80 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))

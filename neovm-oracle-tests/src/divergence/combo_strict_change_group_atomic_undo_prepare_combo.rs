@@ -23,7 +23,7 @@ fn div_v8_prepare_change_group_undo_atomic() {
       (undo)
       (list s1 s2 (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"startA1A2A3\" \"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_change_group_amalgamate_boundary() {
     (undo)
     (list s1 (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"baseXYZ\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,6 +67,6 @@ fn div_v8_undo_outer_limit_amalgamate_combo() {
           (list full (buffer-string) (> (length buffer-undo-list) 0))))
     (setq undo-outer-limit saved-outer-limit)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"01234\" \"0123\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

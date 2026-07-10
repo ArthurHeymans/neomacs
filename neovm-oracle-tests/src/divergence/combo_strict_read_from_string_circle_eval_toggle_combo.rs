@@ -19,7 +19,7 @@ fn div_v8_read_from_string_circle_shared_structure() {
           (invalid-read-syntax (cons 'caught (cadr err)))
           (error (cons 'other (car err))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_read_eval_toggle_hash_dot() {
           (let ((read-eval nil)) (read-from-string "#.(shell-command \"rm -rf /\")"))
         (error (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#.\")""##]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,6 +48,6 @@ fn div_v8_read_multiple_forms_sequential_string() {
     (multiple-value-bind (v2 p2) (read-from-string s nil p1)
       (list v1 p1 v2 p2 (substring s p2)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

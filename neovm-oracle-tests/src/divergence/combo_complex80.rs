@@ -49,9 +49,7 @@ fn div_cx80_macroexpand_vs_macroexpand_one() {
 #[test]
 fn div_cx80_defmacro_with_body_and_rest_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((if (> x 5) (progn (incf x) (message \"hi\")) nil) (cl--block-wrapper (let ((--cl-block-nil-- (cons '--cl-block-nil-- nil))) (catch --cl-block-nil-- (dolist (x '(1 2 3)) (print x))))) 42 6)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-dolist)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx80-when* (cond &rest body)

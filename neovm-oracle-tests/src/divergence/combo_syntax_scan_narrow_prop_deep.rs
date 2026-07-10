@@ -220,7 +220,7 @@ fn deficiency_forward_word_boundary_with_prop_changes_mid_buffer() {
 fn deficiency_kill_word_yank_in_narrowed_with_syntax_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"kyn\")))\n\

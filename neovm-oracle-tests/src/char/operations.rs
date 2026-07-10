@@ -70,9 +70,8 @@ fn oracle_prop_insert_char_count() {
                     (insert "\n")
                     (insert-char ?= 15)
                     (buffer-string))"#;
-    let expect = expect_test::expect![[
-        r#""\n        OK \"--------------------\n        **********\n        ===============\"""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK \"--------------------\n**********\n===============\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

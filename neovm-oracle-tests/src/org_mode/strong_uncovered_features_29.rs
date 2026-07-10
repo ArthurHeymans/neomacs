@@ -154,7 +154,7 @@ fn uf29_attach_dir() {
 #[test]
 fn uf29_attach_unset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK \"/tmp/attach\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

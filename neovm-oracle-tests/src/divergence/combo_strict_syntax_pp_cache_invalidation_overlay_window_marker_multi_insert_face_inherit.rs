@@ -25,7 +25,7 @@ fn div_v0_syntax_pp_cache_after_modifications() {
             (eq p1 p1b)
             (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function syntax-pp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,7 +60,7 @@ fn div_v0_overlay_window_parameter() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 3>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -89,7 +89,7 @@ fn div_v0_marker_insertion_type_multiple() {
               (marker-insertion-type m-after)
               (buffer-string))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 4 3 5 nil t \"ABYXCDEF\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -114,7 +114,7 @@ fn div_v0_face_inherit_chain_depth() {
         (face-attribute 'probe-f3 :foreground nil 'default)
         (face-attribute 'probe-f2 :foreground nil 'default)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"red\" \"red\" bold italic t \"red\" \"red\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -134,6 +134,6 @@ fn div_v0_cl_defmethod_extra_qualifier() {
   (list (probe-eq 42)
         (nreverse log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid argument name: extra\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

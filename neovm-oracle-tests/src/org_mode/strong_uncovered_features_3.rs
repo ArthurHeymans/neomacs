@@ -898,7 +898,7 @@ fn uf3_move_item() {
 fn uf3_insert_todo_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Existing\" nil) (\"New task\" \"IDEA\") (\"Right task\" \"IDEA\"))""#
+        r#""OK ((\"Existing\" nil) (\"New task\" \"TODO\") (\"Right task\" \"TODO\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -942,7 +942,7 @@ fn uf3_update_statistics() {
 #[test]
 fn uf3_match_sparse_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"TODO A\" \"B\" \"TODO C\") nil)""#]];
+    let expect = expect_test::expect![[r#""OK ((\"A\" \"B\" \"C\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

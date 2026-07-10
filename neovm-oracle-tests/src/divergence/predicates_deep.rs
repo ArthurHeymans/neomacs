@@ -148,9 +148,7 @@ fn divergence_buffer_predicates() {
 fn divergence_marker_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (t nil nil #<marker at 1 in  *neovm-oracle-stdout*> 1 nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t nil nil #<marker at 1 in *scratch*> 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((m (make-marker)))
   (list (markerp m)

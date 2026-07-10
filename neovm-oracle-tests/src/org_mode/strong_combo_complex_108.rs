@@ -38,7 +38,7 @@ fn combo108_org_table_sort_descending() {
 #[test]
 fn combo108_org_timestamp_warning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function list:type)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn(require'org)(let((ts(org-timestamp-from-string"<2024-07-04 Thu -5d>")))(list:type(org-element-property:type ts):warning-type(org-element-property:warning-type ts):warning-value(org-element-property:warning-value ts):warning-unit(org-element-property:warning-unit ts))))"##,
         expect,

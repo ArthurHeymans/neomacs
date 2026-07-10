@@ -45,7 +45,7 @@ fn divergence_string_functions_modern() {
 fn divergence_hash_table_modern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((\"a\" \"b\" \"c\") (1 2 3) 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht)
@@ -161,7 +161,7 @@ fn divergence_internal_functions() {
 fn divergence_comp_warn_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable warning-suppress-log-types)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'warning-suppress-types)

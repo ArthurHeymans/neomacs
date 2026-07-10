@@ -27,7 +27,9 @@ fn div_v8_parse_partial_sexp_state_vectors() {
           (funcall probe ". ,a")
           (funcall probe ")))"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 12 34 nil nil 0 nil 20 (1) nil) (1 1 20 nil t nil 0 nil 37 (1) nil) (1 1 2 nil nil nil 0 nil nil (1) nil) (4 61 64 nil nil nil 0 nil nil (1 55 60 61) nil) (4 84 85 nil nil nil 0 nil nil (1 55 79 84) nil) (3 79 98 nil nil nil 0 nil nil (1 55 79) nil) (2 55 60 nil nil nil 0 nil nil (1 55) nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +51,9 @@ fn div_v8_scan_lists_scan_sexps_forward_backward() {
           (condition-case err (save-excursion (goto-char (point-min)) (forward-char 1) (scan-sexps (point) -1)) (scan-error (cadr err)))
           (save-excursion (goto-char at-open) (backward-prefix-chars) (point)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (16 8 19 22 nil \"Containing expression ends prematurely\" 5)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -71,6 +75,8 @@ fn div_v8_syntax_ppss_cache_anchors() {
           (syntax-ppss (point-max))
           (save-excursion (goto-char (funcall anchor "doc")) (syntax-ppss)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 17 34 nil nil 0 nil 22 (1) nil) (1 1 nil nil t nil 1 nil 30 (1) nil) (2 57 70 nil nil nil 1 nil nil (1 57) nil) (0 nil 1 nil nil nil 0 nil nil nil nil) (1 1 nil 34 nil nil 1 nil 22 (1) nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_regex_replace_multibyte_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer rx1> 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass unicode-node ()

@@ -35,7 +35,7 @@ fn org_clock_in_out_drawer_logbook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (0 \"* TODO Task\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n:END:\n\")""#
+        r#""OK (0 \"* TODO Task\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  1:30\n:END:\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

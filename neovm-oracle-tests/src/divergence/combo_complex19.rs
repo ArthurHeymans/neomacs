@@ -47,7 +47,7 @@ fn div_cx19_process_buffer_kill_query_flag() {
 #[test]
 fn div_cx19_cl_letf_generalized_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 3) [10 20 30] orig)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lst (list 1 2 3))
@@ -313,7 +313,7 @@ fn div_cx19_read_print_circle_nested_shared_vectors() {
 #[test]
 fn div_cx19_cl_coerce_vector_to_list_back_to_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function equalp)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((v [1 2 3])

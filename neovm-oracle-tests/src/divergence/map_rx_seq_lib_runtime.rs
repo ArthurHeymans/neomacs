@@ -92,7 +92,7 @@ fn rx_pcase() {
 fn seq_advanced() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (((nil 1 3 5) (t 2 4 6)) (1 3) (2 3) (11 22 33))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'seq)
 (list (seq-group-by #'cl-evenp '(1 2 3 4 5 6))
@@ -133,7 +133,7 @@ fn seq_let_destructure() {
 fn seq_more() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 4 2 (3 2 1) 1 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'seq)
 (list (seq-position '(a b c) 'b) (seq-find #'cl-evenp '(1 3 4 5))

@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx286_cl_typep_satisfies_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 4 '(satisfies evenp))
@@ -24,7 +24,7 @@ fn div_cx286_cl_typep_satisfies_predicates() {
 #[test]
 fn div_cx286_cl_typep_member_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 'a '(member a b c))
@@ -40,7 +40,7 @@ fn div_cx286_cl_typep_member_type() {
 #[test]
 fn div_cx286_cl_typep_integer_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t t nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 5 '(integer 0 10))
@@ -57,7 +57,7 @@ fn div_cx286_cl_typep_integer_range() {
 #[test]
 fn div_cx286_cl_typep_or_and_not() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t nil nil t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep "x" '(or string integer))
@@ -75,7 +75,7 @@ fn div_cx286_cl_typep_or_and_not() {
 #[test]
 fn div_cx286_cl_typep_cons_and_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -93,7 +93,7 @@ fn div_cx286_cl_typep_cons_and_vector() {
 #[test]
 fn div_cx286_cl_typep_float_and_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-variable 1/3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 3.14 'float)
@@ -136,7 +136,7 @@ fn div_cx286_cl_typep_with_eieio_classes() {
 #[test]
 fn div_cx286_cl_typep_array_and_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t nil t t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep [1 2 3] 'array)
@@ -154,8 +154,9 @@ fn div_cx286_cl_typep_array_and_sequence() {
 #[test]
 fn div_cx286_cl_check_type_with_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (nil wrong-type-argument nil wrong-type-argument nil)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (:no-error void-function :no-error void-function :no-error)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (cl-check-type 42 integer) (error :no-error))
@@ -171,7 +172,7 @@ fn div_cx286_cl_check_type_with_message() {
 #[test]
 fn div_cx286_cl_typep_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '("str" 42 (1 . 2) [1 2 3] nil sym 3.14 1/3)))

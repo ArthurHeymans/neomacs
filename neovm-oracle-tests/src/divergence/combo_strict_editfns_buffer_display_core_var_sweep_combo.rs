@@ -23,7 +23,7 @@ fn div_v8_transient_mark_word_wrap_truncate_var_sweep() {
       (boundp 'use-hard-newlines)
       (boundp 'default-justification))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_selective_display_paragraph_start_separate_var_sweep() {
       (boundp 'adaptive-fill-first-line-regexp)
       (boundp 'adaptive-fill-regexp))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +68,6 @@ fn div_v8_mode_line_format_header_line_tab_line_var_sweep() {
       (boundp 'mode-line-remote)
       (boundp 'mode-line-frame-identification))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

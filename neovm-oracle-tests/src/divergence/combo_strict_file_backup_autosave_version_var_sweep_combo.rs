@@ -23,7 +23,7 @@ fn div_v8_backup_by_copying_version_control_var_sweep() {
       (boundp 'backup-directory-alist)
       (boundp 'tramp-backup-directory-alist))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_autosave_visit_require_final_newline_var_sweep() {
       (boundp 'write-region-inhibit-fsync)
       (boundp 'confirm-nonexistent-file-or-buffer))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_find_file_large_file_warn_var_sweep() {
       (boundp 'file-precious-flag)
       (boundp 'delete-by-moving-to-trash))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

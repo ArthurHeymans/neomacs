@@ -23,7 +23,7 @@ fn div_v8_buffer_file_query_replace_history_var_sweep() {
       (boundp 'shell-command-history)
       (boundp 'read-number-history))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_misc_command_history_var_sweep() {
       (boundp 'read-input-method-function-history)
       (boundp 'color-history))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t t nil nil t nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_history_length_delete_duplicates_var_sweep() {
       (boundp 'minibuffer-completion-predicate)
       (boundp 'completion-cycle-threshold))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

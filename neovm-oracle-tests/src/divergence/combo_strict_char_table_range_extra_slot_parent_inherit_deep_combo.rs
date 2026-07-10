@@ -28,7 +28,9 @@ fn div_v8_char_table_range_set_query_uniform_span() {
         (char-table-subtype ct)
         (char-table-range ct ?!)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (a-val z-val upper upper upper digit upper digit t foo nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,7 +56,9 @@ fn div_v8_char_table_extra_slot_parent_inheritance() {
         (char-table-extra-slot child 0)
         (char-table-extra-slot ct 5)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (args-out-of-range #^[nil nil foo #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper nil nil nil nil nil nil parent-a nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil parent-z nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper parent-upper nil nil nil nil nil nil parent-a nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil parent-z nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -79,6 +83,7 @@ fn div_v8_char_table_optimize_map_char_table() {
                   (qk (if (consp (car q)) (car (car q)) (car q))))
               (< pk qk))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((97 . va) (98 . vb) (99 . vc) ((123 . 4194303) . vxz))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

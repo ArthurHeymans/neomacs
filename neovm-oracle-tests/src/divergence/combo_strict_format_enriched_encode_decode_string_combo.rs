@@ -18,7 +18,7 @@ fn div_v8_format_encode_decode_enriched_roundtrip() {
         (let ((decoded (format-decode-string encoded (length encoded) '(text/enriched))))
           (or (string-match "Hello" decoded) decoded))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-encode-string)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_enriched_face_property_encode() {
     (list (stringp encoded)
           (string-match "bold" encoded))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-encode-string)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,6 +51,6 @@ fn div_v8_format_decode_detect_enriched() {
         (or (string-match "bold" decoded) decoded)
         (>= (length decoded) 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-decode-string)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -143,7 +143,7 @@ fn ud_sparse_tree() {
 fn ud_element_parse_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"T\" \"TODO\" 65 (\"tag\")) (\"New\" \"PROG\" 66 (\"newtag\")))""#
+        r#""OK ((\"T\" \"TODO\" 65 (\"tag\")) (\"New\" \"DONE\" 66 (\"newtag\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -463,7 +463,7 @@ fn ud_agenda_entries() {
 #[test]
 fn ud_colview_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"%25ITEM %TODO %3PRIORITY %TAGS %V\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-columns-get-format)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

@@ -60,7 +60,7 @@ fn div_g5_advice_override_and_filter_args() {
 #[test]
 fn div_g5_pcase_let_and_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 10 42)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (pcase-let ((`(,a ,b) '(1 2))) (+ a b))

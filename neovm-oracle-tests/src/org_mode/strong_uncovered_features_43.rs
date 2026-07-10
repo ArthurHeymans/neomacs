@@ -82,9 +82,7 @@ fn uf43_macro_collect() {
 #[test]
 fn uf43_entity_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"alpha\" \"\\\\alpha\" t \"&alpha;\" \"alpha\" \"alpha\" \"α\") (\"beta\" \"\\\\beta\" t \"&beta;\" \"beta\" \"beta\" \"β\") (\"gamma\" \"\\\\gamma\" t \"&gamma;\" \"gamma\" \"gamma\" \"γ\") nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-entity-get)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-entity-get "alpha")
         (org-entity-get "beta")

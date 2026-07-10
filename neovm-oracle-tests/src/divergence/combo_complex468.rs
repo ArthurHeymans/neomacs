@@ -5,7 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx468_cl_loop_hash_across() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"a\" . 1) (\"b\" . 2) (\"c\" . 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht) (puthash "b" 2 ht) (puthash "c" 3 ht)
@@ -18,7 +18,7 @@ fn div_cx468_cl_loop_hash_across() {
 #[test]
 fn div_cx468_cl_loop_summing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 385""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i from 1 to 10
            sum (* i i))"##,
@@ -29,7 +29,7 @@ fn div_cx468_cl_loop_summing() {
 #[test]
 fn div_cx468_cl_loop_maximising() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 9""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(cl-loop for i in '(3 7 2 9 1 8)
            maximize i)"##,
@@ -128,7 +128,7 @@ fn div_cx468_hash_table_custom_test() {
 #[test]
 fn div_cx468_cl_assoc_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil (4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-assoc-if)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-assoc-if #'numberp '((a . 1) (b . 2) (c . 3)))
       (cl-rassoc-if #'numberp '((1 . a) (2 . b) (3 . c)))

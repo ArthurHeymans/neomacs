@@ -18,7 +18,7 @@ fn div_v8_with_silent_modifications_preserves_flag() {
           (buffer-modified-p)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil \"xy\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_restore_buffer_modified_p_set_modified() {
         (restore-buffer-modified-p t)
         (list m1 m2 m3 (buffer-modified-p))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_buffer_modified_tick_consistent() {
             (/= tick2 tick4)
             (> tick3 tick1)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -300,7 +300,7 @@ fn div_cx36_set_buffer_multibyte_then_char_syntax_then_restore() {
 #[test]
 fn div_cx36_cl_loop_for_across_vector_with_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 . 10) (1 . 20) (2 . 30) (3 . 40))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for x across [10 20 30 40]

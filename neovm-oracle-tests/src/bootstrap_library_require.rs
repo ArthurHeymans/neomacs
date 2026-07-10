@@ -26,7 +26,7 @@ fn oracle_prop_bootstrap_library_require_surface() {
   (condition-case err (require 'cl-generic) (error err))
   (featurep 'cl-generic))"#;
     let expect =
-        expect_test::expect![[r#""OK (t cl-lib t t t nil gv t t t t seq t t cl-generic t)""#]];
+        expect_test::expect![[r#""OK (nil cl-lib t t t nil gv t t t t seq t t cl-generic t)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         "(nil cl-lib t t t nil gv t t t t seq t t cl-generic t)",

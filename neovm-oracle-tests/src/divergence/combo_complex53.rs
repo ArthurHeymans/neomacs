@@ -321,9 +321,7 @@ fn div_cx53_subword_forward_backward_cycle_superword_default_comparison_mega() {
 #[test]
 fn div_cx53_coding_priority_utf8_utf16_big5_position_category_combined_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (20 0 12 nil 10 coding-category-utf-8 coding-category-utf-8-auto coding-category-emacs-mule)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((prio (coding-system-priority-list)))

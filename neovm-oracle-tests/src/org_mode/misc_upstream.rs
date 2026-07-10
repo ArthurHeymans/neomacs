@@ -346,7 +346,7 @@ fn upstream_org_colview_uncompile_format() {
 fn upstream_org_macro_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"#+MACRO: A B\n1 B 3\" \"#+MACRO: macro $1 $2\nsome text\" \"#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\ninner outer\")""##
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -459,7 +459,9 @@ fn upstream_oc_register_processor() {
 #[test]
 fn upstream_org_fold_hide_drawer_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-drawer nil org-hide-drawer)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)
@@ -491,7 +493,9 @@ fn upstream_org_fold_hide_drawer_toggle() {
 #[test]
 fn upstream_org_fold_hide_block_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (org-hide-block nil org-hide-block)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-fold)

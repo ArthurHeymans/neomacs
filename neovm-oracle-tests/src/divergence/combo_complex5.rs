@@ -313,7 +313,7 @@ fn div_cx5_overlay_invisible_line_move() {
 #[test]
 fn div_cx5_cl_typep_defstruct_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

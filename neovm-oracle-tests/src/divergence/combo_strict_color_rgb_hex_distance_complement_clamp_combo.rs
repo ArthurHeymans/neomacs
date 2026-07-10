@@ -18,7 +18,9 @@ fn div_v8_color_rgb_hex_name_distance_complement() {
       (color-supported-p "red")
       (color-supported-p "notacolor"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r##""OK (\"#ff0000\" \"#7fff3fffbfff\" 1.0 327669 589805 (0.0 1.0 1.0) t nil)""##
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +36,7 @@ fn div_v8_color_clamp_srgb_to_lab_hsl() {
       (length (color-rgb-to-hsl 1.0 0.0 0.0))
       (car (color-rgb-to-hsl 1.0 0.0 0.0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function color-clamp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,6 +52,6 @@ fn div_v8_color_defined_values_gray_p_nearest() {
       (integerp (length (defined-colors)))
       (memq "red" (defined-colors)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

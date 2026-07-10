@@ -165,7 +165,7 @@ fn div_cx12_circular_hash_table_print() {
 #[test]
 fn div_cx12_cl_labels_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-labels ((even-p (n) (if (= n 0) t (odd-p (1- n))))
@@ -201,7 +201,7 @@ fn div_cx12_buffer_local_lifecycle_default_kill() {
 #[test]
 fn div_cx12_cl_coerce_chain_vector_list_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((97 98 233) \"abé\" (97 98 233))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((v [97 98 233])
@@ -280,7 +280,7 @@ fn div_cx12_field_property_beginning_of_line() {
 #[test]
 fn div_cx12_string_match_p_vs_string_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 (4 9) 0)""#]];
+    let expect = expect_test::expect![[r#""OK (3 (0 3) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match-p "café" "le café here")

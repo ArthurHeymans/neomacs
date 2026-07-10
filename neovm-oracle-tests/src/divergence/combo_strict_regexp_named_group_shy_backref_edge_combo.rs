@@ -17,7 +17,7 @@ fn div_v8_regexp_named_group_backref_nested() {
       (string-match "\\(?<word>\\w+\\) \\k<word>" "hello hello")
       (match-string 1 "hello hello"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-regexp \"Invalid regular expression\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_regexp_shy_alternation_backref_edge() {
       (string-match "\\(.\\)\\1\\(.\\)\\2" "aabb")
       (match-string 0 "aabb"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"abcdab\" 0 0 0 \"abab\" 0 \"aabb\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,6 +50,6 @@ fn div_v8_regexp_w_max_minimal_paren_star() {
       (string-match "\\<word\\>" "a word here")
       (match-string 0 "a word here"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 0 \"abc123def\" 0 \"a  !  b\" 2 \"word\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

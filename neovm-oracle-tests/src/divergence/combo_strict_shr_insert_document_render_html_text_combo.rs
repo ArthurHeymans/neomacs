@@ -17,7 +17,9 @@ fn div_v8_shr_paragraph_heading_render() {
     (shr-insert-document "<html><body><h1>Title</h1><p>A short paragraph here.</p></body></html>")
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp \"<html><body><h1>Title</h1><p>A short paragraph here.</p></body></html>\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +34,9 @@ fn div_v8_shr_list_link_render() {
     (shr-insert-document "<html><body><ul><li>one</li><li>two</li><li>three</li></ul><a href=\"x\">link text</a></body></html>")
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp \"<html><body><ul><li>one</li><li>two</li><li>three</li></ul><a href=\\\"x\\\">link text</a></body></html>\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,6 +51,8 @@ fn div_v8_shr_whitespace_newline_handling() {
     (shr-insert-document "<html><body><p>multiple    spaces   and\n\nnewlines</p></body></html>")
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp \"<html><body><p>multiple    spaces   and\n\nnewlines</p></body></html>\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

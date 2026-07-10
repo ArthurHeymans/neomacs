@@ -18,7 +18,7 @@ fn div_u8_frame_z_group_and_tab_bar_lines() {
       (boundp 'tab-bar-format)
       (boundp 'tab-bar-new-tab-choice))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable tab-bar-lines)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +46,7 @@ fn div_u8_buffer_list_order_after_bury_unbury() {
     (kill-buffer b)
     (kill-buffer c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,7 +69,7 @@ fn div_u8_display_buffer_alist_custom() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t \" *probe-dba*\" 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -91,7 +91,7 @@ fn div_u8_window_text_representation() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function window-text-representation)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -113,6 +113,6 @@ fn div_u8_cl_loop_with_hash_and_accumulate_and_finally() {
            end
            finally (return (list total big small))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

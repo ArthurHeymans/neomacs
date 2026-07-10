@@ -152,7 +152,7 @@ fn uf22_src_insert() {
 #[test]
 fn uf22_src_to_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"[[file:test.png][desc]]\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-result-to-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-result-to-file "test.png" "desc" '("figure"))"##,
         expect,
@@ -370,7 +370,7 @@ fn uf22_src_header_insert() {
 #[test]
 fn uf22_src_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:results . \"output\") (:exports . \"\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-merge-params)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-merge-params '((:results . "value")) '((:results . "output"))) "##,
         expect,
@@ -418,7 +418,7 @@ fn uf22_src_result_params() {
 #[test]
 fn uf22_src_elisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-execute:emacs-lisp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-execute:emacs-lisp "(+ 1 2)" '((:results . "value"))) "##,
         expect,

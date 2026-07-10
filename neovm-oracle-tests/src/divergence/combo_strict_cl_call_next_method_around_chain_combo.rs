@@ -19,7 +19,8 @@ fn div_v8_cl_call_next_method_around_multi_level() {
 (list (probe-cnm-chain 5)
       (probe-cnm-chain 42))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((around-1 . base-int) (around-2 around-1 . base-int))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +46,9 @@ fn div_v8_cl_next_method_p_before_after_with_around() {
 (let ((result (probe-combo 5)))
   (list result (nreverse probe-cnm-log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (primary-result (around-enter before primary after around-exit))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +65,6 @@ fn div_v8_cl_no_next_method_predicate_error() {
           (cl-no-next-method 'caught-no-next))))
 (list (probe-nnm 5))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((nil caught-no-next))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

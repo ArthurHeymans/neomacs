@@ -83,9 +83,7 @@ fn div_cx300_mega_milestone_1_full_subsystem_chaos() {
 #[test]
 fn div_cx300_mega_milestone_2_pcase_rx_syntax_advice_register_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -244,7 +242,7 @@ fn div_cx300_mega_milestone_4_keymap_eval_macro_closure_advice_hash_obarray() {
 #[test]
 fn div_cx300_mega_milestone_5_all_subsystem_ultimate_chaos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)

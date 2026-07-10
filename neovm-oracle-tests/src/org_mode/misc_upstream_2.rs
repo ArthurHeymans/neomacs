@@ -219,7 +219,7 @@ fn upstream_org_colview_columns_scope() {
 fn upstream_org_capture_fill_template() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"success!\n\" \"2026\n\" \"<2026-06-29 Mon>\n\" \"[2026-06-29 Mon]\n\" \"\" \"%i\n\" \"\")""#
+        r#""OK (\"success!\n\" \"2026\n\" \"<2026-07-10 Fri>\n\" \"[2026-07-10 Fri]\n\" \"\" \"%i\n\" \"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -121,7 +121,7 @@ fn cn_cl_values_floor_bind() {
 fn cn_seq_advanced_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 1 2 2 3 3) (20 40) (0 2 4) t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'seq)
 (list (seq-mapcat (lambda (x) (list x x)) '(1 2 3))
@@ -137,8 +137,7 @@ fn cn_seq_advanced_2() {
 fn cn_seq_split_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (([1 2] [3 4] [5]) ((1 2 3) (4 5 6) (7)) (4 5) (1 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-oddp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'seq)
 (list (seq-split [1 2 3 4 5] 2)

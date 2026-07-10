@@ -83,9 +83,7 @@ fn div_cx348_mega_1_full_subsystem_ultimate() {
 #[test]
 fn div_cx348_mega_2_pcase_rx_syntax_advice_register_window_format_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)

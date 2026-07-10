@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i0_isearch_search_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t nil t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t nil t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'search-default-mode)

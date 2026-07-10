@@ -30,7 +30,9 @@ fn div_v8_window_prev_next_bury_kill_combo() {
     (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x))) (list a c))
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument bufferp (#<buffer *scratch*> #<marker at 1 in *scratch*> #<marker at 1 in *scratch*>))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,7 +55,9 @@ fn div_v8_marker_through_complex_replace() {
           (marker-position m3)
           (marker-buffer m1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"The QUICK brown FOX jumps LAZY dog\" 5 20 35 #<killed buffer>)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,7 +73,7 @@ fn div_v8_with_temp_message_message_log() {
     (list (current-message)
           (with-current-buffer "*Messages*" (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -99,7 +103,7 @@ fn div_v8_indirect_buffer_undo_independence() {
     (kill-buffer ind)
     (kill-buffer base)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"base-text\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -122,6 +126,8 @@ fn div_v8_char_table_extra_slot_range_and_parent_combined() {
         (char-table-extra-slot parent 0)
         (eq (char-table-parent child) parent)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (args-out-of-range #^[child-val #^[parent-val nil syntax-table #^^[3 0 parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-a parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-z parent-val parent-val parent-val parent-val parent-val] #^^[1 0 #^^[2 0 #^^[3 0 parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-a parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-z parent-val parent-val parent-val parent-val parent-val] parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val] parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val] parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val parent-val] syntax-table #^^[3 0 child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-a child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val] #^^[1 0 #^^[2 0 #^^[3 0 child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-a child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val] child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val] child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val] child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val child-val] 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

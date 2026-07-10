@@ -19,7 +19,7 @@ fn div_v8_print_prin1_to_custom_standard_output_buffer() {
       (kill-buffer (current-buffer))
       result)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK \"\n(a b c)\n42literal\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +41,8 @@ fn div_v8_with_output_to_string_nested_terpri() {
       (with-output-to-string
         (princ (format "%d + %d = %d" 1 2 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"outer inner \nafter-terpriend\" 3 \"1 + 2 = 3\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +60,6 @@ fn div_v8_prin1_to_string_vs_princ_to_string_face_escape() {
         (let ((print-level 1))
           (prin1-to-string '(1 (2 (3 (4))))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function princ-to-string)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

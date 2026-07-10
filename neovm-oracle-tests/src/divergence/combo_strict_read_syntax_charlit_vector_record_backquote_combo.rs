@@ -25,7 +25,8 @@ fn div_v8_read_char_literal_escape_matrix() {
       (read "?\\\\")
       (read "?A"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (1 134217825 8 9 65 233 134217729 27 9 10 59 40 92 65)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +44,9 @@ fn div_v8_read_vector_record_function_backquote() {
         (read "(a . (b . (c . nil)))")
         (read "[1 [2 [3]]]")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r##""OK ((err . \"#\") (err . \"#\") #s(foo 1 2) #'symbol #'lambda `(a ,b ,@c) (a b c) [1 [2 [3]]])""##
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +67,6 @@ fn div_v8_read_from_string_matrix_errors() {
         (multiple-value-bind (val pos) (read-from-string s)
           (list val pos (substring s pos)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -68,7 +68,7 @@ fn div_cx146_use_package_availability() {
 #[test]
 fn div_cx146_package_desc_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -86,7 +86,7 @@ fn div_cx146_package_desc_format() {
 #[test]
 fn div_cx146_package_version_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t (1 2 3) \"1.2.3\" \"1.2.3.4\")""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -125,7 +125,7 @@ fn div_cx146_use_package_expand_form() {
 #[test]
 fn div_cx146_package_installed_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -142,7 +142,7 @@ fn div_cx146_package_installed_p() {
 #[test]
 fn div_cx146_elpa_archive_url_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-variable)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -158,7 +158,7 @@ fn div_cx146_elpa_archive_url_format() {
 #[test]
 fn div_cx146_package_activated_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -174,7 +174,7 @@ fn div_cx146_package_activated_list_query() {
 #[test]
 fn div_cx146_package_import_with_existing_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

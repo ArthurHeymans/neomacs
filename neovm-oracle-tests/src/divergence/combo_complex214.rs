@@ -48,7 +48,7 @@ fn div_cx214_window_configuration_save_restore() {
 fn div_cx214_window_state_get_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t (((min-height . 4) (min-width . 10) (min-height-ignore . 2) (min-width-ignore . 2) (min-height-safe . 1) (min-width-safe . 2) (min-pixel-height . 4) (min-pixel-width . 10) (min-pixel-height-ignore . 2) (min-pixel-width-ignore . 2) (min-pixel-height-safe . 1) (min-pixel-width-safe . 2)) leaf (pixel-width . 80) (pixel-height . 23) (total-width . 80) (total-height . 23) (normal-height . 1.0) (normal-width . 1.0) (parameters (clone-of . #<window 1 on *scratch*>)) (buffer #<buffer *scratch*> (selected . t) (hscroll . 0) (fringes 0 0 nil nil) (margins nil) (scroll-bars nil 0 t nil 0 t nil) (vscroll . 0) (dedicated) (point . #<marker at 1 in *scratch*>) (start . #<marker at 1 in *scratch*>))))""#
+        r#""OK (t (((min-height . 4) (min-width . 10) (min-height-ignore . 2) (min-width-ignore . 2) (min-height-safe . 1) (min-width-safe . 2) (min-pixel-height . 4) (min-pixel-width . 10) (min-pixel-height-ignore . 2) (min-pixel-width-ignore . 2) (min-pixel-height-safe . 1) (min-pixel-width-safe . 2)) leaf (pixel-width . 80) (pixel-height . 24) (total-width . 80) (total-height . 24) (normal-height . 1.0) (normal-width . 1.0) (parameters (clone-of . #<window 1 on *scratch*>)) (buffer #<buffer *scratch*> (selected . t) (hscroll . 0) (fringes 0 0 nil nil) (margins nil) (scroll-bars nil 0 t nil 0 t nil) (vscroll . 0) (dedicated) (point . #<marker at 1 in *scratch*>) (start . #<marker at 1 in *scratch*>))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -149,7 +149,7 @@ fn div_cx214_window_tree_structure_query() {
 #[test]
 fn div_cx214_get_buffer_window_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (current-buffer)))

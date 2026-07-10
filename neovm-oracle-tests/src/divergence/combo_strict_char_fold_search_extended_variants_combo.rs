@@ -20,7 +20,7 @@ fn div_v8_char_fold_compatibility_ligature_circled_fraction() {
                 (if (re-search-forward re nil t) 'match 'no-match))))
           pairs))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (match match match match no-match match)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_char_fold_case_fold_combined() {
                   (if (re-search-forward re nil t) 'match 'no-match))))
             pairs)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (match match match)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_char_fold_table_sparse_inclusion_exclusion() {
         (or (null entry) (stringp entry) (consp entry)))
       (length (char-fold-to-regexp "test")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t 224)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

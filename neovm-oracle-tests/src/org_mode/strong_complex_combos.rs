@@ -1049,8 +1049,7 @@ fn strong_keyword_parsing_all_types() {
 fn strong_comment_fixed_width_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#"OK (("This is a comment" "Another comment") ("Fixed-width
-Another line"))"#
+        r#""OK ((\"This is a comment\" \"Another comment\") (\"Fixed-width\nAnother line\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

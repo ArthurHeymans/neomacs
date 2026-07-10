@@ -26,7 +26,9 @@ fn div_v8_pcase_app_and_or_guard_combined() {
         ((app (lambda (s) (length s)) 4) 'len4)
         (_ 'other-len)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((five \"hello\") big-int (\"a\" \"b\" \"c\") no-match len4)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +43,8 @@ fn div_v8_pcase_pred_function_partial_application_patterns() {
       (pcase '() ((or (pred null) `(,_ . ,_)) 'empty-or-cons))
       (pcase '(1) ((or (pred null) `(,_ . ,_)) 'empty-or-cons)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (le50 ge10 has-at long empty-or-cons empty-or-cons)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -61,6 +64,7 @@ fn div_v8_pcase_let_with_nested_destructure_and_clauses() {
         (`(:ok ,code) code)
         (`(:err ,msg) msg)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (1 . one))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

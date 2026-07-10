@@ -18,7 +18,7 @@ fn div_v8_display_table_glyph_vector_aset_aref() {
         (length dt)
         (aref dt 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ([65 66] nil [92 116] 4194304 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_glyphless_char_display_method() {
                 (and (consp g) (integerp (car g))))))
     (setq glyphless-char-display saved)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function glyphless-char-p)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +53,6 @@ fn div_v8_standard_display_ascii_current_display_table() {
               (vectorp standard-display-table)))
     (setq standard-display-table saved)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable current-display-table)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

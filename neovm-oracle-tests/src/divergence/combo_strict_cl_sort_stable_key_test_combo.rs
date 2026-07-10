@@ -16,7 +16,9 @@ fn div_v8_cl_sort_stable_key_test_deep() {
         (cl-sort (copy-sequence data) #'string< :key #'cdr)
         (cl-stable-sort (copy-sequence data) #'string< :key #'cdr)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((1 . a) (1 . b) (2 . g) (3 . c) (4 . d) (5 . e) (9 . f)) ((1 . a) (1 . b) (2 . g) (3 . c) (4 . d) (5 . e) (9 . f)) ((1 . a) (1 . b) (3 . c) (4 . d) (5 . e) (9 . f) (2 . g)) ((1 . a) (1 . b) (3 . c) (4 . d) (5 . e) (9 . f) (2 . g)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -31,7 +33,7 @@ fn div_v8_cl_merge_key_vectors_dotted() {
         (cl-merge '(1 1 1) '(1 1 1) #'<)
         (cl-merge '("c") '("a" "b") #'string<)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep <)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,6 +47,8 @@ fn div_v8_cl_sort_vectors_strings_mixed() {
       (cl-sort (copy-sequence '(3 1 4 1 5)) #'>)
       (cl-stable-sort (copy-sequence [3 1 4]) #'<))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ([1 1 2 3 4 5 6 9] [\"apple\" \"banana\" \"cherry\"] (5 4 3 1 1) [1 3 4])""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -195,7 +195,7 @@ fn oracle_prop_erase_buffer_then_reinsert() {
                              (buffer-string))))
             (list snap1 snap2 snap3 snap4 snap5)))))))"#;
     let expect = expect_test::expect![[
-        r#""\n        OK ((13 14 \"first content\") (0 1 1 1 t t) (19 20 \"second content here\") (0 1) (17 7 \"line2\" \"line1\n        line2\n        line3\"))""#
+        r#""OK ((13 14 \"first content\") (0 1 1 1 t t) (19 20 \"second content here\") (0 1) (17 7 \"line2\" \"line1\nline2\nline3\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

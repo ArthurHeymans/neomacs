@@ -24,7 +24,8 @@ fn div_v8_cl_generic_multi_dispatch_precedence() {
       (probe-md [1 2] 5)
       (probe-md 5 [1 2]))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (num-num str-str num-any any-any any-any num-any)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +49,9 @@ fn div_v8_cl_generic_eql_specializer_call_next_method() {
       (probe-chain "str")
       (probe-chain [1 2]))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (is-special is-forty-two default default (num-pre . base) base base)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,6 +70,6 @@ fn div_v8_cl_generic_hierarchy_overrides_no_applicable() {
       (condition-case err (probe-h [1 2]) (cl-no-applicable-method 'no-method))
       (condition-case err (probe-h 'sym) (cl-no-applicable-method 'no-method-sym)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (int float str no-method no-method-sym)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -61,7 +61,7 @@ fn div_cx421_eval_buffer_context() {
 #[test]
 fn div_cx421_save_excursion_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (#<buffer  *neovm-oracle-stdout*> 1)""#]];
+    let expect = expect_test::expect![[r#""OK (#<buffer *scratch*> 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *cx421-a*"))

@@ -11,8 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n2_case_ascii_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 1 5)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 1 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (downcase "HELLO WORLD")

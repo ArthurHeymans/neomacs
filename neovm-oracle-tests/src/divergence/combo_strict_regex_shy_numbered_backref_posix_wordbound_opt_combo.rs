@@ -26,7 +26,7 @@ fn div_v8_regex_shy_numbered_groups_capture_skipping() {
                  'unexpected-match)
         (invalid-regexp 'caught-invalid)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 3 \"cap\" nil 0 0 \"cd\" caught-invalid)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,9 @@ fn div_v8_regex_word_boundary_posix_longest_opt() {
       (regexp-opt '("foo" "bar" "baz") t)
       (regexp-opt '("a" "ab" "abc")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (2 2 nil 4 4 0 \"a\" 0 \"ab\" 0 (\"foo\" \"bar\") \"\\\\(?:ba[rz]\\\\|foo\\\\)\" \"\\\\(ba[rz]\\\\|foo\\\\)\" \"\\\\(?:a\\\\(?:bc?\\\\)?\\\\)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +71,8 @@ fn div_v8_regex_case_fold_multibyte_charclass() {
         (match-string 0 s)
         (string-match "A\\(.\\)A" s)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (0 5 no-match-when-case-sensitive 11 \"本\" 11 \"日本語\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

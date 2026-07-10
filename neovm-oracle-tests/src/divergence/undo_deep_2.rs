@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_boundary_amalgamation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIOK (t (nil (4 . 7) nil (1 . 4) (t . 0)) 6)""#]];
+    let expect = expect_test::expect![[r#""OK (t (nil (4 . 7) nil (1 . 4) (t . 0)) 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -28,7 +28,7 @@ fn divergence_undo_boundary_amalgamation() {
 fn divergence_undo_after_multiple_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAAOK (\"AAA\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"AAA\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -71,8 +71,7 @@ fn divergence_undo_with_markers_tracked() {
 fn divergence_undo_in_narrowed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""BBBCCCDDDERR (user-error \"No further undo information\")""#]];
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAABBBCCCDDDEEE")
@@ -109,7 +108,7 @@ fn divergence_undo_limit() {
 fn divergence_undo_in_read_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloOK (\"Hello\" t ((1 . 6) (t . 0)))""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello\" t ((1 . 6) (t . 0)))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -167,7 +166,7 @@ fn divergence_buffer_undo_list_torture() {
 fn divergence_undo_nil_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFOK ((nil (1 . 4) (t . 0)) t)""#]];
+    let expect = expect_test::expect![[r#""OK ((nil (1 . 4) (t . 0)) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)

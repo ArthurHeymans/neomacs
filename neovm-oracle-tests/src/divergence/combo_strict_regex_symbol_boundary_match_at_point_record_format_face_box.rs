@@ -21,7 +21,7 @@ fn div_t8_regex_symbol_boundaries_match_at_point() {
         (and (string-match "\\_<\\(\\w+\\)\\_>" "foo bar baz")
              (match-string 1))))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,9 @@ fn div_t8_print_number_table() {
         (let ((print-circle t) (print-number-table t))
           (prin1-to-string (list shared shared)))))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"((42 3.14 \\\"str\\\") (42 3.14 \\\"str\\\"))\" \"((1 2 3) (1 2 3) (1 2 3))\" \"(#1=(42 3.14 \\\"str\\\") #1#)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +54,7 @@ fn div_t8_format_s_S_records_structs() {
           (string-match "probe-fmt-rec" (format "%s" r))
           (string-match "#s" (format "%S" r)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,7 +71,9 @@ fn div_t8_face_box_underline_variants() {
         (face-attribute 'probe-box-face :box nil nil)
         (face-attribute 'probe-underline-face :underline nil nil)))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((:line-width 2 :color \"red\" :style released-button) (:color \"blue\" :style wave :position -2) (:line-width 2 :color \"red\" :style released-button) (:color \"blue\" :style wave :position -2))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -99,6 +103,6 @@ fn div_t8_combo_search_invisible_narrow_casefold() {
               (match-beginning 0)))))
     (widen)))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 45)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

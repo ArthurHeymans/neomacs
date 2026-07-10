@@ -26,7 +26,8 @@ fn div_v8_process_attributes_keys_shape() {
           (assq 'etime attrs)
           (kill-buffer buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument numberp #<process probe-attr>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +52,7 @@ fn div_v8_process_list_filter_live_query() {
           (integerp (process-id proc))
           (kill-buffer buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -75,6 +76,6 @@ fn div_v8_process_status_type_mark_tty() {
     (kill-buffer buf)
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (real t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

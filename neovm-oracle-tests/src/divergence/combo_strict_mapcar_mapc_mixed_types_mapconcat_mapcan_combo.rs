@@ -19,7 +19,7 @@ fn div_v8_mapcar_mapc_over_string_vector_list() {
         (nreverse acc))
       (mapcar (lambda (x) (* x x)) [1 2 3 4]))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_mapconcat_mapcan_multiple_sequences() {
       (mapconcat #'identity '("only") "-")
       (mapconcat #'identity '() "-"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcan 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +55,6 @@ fn div_v8_seq_map_map_index_filter_string_vector() {
       (seq-into '(1 2 3) 'vector)
       (seq-into [a b c] 'list)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-oddp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

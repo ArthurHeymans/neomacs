@@ -112,7 +112,7 @@ fn div_cx513_string_prefix_suffix_edge() {
 #[test]
 fn div_cx513_string_remove_prefix_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"def\" \"abcdef\" \"abc\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function string-remove-prefix)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-remove-prefix "abc" "abcdef")
       (string-remove-prefix "xyz" "abcdef")

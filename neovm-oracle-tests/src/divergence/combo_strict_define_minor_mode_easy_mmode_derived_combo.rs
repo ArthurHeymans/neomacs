@@ -23,7 +23,7 @@ fn div_v8_define_minor_mode_toggle_lighter_keymap() {
         (progn (probe-mmr-mode -1) (default-value 'probe-mmr-mode))
         (assq 'probe-mmr-mode minor-mode-alist)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp probe-mmr-act)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_define_global_minor_mode_globalized() {
         (progn (probe-gmm-mode 1) (default-value 'probe-gmm-mode))
         probe-gmm-ran))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_define_derived_mode_parent_syntax_table() {
           probe-derived-ran
           (stringp (format-mode-line mode-name)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

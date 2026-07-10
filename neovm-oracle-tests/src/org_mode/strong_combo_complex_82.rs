@@ -51,7 +51,7 @@ fn combo82_org_crypt_key() {
 fn combo82_babel_expand_params() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:expand-fbound t :expand-body-fbound t :noweb-expand-fbound t)""#
+        r#""OK (:expand-fbound t :expand-body-fbound nil :noweb-expand-fbound t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ob-core) (list

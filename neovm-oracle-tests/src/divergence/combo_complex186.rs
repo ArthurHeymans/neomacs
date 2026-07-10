@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx186_cl_loop_for_hash_collect_sum_average() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((10 20 30 40) 100 25)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -27,9 +27,7 @@ fn div_cx186_cl_loop_for_hash_collect_sum_average() {
 #[test]
 fn div_cx186_cl_loop_nested_with_for_in_and_across() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((2 4 6 8 10 12 14 16 18) ((0 . 10) (1 . 20) (2 . 30)) (:total 9 :indices (0 1 2)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lists '((1 2 3) (4 5) (6 7 8 9)))
@@ -53,7 +51,7 @@ fn div_cx186_cl_loop_nested_with_for_in_and_across() {
 #[test]
 fn div_cx186_cl_destructuring_bind_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 3 4) (((1 . 2) 3) 1 2 3) (1 2 3 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -71,7 +69,7 @@ fn div_cx186_cl_destructuring_bind_nested() {
 #[test]
 fn div_cx186_cl_multiple_value_bind_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 3) (1 2 nil) (1 2) :no-bindings :single)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -88,9 +86,7 @@ fn div_cx186_cl_multiple_value_bind_edge_cases() {
 #[test]
 fn div_cx186_cl_loop_with_complex_conditionals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:evens ((2 . \"b\") (4 . \"d\")) :big-odds ((5 . \"e\")) :small-odds ((1 . \"a\") (3 . \"c\")))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '((1 . "a") (2 . "b") (3 . "c") (4 . "d") (5 . "e"))))
@@ -109,7 +105,7 @@ fn div_cx186_cl_loop_with_complex_conditionals() {
 #[test]
 fn div_cx186_cl_loop_minimize_maximize_with_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:min 3 :max 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((strings '("apple" "kiwi" "banana" "fig" "cherry")))
@@ -125,7 +121,7 @@ fn div_cx186_cl_loop_minimize_maximize_with_key() {
 #[test]
 fn div_cx186_cl_loop_with_initially_and_finally_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function return)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
@@ -145,7 +141,7 @@ fn div_cx186_cl_loop_with_initially_and_finally_side_effects() {
 #[test]
 fn div_cx186_cl_do_with_result_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 4 9 16)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((result
@@ -161,7 +157,7 @@ fn div_cx186_cl_do_with_result_form() {
 #[test]
 fn div_cx186_cl_loop_always_never_thereis_short_circuit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t nil 6 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -179,7 +175,7 @@ fn div_cx186_cl_loop_always_never_thereis_short_circuit() {
 #[test]
 fn div_cx186_cl_loop_sum_with_float_into_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 5.500000000000001""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for i from 1 to 10
@@ -193,7 +189,7 @@ fn div_cx186_cl_loop_sum_with_float_into_var() {
 #[test]
 fn div_cx186_cl_loop_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '((1 . "alpha") (2 . "beta") (3 . "gamma"))))

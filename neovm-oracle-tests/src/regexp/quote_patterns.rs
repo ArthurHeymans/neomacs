@@ -255,7 +255,6 @@ fn oracle_prop_regexp_quote_combined_with_anchors() {
   (let ((pat (concat (regexp-quote "[") "[0-9]+" (regexp-quote "]"))))
     (if (string-match pat "value [42] found")
         (match-string 0) nil)))"#;
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 6)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

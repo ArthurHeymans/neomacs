@@ -128,7 +128,7 @@ fn mo_sparse_tree_multi_criteria() {
 fn mo_element_parse_modify_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"T\" \"TODO\" 65 (\"tag\")) (\"New\" \"PROG\" 66 (\"newtag\")))""#
+        r#""OK ((\"T\" \"TODO\" 65 (\"tag\")) (\"New\" \"DONE\" 66 (\"newtag\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

@@ -158,7 +158,7 @@ fn div_cx176_bookmark_all_names_query() {
 #[test]
 fn div_cx176_bookmark_default_file_path_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-variable)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

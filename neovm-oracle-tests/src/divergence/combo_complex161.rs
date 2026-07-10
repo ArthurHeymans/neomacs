@@ -152,7 +152,7 @@ fn div_cx161_format_time_string_with_padding_flags() {
 #[test]
 fn div_cx161_iso8601_parse_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2024 6 15 12 30 45)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

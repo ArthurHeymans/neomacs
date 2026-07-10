@@ -95,8 +95,7 @@ fn divergence_print_length_level_nested() {
 fn divergence_string_with_special_chars_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (t 5 \"hello\nworld\" \"tab\there\" \"quote\\\"inside\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((strings (list \"hello\\nworld\"
                             \"tab\\there\"

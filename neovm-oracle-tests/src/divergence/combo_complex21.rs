@@ -120,7 +120,7 @@ fn div_cx21_cl_defmethod_multi_arg_dispatch() {
 #[test]
 fn div_cx21_hash_table_modify_during_maphash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 (\"1\" \"3\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -177,7 +177,7 @@ fn div_cx21_read_circle_print_gensym_mega() {
 #[test]
 fn div_cx21_cl_loop_hash_keys_values_simultaneous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"a=1\" \"b=2\" \"c=3\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -359,7 +359,7 @@ fn div_cx21_window_dedicated_set_buffer_interaction() {
 #[test]
 fn div_cx21_cl_setf_on_plist_via_getf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:c 3 :a 99 :b 2) 99 3 :missing)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ cl-getf\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((pl '(:a 1 :b 2)))

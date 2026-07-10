@@ -33,7 +33,7 @@ fn div_v8_list_sequence_subr_fboundp_sweep() {
       (fboundp 'lookup-key)
       (fboundp 'where-is-internal))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,7 +63,7 @@ fn div_v8_buffer_position_subr_fboundp_sweep() {
       (fboundp 'make-variable-buffer-local)
       (fboundp 'make-local-variable))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

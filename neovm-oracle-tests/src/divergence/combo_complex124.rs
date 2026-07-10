@@ -52,7 +52,7 @@ fn div_cx124_event_modifiers_matrix() {
 fn div_cx124_event_basic_type_resolution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((97 97) (C-a nil) ((control 97) control) (M-a nil) (C-M-a nil) (return return) (C-return return) (M-return return) (mouse-1 mouse-1) (M-mouse-1 mouse-1) (C-down-mouse-1 mouse-1))""#
+        r#""OK ((97 97) (C-a nil) ((control 97) nil) (M-a nil) (C-M-a nil) (return return) (C-return nil) (M-return return) (mouse-1 mouse-1) (M-mouse-1 mouse-1) (C-down-mouse-1 mouse-1))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -28,7 +28,7 @@ fn div_v8_bidi_paragraph_direction_ltr_rtl() {
         (insert "Mixed שלום text")
         (bidi-paragraph-direction)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bidi-paragraph-direction)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_bidi_resolved_level_and_mirror() {
         (bidi-paragraph-direction)
         (buffer-substring 1 13)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bidi-resolved-level)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_bidi_paragraph_explicit_direction_override() {
       (eq 'left-to-right 'left-to-right)
       (eq 'right-to-left 'right-to-left))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bidi-paragraph-direction)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

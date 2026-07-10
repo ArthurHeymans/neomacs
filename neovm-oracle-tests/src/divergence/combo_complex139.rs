@@ -89,7 +89,7 @@ fn div_cx139_byte_compile_simple_defun() {
 #[test]
 fn div_cx139_byte_compile_warning_categories() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable byte-compile-warnings)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((categories '(free-vars unresolved callargs redefine obsolete

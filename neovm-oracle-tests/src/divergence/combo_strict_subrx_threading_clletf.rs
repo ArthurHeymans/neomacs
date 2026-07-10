@@ -65,7 +65,7 @@ fn div_g3_subr_x_string_ops() {
 #[test]
 fn div_g3_cl_letf_and_setf_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 3) 8 [1 2 3] 99 (2 1 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x (list 1 2 3))

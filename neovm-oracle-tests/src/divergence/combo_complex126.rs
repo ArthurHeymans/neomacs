@@ -143,7 +143,7 @@ fn div_cx126_advice_member_p_named_advices() {
 #[test]
 fn div_cx126_advice_mapc_iterate_advices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((nil) (nil) (nil) (nil))""#]];
+    let expect = expect_test::expect![[r#""OK ((nil) (nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx126-target () :primary)

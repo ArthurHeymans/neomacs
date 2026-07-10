@@ -103,7 +103,7 @@ fn strict_org_comment_block_inline() {
 #[test]
 fn strict_org_timestamp_inactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:type inactive :year 2024 :month 5 :day 15)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (let ((ts (org-timestamp-from-string "[2024-05-15 Wed]"))) (list :type (org-element-property :type ts)

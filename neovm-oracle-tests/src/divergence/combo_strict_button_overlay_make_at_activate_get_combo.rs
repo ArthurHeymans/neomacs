@@ -20,7 +20,9 @@ fn div_v8_button_make_at_start_end_get() {
           (button-get btn 'help-echo)
           (button-get btn 'category))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Button ‘category’ property may not be set directly\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +48,7 @@ fn div_v8_button_insert_forward_navigation_put() {
             (button-label b1)
             (button-label b2)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (17 22 act1 act2 \"LINK1\" \"LINK2\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -66,6 +68,6 @@ fn div_v8_button_overlay_properties_and_type() {
           (overlayp btn)
           (progn (button-put btn 'face 'bold) (button-get btn 'face)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function buttonp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

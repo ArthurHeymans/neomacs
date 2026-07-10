@@ -18,7 +18,7 @@ fn div_v8_button_type_supertype_inheritance_get_put() {
       (button-type-get 'probe-btn-child 'help-echo)
       (button-type-get 'probe-btn-child 'extra)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 9 49)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_make_button_with_type_properties() {
           (button-start btn)
           (button-end btn))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function buttonp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_insert_button_default_subtype_props() {
           (button-label b2)
           (button-get b1 'type))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Unknown button type ‘link’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

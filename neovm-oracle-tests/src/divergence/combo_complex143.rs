@@ -190,7 +190,7 @@ fn div_cx143_imenu_rescan() {
 #[test]
 fn div_cx143_which_function_in_emacs_lisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"neo-cx143-fn2\"""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

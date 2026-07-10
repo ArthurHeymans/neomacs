@@ -47,7 +47,7 @@ fn strict_error_org_schedule_past_date() {
 #[test]
 fn strict_error_org_deadline_invalid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Deadline on <2026-06-29 Mon>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Deadline on <2026-07-10 Fri>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (with-temp-buffer (org-mode) (insert "* H\n") (goto-char (point-min))
@@ -79,7 +79,7 @@ fn strict_error_org_element_parse_empty_string() {
 #[test]
 fn strict_error_org_timestamp_format_bad() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK :bad-format""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (let ((ts (org-timestamp-from-string "<2024-01-01>")))

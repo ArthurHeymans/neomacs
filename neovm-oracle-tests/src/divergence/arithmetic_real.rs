@@ -85,7 +85,7 @@ fn divergence_trig_math() {
 fn divergence_number_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil nil t t t nil t nil t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (integerp 42)

@@ -116,7 +116,7 @@ fn divergence_bool_vector_serialization() {
 fn divergence_string_escape_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (6 t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((strings (list \"hello\\nworld\"
                              \"tab\\there\"

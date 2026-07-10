@@ -70,7 +70,7 @@ fn div_cx102_org_property_extraction() {
 #[test]
 fn div_cx102_org_babel_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

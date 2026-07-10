@@ -67,9 +67,7 @@ fn div_cx257_mapcar_mapc_return_values() {
 #[test]
 fn div_cx257_sxhash_distribution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((491446041053 2032762058 507715862109 452976197021 0) (491446041053 2032762058 507715862109 452976197021 0) t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vals '("alpha" "beta" "gamma" "delta" "epsilon")))

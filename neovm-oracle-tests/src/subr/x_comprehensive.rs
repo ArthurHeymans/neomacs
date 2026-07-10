@@ -485,7 +485,7 @@ fn oracle_prop_subr_x_thread_first_last() {
     ;; (- 1 5) vs (- 5 1)
     (list (thread-first 5 (- 1))
           (thread-last 5 (- 1)))))"#;
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -513,7 +513,7 @@ fn oracle_prop_subr_x_thread_macroexpansion_and_named_let_lexical_contracts() {
         (macroexpand '(named-let f ((x 1)) x))
       (error (list (car err) (cadr err))))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((- (* (+ 5 3) 2)) (- (* 2 (+ 3 5))) (internal--thread-argument t x f) (internal--thread-argument nil x f) (car (append (list 1 2) '(3))) (error \"‘named-let’ requires lexical binding\") (error \"‘named-let’ requires lexical binding\"))""#
+        r#""OK ((- (* (+ 5 3) 2)) (- (* 2 (+ 3 5))) (internal--thread-argument t x f) (internal--thread-argument nil x f) (car (append (list 1 2) '(3))) (error \"‘named-let’ requires lexical binding\") (funcall (cl-labels ((f (x) x)) #'f) 1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

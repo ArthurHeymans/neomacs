@@ -23,7 +23,7 @@ fn div_v8_with_temp_buffer_window_output_string() {
                 (princ "world")))
       (when (get-buffer buf-name) (kill-buffer buf-name)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t \"*scratch*\" \"hello world\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_with_current_buffer_window_print_to_buffer() {
                   (kill-buffer " *probe-stdout*"))))
       (when (get-buffer buf-name) (kill-buffer buf-name)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil \"printed\" \"\n(a b c)\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_temp_buffer_show_hook_standard_input() {
         (current-message))
       (stringp (format "%s" (with-output-to-string (princ "nested")))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t \"isolated\" nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

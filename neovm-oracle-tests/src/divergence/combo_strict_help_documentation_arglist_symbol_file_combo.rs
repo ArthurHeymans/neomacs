@@ -18,7 +18,9 @@ fn div_v8_documentation_arglist_user_and_builtin() {
         (indirect-function 'probe-docd)
         (functionp 'probe-docd)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Sum two args.\" \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" \"Create a new cons, give it CAR and CDR as components, and return it.\n\n(fn CAR CDR)\" (x y) (closure (t) (x y) (+ x y)) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +35,9 @@ fn div_v8_substitute_command_keys_and_describe() {
       (documentation-property 'car 'function-documentation)
       (documentation-property 'cons 'variable-documentation))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"Use C-f to move forward.\" 4 7 (font-lock-face help-key-binding face help-key-binding)) #(\"Type C-g to cancel.\" 5 8 (font-lock-face help-key-binding face help-key-binding)) \"Plain text no keys.\" \"With \\\\[literal] preserved.\" nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +53,6 @@ fn div_v8_symbol_file_and_find_function_helpers() {
         (symbol-file 'probe-not-defined)
         (function-get 'car 'compiler-macro)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

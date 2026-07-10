@@ -89,7 +89,7 @@ fn divergence_syntax_class_codes() {
 fn divergence_modify_syntax_entry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (119 \"w\")""#]];
+    let expect = expect_test::expect![[r#""OK (95 \"_\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (modify-syntax-entry ?@ "w" (standard-syntax-table))
@@ -120,7 +120,7 @@ fn divergence_category_table() {
 fn divergence_syntax_forward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello world fooOK (7)""#]];
+    let expect = expect_test::expect![[r#""OK (7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world foo")
@@ -139,7 +139,7 @@ fn divergence_syntax_forward_word() {
 fn divergence_parse_partial_sexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""(foo (bar \"baz\") quux)OK (1 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo (bar \"baz\") quux)")

@@ -18,7 +18,7 @@ fn div_v8_cl_do_symbols_private_obarray() {
   (cl-do-symbols (s 0 ob) (push s collected))
   (sort collected #'string<))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_mapatoms_collect_sort_private_obarray() {
   (mapatoms (lambda (s) (push s collected)) ob)
   (sort (mapcar #'symbol-name collected) #'string<))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +53,6 @@ fn div_v8_cl_do_all_symbols_count_subset() {
             (cl-do-symbols (s 0 ob) (setq priv-count (1+ priv-count))))
           priv-count)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

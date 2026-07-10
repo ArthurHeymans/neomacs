@@ -8,7 +8,7 @@ fn divergence_undo_replace_with_props_and_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AA-XXXXXX-CC-DD-YYYYYY-FF-GG-HH-II-JJERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"AA-XXXXXX-CC-DD-YYYYYY-FF-GG-HH-II-JJ\" 0 2 (section a) 10 12 (section c) 13 15 (section d) 23 25 (section f) 26 28 (section g) 29 31 (section h) 32 34 (section i) 35 36 (section j)) 4 25 a nil #(\"AA-BB-CC-DD-EE-FF-GG-HH-II-JJ\" 0 2 (section a) 3 5 (section b) 6 8 (section c) 9 11 (section d) 12 14 (section e) 15 17 (section f) 18 20 (section g) 21 23 (section h) 24 26 (section i) 27 28 (section j)) t 1 t 6 nil 10 t 17 t 24 t active t a t b t c t d t e t f t g t h t i t j t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -71,8 +71,9 @@ fn divergence_undo_replace_with_props_and_markers() {
 fn divergence_undo_narrow_insert_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ZZCC-WWWW-EE-FF-GG-HHERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"ZZCC-WWWW-EE-FF-GG-HH\" 2 5 (region a) 10 21 (region b)) #(\"AA-BB-CC-DD-EE-FF-GG-HH-II-JJ-KK-LL\" 0 6 (region a) 6 9 (region a) 9 11 (region a) 12 23 (region b) 24 34 (region c)) t 1 t 7 t 13 t 19 t 25 t first t second t third t a t b t c t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH-II-JJ-KK-LL")
@@ -123,9 +124,7 @@ fn divergence_undo_narrow_insert_replace_chain() {
 fn divergence_undo_kill_yank_with_overlay_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""BLOCK1---BLOCK2---BLOCK3---BLOCK4ERR (args-out-of-range 34 39)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 34 39)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BLOCK1---BLOCK2---BLOCK3---BLOCK4")
@@ -174,9 +173,7 @@ fn divergence_undo_kill_yank_with_overlay_tracking() {
 fn divergence_undo_multiple_overlays_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""LINE1\n\nLINE3REPLACED-LINE\nMODIFIED\nLINE5ERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 77)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3\nLINE4\nLINE5")
@@ -227,7 +224,7 @@ fn divergence_undo_multiple_overlays_with_props() {
 fn divergence_undo_with_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""KEEP-E-KEEPVE-KEEPERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP-REMOVE-KEEP-REMOVE-KEEP")
@@ -277,9 +274,7 @@ fn divergence_undo_with_overlay_evaporate() {
 fn divergence_undo_regex_replace_preserve_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""tok1-SEPARATOR-tok2-SEPARATOR-tok3-SEPARATOR-tok4-SEPARATOR-tok5ERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 65)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "tok1-sep-tok2-sep-tok3-sep-tok4-sep-tok5")
@@ -330,8 +325,9 @@ fn divergence_undo_regex_replace_preserve_intervals() {
 fn divergence_undo_insert_delete_with_prop_transitions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAABBBBCCCCDDDDEEEEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"AAAABBBBCCCCDDDDEEEE\" 0 3 (color red) 4 7 (color blue) 8 11 (color green) 12 15 (color yellow) 16 19 (color purple)) t 5 t all t red t blue t green t yellow t purple t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAABBBBCCCCDDDDEEEE")

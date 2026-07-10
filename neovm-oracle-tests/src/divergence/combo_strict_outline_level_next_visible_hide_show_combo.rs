@@ -21,7 +21,7 @@ fn div_v8_outline_level_next_previous_visible_heading() {
         (prev (progn (outline-previous-visible-heading 1) (point))))
     (list lvl1 next1 lvl-next1 next2 prev)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_outline_forward_backward_same_level() {
         (back (progn (outline-backward-same-level 1) (point))))
     (list fwd back)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (12 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_outline_hide_body_show_all_cycle() {
             (> (length hidden-text) 0)
             (string-match "body1" (buffer-string))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (6 t 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

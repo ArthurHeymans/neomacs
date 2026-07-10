@@ -17,7 +17,9 @@ fn div_v8_iso8601_parse_date_datetime() {
       (iso8601-parse-duration "PT1H30M")
       (iso8601-parse "2025-12-31T23:59:59Z"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((45 30 12 15 3 2025 nil nil 0) (nil nil nil 15 3 2025 nil -1 nil) (0 0 0 1 1 2025 nil nil 0) (0 0 0 1 1 1970 nil nil 0) (0 30 1 0 0 0 nil -1 nil) (59 59 23 31 12 2025 nil nil 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +34,7 @@ fn div_v8_parse_time_string_variants() {
       (parse-time-string "15:30")
       (condition-case err (parse-time-string "not a date") (error 'caught))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 7 77)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +54,8 @@ fn div_v8_decode_time_of_parsed_under_utc() {
                                    (encode-time (iso8601-parse "2025-06-15T08:00:00Z")))))
     (set-time-zone-rule tz)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((30 12 3 4 2 1970 3 nil 0) (0 0 0 1 1 1970 4 nil 0) \"2025-06-15 08:00:00\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

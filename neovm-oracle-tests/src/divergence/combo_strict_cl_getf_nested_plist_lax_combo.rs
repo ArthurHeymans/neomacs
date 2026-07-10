@@ -17,7 +17,7 @@ fn div_v8_cl_getf_default_nested_plist() {
         (cl-getf p 'z 'missing)
         (car (cl-getf p 'b))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 (c 2 d 3) 4 missing c)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,7 @@ fn div_v8_cl_get_symbol_plist_inheritance() {
         (cl-get 'probe-gsp 'z 'default)
         (cl-get 'probe-gsp 'c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 1 default nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,6 +48,6 @@ fn div_v8_cl_remprop_getf_setf_in_place() {
         (cl-getf p 'a)
         p))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function copy-list)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

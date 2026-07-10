@@ -20,7 +20,7 @@ fn div_v8_display_buffer_get_buffer_window() {
     (when (get-buffer-window buf) (delete-window (get-buffer-window buf)))
     (kill-buffer buf)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_display_buffer_pop_up_frame_action() {
           (setq display-buffer-alist saved)))
     (kill-buffer buf)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_get_buffer_window_list_all_frames() {
     (when (get-buffer-window buf) (delete-window (get-buffer-window buf)))
     (kill-buffer buf)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

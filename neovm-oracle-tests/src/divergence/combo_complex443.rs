@@ -87,7 +87,7 @@ fn div_cx443_casefold_char_range_regex() {
 fn div_cx443_string_collate_all_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"0\" \"1\" \"A\" \"B\" \"Z\" \"a\" \"b\" \"z\") (\"0\" \"1\" \"A\" \"B\" \"Z\" \"a\" \"b\" \"z\"))""#
+        r#""OK ((\"0\" \"1\" \"a\" \"A\" \"b\" \"B\" \"z\" \"Z\") (\"0\" \"1\" \"A\" \"B\" \"Z\" \"a\" \"b\" \"z\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((l '("A" "B" "a" "b" "0" "1" "Z" "z")))

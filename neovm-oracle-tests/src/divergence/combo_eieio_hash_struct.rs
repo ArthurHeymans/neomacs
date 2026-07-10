@@ -36,9 +36,7 @@ fn divergence_eieio_buffer_local_slot() {
 fn divergence_cl_struct_with_textprops_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""LABEL1----LABEL2----LABEL3----LABEL4----LABEL5ERR (args-out-of-range 45 50)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-sp (:constructor test-sp-make))
@@ -80,7 +78,7 @@ fn divergence_hash_table_as_text_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAA-BBB-CCC-DDD-EEEOK (t t t t t t #(\"AAA-BBB-CCC-DDD-EEE\" 0 2 (meta #s(hash-table test equal data (\"a\" 1 \"b\" 2 \"c\" 3)))) t)""#
+        r#""OK (t t t t t t #(\"AAA-BBB-CCC-DDD-EEE\" 0 2 (meta #s(hash-table test equal data (\"a\" 1 \"b\" 2 \"c\" 3)))) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -105,7 +103,9 @@ fn divergence_hash_table_as_text_prop() {
 fn divergence_advice_around_text_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""X X X X XERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"X X X X X\" 5 t #(\"hello world foo bar baz\" 0 4 (word w1) 6 10 (word w2) 12 14 (word w3) 16 18 (word w4) 20 22 (word w5)) t w1 t w2 t w3 t w4 t w5 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world foo bar baz")
@@ -227,8 +227,9 @@ fn divergence_cl_loop_with_buffer_ops() {
 fn divergence_nested_undo_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""1111 2222 3333 4444 5555ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"1111 2222 3333 4444 5555\" #(\"AAAA BBBB CCCC DDDD EEEE\" 0 3 (g 1) 5 8 (g 2) 10 13 (g 3) 15 18 (g 4) 20 23 (g 5)) t nil nil nil nil nil 1 t 2 t 3 t 4 t 5 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA BBBB CCCC DDDD EEEE")

@@ -243,7 +243,7 @@ fn div_cx424_default_font_line() {
 #[test]
 fn div_cx424_frame_tool_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (24 80 void-function)""#]];
+    let expect = expect_test::expect![[r#""OK (25 80 void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (frame-text-lines) (error (car e)))

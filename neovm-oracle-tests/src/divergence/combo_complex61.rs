@@ -97,7 +97,7 @@ fn div_cx61_display_property_inline_image_placeholder() {
 #[test]
 fn div_cx61_window_text_height_and_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 11 80 10 80 10 1 0)""#]];
+    let expect = expect_test::expect![[r#""OK (80 24 80 23 80 23 1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -234,7 +234,7 @@ fn div_cx61_window_scroll_functions_and_redisplay_hooks() {
 #[test]
 fn div_cx61_temp_buffer_resize_and_window_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 1 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (2 1 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

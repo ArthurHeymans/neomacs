@@ -309,7 +309,7 @@ fn org_archive_sibling_reversed_order_stats_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Parent [0/1]\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Old one\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody one\n*** DONE Old two\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody two\n\" ((\"Parent\" 1 nil) (\"Archive\" 2 t) (\"Old one\" 3 t) (\"Old two\" 3 t) (\"Keep\" 2 nil)))""#
+        r#""OK (\"* Parent [0/1]\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Old one\n:PROPERTIES:\n:ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]\n:END:\nBody one\n*** DONE Old two\n:PROPERTIES:\n:ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]\n:END:\nBody two\n\" ((\"Parent\" 1 nil) (\"Archive\" 2 t) (\"Old one\" 3 t) (\"Old two\" 3 t) (\"Keep\" 2 nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

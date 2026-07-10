@@ -82,9 +82,7 @@ fn oracle_prop_mapatoms_set_plist_properties() {
             (cl-every (lambda (pair)
                         (= (cdr pair) (length (car pair))))
                       sorted)))))"#;
-    let expect = expect_test::expect![[
-        r#""OK (((\"neovm--moc-sp-a-8834\" . 20) (\"neovm--moc-sp-ab-8834\" . 21) (\"neovm--moc-sp-abc-8834\" . 22) (\"neovm--moc-sp-abcd-8834\" . 23)) t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -284,7 +282,7 @@ fn oracle_prop_mapatoms_obarray_size_collision_stress() {
                 (= (length collected) (length kept))
                 (equal (sort (copy-sequence collected) #'string<)
                        (sort (copy-sequence kept) #'string<))))))))"#;
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

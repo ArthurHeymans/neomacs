@@ -24,7 +24,8 @@ fn div_v8_text_property_default_nonsticky_control() {
                 (buffer-string)))
       (setq text-property-default-nonsticky saved))))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (bold nil #(\"AAAAAXBBBBBCCCCC\" 0 5 (face bold)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +41,7 @@ fn div_v8_wrap_prefix_line_prefix_property() {
         (get-text-property 5 'wrap-prefix)
         (get-text-property 10 'wrap-prefix)))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r####""OK (\">>> \" \"### \" \">>> \" nil)""####]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +57,6 @@ fn div_v8_intangible_field_point_entered_left_hooks() {
         (get-text-property 3 'intangible)
         (text-properties-at 4)))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t cat-x nil (category cat-x intangible t))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

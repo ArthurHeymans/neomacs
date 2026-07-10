@@ -163,7 +163,7 @@ fn divergence_buffer_swap_content() {
 fn divergence_point_marker_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXABCDEFGHIJOK (5 11 3 13 nil t 3 nil 13 t nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (5 11 3 13 nil t 3 nil 13 t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -227,7 +227,7 @@ fn divergence_narrow_widen_marker_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-XXBBBB-CCCC-DDDD-EEEEOK (#(\"XXBBBB-CCC\" 2 5 (section b) 7 10 (section c)) (1 8 13 18 23) #(\"AAAA-XXBBBB-CCCC-DDDD-EEEE\" 0 3 (section a) 7 10 (section b) 12 15 (section c) 17 20 (section d) 22 25 (section e)) t 1 t 8 t 13 t 18 nil 23 nil a t nil nil)""#
+        r#""OK (#(\"XXBBBB-CCC\" 2 5 (section b) 7 10 (section c)) (1 8 13 18 23) #(\"AAAA-XXBBBB-CCCC-DDDD-EEEE\" 0 3 (section a) 7 10 (section b) 12 15 (section c) 17 20 (section d) 22 25 (section e)) t 1 t 8 t 13 t 18 nil 23 nil a t nil nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -273,9 +273,7 @@ fn divergence_narrow_widen_marker_bounds() {
 fn divergence_buffer_visibility_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""VISIBLE1-INVISIBLE-VISIBLE2-INVISIBLE-VISIBLE3OK (nil nil nil t t t t test-bvf-xxx t 46 nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil t t t t test-bvf-xxx t 46 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "VISIBLE1-INVISIBLE-VISIBLE2-INVISIBLE-VISIBLE3")

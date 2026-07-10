@@ -64,7 +64,7 @@ fn div_cx187_indirect_buffer_shares_text() {
 #[test]
 fn div_cx187_bury_buffer_reorders_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (11 12 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx187-bury-a*"))

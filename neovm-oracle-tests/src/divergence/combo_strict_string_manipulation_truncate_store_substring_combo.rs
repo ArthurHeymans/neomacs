@@ -18,7 +18,7 @@ fn div_v8_truncate_store_substring_format_propertize() {
       (format "%c" 65)
       (mapconcat #'identity '("a" "b" "c") "-"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-propertize)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,9 @@ fn div_v8_split_string_unquote_combine_quote() {
       (split-string "a,b,,c" "," t)
       (mapconcat #'char-to-string "abc" "-"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"a,\" \"b,\" \"c\") (\"single\") \"a \\\"b c\\\" \\\"d\\\\\\\"e\\\"\" \"simple \\\"with space\\\"\" (\"a\" \"b\" \"c\") \"a-b-c\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +55,8 @@ fn div_v8_string_multibyte_unibyte_byte_funcs() {
       (string-as-unibyte "abc")
       (string-as-multibyte "abc"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"abc\" \"abc\" t nil 3 6 \"abc\" \"A\" \"日\" \"abc\" \"abc\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

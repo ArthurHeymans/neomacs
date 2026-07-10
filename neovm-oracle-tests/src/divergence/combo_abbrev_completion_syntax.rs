@@ -56,9 +56,7 @@ fn divergence_syntax_table_manipulation() {
 fn divergence_syntax_class_with_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(defun foo (bar)\n  \"docstring\"\n  (list bar 'baz))OK (0 t nil t nil t 1 t 34 nil 0 t nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (0 t nil t nil t 1 t 34 nil 0 t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(defun foo (bar)\n  \"docstring\"\n  (list bar 'baz))")
@@ -169,9 +167,7 @@ fn divergence_abbrev_expand_in_buffer() {
 fn divergence_syntax_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(alpha (beta (gamma delta) epsilon) zeta)OK (27 nil t t nil 1 42 41 8)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (27 nil t t nil 1 42 41 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(alpha (beta (gamma delta) epsilon) zeta)")
@@ -196,7 +192,7 @@ fn divergence_syntax_properties_with_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAA.BBB.CCC.DDDOK ((1) t nil t nil t (1) t #(\"AAA.BBB.CCC.DDD\" 3 4 (syntax-table (1)) 7 8 (syntax-table (1)) 11 12 (syntax-table (1))) t)""#
+        r#""OK ((1) t nil t nil t (1) t #(\"AAA.BBB.CCC.DDD\" 3 4 (syntax-table (1)) 7 8 (syntax-table (1)) 11 12 (syntax-table (1))) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -249,9 +245,7 @@ fn divergence_completion_regexps() {
 fn divergence_syntax_comment_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#"";; This is a comment\n(defvar x 1)\n;; Another comment\n(setq x 2)OK (nil t nil t nil t 0 t 1 nil 0 t nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil t nil t t nil 0 t 1 nil 0 t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert ";; This is a comment\n(defvar x 1)\n;; Another comment\n(setq x 2)")

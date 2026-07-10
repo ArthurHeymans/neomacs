@@ -18,7 +18,7 @@ fn div_v8_apply_funcall_trailing_leading_args() {
       (funcall (symbol-function 'car) '(a b c))
       (funcall '+ 1 2 3))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (10 5 6 0 10 4 a 6)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_eval_lexical_dynamic_apply_partial() {
       (funcall (apply-partially #'list 'a 'b) 'c)
       (mapcar (apply-partially #'+ 100) '(1 2 3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,6 +51,8 @@ fn div_v8_funcall_macro_special_form_error() {
       (functionp 'car)
       (functionp (lambda () nil)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (caught-if caught-and caught-setq caught-let caught-quote t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

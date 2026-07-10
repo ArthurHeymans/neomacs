@@ -18,7 +18,7 @@ fn div_v8_window_pixel_width_height_font_metrics_shape() {
         (> (window-pixel-width w) 0)
         (> (window-pixel-height w) 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_default_font_width_line_pixel_height_shape() {
       (> (default-line-height) 0)
       (= (default-line-height) (default-font-height)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_window_text_pixel_size_count_screen_lines_shape() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

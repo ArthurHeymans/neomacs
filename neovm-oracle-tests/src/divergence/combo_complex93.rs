@@ -175,7 +175,7 @@ fn div_cx93_char_table_extra_slots_get_set() {
 #[test]
 fn div_cx93_syntax_table_inheritance_and_per_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (119 46)""#]];
+    let expect = expect_test::expect![[r#""OK (119 95)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx93-st-a*"))

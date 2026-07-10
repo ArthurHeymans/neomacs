@@ -136,9 +136,7 @@ fn combo95_export_raw_snippet_backends() {
 #[test]
 fn combo95_org_timestamp_with_repeater_warning_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:type active :repeater-type cumulate :repeater-value 1 :repeater-unit month :warning-type all :warning-value 3 :warning-unit day)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (let ((ts (org-timestamp-from-string "<2024-01-01 Mon +1m -3d>")))

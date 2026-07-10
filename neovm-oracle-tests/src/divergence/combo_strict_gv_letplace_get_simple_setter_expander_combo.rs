@@ -24,7 +24,7 @@ fn div_v8_gv_letplace_place_get_setf_expansion() {
             (funcall setter (* (funcall getter) 2)))
           v)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (gv-invalid-place 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_let_alist_generalized_access() {
         (let-alist alist .missing)
         (let-alist (list (cons 'x 1) (cons 'y 2)) (list .x .y))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"alice\" 30 \"value\" nil (1 2))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_gv_define_simple_setter_macro_place() {
     (setf (probe-gv-setter) 'newval)
     (list probe-gv-store)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (newval)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

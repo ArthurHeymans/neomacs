@@ -23,7 +23,7 @@ fn div_v8_line_beginning_end_position_relative_n() {
         (line-end-position -1)
         (line-number-at-pos)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (13 18 7 13 18 1 6 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +50,7 @@ fn div_v8_count_lines_final_newline_edge() {
         (insert "a\nb\nc\n")
         (line-number-at-pos (point-max))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 0 1 4 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_forward_line_return_value_edges() {
       (let ((r-end (forward-line 100)))
         (list r1 p1 r2 p2 r-end (point) (line-number-at-pos))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 1 0 13 99 19 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

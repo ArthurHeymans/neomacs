@@ -127,7 +127,7 @@ fn div_cx135_lgrep_basic() {
 #[test]
 fn div_cx135_xref_backend_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -143,9 +143,7 @@ fn div_cx135_xref_backend_predicates() {
 #[test]
 fn div_cx135_project_root_via_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((transient . \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\") t \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -170,7 +168,7 @@ fn div_cx135_project_root_via_marker() {
 #[test]
 fn div_cx135_compilation_buffer_name_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -187,7 +185,7 @@ fn div_cx135_compilation_buffer_name_query() {
 #[test]
 fn div_cx135_xref_query_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

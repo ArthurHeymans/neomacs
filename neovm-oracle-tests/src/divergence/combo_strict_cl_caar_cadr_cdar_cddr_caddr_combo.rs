@@ -16,7 +16,7 @@ fn div_v8_cl_caar_cadr_cdar_cddr_two_level() {
         (cl-cdar data)
         (cl-cddr data)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-caar)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_cl_caaar_caddr_cdddr_cddddr_three_four() {
         (cl-fourth flat)
         (cl-fifth flat)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 c (d e) (e) a b c d e)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,6 +54,6 @@ fn div_v8_cl_list_star_rest_last_nth_value() {
       (cl-nth 2 '(a b c d))
       (cl-tenth '(1 2 3 4 5 6 7 8 9 10)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-list)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

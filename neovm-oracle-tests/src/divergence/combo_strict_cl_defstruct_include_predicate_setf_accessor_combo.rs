@@ -29,7 +29,7 @@ fn div_v8_cl_defstruct_accessors_predicate_include() {
           (progn (setf (probe-pt-x cp) 99) (probe-pt-x cp))
           (probe-cpt-p (copy-probe-cpt cp)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,7 +56,7 @@ fn div_v8_cl_defstruct_boa_copier_defaulted() {
           (progn (setf (probe-box-locked b1) t) (probe-box-locked b1))
           (probe-box-locked b3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -76,6 +76,6 @@ fn div_v8_cl_defstruct_vector_type_named() {
           (probe-vec-p [probe-vec 9 9 9])
           (probe-vec-p [not-a-vec 1 2]))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -33,7 +33,9 @@ fn div_v8_eieio_defclass_slots_inheritance_accessors() {
         (slot-boundp d 'plegs)
         (progn (oset d breed "poodle") (probe-dog-breed d))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Rex\" 4 \"lab\" \"Cat\" t t nil \"Rex\" \"lab\" t t \"poodle\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,7 +56,7 @@ fn div_v8_eieio_defmethod_before_after_combination() {
   (let ((res (probe-cry (probe-creature))))
     (list res (nreverse probe-clog))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"primary\" (before primary))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -77,6 +79,6 @@ fn div_v8_eieio_slot_default_initarg_type_cl_includes() {
         (with-slots (label count) b1
           (list label count))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Unknown type probe-animal-missing\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

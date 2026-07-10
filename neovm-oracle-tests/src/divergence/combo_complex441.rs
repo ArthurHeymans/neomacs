@@ -52,9 +52,7 @@ fn div_cx441_pcase_app_guard() {
 #[test]
 fn div_cx441_cl_loop_multi_collection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (error \"Iteration on hash-tables does not support this combination\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ht (make-hash-table :test 'equal)))
   (puthash "a" 1 ht) (puthash "b" 2 ht)

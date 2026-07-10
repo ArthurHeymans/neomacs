@@ -215,7 +215,7 @@ fn div_cx45_regex_casefold_multibyte_replace_match_data_save_mega() {
 #[test]
 fn div_cx45_timer_multiple_cancel_count_idle_list_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 1 2 1 1)""#]];
+    let expect = expect_test::expect![[r#""OK (2 0 2 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
@@ -340,7 +340,7 @@ fn div_cx45_hash_table_weak_key_rehash_after_eviction() {
 #[test]
 fn div_cx45_cl_coerce_list_vector_string_char_cycle_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"Unknown type char\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s "café")
@@ -359,7 +359,7 @@ fn div_cx45_cl_coerce_list_vector_string_char_cycle_mega() {
 #[test]
 fn div_cx45_print_read_struct_vector_named_plist_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (neo-cx45-named \"x\" 1 t \"x\" 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

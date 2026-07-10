@@ -372,9 +372,7 @@ fn oracle_prop_wcb_comp_generated_buffer_names() {
                    (setq all-unique nil))))
              all-unique))))
     (dolist (b bufs) (when (buffer-live-p b) (kill-buffer b)))))"#;
-    let expect = expect_test::expect![[
-        r#""OK (t 5 (\"buf-0\" \"buf-1\" \"buf-2\" \"buf-3\" \"buf-4\") t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

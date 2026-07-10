@@ -22,7 +22,7 @@ fn div_v8_undo_list_insertion_deletion_structure() {
             (consp buffer-undo-list)
             (memq nil buffer-undo-list)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t (nil (1 . 6) (t . 0)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_undo_list_text_property_marker_elements() {
             (consp buffer-undo-list)
             (> (length buffer-undo-list) after-prop)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -66,6 +66,6 @@ fn div_v8_undo_boundary_grouping_primitive() {
           (>= boundaries 2)
           (consp buffer-undo-list))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

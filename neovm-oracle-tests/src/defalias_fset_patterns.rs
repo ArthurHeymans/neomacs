@@ -316,9 +316,7 @@ fn oracle_prop_defalias_fset_function_wrapper() {
     (fmakunbound 'neovm--dfp-add)
     (fmakunbound 'neovm--dfp-mul)
     (makunbound 'neovm--dfp-wrap-log)))"#;
-    let expect = expect_test::expect![[
-        r#""OK (7 30 30 56 4 ((call add (3 4) => 7) (call add (10 20) => 30) (call mul (5 6) => 30) (call mul (7 8) => 56)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

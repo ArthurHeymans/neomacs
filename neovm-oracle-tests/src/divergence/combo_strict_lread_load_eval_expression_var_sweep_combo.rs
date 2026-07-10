@@ -21,7 +21,7 @@ fn div_v8_load_path_suffixes_after_load_alist_var_sweep() {
       (boundp 'read-circle)
       (boundp 'read-with-symbol-positions))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_eval_expression_print_format_var_sweep() {
       (boundp 'byte-compile-warnings)
       (boundp 'byte-optimize))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t t nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_features_provided_required_alist_var_sweep() {
       (boundp 'source-directory)
       (boundp 'emacs-version))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t nil t t nil nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

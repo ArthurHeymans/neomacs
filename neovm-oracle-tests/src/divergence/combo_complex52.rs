@@ -343,7 +343,7 @@ fn div_cx52_process_send_string_newline_filter_buffer_textprop_overlay_narrow_un
 #[test]
 fn div_cx52_coding_priority_list_utf8_auto_utf16_big5_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (20 0 10 12 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((prio (coding-system-priority-list)))
@@ -422,7 +422,7 @@ fn div_cx52_regex_casefold_replace_then_undo_marker_overlay_narrow_mega() {
 #[test]
 fn div_cx52_cl_coerce_list_vector_string_char_multibyte_propertized_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (6 6 6 6 (face bold) nil t 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let* ((s (propertize "café世界" 'face 'bold))

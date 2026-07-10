@@ -191,7 +191,7 @@ fn strict_refile_get_location() {
 fn strict_org_src_fontify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:fontify-block-fbound t :fontify-natively-bound t :edit-src-fbound t :exit-src-fbound t)""#
+        r#""OK (:fontify-block-fbound t :fontify-natively-bound nil :edit-src-fbound t :exit-src-fbound t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

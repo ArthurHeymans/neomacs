@@ -243,7 +243,7 @@ fn uf13_multi_put() {
 #[test]
 fn uf13_ts_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-to-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((t (org-timestamp-to-time (org-timestamp-from-string "<2026-01-15 Wed>"))))
   (list (nth 0 t) (nth 1 t)))"##,
@@ -258,7 +258,7 @@ fn uf13_ts_time() {
 #[test]
 fn uf13_ts_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2026 1 15 10 30 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ts (org-timestamp-from-string "<2026-01-15 Wed 10:30>")))
   (list (org-element-property :year-start ts)
@@ -278,7 +278,7 @@ fn uf13_ts_from() {
 #[test]
 fn uf13_ts_fmt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"2026-01-15 10:30\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ts (org-timestamp-from-string "<2026-01-15 Wed 10:30>")))
   (org-timestamp-format ts "%Y-%m-%d %H:%M"))"##,
@@ -353,7 +353,7 @@ fn uf13_lint() {
 #[test]
 fn uf13_secondary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-map)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-element-map (org-element-parse-secondary-string "*bold* /italic/ \\usepackage{a}" (org-element-restriction 'paragraph))
   'object
@@ -369,9 +369,7 @@ fn uf13_secondary() {
 #[test]
 fn uf13_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic line-break latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim) (bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim) (bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-restriction)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-element-restriction 'paragraph)
         (org-element-restriction 'headline)

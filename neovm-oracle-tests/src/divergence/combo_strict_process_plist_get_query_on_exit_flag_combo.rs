@@ -27,7 +27,8 @@ fn div_v8_process_plist_get_put_query_on_exit() {
         (plist-get (process-plist proc) 'new-key)
         (assq 'orig-key (process-plist proc))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (t t \"probe-pdp\" orig-val new-val nil new-val nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,7 +56,7 @@ fn div_v8_process_attributes_status_type_tty() {
               (not (memq proc plist))
             (not (null (memq proc plist)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t real nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -78,6 +79,6 @@ fn div_v8_process_kill_then_check_buffer_output() {
           (process-live-p proc)
           (eq (process-buffer proc) buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t \"line\n\" nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

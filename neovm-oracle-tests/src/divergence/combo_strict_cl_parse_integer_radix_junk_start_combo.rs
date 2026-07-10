@@ -16,7 +16,7 @@ fn div_v8_cl_parse_integer_radix_bases() {
       (cl-parse-integer "-100")
       (cl-parse-integer "+50"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (42 255 511 10 -100 50)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,7 @@ fn div_v8_cl_parse_integer_junk_start_end() {
       (cl-parse-integer "" :junk-allowed t)
       (cl-parse-integer "  42  " :junk-allowed t))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (42 caught 2 0 nil 42)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,6 +47,6 @@ fn div_v8_cl_parse_integer_edge_leading_zeros() {
       (cl-parse-integer "deadbeef" :radix 16)
       (cl-parse-integer "z" :radix 36))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (7 0 0 3735928559 35)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

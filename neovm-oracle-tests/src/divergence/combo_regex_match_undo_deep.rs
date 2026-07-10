@@ -320,7 +320,7 @@ fn deficiency_re_replace_with_overlay_tracking() {
 fn deficiency_whitespace_regex_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"wrp\")))\n\

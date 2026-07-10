@@ -168,7 +168,7 @@ fn div_cx200_mega_milestone_3_process_buflocal_textprop_overlay_marker_undo_narr
 fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_clloop_register_window_config()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -219,9 +219,7 @@ fn div_cx200_mega_milestone_4_pcase_rx_syntax_search_replace_format_time_advice_
 #[test]
 fn div_cx200_mega_milestone_5_all_twelve_subsystems_full_chaos_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)

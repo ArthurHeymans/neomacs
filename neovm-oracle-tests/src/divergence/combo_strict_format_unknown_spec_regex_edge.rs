@@ -41,8 +41,7 @@ fn div_r8_empty_and_nil_regex() {
 #[test]
 fn div_r8_deeply_nested_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 5)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "\\((((((((a))))))))\\)" "((((((((a))))))))")

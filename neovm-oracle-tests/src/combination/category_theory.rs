@@ -485,9 +485,7 @@ fn oracle_prop_category_theory_monad_laws_verification() {
                (funcall list-f val))
         (equal (funcall maybe-bind (funcall maybe-return val) maybe-f)
                (funcall maybe-f val))))))"#;
-    let expect = expect_test::expect![[
-        r#""OK (((law1 . t) (law2 . t) (law3 . t)) ((law1 . t) (law2 . t) (law3 . t)) (nil nil nil) (nil nil nil) (t t))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

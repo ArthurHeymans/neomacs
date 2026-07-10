@@ -24,7 +24,9 @@ fn div_v8_json_read_nested_arrays_objects_scalars() {
         (json-read-from-string "true")
         (json-read-from-string "[{\"k\": \"v\"}, null, [1]]")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((a . 1) (b 2 3 4) (c (d . t) (e . :json-false))) (1 2 3) \"hello\" 42 3.14 nil t (((k . \"v\")) nil (1)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +44,9 @@ fn div_v8_json_encode_alist_plist_arrays() {
         (json-encode-number 42)
         (json-encode-number 3.14)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"{\\\"a\\\":1,\\\"b\\\":2,\\\"c\\\":\\\"str\\\"}\" \"[1,2,3]\" \"{\\\"a\\\":1,\\\"b\\\":[2,3]}\" \"\\\"with \\\\\\\"quotes\\\\\\\" and \\\\\\\\backslash\\\"\" \"\\\"unicode: 日本語 café\\\"\" \"42\" \"3.14\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -61,6 +65,8 @@ fn div_v8_json_roundtrip_unicode_escape_edge() {
           (json-error-format 'caught)
           (error (cons 'other-err (car err))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"é\" \"line\nbreak\ttab\" \"escaped \\\\u s l a s h\" \"{\\\"x\\\":[1,{\\\"y\\\":2}],\\\"z\\\":\\\"café\\\"}\" ((spaces . 1)) (other-err . json-end-of-file))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

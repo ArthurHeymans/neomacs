@@ -209,9 +209,7 @@ fn divergence_frame_fringe_width_calls() {
 fn divergence_fringe_bitmaps_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""Line with fringe indicators test content hereOK (t t t t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Line with fringe indicators test content here")
@@ -238,7 +236,7 @@ fn divergence_fringe_overlay_display_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-BBBB-CCCC-DDDD-EEEE-FFFFOK (t t t left-fringe-marker t right-fringe-marker t left-fringe-filled t 5 t 9 t (left-fringe right-triangle) t (right-fringe left-arrow) t (left-fringe filled-square warning) t \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" t)""#
+        r#""OK (t t t left-fringe-marker t right-fringe-marker t left-fringe-filled t 5 t 9 t (left-fringe right-triangle) t (right-fringe left-arrow) t (left-fringe filled-square warning) t \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

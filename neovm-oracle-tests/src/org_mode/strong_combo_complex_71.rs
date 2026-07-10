@@ -198,7 +198,7 @@ fn combo71_footnote_all_labels_crosscheck() {
 fn combo71_export_dispatch_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:dispatch-fbound t :backends (org odt latex icalendar html ascii) :backend-count 6)""#
+        r#""OK (:dispatch-fbound t :backends (odt latex icalendar html ascii) :backend-count 5)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

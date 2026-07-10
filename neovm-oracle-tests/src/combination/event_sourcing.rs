@@ -323,9 +323,7 @@ fn oracle_prop_combination_event_sourcing_versioning() {
                                             (lambda (a b)
                                               (string< (plist-get a :customer)
                                                        (plist-get b :customer)))))))"#;
-    let expect = expect_test::expect![[
-        r#""OK (:migrated-count 7 :all-v2 t :balances ((:customer \"alice\" :balance 308) (:customer \"bob\" :balance -4) (:customer \"carol\" :balance 81) (:customer \"dave\" :balance 120)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

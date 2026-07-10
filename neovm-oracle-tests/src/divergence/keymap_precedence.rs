@@ -156,7 +156,7 @@ fn div_km_current_active_maps_count() {
 #[test]
 fn div_km_current_active_maps_include_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

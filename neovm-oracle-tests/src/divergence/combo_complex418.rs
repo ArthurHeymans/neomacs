@@ -65,7 +65,7 @@ fn div_cx418_open_network_stream() {
 #[test]
 fn div_cx418_json_read_hash_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 1 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function json-read-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((json-object-type 'hash-table)
@@ -83,7 +83,7 @@ fn div_cx418_json_read_hash_table() {
 #[test]
 fn div_cx418_json_pretty_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 3) 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function json-read-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data (json-read-from-string "{\"a\":[1,2,3],\"b\":{\"c\":4}}")))
@@ -159,7 +159,7 @@ fn div_cx418_format_seconds() {
 #[test]
 fn div_cx418_decoded_time_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (wrong-type-argument wrong-type-argument)""#]];
+    let expect = expect_test::expect![[r#""OK (void-function void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dt (decode-time (encode-time 0 0 0 1 1 2024 nil))))

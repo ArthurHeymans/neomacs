@@ -378,6 +378,6 @@ fn oracle_prop_read_print_comprehensive_reader_macros() {
   (let ((print-circle t))
     (let ((obj (car (read-from-string "(#1=(x y) #1#)"))))
       (eq (car obj) (cadr obj)))))"##;
-    let expect = expect_test::expect![[r#""OK (#'car (t nil) (t t) (a t) t)""#]];
+    let expect = expect_test::expect![[r#""OK (#'car (t t) (t t) (a t) t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

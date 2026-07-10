@@ -22,7 +22,7 @@ fn div_v8_text_property_search_forward_predicate_nil() {
           (if m1 (prop-match-value m1) nil)
           (point))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 6 bold 6)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_text_property_search_specific_value_predicate() {
             (and m2 (prop-match-beginning m2))
             (and m2 (prop-match-value m2))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (bold 6 1 bold)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_get_pos_property_text_property_search_backward() {
                (let ((mb (text-property-search-backward 'face nil nil)))
                  (and mb (prop-match-value mb))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function text-property-search-backward)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

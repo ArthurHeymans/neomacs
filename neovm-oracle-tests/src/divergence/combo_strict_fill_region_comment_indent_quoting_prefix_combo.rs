@@ -16,7 +16,9 @@ fn div_v8_fill_region_adaptive_fill_fill_prefix() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"This is a long paragraph of\ntext that should be filled at\nthe configured fill column\nboundary and wrapped into\nmultiple lines.\n\nSecond paragraph here also\nlong enough to require\nwrapping at the boundary into\nseveral separate filled lines.\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -31,7 +33,9 @@ fn div_v8_fill_region_with_fill_prefix() {
     (fill-region (point-min) (point-max) nil nil t))
   (buffer-string))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"> first line of quoted material\n> that is quite long and needs\n> wrapping second quoted line also\n> long\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +54,9 @@ fn div_v8_comment_region_uncomment_roundtrip() {
       (let ((double (buffer-string)))
         (list commented uncommented double (list comment-start comment-end comment-add))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\";; line one\n;; line two\n;; line three\n\" \"; line one\n; line two\n; line three\n\" \";; ; line one\n;; ; line two\n;; ; line three\n\" (\";\" \"\" 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,7 +70,9 @@ fn div_v8_indent_region_lisp_source() {
   (indent-region (point-min) (point-max))
   (buffer-string))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"(defun broken-indent (a b)\n  (let ((x (+ a 1))\n\t(y (- b 2)))\n    (when (> x y)\n      (list x y (* x y)))))\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -84,6 +92,7 @@ fn div_v8_justify_line_and_fill_column_edges() {
         (let ((cfc (current-fill-column)))
           (list justified cfc (current-column)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"this line is medium length and justifies\" 40 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

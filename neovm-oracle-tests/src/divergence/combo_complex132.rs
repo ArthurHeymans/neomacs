@@ -194,7 +194,7 @@ fn div_cx132_calendar_last_day_of_month() {
 #[test]
 fn div_cx132_calc_eval_radix_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"255\" \"10\" \"64\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"16#FF\" \"16#A\" \"16#40\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

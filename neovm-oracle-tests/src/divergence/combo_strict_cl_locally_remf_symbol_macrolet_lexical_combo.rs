@@ -17,7 +17,7 @@ fn div_v8_cl_locally_destructuring_return_lexical() {
       (cl-multiple-value-bind (q r) (values 10 20)
         (list q r)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_cl_remf_remprop_getf_symbol_macrolet() {
           (setf slot 99)
           p)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function copy-list)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,6 +51,6 @@ fn div_v8_cl_the_check_type_assert_with_message() {
       (cl-assert (= 2 2) t "probe-assert")
       'done)
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 \"hi\" (caught . integer) ok nil done)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

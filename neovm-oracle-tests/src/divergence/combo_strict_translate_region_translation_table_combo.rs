@@ -19,7 +19,7 @@ fn div_v8_translate_region_chartable_ascii() {
     (translate-region 1 4 table)
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK \"ABCdefg\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,7 @@ fn div_v8_make_translation_table_alist_multibyte() {
     (translate-region 1 12 table)
     (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK \"h3ll0 w0rld\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +49,6 @@ fn div_v8_translate_region_full_span_ranges() {
       (translate-region 1 (point-max) table)
       (list before (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello World 123\" \"H**** W**** 123\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

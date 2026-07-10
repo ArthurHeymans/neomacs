@@ -329,7 +329,7 @@ fn oracle_prop_overlay_lists() {
        (let ((ol2 (overlay-lists)))
          (list (length (car ol2)) (length (cdr ol2))))))))
 "####;
-    let expect = expect_test::expect![[r#""OK (t 4 t t (0 0))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

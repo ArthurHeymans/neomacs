@@ -26,9 +26,7 @@ fn div_cx413_seq_map_filter_sort() {
 #[test]
 fn div_cx413_map_elt_put_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (1 not-found #s(hash-table test equal data (\"b\" 2)) deleted)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-put!)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -47,7 +45,7 @@ fn div_cx413_map_elt_put_delete() {
 #[test]
 fn div_cx413_thread_first_last() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (12 (\" \"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function thread-first)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (thread-first 5 (+ 3) (* 2) (- 4))

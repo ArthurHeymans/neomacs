@@ -58,7 +58,7 @@ fn div_cx487_other_window() {
 #[test]
 fn div_cx487_split_window_horiz() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 3""#]];
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (split-window w nil 'right)
@@ -71,7 +71,7 @@ fn div_cx487_split_window_horiz() {
 #[test]
 fn div_cx487_split_window_vert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 4""#]];
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (split-window w nil 'below)

@@ -82,7 +82,7 @@ fn div_cx489_window_use_time() {
 #[test]
 fn div_cx489_window_new_total() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 40""#]];
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (window-new-total w))
@@ -94,7 +94,7 @@ fn div_cx489_window_new_total() {
 #[test]
 fn div_cx489_window_new_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 40""#]];
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (window-new-pixel w))
@@ -106,7 +106,7 @@ fn div_cx489_window_new_pixel() {
 #[test]
 fn div_cx489_window_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (list (window-pixel-left w) (window-pixel-top w)))
@@ -144,7 +144,7 @@ fn div_cx489_window_resize_apply() {
 #[test]
 fn div_cx489_window_edges_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 1 80 23) (0 1 80 24))""#]];
+    let expect = expect_test::expect![[r#""OK ((0 0 80 23) (0 0 80 24))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (list (window-edges w t) (window-pixel-edges w)))
@@ -168,7 +168,7 @@ fn div_cx489_window_absolute() {
 #[test]
 fn div_cx489_window_inside() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 80 23)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0 80 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (window-inside-pixel-edges w))
@@ -180,9 +180,7 @@ fn div_cx489_window_inside() {
 #[test]
 fn div_cx489_window_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (((quit-restore-prev other (#<buffer *cx489*> 1 #<marker at 1 in *cx489*> 80) #<window 1 on *cx489-action*> #<buffer *cx489-action*>) (quit-restore other (#<buffer *scratch*> 1 #<marker at 1 in *scratch*> 80) #<window 1 on *cx489-action*> #<buffer *cx489*>)) ((#<buffer *cx489*> #<marker at 1 in *cx489*> #<marker at 1 in *cx489*>) (#<buffer *scratch*> #<marker at 1 in *scratch*> #<marker at 1 in *scratch*>)))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((w (selected-window)))
   (list (window-parameters w) (window-prev-buffers w)))

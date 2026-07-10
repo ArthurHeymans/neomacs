@@ -24,7 +24,7 @@ fn div_v8_window_configuration_to_register_jump_roundtrip() {
     (delete-other-windows)
     (set-register ?w nil)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 2 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_register_number_string_rect_window_config_types() {
         (set-register ?c nil)
         (get-register ?c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (42 \"a string\" nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_point_to_register_jump_to_register_preserve() {
           (list before (point) (marker-position (get-register ?p)))))
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 5 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

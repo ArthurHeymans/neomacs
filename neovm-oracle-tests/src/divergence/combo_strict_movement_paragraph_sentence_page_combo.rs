@@ -17,7 +17,7 @@ fn div_v8_forward_backward_paragraph_boundaries() {
         (back (progn (backward-paragraph) (point))))
     (list p1 p2 back)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (18 37 18)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_forward_backward_sentence_boundaries() {
         (back (progn (backward-sentence) (point))))
     (list s1 s2 s3 back)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (49 50 50 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +49,6 @@ fn div_v8_page_delimiter_forward_page() {
         (at-delimiter (char-before)))
     (list first-page at-delimiter)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (20 12)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

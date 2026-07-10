@@ -22,7 +22,7 @@ fn div_v8_rational_arithmetic_simplify_gcd() {
       (numberp 1/3)
       (wholenump 5))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_bignum_bitwise_shift_ash_logand() {
       (lsh 1 32)
       (integer-length (expt 2 64)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function integer-length)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_float_precision_predicate_nan_inf() {
         (< 1e-300 1e-200)
         (<= 3.0 3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t nil t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

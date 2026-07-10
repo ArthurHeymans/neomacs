@@ -19,7 +19,9 @@ fn div_v8_macroexpand_builtin_macros() {
       (macroexpand '(setq a 1 b 2))
       (macroexpand '(prog1 a b c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((if t (progn 'yes)) (if nil nil 'yes) (and a b c) (or a b c) (setq lst (cons x lst)) (car-safe (prog1 lst (setq lst (cdr lst)))) (setq a 1 b 2) (prog1 a b c))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +39,7 @@ fn div_v8_defmacro_custom_gensym_hygiene() {
     (probe-swap x y)
     (list x y)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +59,8 @@ fn div_v8_defmacro_backquote_splice_and_rest() {
     (list counter
           (probe-unless-verbose t 'ran))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (invalid-function (closure (t) (place &optional (n 1)) `(setq ,place (+ ,place ,n))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -20,7 +20,7 @@ fn div_v8_input_method_current_default_verbose_var_sweep() {
       (boundp 'deactivate-current-input-method-function)
       (boundp 'describe-current-input-method-function))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_key_translation_function_key_map_var_sweep() {
       (boundp 'modifier-key-1)
       (boundp 'character-translations))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -61,6 +61,6 @@ fn div_v8_key_binding_overscroll_event_var_sweep() {
       (boundp 'last-input-char)
       (boundp 'menu-bar-final-items))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

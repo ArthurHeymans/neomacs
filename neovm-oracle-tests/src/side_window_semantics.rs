@@ -299,7 +299,7 @@ fn oracle_side_window_toggle_no_side_windows_signals_error() {
       (list 'no-error))
   (error (list 'error-caught (car (cdr err)))))
 "#;
-    let expect = expect_test::expect![[r#""OK (no-error)""#]];
+    let expect = expect_test::expect![[r#""OK (error-caught \"No side windows state found\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -430,7 +430,7 @@ fn oracle_side_window_explicit_width_left() {
        (edges (window-edges side)))
   (list (nth 2 edges)))
 "#;
-    let expect = expect_test::expect![[r#""OK (20)""#]];
+    let expect = expect_test::expect![[r#""OK (25)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -702,7 +702,7 @@ fn oracle_side_window_combo_quit_restore_prev_next_buffers() {
         (eq (nth 1 quit-restore) sw)
         (eq (nth 2 quit-restore) buf-b)))
 "#;
-    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -806,7 +806,7 @@ fn oracle_side_window_combo_resize_and_split() {
           child)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK (20 20 (split-err \"Cannot split side window or parent of side window\"))""#
+        r#""OK (15 15 (split-err \"Cannot split side window or parent of side window\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -1122,7 +1122,8 @@ fn oracle_side_window_deep_minibuffer_window_edges() {
        (mini-edges-after (window-edges mini)))
   (list mini-edges root-edges sw-edges mini-edges-after))
 "#;
-    let expect = expect_test::expect![[r##""ERR (error \"#<window 5> is not a live window\")""##]];
+    let expect =
+        expect_test::expect![[r#""OK ((0 24 80 25) (0 0 80 24) (0 0 20 24) (0 24 80 25))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1202,7 +1203,7 @@ fn oracle_side_window_deep_bury_buffer_in_side_window() {
         (length prev)
         (length next)))
 "#;
-    let expect = expect_test::expect![[r#""OK (#<buffer *sw-bury-2*> 9 0)""#]];
+    let expect = expect_test::expect![[r#""OK (#<buffer *sw-bury-2*> 1 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1362,7 +1363,7 @@ fn oracle_side_window_walk_windows_filters_with_side_param() {
   (list all-windows side-windows main-windows
         (> all-windows 0)))
 "#;
-    let expect = expect_test::expect![[r#""OK (6 4 2 t)""#]];
+    let expect = expect_test::expect![[r#""OK (3 2 1 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1427,7 +1428,7 @@ fn oracle_side_window_display_buffer_reuse_window_over_side() {
                  (error (list 'err (car (cdr err)))))))
   (list result))
 "#;
-    let expect = expect_test::expect![[r#""OK ((got-window nil right))""#]];
+    let expect = expect_test::expect![[r#""OK ((got-window nil nil))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1459,8 +1460,7 @@ fn oracle_side_window_split_with_explicit_side_parameter() {
   (list side-param
         (window-parameter sw 'window-slot)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 22>)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1478,7 +1478,7 @@ fn oracle_side_window_set_window_parameter_side_manually() {
        (after-cleanup (window-parameter main 'window-side)))
   (list orig-side after-set main-now after-cleanup))
 "#;
-    let expect = expect_test::expect![[r#""OK (nil left #<window 16> nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil left #<window 1 on *scratch*> nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1497,7 +1497,7 @@ fn oracle_side_window_window_list_with_different_args() {
         count
         (= (length all-no-mini) (length all-with-mini))))
 "#;
-    let expect = expect_test::expect![[r#""OK (t 6 t)""#]];
+    let expect = expect_test::expect![[r#""OK (t 2 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1625,8 +1625,7 @@ fn oracle_side_window_deep_window_use_time_side_vs_main() {
         (numberp main-time)
         (>= sw-time main-time)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 22>)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1647,8 +1646,7 @@ fn oracle_side_window_deep_window_resize_with_side_window_present() {
        (sw-width-after (window-total-width sw)))
   (list main-width-before main-width-after sw-width-after))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 22>)""#]];
+    let expect = expect_test::expect![[r#""OK (55 57 23)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1738,7 +1736,7 @@ fn oracle_side_window_deep_two_side_windows_opposite_sides_vertical() {
         (= l-height r-height)
         (= l-height main-height)))
 "#;
-    let expect = expect_test::expect![[r#""OK ((0 7 20 19) (60 7 80 19) (20 7 60 19) t t)""#]];
+    let expect = expect_test::expect![[r#""OK ((0 0 15 24) (65 0 80 24) (15 0 65 24) t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1897,7 +1895,7 @@ fn oracle_side_window_deep_quit_window_on_side_window() {
              (window-parameter sw-after 'window-side))
         (eq buf-before buf-after)))
 "#;
-    let expect = expect_test::expect![[r#""OK (t bottom nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1917,8 +1915,7 @@ fn oracle_side_window_deep_display_buffer_same_window_with_side() {
   (list (eq result main)
         (not result-side)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 22>)""#]];
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1971,7 +1968,7 @@ fn oracle_side_window_deep_frame_parameter_window_state_after_toggle() {
   (list (null state-before)
         (not (null state-after))))
 "#;
-    let expect = expect_test::expect![[r#""OK (nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2063,7 +2060,7 @@ fn oracle_side_window_deep_window_tree_parent_child_sibling() {
         next-live prev-live
         next-side prev-side))
 "#;
-    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2092,7 +2089,7 @@ fn oracle_side_window_deep_window_tree_after_multi_side() {
                    (nreverse kids))))
   (list same-parent both-children-of-root children))
 "#;
-    let expect = expect_test::expect![[r#""OK (t t ((left t) (nil nil) (right t)))""#]];
+    let expect = expect_test::expect![[r#""OK (t t ((left t) (nil t) (right t)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2134,7 +2131,7 @@ fn oracle_side_window_deep_set_window_configuration_round_trip() {
         (and sw-after t)
         slot-after))
 "#;
-    let expect = expect_test::expect![[r#""OK (left 1 t 0)""#]];
+    let expect = expect_test::expect![[r#""OK (left 1 t 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2152,7 +2149,7 @@ fn oracle_side_window_deep_window_minimum_size_enforcement() {
        (min-height (window-min-size sw nil)))
   (list width min-width min-height))
 "#;
-    let expect = expect_test::expect![[r#""OK (20 10 4)""#]];
+    let expect = expect_test::expect![[r#""OK (2 10 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2252,7 +2249,7 @@ fn oracle_side_window_deep_walk_window_tree_with_side_windows() {
        (main-count (- tree-count side-count)))
   (list tree-count side-count main-count))
 "#;
-    let expect = expect_test::expect![[r#""OK (11 6 5)""#]];
+    let expect = expect_test::expect![[r#""OK (3 1 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2289,7 +2286,7 @@ fn oracle_side_window_deep_window_normal_size_side_window() {
        (main-normal-h (window-normal-size main t)))
   (list normal-h normal-v main-normal-h))
 "#;
-    let expect = expect_test::expect![[r#""OK (1.0 0.5 0.5)""#]];
+    let expect = expect_test::expect![[r#""OK (0.25 1.0 0.75)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2313,8 +2310,7 @@ fn oracle_side_window_deep_display_buffer_in_previous_window_side() {
                  (error (list 'err (car (cdr err)))))))
   (list result))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 22>)""#]];
+    let expect = expect_test::expect![[r#""OK ((got-window nil))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2376,7 +2372,7 @@ fn oracle_side_window_deep_get_lru_window_with_side_windows() {
        (lru-nomini-side (window-parameter lru-nomini 'window-side)))
   (list lru-all-side lru-nomini-side))
 "#;
-    let expect = expect_test::expect![[r#""OK (nil bottom)""#]];
+    let expect = expect_test::expect![[r#""OK (nil left)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2411,7 +2407,7 @@ fn oracle_side_window_deep_count_windows_with_side() {
        (diff (- count-after count-before)))
   (list count-before count-after count-all diff))
 "#;
-    let expect = expect_test::expect![[r#""OK (8 8 8 0)""#]];
+    let expect = expect_test::expect![[r#""OK (1 2 2 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2449,7 +2445,7 @@ fn oracle_side_window_deep_full_toggle_lifecycle() {
         (null after-delete)
         toggle-after-delete))
 "#;
-    let expect = expect_test::expect![[r#""OK (t t t nil succeeded)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t succeeded)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2507,8 +2503,7 @@ fn oracle_side_window_deep_delete_other_windows_from_side_window_in_detail() {
         (eq (selected-window) sw)
         (window-live-p main)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 55>)""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2538,8 +2533,7 @@ fn oracle_side_window_deep_enlarge_main_window_into_side_space() {
         (< sw-width-after sw-width-before)
         (> main-width-after main-width-before)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 55>)""#]];
+    let expect = expect_test::expect![[r#""OK (20 60 17 63 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2560,8 +2554,7 @@ fn oracle_side_window_deep_shrink_main_window_side_window_grows() {
   (list sw-width-before sw-width-after
         (> sw-width-after sw-width-before)))
 "#;
-    let expect =
-        expect_test::expect![[r#""ERR (wrong-type-argument window-live-p #<window 55>)""#]];
+    let expect = expect_test::expect![[r#""OK (20 23 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2581,7 +2574,7 @@ fn oracle_side_window_deep_enlarge_window_horizontally_in_side_window() {
   (list width-before width-after
         (> width-after width-before)))
 "#;
-    let expect = expect_test::expect![[r#""OK (20 23 t)""#]];
+    let expect = expect_test::expect![[r#""OK (15 18 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2602,6 +2595,6 @@ fn oracle_side_window_deep_window_pixel_width_after_resize() {
         pix-w-after pix-total-w-after
         (> pix-w-after pix-w-before)))
 "#;
-    let expect = expect_test::expect![[r#""OK (20 20 25 25 t)""#]];
+    let expect = expect_test::expect![[r#""OK (12 12 17 17 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

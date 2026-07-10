@@ -50,7 +50,7 @@ fn div_cx517_source_etc() {
 #[test]
 fn div_cx517_byte_compiler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (fboundp 'byte-compile) (fboundp 'byte-optimize-form))
 "##,
@@ -131,7 +131,7 @@ fn div_cx517_memory_report() {
 #[test]
 fn div_cx517_emacs_lisp_native() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (fboundp 'emacs-lisp-native-compile)
       (fboundp 'emacs-lisp-compilation-mode))

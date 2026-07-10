@@ -193,7 +193,8 @@ fn cl_macrolet_symbol() {
 fn pcase_app_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (matched str 6)""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Unknown cl-type pattern: (cl-type string)\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (pcase 10 ((app 1+ 11) 'matched) (_ 'no))
       (pcase "hi" ((cl-type string) 'str) (_ 'no))

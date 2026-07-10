@@ -33,7 +33,7 @@ fn div_cx488_frame_parameters_deep() {
 #[test]
 fn div_cx488_frame_text_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 24)""#]];
+    let expect = expect_test::expect![[r#""OK (80 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (selected-frame)))
   (list (frame-text-width f) (frame-text-height f)))

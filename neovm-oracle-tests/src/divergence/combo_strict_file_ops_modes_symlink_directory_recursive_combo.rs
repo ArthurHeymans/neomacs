@@ -26,7 +26,7 @@ fn div_v8_file_modes_set_symlink_directory_recursive() {
               (file-symlink-p (expand-file-name "f1.txt" sub)))
       (delete-directory sub t)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -48,7 +48,7 @@ fn div_v8_file_symlink_make_resolve() {
               (buffer-string)))
     (delete-directory sub t)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"target.txt\" t \"target\n\")""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -72,6 +72,6 @@ fn div_v8_file_copy_rename_attributes_consistency() {
               (buffer-string)))
     (delete-directory sub t)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t \"original\n\")""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }

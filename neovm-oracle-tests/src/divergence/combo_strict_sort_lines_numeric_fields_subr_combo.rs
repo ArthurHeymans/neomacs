@@ -22,7 +22,9 @@ fn div_v8_sort_lines_lexicographic_reverse() {
         (sort-lines nil (point-min) (point-max))
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"apple\nbanana\ncherry\ndate\n\" \"date\ncherry\nbanana\napple\n\" \"a\nb\nc\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +41,9 @@ fn div_v8_sort_numeric_fields_columns() {
         (sort-fields 1 (point-min) (point-max))
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"1 delta\n2 beta\n10 alpha\n100 gamma\n\" \"a 2\nm 3\nz 1\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +60,8 @@ fn div_v8_sort_subr_custom_key_extractor() {
         (sort-paragraphs nil (point-min) (point-max))
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"apple:1\nbanana:3\ncherry:2\n\" \"aaa short\n\nfirst paragraph here\n\nmiddle paragraph longer\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

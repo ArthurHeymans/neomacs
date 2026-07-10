@@ -116,7 +116,7 @@ fn div_mfp_minibuffer_message_no_active() {
 fn div_mfp_display_completion_list_error_parity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""Type M-x minibuffer-choose-completion on a completion to select it.\nType M-x minibuffer-next-completion or M-x minibuffer-previous-completion to move point between completions.\n\n3 possible completions:\napple\napricot\nbananaOK nil""#
+        r#""3 possible completions:\napple\napricot\nbananaOK (errored . wrong-type-argument)""#
     ]];
     // display-completion-list in batch errors identically (wrong-type-argument
     // on a buffer position) — no divergence in the error path.

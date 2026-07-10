@@ -21,7 +21,9 @@ fn div_v8_completion_try_all_test_list_collection() {
         (test-completion "alpha" coll)
         (test-completion "xyz" coll)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"alpha\" \"alphabet\" t \"beta\" nil (\"alpha\" \"alphabet\") (\"gamma\" \"gamma2\") (\"alpha\" \"alphabet\" \"beta\" \"gamma\" \"gamma2\") t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +39,9 @@ fn div_v8_completion_boundaries_obarray() {
         (all-completions "ca" coll)
         (completion-boundaries "xyz" coll nil "abc")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((0 . 6) (0 . 0) (0 . 2) \"car-safe\" (\"car\" \"car-safe\" \"cadr\") (0 . 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +56,8 @@ fn div_v8_completion_predicate_lambda_and_style() {
         (length (all-completions "a" coll))
         (test-completion "apple" coll)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"apricot\" \"avocado\") \"a\" (\"apple\" \"apricot\" \"avocado\") 3 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

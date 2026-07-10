@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_mark_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (1 6 1 6 \"Hello\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 6 1 6 \"Hello\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -53,7 +53,7 @@ fn divergence_mark_ring() {
 fn divergence_exchange_point_and_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK ((11 1) 1 11)""#]];
+    let expect = expect_test::expect![[r#""OK ((11 1) 1 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -70,7 +70,7 @@ fn divergence_exchange_point_and_mark() {
 fn divergence_kill_region_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -108,7 +108,7 @@ fn divergence_rectangle_functions() {
 fn divergence_delete_extract_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""line1\nline2\nline3\nOK ((\"lin\") 1)""#]];
+    let expect = expect_test::expect![[r#""OK ((\"lin\") 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\n")

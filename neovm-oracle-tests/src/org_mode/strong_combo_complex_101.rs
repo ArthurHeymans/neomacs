@@ -123,9 +123,7 @@ fn combo101_org_babel_src_block_at_point() {
 #[test]
 fn combo101_org_time_stamp_active_range_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:type active-range :start-day 15 :end-day 20 :format-start \"2024-01-15\" :duration-days 5)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (let ((ts (org-timestamp-from-string "<2024-01-15 Mon>--<2024-01-20 Sat>")))

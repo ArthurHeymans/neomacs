@@ -17,7 +17,7 @@ fn div_v8_display_space_width_align_to_spec_property() {
         (get-text-property 2 'display)
         (get-text-property 6 'display)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((space :width 5) nil (space :align-to 20))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,7 @@ fn div_v8_display_raise_height_spec_property() {
         (get-text-property 6 'display)
         (get-text-property 11 'display)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((raise 0.5) (height 1.5) nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,6 +53,6 @@ fn div_v8_before_after_string_overlay_display() {
           (overlay-start o)
           (overlay-end o))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"<<<\" \">>>\" \"REPLACED\" 3 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

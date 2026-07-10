@@ -170,7 +170,7 @@ fn deficiency_narrow_widen_replace_prop_cycle() {
 fn deficiency_struct_marker_slots_undo_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (span (:constructor make-span))\n\
@@ -414,7 +414,7 @@ fn deficiency_hash_table_textprop_key_identity() {
 fn deficiency_cl_loop_with_buffer_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function first)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clb\")))\n\

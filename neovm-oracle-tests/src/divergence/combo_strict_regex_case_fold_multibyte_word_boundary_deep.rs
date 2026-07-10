@@ -44,8 +44,7 @@ fn div_r9_word_boundary_cjk_and_char_fold() {
 #[test]
 fn div_r9_regex_backreference_case_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let ((case-fold-search t))

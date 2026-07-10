@@ -31,7 +31,7 @@ fn div_v8_timer_run_cancel_list_membership() {
               (progn (cancel-timer t3) (consp (memq t3 timer-list)))))
     (when (timerp t1) (cancel-timer t1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function timer-incarnation)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_timer_cancel_async_signal_idletime_predicates() {
               (<= fired 1)))
     (when (timerp t1) (cancel-timer t1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil 0 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_timer_attributes_repeat_idle_indexed_access() {
             (eq (timer--repeat-delay t1) 60))
     (when (timerp t1) (cancel-timer t1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t 60 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

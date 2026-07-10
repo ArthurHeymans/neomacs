@@ -20,7 +20,7 @@ fn div_v8_subword_forward_camel_pascal_case() {
         (p5 (progn (subword-forward 1) (point))))
     (list p1 p2 p3 p4 p5)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (6 10 14 21 25)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_subword_backward_navigation() {
         (b3 (progn (subword-backward 1) (point))))
     (list b1 b2 b3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (11 3 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_subword_capitalize_upcase_downcase_mark() {
         (subword-downcase 1)
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"myVarName\" \"MYVarName\" \"myvarName\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -112,7 +112,7 @@ fn div_e3_frame_parameter_more_defaults() {
 fn div_e3_window_parameter_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (nil nil nil ((quit-restore-prev) (quit-restore other (#<buffer *scratch*> 1 #<marker at 1 in *scratch*> 80) #<window 1 on *scratch*> #<killed buffer>)))""#
+        r#""OK (nil nil nil ((quit-restore other (#<buffer *scratch*> 1 #<marker at 1 in *scratch*> 80) #<window 1 on *scratch*> #<killed buffer>)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

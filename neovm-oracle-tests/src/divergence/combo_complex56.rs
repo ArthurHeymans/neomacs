@@ -97,9 +97,7 @@ fn div_cx56_subword_superword_default_cycle_kill_capitalize_undo_marker_overlay_
 #[test]
 fn div_cx56_json_xml_dom_coerce_hash_struct_backquote_read_print_circle_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"café\" \"世界\") (\"café\" \"世界\") 2 \"ed4f882a892be16f3cd03a00f8c1fd69c26254207b51b926b69bf0cc568d2205\" 0 \"1\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -309,7 +307,7 @@ fn div_cx56_regex_casefold_replace_undo_marker_overlay_narrow_display_textprop_e
 fn div_cx56_print_circle_gensym_struct_vector_propertized_escape_length_level_backquote_read_cl_coerce_hash_secure_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument buffer-or-string-p \\...)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

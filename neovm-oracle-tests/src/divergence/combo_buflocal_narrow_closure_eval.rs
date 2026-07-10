@@ -221,7 +221,7 @@ fn divergence_closure_capture_with_eval_redefinition() {
 fn divergence_buflocal_with_undo_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HEXXLLOERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable test-bui-xyz)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-bui-xxx 0)

@@ -42,9 +42,7 @@ fn div_cx194_seq_sort_by_with_key() {
 #[test]
 fn div_cx194_seq_group_by_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (((:odd 1 3 5 7 9) (:even 2 4 6 8 10)) ((1 2 3) (4 5 6) (7 8 9) (10)) ((1 2 3 4) (5 6 7 8) (9 10)) ((1 2 3 4 5 6 7 8 9 10)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(1 2 3 4 5 6 7 8 9 10)))
@@ -77,7 +75,7 @@ fn div_cx194_seq_uniq_with_test() {
 #[test]
 fn div_cx194_seq_find_position_contains() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (4 2 nil t nil 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(1 2 3 4 5)))

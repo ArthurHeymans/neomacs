@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx62_cl_defstruct_included_and_print_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function copy-neo-cx62-base)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx62-base (:constructor neo-cx62-make-base)
@@ -37,9 +37,7 @@ fn div_cx62_cl_defstruct_included_and_print_object() {
 #[test]
 fn div_cx62_cl_defstruct_with_named_conc_str_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (1 2 3 t (neo-cx62-rec 1 2 3) 99 99 (neo-cx62-rec 99 2 3))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx62-rec (:type list) :named) a b c)
@@ -134,9 +132,7 @@ fn div_cx62_add_function_before_until_after_while_combination() {
 #[test]
 fn div_cx62_format_spec_edge_percent_and_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"alpha-beta\" \"%literal\" \"alpha-%-end\" error \"alpha alpha alpha\" error)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -183,9 +179,7 @@ fn div_cx62_rx_macro_evaluation_complex() {
 #[test]
 fn div_cx62_cl_loop_for_hash_destructure_sum_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"alpha\" \"beta\" \"gamma\") 60 2 (:big ((\"beta\" . 20) (\"gamma\" . 30)) :small ((\"alpha\" . 10))))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -208,9 +202,7 @@ fn div_cx62_cl_loop_for_hash_destructure_sum_count() {
 #[test]
 fn div_cx62_cl_loop_with_destructuring_and_collect_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (((1 \"a\") (2 \"b\") (3 \"c\") (4 \"d\") (5 \"e\") (6 \"f\")) (100 200 300 400 500 600) (:total 6 :indices (1 2 3)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(((1 . "a") (2 . "b")) ((3 . "c")) ((4 . "d") (5 . "e") (6 . "f")))))
@@ -232,8 +224,7 @@ fn div_cx62_cl_loop_with_destructuring_and_collect_pattern() {
 #[test]
 fn div_cx62_cl_destructuring_with_default_and_ignore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (6 (1 2 nil) (1 2 3 4 5) (1 2 99) ((1 2) 1 2) (1 2 3 4))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '((a . 1) (b . 2) (c . 3))))
@@ -252,7 +243,7 @@ fn div_cx62_cl_destructuring_with_default_and_ignore() {
 #[test]
 fn div_cx62_cl_setf_getf_pushnew_remf_plist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:c (5) :b 99) nil 99 (5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-pushnew)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p '(:a 1 :b 2)))

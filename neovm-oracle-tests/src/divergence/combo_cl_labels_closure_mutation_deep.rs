@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_cl_labels_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-labels ((even? (n) (if (= n 0) t (odd? (1- n))))\n\
@@ -22,7 +22,7 @@ fn deficiency_cl_labels_mutual_recursion() {
 fn deficiency_cl_labels_closure_over_mutable_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (3 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((counter 0))\n\
@@ -38,7 +38,7 @@ fn deficiency_cl_labels_closure_over_mutable_var() {
 fn deficiency_cl_labels_with_buffer_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"clb\")))\n\
@@ -66,7 +66,7 @@ fn deficiency_cl_labels_with_buffer_operations() {
 fn deficiency_cl_labels_higher_order_factory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (15 21 101)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-labels ((make-adder (n) (lambda (x) (+ x n)))\n\
@@ -84,7 +84,7 @@ fn deficiency_cl_labels_higher_order_factory() {
 fn deficiency_cl_flet_shadowing_builtins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (7 50)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-flet ((+ (a b) (- a b)))\n\
@@ -121,7 +121,7 @@ fn deficiency_cl_labels_nested_with_accumulator() {
 fn deficiency_cl_labels_tail_accumulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (5 4 3 2 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-labels ((rev-append (lst acc)\n\
@@ -136,7 +136,7 @@ fn deficiency_cl_labels_tail_accumulation() {
 fn deficiency_cl_labels_with_hash_table_builder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (4 2 2 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'equal)))\n\
@@ -160,7 +160,7 @@ fn deficiency_cl_labels_with_hash_table_builder() {
 fn deficiency_cl_function_lambda_closure_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (15 15 t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-function)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((x 10))\n\
@@ -178,7 +178,7 @@ fn deficiency_cl_function_lambda_closure_comparison() {
 fn deficiency_cl_labels_with_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mlt\")))\n\

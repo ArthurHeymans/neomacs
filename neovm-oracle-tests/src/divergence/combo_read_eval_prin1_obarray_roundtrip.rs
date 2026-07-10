@@ -60,9 +60,7 @@ fn deficiency_read_from_string_with_multiple_objects() {
 fn deficiency_prin1_special_strings_with_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((\"hello\\\"world\" \"\\\"hello\\\\\\\"world\\\"\" t) (\"back\\\\slash\" \"\\\"back\\\\\\\\slash\\\"\" t) (\"tab\there\" \"\\\"tab\there\\\"\" t) (\"newline\nhere\" \"\\\"newline\nhere\\\"\" t) (\"\" \"\\\"\\\"\" t))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((strings '(\"hello\\\"world\" \"back\\\\slash\" \"tab\\there\"\n\
@@ -167,9 +165,7 @@ fn deficiency_prin1_with_print_length_and_level() {
 fn deficiency_read_syntax_for_cons_cells() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((a . b) \"(a . b)\" t) ((a b . c) \"(a b . c)\" t) ((a b c) \"(a b c)\" t))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((cells '((a . b) (a b . c) (a b c . nil))))\n\

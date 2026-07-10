@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_h3_json_encode_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/json.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/json.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -106,7 +106,7 @@ fn div_h3_url_parse() {
 fn div_h3_json_array_objects_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/json.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/json.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

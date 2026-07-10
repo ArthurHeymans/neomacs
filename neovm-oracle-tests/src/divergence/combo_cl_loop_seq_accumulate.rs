@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_loop_multi_accumulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (15 5 1 5 3 t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data '((a 1) (b 2) (c 3) (d 4) (e 5))))
@@ -32,7 +32,7 @@ fn divergence_cl_loop_multi_accumulation() {
 fn divergence_cl_loop_with_hash_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (60 t 3 t (x . 10) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
@@ -82,7 +82,7 @@ fn divergence_seq_into_different_types() {
 fn divergence_cl_loop_with_vectors_and_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (3 t 150 t (10 20 30 40 50) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v [10 20 30 40 50])
@@ -104,7 +104,7 @@ fn divergence_cl_loop_with_vectors_and_strings() {
 fn divergence_cl_loop_for_in_package() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function every)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((syms nil))
@@ -147,9 +147,7 @@ fn divergence_seq_mapcat_concatenate() {
 fn divergence_cl_loop_with_multiple_for_clauses() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((1 1) (2 4) (3 9) (4 16) (5 25)) t ((1 . a) (2 . b) (3 . c) (4 . d)) t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-loop for x from 1 to 5

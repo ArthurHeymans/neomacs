@@ -101,7 +101,7 @@ fn div_cx33_coding_system_for_write_doesnt_propagate_to_subprocess() {
 #[test]
 fn div_cx33_timer_cancel_all_after_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 2 1 1)""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timers (list (run-with-timer 100 nil (lambda ()))
@@ -139,7 +139,7 @@ fn div_cx33_overlay_before_string_with_display_and_face_combined() {
 #[test]
 fn div_cx33_cl_defstruct_with_reader_writer_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function neo-cx33-read-box)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -201,7 +201,7 @@ fn div_cx33_undo_after_delete_then_insert_text_prop_overlay_marker() {
 #[test]
 fn div_cx33_window_text_height_and_body_after_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (22 11 t)""#]];
+    let expect = expect_test::expect![[r#""OK (23 11 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((orig (window-body-height)))

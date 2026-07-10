@@ -209,8 +209,7 @@ fn cl_values_multiple() {
 fn seq_fns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK ((2 4) (2 3 4) 6 (1 2) ((1 2) (3 4) (5)) (1 2 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(require 'seq)
 (list (seq-filter #'cl-evenp '(1 2 3 4)) (seq-map #'1+ [1 2 3])

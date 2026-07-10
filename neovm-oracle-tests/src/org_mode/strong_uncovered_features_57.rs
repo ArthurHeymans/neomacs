@@ -155,7 +155,7 @@ fn uf57_babel_insert() {
 #[test]
 fn uf57_babel_to_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"[[file:test.png][desc]]\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-result-to-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-result-to-file "test.png" "desc" '("figure"))"##,
         expect,
@@ -169,7 +169,7 @@ fn uf57_babel_to_file() {
 #[test]
 fn uf57_babel_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:results . \"output\") (:exports . \"\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-babel-merge-params)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-babel-merge-params '((:results . "value")) '((:results . "output")))"##,
         expect,

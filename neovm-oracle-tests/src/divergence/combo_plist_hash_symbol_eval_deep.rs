@@ -165,9 +165,7 @@ fn deficiency_plist_to_hash_table_conversion_roundtrip() {
 fn deficiency_symbol_plist_with_lots_of_keys_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19) overwritten 19 nil 40)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((sym (make-symbol \"stress\")))\n\

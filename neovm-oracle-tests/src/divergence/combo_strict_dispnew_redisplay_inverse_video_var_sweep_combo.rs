@@ -21,7 +21,7 @@ fn div_v8_baud_rate_inverse_video_redisplay_var_sweep() {
       (boundp 'face-remapping-alist)
       (boundp 'window-screen-lines))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t nil t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_redisplay_force_mode_line_update_var_sweep() {
       (boundp 'mouse-wheel-tilt-scroll)
       (boundp 'wheel-up/down-event))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t nil t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_terminal_coding_display_time_str_var_sweep() {
       (boundp 'minor-mode-list)
       (boundp 'emacs-mode-string))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t nil nil t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

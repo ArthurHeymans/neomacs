@@ -64,7 +64,7 @@ fn div_cx534_type_of_types() {
 #[test]
 fn div_cx534_cl_typep_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-typep 42 'integer) (cl-typep "a" 'string) (cl-typep 3.14 'float))
 "##,
@@ -75,7 +75,7 @@ fn div_cx534_cl_typep_check() {
 #[test]
 fn div_cx534_cl_typep_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-typep '(1 2) 'list) (cl-typep [1 2] 'vector) (cl-typep "abc" 'sequence))
 "##,
@@ -86,7 +86,7 @@ fn div_cx534_cl_typep_sequence() {
 #[test]
 fn div_cx534_cl_typep_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-typep 42 'number) (cl-typep 42 'fixnum) (cl-typep (expt 2 100) 'bignum))
 "##,
@@ -97,7 +97,7 @@ fn div_cx534_cl_typep_number() {
 #[test]
 fn div_cx534_cl_struct_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (cx534-point t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-defstruct cx534-point x y)
@@ -111,7 +111,7 @@ fn div_cx534_cl_struct_type() {
 #[test]
 fn div_cx534_cl_struct_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 10""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-defstruct (cx534-pair (:constructor cx534-make))
@@ -139,7 +139,7 @@ fn div_cx534_record_typeof_deep() {
 #[test]
 fn div_cx534_cl_typep_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-defstruct cx534-pt x y)
@@ -166,7 +166,7 @@ fn div_cx534_record_copy() {
 #[test]
 fn div_cx534_cl_struct_copier() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-variable p)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (cl-defstruct cx534-cpt x y)

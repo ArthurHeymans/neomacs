@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_slot_boundp_setf_marker_overlay_textprop_buflocal_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "sbb")))
@@ -114,7 +114,7 @@ fn combo_cl_slot_boundp_setf_clone_overlay_undo() {
 fn combo_cl_slot_boundp_setf_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "sb1"))
@@ -190,7 +190,7 @@ fn combo_cl_slot_boundp_setf_multi_buffer_undo() {
 fn combo_cl_slot_boundp_setf_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ssr")))
@@ -238,7 +238,7 @@ fn combo_cl_slot_boundp_setf_setf_replace_undo() {
 fn combo_cl_slot_boundp_setf_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "smo")))

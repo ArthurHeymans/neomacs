@@ -22,7 +22,9 @@ fn div_v8_nconc_aliasing_tail_share_delq_delete_remq() {
         (remq 'b '(a b c b d))
         (delq nil (list nil 1 nil 2 nil))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6) (1 2 3 4 5 6) (4 5 6) t 6 (1 3 4) (1 3 4) (a c d) (1 2))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +46,9 @@ fn div_v8_nreverse_nbutlast_nconc_dotted() {
           (setcdr (nthcdr 2 x) '(tail))
           (nconc x '(end)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((5 4 3 2 1) (1) (a b c d) (a b c) nil (1 2 3 4 5) nil (1 2 3 tail end))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,7 +71,9 @@ fn div_v8_copy_alist_tree_sequence_isolation() {
         (eq (car al) (car cs))
         (eq al cs)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((a . 99) (B 2 3) (c . \"str\")) ((a . 1) (b 2 3) (c . \"str\")) ((a . 1) (b 2 3) (c . \"str\")) ((a . 99) (B 2 3) (c . \"str\")) nil nil t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -90,6 +96,8 @@ fn div_v8_member_memq_memql_assoc_assq_rassq_mixed() {
         (assoc-string "K" al nil)
         (assoc-string 'b al)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((3 4 3 2 1) (3 4 3 2 1) (3 4 3 2 1) nil (a . 1) (b . 2) (b . 2) (3 . three) (\"k\" . v) (\"k\" . v) nil (b . 2))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

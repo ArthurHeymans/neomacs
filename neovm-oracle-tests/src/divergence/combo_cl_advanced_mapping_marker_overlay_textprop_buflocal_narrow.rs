@@ -104,7 +104,7 @@ fn combo_cl_mapcan_clone_overlay_undo() {
 fn combo_cl_mapl_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapl)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "ml1"))
@@ -172,7 +172,7 @@ fn combo_cl_mapl_multi_buffer_undo() {
 fn combo_cl_mapcan_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapcan)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "msr")))

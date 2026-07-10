@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_goto_char_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloOK (1)""#]];
+    let expect = expect_test::expect![[r#""OK (1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -25,7 +25,7 @@ fn divergence_goto_char_bounds() {
 fn divergence_forward_char_backward_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHOK (1)""#]];
+    let expect = expect_test::expect![[r#""OK (1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -44,7 +44,7 @@ fn divergence_forward_char_backward_char() {
 fn divergence_forward_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""line1\nline2\nline3\nline4\nline5OK (7)""#]];
+    let expect = expect_test::expect![[r#""OK (7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
@@ -65,7 +65,7 @@ fn divergence_forward_line() {
 fn divergence_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcabcabcOK (4 4 7)""#]];
+    let expect = expect_test::expect![[r#""OK (4 4 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abcabcabc")
@@ -84,7 +84,7 @@ fn divergence_search_forward_backward() {
 fn divergence_search_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello worldOK (12 nil 1)""#]];
+    let expect = expect_test::expect![[r#""OK (12 nil 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world")
@@ -100,7 +100,7 @@ fn divergence_search_no_error() {
 fn divergence_re_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""foo123bar456bazOK (\"456\" 13)""#]];
+    let expect = expect_test::expect![[r#""OK (\"456\" 13)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo123bar456baz")
@@ -117,7 +117,7 @@ fn divergence_re_search_forward() {
 fn divergence_skip_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""   \t\n  helloOK (8)""#]];
+    let expect = expect_test::expect![[r#""OK (8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "   \t\n  hello")
@@ -134,7 +134,7 @@ fn divergence_skip_chars() {
 fn divergence_thing_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello world 42ERR (void-function word-at-point)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function word-at-point)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world 42")
@@ -150,7 +150,7 @@ fn divergence_thing_at_point() {
 fn divergence_bounds_of_thing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello world 42OK ((1 . 6) 1 6)""#]];
+    let expect = expect_test::expect![[r#""OK ((1 . 6) 1 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world 42")
@@ -166,7 +166,7 @@ fn divergence_bounds_of_thing() {
 fn divergence_forward_word_backward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""one two three fourOK (9 \"three\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function word-at-point)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "one two three four")

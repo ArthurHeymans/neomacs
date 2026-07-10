@@ -26,7 +26,8 @@ fn div_v8_string_to_number_radix_hex_junk() {
       (string-to-number "3.14")
       (string-to-number "0xZZ"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (42 255 255 0 511 5 -5 5 123 0 0 42 10000000000.0 3.14 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,7 +48,7 @@ fn div_v8_number_to_string_int_float_bignum_negzero() {
       (number-to-string 1e100)
       (number-to-string 1e-10))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -66,6 +67,8 @@ fn div_v8_number_format_to_string_overflow_inf_nan() {
       (number-to-string (/ 0.0 0.0))
       (format "%f" (/ 1.0 0.0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"42\" \"2305843009213693952\" \"ff\" \"100\" \"1010\" \"inf\" \"1.0e+INF\" \"-1.0e+INF\" \"-0.0e+NaN\" \"inf\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

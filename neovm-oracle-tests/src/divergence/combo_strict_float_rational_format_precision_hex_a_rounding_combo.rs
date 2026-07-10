@@ -28,7 +28,7 @@ fn div_v8_float_hex_high_precision_rational_print() {
       (format "%.2f" 2.5)
       (format "%.2f" 3.5))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid format operation %a\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +52,7 @@ fn div_v8_float_extremes_infinity_zero_denormal() {
         (format "%.16e" least-positive-normalized-float)
         (floatp least-positive-normalized-float)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable least-positive-normalized-float)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -75,6 +75,6 @@ fn div_v8_rational_exact_arithmetic_and_convert() {
       (= (* 1/10 10) 1)
       (= (* 0.1 10) 1))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (arith-error)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

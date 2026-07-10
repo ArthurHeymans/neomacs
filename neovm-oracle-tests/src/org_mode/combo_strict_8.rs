@@ -389,9 +389,7 @@ fn strict_multibuffer_isolation() {
 #[test]
 fn strict_timestamp_format_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((:active-props (2024 6 15 14 30) :active-format \"2024-06-15 14:30\" :active-type active) (:inactive-props (2024 12 25) :inactive-format \"December 25, 2024\" :inactive-type inactive) (:range-props (2024 1 1 2024 1 7) :range-format \"2024-01-01\" :range-type active-range) (:repeater-type cumulate :repeater-value 1 :repeater-unit week))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

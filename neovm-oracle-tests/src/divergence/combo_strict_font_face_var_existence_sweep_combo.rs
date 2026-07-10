@@ -23,7 +23,7 @@ fn div_v8_font_selection_order_registry_var_sweep() {
       (boundp 'x-use-underline-position-properties)
       (boundp 'line-spacing-default))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t nil t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_face_attribute_canonical_var_sweep() {
       (boundp 'fontification-functions)
       (boundp 'jit-lock-context-time))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t nil t nil t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +62,6 @@ fn div_v8_color_palette_x_resources_var_sweep() {
       (boundp 'cursor-in-non-selected-windows)
       (boundp 'mode-line-in-non-selected-windows))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

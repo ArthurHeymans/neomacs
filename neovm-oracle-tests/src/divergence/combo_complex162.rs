@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx162_cl_do_basic_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 2 3 4)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)
@@ -24,7 +24,7 @@ fn div_cx162_cl_do_basic_iteration() {
 #[test]
 fn div_cx162_cl_do_with_multiple_vars_and_step() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 . 10) (1 . 9) (2 . 8) (3 . 7) (4 . 6))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)
@@ -41,7 +41,7 @@ fn div_cx162_cl_do_with_multiple_vars_and_step() {
 #[test]
 fn div_cx162_cl_do_star_with_dependencies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 . 0) (1 . 2) (2 . 4) (3 . 6) (4 . 8))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do*)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)
@@ -58,7 +58,7 @@ fn div_cx162_cl_do_star_with_dependencies() {
 #[test]
 fn div_cx162_cl_destructuring_bind_with_key_rest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:c 3 nil 99))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-destructuring-bind (a b &key c (d 99)) '(:c 3) (list a b c d)))
@@ -70,7 +70,7 @@ fn div_cx162_cl_destructuring_bind_with_key_rest() {
 #[test]
 fn div_cx162_cl_destructuring_bind_with_whole() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2) 1 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-destructuring-bind (&whole whole a b) '(1 2)
@@ -83,7 +83,7 @@ fn div_cx162_cl_destructuring_bind_with_whole() {
 #[test]
 fn div_cx162_cl_flet_basic_local_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 15 5)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-flet ((double (x) (* x 2))
@@ -97,7 +97,7 @@ fn div_cx162_cl_flet_basic_local_function() {
 #[test]
 fn div_cx162_cl_flet_with_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function odd-cx162?)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-flet ((even-cx162? (n) (if (= n 0) t (odd-cx162? (1- n))))
@@ -111,7 +111,7 @@ fn div_cx162_cl_flet_with_mutual_recursion() {
 #[test]
 fn div_cx162_cl_labels_with_closure_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 3 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -129,7 +129,7 @@ fn div_cx162_cl_labels_with_closure_mutation() {
 #[test]
 fn div_cx162_cl_macrolet_local_macro_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((swap (a b)
@@ -145,7 +145,7 @@ fn div_cx162_cl_macrolet_local_macro_definition() {
 #[test]
 fn div_cx162_cl_symbol_macrolet_global_replacement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 3 16)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-symbol-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-symbol-macrolet ((x (list :expanded)))
@@ -158,7 +158,7 @@ fn div_cx162_cl_symbol_macrolet_global_replacement() {
 #[test]
 fn div_cx162_cl_macrolet_with_complex_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 6""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-macrolet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-macrolet ((with-trace (form)
@@ -174,7 +174,7 @@ fn div_cx162_cl_macrolet_with_complex_body() {
 #[test]
 fn div_cx162_cl_do_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 2 18)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-do)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)

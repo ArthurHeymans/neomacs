@@ -12,7 +12,7 @@ use crate::common::{
 fn oracle_prop_end_of_line_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcOK 4""#]];
+    let expect = expect_test::expect![[r#""OK 4""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abc\") (goto-char 1) (end-of-line) (point))",
         expect,

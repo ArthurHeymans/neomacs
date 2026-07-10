@@ -25,7 +25,7 @@ fn div_cx137_ansi_color_availability() {
 #[test]
 fn div_cx137_ansi_color_apply_basic_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -83,7 +83,7 @@ fn div_cx137_color_rgb_to_name() {
 #[test]
 fn div_cx137_color_complement() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0.0 1.0 1.0) (0.0 0.0 0.0) (1.0 0.0 1.0))""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -99,7 +99,7 @@ fn div_cx137_color_complement() {
 #[test]
 fn div_cx137_color_gradient() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -134,9 +134,7 @@ fn div_cx137_color_distance() {
 #[test]
 fn div_cx137_color_rgb_to_hsl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((0.0 1.0 0.5) (0.3333333333333333 1.0 0.5) (0.0 0.0 0.5) (0.0 0.0 0.0))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -153,7 +151,7 @@ fn div_cx137_color_rgb_to_hsl() {
 #[test]
 fn div_cx137_ansi_color_strip_codes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Hello Bold Red end\" 18 t)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

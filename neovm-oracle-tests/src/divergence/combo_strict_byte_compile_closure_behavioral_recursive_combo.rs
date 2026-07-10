@@ -18,7 +18,7 @@ fn div_v8_byte_compile_lambda_funcall_compiled_p() {
         (funcall (byte-compile (lambda (a b) (- (* a 3) b))) 4 1)
         (funcall (byte-compile (lambda () (+ 1 2))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t 42 0 11 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_byte_compile_recursive_closure_lexical() {
             (funcall inc)
             counter))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable fact-src)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +58,6 @@ fn div_v8_byte_compile_conditional_mapcar_apply() {
         (funcall (byte-compile (lambda (n) (cl-loop for i below n sum i))) 5)
         (compiled-function-p (byte-compile (lambda (x) x)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable for)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

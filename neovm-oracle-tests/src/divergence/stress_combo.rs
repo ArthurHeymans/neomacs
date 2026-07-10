@@ -7,9 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_stress_many_inserts_deletes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""line0\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nline51\nline52\nline53\nline54\nline55\nline56\nline57\nline58\nline59\nline60\nline61\nline62\nline63\nline64\nline65\nline66\nline67\nline68\nline69\nline70\nline71\nline72\nline73\nline74\nline75\nline76\nline77\nline78\nline79\nline80\nline81\nline82\nline83\nline84\nline85\nline86\nline87\nline88\nline89\nline90\nline91\nline92\nline93\nline94\nline95\nline96\nline97\nline98\nline99\nOK (691 400 399)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (691 400 399)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -30,7 +28,7 @@ fn divergence_stress_many_inserts_deletes() {
 fn divergence_stress_nested_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJERR (invalid-read-syntax \")\" 10 17)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 10 17)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -50,9 +48,7 @@ fn divergence_stress_nested_save_excursion() {
 fn divergence_stress_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (10 10 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (10 10 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?X))
@@ -70,9 +66,8 @@ fn divergence_stress_many_overlays() {
 fn divergence_stress_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK ((bold italic underline) (bold italic underline) nil)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK ((bold italic underline) (bold italic underline) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?X))
@@ -90,7 +85,7 @@ fn divergence_stress_many_text_props() {
 fn divergence_stress_many_narrows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (1 11 \"ABCDEFGHIJ\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 11 \"ABCDEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -109,7 +104,7 @@ fn divergence_stress_many_narrows() {
 fn divergence_stress_many_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABXXXCDEFGHIJOK (1 2 3 7 8 9 10 11 12 13)""#]];
+    let expect = expect_test::expect![[r#""OK (1 2 3 7 8 9 10 11 12 13)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -142,7 +137,7 @@ fn divergence_stress_condition_case_loop() {
 fn divergence_stress_undo_redo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""oneOK (\"onetwothree\" \"one\" \"one\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"onetwothree\" \"one\" \"one\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)

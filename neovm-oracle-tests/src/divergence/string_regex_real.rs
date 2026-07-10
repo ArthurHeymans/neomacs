@@ -7,9 +7,8 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_re_search_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""2024-01-15 and 2025-12-31OK ((\"2024\" \"01\" \"15\") (\"2025\" \"12\" \"31\") 16 26)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK ((\"2024\" \"01\" \"15\") (\"2025\" \"12\" \"31\") 16 26)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"2024-01-15 and 2025-12-31\")
@@ -48,7 +47,7 @@ fn divergence_string_multibyte_operations() {
 fn divergence_regex_anchored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abc\ndef\nghiOK (\"abc\" \"def\" \"ghi\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"abc\" \"def\" \"ghi\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"abc\\ndef\\nghi\")

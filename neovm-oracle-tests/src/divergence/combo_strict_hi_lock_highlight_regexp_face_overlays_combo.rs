@@ -21,7 +21,7 @@ fn div_v8_highlight_regexp_overlays_face() {
           faces
           (length (overlays-in (point-min) (point-max))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 (nil nil nil) 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_highlight_lines_matching_regexp_full_line() {
     (unhighlight-regexp "match")
     (list count (length (overlays-in (point-min) (point-max))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +58,6 @@ fn div_v8_hi_lock_mode_interactive_patterns_list() {
       (kill-buffer (current-buffer))
       result)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

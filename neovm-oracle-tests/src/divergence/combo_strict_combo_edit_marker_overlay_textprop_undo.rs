@@ -30,7 +30,9 @@ fn div_v8_combo_edit_marker_overlay_textprop_undo() {
             (overlay-end o)
             (get-text-property 1 'weight)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"EFIXHello World\" 4 9 (weight heavy)) 10 1 \"\" 1 1 1 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +52,7 @@ fn div_v8_combo_search_replace_match_data_marker_preserve() {
             (string-match "brown" (buffer-string))
             (match-data)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"The QUICK brown FOX\" 5 (10 15))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -73,6 +75,7 @@ fn div_v8_combo_narrow_overlay_marker_textprop_isolation() {
           (get-text-property (point-min) 'face)
           (buffer-substring (point-min) (point-max)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (5 13 8 5 12 bold #(\"BBBBCCCC\" 0 4 (face bold)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -278,7 +278,7 @@ fn div_cx31_overlay_display_space_spec_column_effect() {
 #[test]
 fn div_cx31_cl_coerce_from_hash_table_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK wrong-type-argument""#]];
+    let expect = expect_test::expect![[r#""OK void-function""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table)))

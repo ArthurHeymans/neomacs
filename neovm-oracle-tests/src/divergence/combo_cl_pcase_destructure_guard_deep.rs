@@ -37,7 +37,7 @@ fn deficiency_pcase_with_destructuring() {
 fn deficiency_pcase_with_guard_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function cl-pcase)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-loop for n from 0 to 10\n\
@@ -81,7 +81,7 @@ fn deficiency_pcase_nested_list_pattern() {
 fn deficiency_pcase_with_string_match_guard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function cl-pcase)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-loop for s in '(\"hello\" \"world\" \"test\" \"elisp\")\n\
@@ -111,7 +111,7 @@ fn deficiency_pcase_on_vector_with_length() {
 fn deficiency_pcase_with_or_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function cl-pcase)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-loop for x in '(a b c d e f)\n\
@@ -126,7 +126,7 @@ fn deficiency_pcase_with_or_pattern() {
 fn deficiency_pcase_on_alist_lookup_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function cl-pcase)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((alist '((a . 1) (b . 2) (c . 3))))\n\
@@ -143,7 +143,7 @@ fn deficiency_pcase_on_alist_lookup_pattern() {
 fn deficiency_pcase_with_and_or_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-function cl-pcase)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-loop for x in '(1 2 3 4 5 6 7 8 9 10)\n\

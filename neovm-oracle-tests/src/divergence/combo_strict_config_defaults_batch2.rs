@@ -85,7 +85,7 @@ fn div_f6_cursor_display_defaults() {
 #[test]
 fn div_f6_comment_syntax_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil \"\" 32 nil comment-indent-default nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\";\" \"\" 40 nil lisp-comment-indent nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list comment-start

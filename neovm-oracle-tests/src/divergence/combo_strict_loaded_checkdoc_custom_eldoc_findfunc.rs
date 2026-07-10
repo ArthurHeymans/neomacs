@@ -50,7 +50,7 @@ fn div_n3_custom_introspection() {
 fn div_n3_eldoc_argstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/eldoc.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/eldoc.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -69,7 +69,7 @@ fn div_n3_eldoc_argstring() {
 fn div_n3_find_func_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/find-func.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/find-func.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

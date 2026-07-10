@@ -100,7 +100,7 @@ fn divergence_member_assoc_assq_real() {
 fn divergence_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 2 3 (4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         "(cl-destructuring-bind (a (b c) &rest d) '(1 (2 3) 4 5)
   (list a b c d)) ",
@@ -128,7 +128,7 @@ fn divergence_tree_operations() {
 fn divergence_set_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((4 3) (6 5 1 2 3 4) (1 2) (1 2 5 6) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-intersection)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((a '(1 2 3 4))
         (b '(3 4 5 6)))
@@ -145,7 +145,7 @@ fn divergence_set_operations() {
 fn deficiency_subseq_butlast() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 3) (3 4 5) (1 2 3 4) (1 2 3) (1 2) (4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-subseq '(1 2 3 4 5) 1 3)

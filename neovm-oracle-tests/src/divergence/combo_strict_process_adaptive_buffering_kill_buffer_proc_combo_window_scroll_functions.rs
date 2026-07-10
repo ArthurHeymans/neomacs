@@ -21,7 +21,7 @@ fn div_u5_process_adaptive_read_buffering() {
                (process-adaptive-read-buffering proc))
         (process-type proc)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function process-adaptive-read-buffering)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_u5_kill_buffer_query_functions() {
         (buffer-live-p b)
         (nreverse log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil (query))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,7 +69,7 @@ fn div_u5_window_scroll_functions_hook() {
     (setq window-scroll-functions nil)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 t 477 561)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

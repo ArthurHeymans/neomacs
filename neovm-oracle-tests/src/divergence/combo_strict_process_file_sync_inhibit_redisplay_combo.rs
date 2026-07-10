@@ -22,7 +22,7 @@ fn div_v8_process_file_output_to_file_sync() {
                 (buffer-string)))
       (when (file-exists-p out) (delete-file out))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_process_file_output_to_buffer_current() {
               (= (buffer-size) 7))
       (kill-buffer (current-buffer)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"buf-out\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +55,6 @@ fn div_v8_process_file_exit_code_nonzero() {
         code2
         (or (null code2) (and (integerp code2) (/= code2 0)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 42 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

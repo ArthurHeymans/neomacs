@@ -26,7 +26,7 @@ fn div_v8_bool_vector_make_aset_aref_length_count() {
         (bool-vector-count (bool-vector t t nil t))
         (bool-vector-count (bool-vector))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bool-vector-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +48,7 @@ fn div_v8_bool_vector_bitwise_set_operations() {
         (aref (bool-vector-xor a b) 1)
         (aref (bool-vector-difference a b) 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bool-vector-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_bool_vector_resize_fill_map_over() {
           (aset b2 2 t)
           (list (aref b2 2) (bool-vector-count b2)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function bool-vector-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

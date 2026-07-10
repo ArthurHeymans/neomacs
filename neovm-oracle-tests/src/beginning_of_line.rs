@@ -12,7 +12,7 @@ use crate::common::{
 fn oracle_prop_beginning_of_line_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ab\ncd\nOK 4""#]];
+    let expect = expect_test::expect![[r#""OK 4""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"ab\\ncd\\n\") (goto-char 5) (beginning-of-line) (point))",
         expect,

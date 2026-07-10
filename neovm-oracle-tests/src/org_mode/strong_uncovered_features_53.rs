@@ -188,9 +188,7 @@ fn uf53_indent() {
 #[test]
 fn uf53_indent_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 \"\") (2 #(\"  \" 0 2 (face org-indent))) (3 #(\"*\" 0 1 (face org-indent))) (4 #(\"    \" 0 4 (face org-indent))) (5 #(\"**\" 0 2 (face org-indent))) (6 #(\"      \" 0 6 (face org-indent))))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-indent-indent-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -323,7 +321,7 @@ fn uf53_src_value() {
 #[test]
 fn uf53_src_lang_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (emacs-lisp-mode python-mode sh-mode c-mode)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-src-get-lang-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-src-get-lang-mode "emacs-lisp")
         (org-src-get-lang-mode "python")

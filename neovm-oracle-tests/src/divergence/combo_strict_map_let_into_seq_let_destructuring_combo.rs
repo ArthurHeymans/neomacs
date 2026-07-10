@@ -18,7 +18,9 @@ fn div_v8_map_let_destructuring_into() {
         (map-length m)
         (map-copy m)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (cl-no-applicable-method map-into [1 2 3] (closure (t) (x) (* x 10)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +39,7 @@ fn div_v8_seq_let_destructuring_min_max_by() {
       (seq-reverse '(1 2 3))
       (seq-group-by #'cl-evenp '(1 2 3 4 5 6)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function seq-min-by)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +57,6 @@ fn div_v8_seq_zip_difference_intersection_sorted() {
       (seq-sort '(3 1 2) #'>)
       (seq-contains-pos '(a b c d) 'c))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep <)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,7 +8,7 @@ fn divergence_undo_20_step_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ALPHA-BETA-GAMMA-DELTA-EPSILONERR (wrong-type-argument listp t)""#
+        r#""OK (\"ALPHA-BETA-GAMMA-DELTA-EPSILON\" #(\"FUNC1-FUNC2-FUNC3-FUNC4-FUNC5\" 0 5 (func 1) 6 11 (func 2) 12 17 (func 3) 18 23 (func 4) 24 29 (func 5)) t nil nil nil nil nil 1 t 2 t 3 t 4 t 5 t all t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -56,9 +56,7 @@ fn divergence_undo_20_step_edit_session() {
 fn divergence_undo_insert_delete_alternating() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""BASE-BASE-BASE-INS3BASE-BASEERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 39)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BASE-BASE-BASE-BASE-BASE")
@@ -96,9 +94,7 @@ fn divergence_undo_insert_delete_alternating() {
 fn divergence_undo_with_10_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?T))
@@ -143,7 +139,7 @@ fn divergence_undo_kill_rectangle_sim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""LINE1-\nLINE2-BLINE3-CLINE4-\nLINEEEERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"LINE1-\nLINE2-BLINE3-CLINE4-\nLINEEE\" 0 4 (line 1) 7 11 (line 2) 14 18 (line 3) 21 25 (line 4) 28 32 (line 5)) #(\"LINE1-AAA\nLINE2-BBB\nLINE3-CCC\nLINE4-DDD\nLINE5-EEE\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 30 34 (line 4) 40 44 (line 5)) t t 1 t 2 t 3 t 4 t rect t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -184,8 +180,9 @@ fn divergence_undo_kill_rectangle_sim() {
 fn divergence_undo_propertize_replace_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ORANGE-CYAN-TEAL-YELLOWERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"ORANGE-CYAN-TEAL-YELLOW\" 17 23 (color yellow)) #(\"RED-BLUE-GREEN-YELLOW\" 0 3 (color red) 4 8 (color blue) 9 14 (color green) 15 21 (color yellow)) nil red t blue t green t yellow t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((s1 (propertize "RED" 'color 'red))
@@ -220,7 +217,7 @@ fn divergence_undo_propertize_replace_cycle() {
 fn divergence_undo_narrow_replace_widen_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXB1-B2-YY-B4-B5ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 26 39)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "A1-A2-A3-A4-A5-B1-B2-B3-B4-B5-C1-C2-C3-C4-C5")
@@ -256,8 +253,9 @@ fn divergence_undo_narrow_replace_widen_deep() {
 fn divergence_undo_buffer_substring_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ORIG-ORIG-ORIG-ORIG-ORIGERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"ORIG\" 0 3 (chunk 1)) #(\"ORIG\" 0 3 (chunk 2)) #(\"ORIG-ORIG-ORIG-ORIG-ORIG\" 10 13 (chunk 3) 15 18 (chunk 4) 20 23 (chunk 5)) #(\"ORIG-ORIG-ORIG-ORIG-ORIG\" 0 3 (chunk 1) 5 8 (chunk 2) 10 13 (chunk 3) 15 18 (chunk 4) 20 23 (chunk 5)) t t 1 t 2 t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ORIG-ORIG-ORIG-ORIG-ORIG")
@@ -293,9 +291,7 @@ fn divergence_undo_buffer_substring_replace() {
 fn divergence_undo_30_property_segments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPERR (void-variable start)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-variable start)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 150 ?P))
@@ -334,7 +330,7 @@ fn divergence_undo_3_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""MAIN-CONTENT-HEREOK (#(\"MAIN-CONTENT-HERE\" 0 3 (buf main) 5 11 (buf main) 13 16 (buf main)) t t main)""#
+        r#""OK (#(\"MAIN-CONTENT-HERE\" 0 3 (buf main) 5 11 (buf main) 13 16 (buf main)) t t main)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -383,7 +379,9 @@ fn divergence_undo_3_buffer_switch() {
 fn divergence_undo_replace_within_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXAAYBBYZCCZERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"XXAAYBBYZCCZ\" 0 2 (zone x) 4 5 (zone y) 8 9 (zone z)) #(\"XXXXYYYYZZZZ\" 0 2 (zone x) 2 3 (zone x) 4 5 (zone y) 5 7 (zone y) 8 9 (zone z) 9 11 (zone z)) t t x t y t z t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "XXXXYYYYZZZZ")

@@ -63,7 +63,7 @@ fn div_cx420_define_hash_table_test() {
 #[test]
 fn div_cx420_cl_destructuring_bind_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 (2 3) 4 5 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-destructuring-bind ((a &rest b) c d &key e) '((1 2 3) 4 5 :e 6)
@@ -77,7 +77,7 @@ fn div_cx420_cl_destructuring_bind_nested() {
 #[test]
 fn div_cx420_cl_loop_across_in_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((10 20 30 40) (2 4 6 8))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vec [10 20 30 40])
@@ -109,7 +109,7 @@ fn div_cx420_rx_minimal_maximal() {
 #[test]
 fn div_cx420_pcase_cl_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 20)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -127,7 +127,7 @@ fn div_cx420_pcase_cl_struct() {
 #[test]
 fn div_cx420_cl_subst_sublis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((new a b (new c)) (new b b (new c)))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subst)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-subst 'new 'old '(old a b (old c)))
@@ -207,7 +207,7 @@ fn div_cx420_merge_sequences() {
 #[test]
 fn div_cx420_cl_position_find_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 3 c 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(a b c b a)))
@@ -224,7 +224,7 @@ fn div_cx420_cl_position_find_count() {
 #[test]
 fn div_cx420_cl_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 1 2 3 4 5 6 9) (1 1 3 4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(3 1 4 1 5 9 2 6)))

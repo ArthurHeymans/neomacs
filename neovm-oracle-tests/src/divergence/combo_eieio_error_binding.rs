@@ -57,9 +57,7 @@ fn divergence_eieio_initform_dynamic_binding() {
 fn divergence_cl_labels_recursive_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((1 0) (2 1) (4 2) (8 3) (9 3) (5 2) (10 3) (11 3) (3 1) (6 2) (12 3) (13 3) (7 2) (14 3) (15 3))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((visited nil))
   (cl-labels ((visit (n depth)

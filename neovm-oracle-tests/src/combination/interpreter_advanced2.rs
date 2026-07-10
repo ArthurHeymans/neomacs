@@ -283,7 +283,8 @@ fn oracle_prop_interp2_recursive_algorithms() {
                            (app ack 3 0) (app ack 3 2)))
                 nil))
     (fmakunbound 'neovm--i2-eval)))"#;
-    let expect = expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Lisp nesting exceeds ‘max-lisp-eval-depth’\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

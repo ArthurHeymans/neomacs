@@ -75,7 +75,7 @@ fn divergence_numeric_boundary_values() {
 fn divergence_buffer_empty_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (= (point-min) 1)

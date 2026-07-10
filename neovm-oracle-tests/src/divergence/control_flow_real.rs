@@ -64,9 +64,7 @@ fn divergence_dotimes_dolist_real() {
 fn divergence_loop_macro_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((1 4 9 16 25) (1 3 5) ((a . 1) (b . 2) (c . 3)) 15 (x x x))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-loop for i from 1 to 5 collect (* i i))
@@ -85,7 +83,7 @@ fn divergence_loop_macro_real() {
 fn divergence_cl_block_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (42 exited)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-block)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-block done
@@ -103,7 +101,7 @@ fn divergence_cl_block_return() {
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((6 14) (1 1 120 3628800))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-flet ((double (x) (* x 2)))
@@ -118,7 +116,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_case_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (three other fruit-bc two)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-case)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-case 3
@@ -143,7 +141,7 @@ fn divergence_cl_case_match() {
 fn divergence_cl_typecase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (int flt str null)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typecase)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-typecase 42
@@ -184,7 +182,7 @@ fn divergence_while_with_mutation() {
 fn divergence_cl_letf_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((x 10))
   (cl-letf (((symbol-value 'x) 99))

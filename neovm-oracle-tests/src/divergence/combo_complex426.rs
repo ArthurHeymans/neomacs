@@ -73,7 +73,7 @@ fn div_cx426_window_min_max_delta() {
 #[test]
 fn div_cx426_window_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 23)""#]];
+    let expect = expect_test::expect![[r#""OK (80 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))

@@ -348,7 +348,7 @@ fn div_cx37_overlay_modification_hooks_fire_on_delete() {
 #[test]
 fn div_cx37_cl_loop_with_destructuring_and_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 a 1) (1 b 2) (2 c 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for (k . v) in '((a . 1) (b . 2) (c . 3))

@@ -21,7 +21,7 @@ fn div_v8_obarray_symbols_with_pos_var_sweep() {
       (boundp 'lambda-allocation-checking)
       (boundp 'purecopy-strings))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil nil t nil t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_char_table_pure_memory_var_sweep() {
       (boundp 'print-circle)
       (boundp 'print-length))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t nil t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +62,6 @@ fn div_v8_misc_data_symbol_var_sweep() {
       (boundp 'integer-width)
       (boundp 'binary-as-unsigned))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil nil nil nil nil nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

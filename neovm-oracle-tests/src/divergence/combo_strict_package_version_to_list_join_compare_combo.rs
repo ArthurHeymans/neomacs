@@ -18,7 +18,9 @@ fn div_v8_version_to_list_join_roundtrip() {
       (package-version-join '(1 0))
       (package-version-join (version-to-list "2.5.7")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3) (1 10) (0 0 1) (26 1) \"1.2.3\" \"1.0\" \"2.5.7\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +40,7 @@ fn div_v8_version_list_compare_string_version_predicates() {
       (version= "1.2.3" "1.2.3")
       (version-list-<= '(1 2) '(1 2 0)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function version-list->)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +62,8 @@ fn div_v8_package_desc_construct_basics() {
         (package-desc-kind desc)
         (package-version-join (package-desc-version desc))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t probe-pkg (1 2 3) \"A probe package\" single \"1.2.3\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

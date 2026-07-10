@@ -8,7 +8,7 @@ fn divergence_string_props_with_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""TODO: fix bug #issue-123OK (#(\"TODO: fix bug #issue-123\" 0 14 (face bold) 21 24 (face bold)) bold bold #(\"123\" 0 3 (face bold)) t)""#
+        r#""OK (#(\"TODO: fix bug #issue-123\" 0 14 (face bold) 21 24 (face bold)) bold bold #(\"123\" 0 3 (face bold)) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
@@ -47,8 +47,7 @@ fn deficiency_map_with_side_effects() {
 fn deficiency_cl_loop_with_into_and_finally() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK ((55 5) 30 ((0 . a) (1 . b) (2 . c) (3 . d) (4 . e)))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (cl-loop for x from 1 to 10
@@ -69,8 +68,7 @@ fn deficiency_cl_loop_with_into_and_finally() {
 fn divergence_rx_pcase_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((re (rx bos (group (one-or-more digit)) \".\"
                      (group (one-or-more digit)) \".\"

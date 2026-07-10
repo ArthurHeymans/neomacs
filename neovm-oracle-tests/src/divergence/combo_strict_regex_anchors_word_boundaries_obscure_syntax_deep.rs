@@ -29,8 +29,7 @@ fn div_s1_regex_anchors_and_word_boundaries() {
 #[test]
 fn div_s1_regex_charset_multibyte_ranges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 4)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "[あ-ん]" "ほ")

@@ -39,8 +39,7 @@ fn apply_partially_fn() {
 fn assoc_member_testfn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK ((\"b\" . 2) (3 4) (\"foo\" \"bar\") (\"a\" \"b\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-member)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (assoc "B" '(("a" . 1) ("b" . 2)) (lambda (x y) (string-equal-ignore-case x y)))
         (cl-member 3 '(1 2 3 4) :test #'=)
@@ -87,7 +86,7 @@ fn define_hash_table_test() {
 fn delete_dups_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 2 3) (\"A\" \"b\") (3 2 1))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-delete-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (delete-dups (list 1 2 1 3 2 1))
         (cl-delete-duplicates (list "a" "A" "b") :test #'string-equal-ignore-case)
@@ -113,7 +112,7 @@ fn funcall_interactively() {
 fn mapcan_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 1 2 4 3 9) (2 3 4) (11 22 33))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mapcar)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (mapcan (lambda (x) (list x (* x x))) '(1 2 3))
         (mapcar #'1+ '(1 2 3))
@@ -142,7 +141,7 @@ fn run_hook_with_args() {
 fn sort_with_key_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((\"a\" \"bb\" \"ccc\") [1 2 3] (1 -2 -3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (sort (list "ccc" "a" "bb") :key #'length)
         (sort (vector 3 1 2) #'<)

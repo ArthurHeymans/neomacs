@@ -19,7 +19,7 @@ fn div_v8_cl_progv_runtime_symbol_binding() {
       probe-pgv-b
       probe-pgv-c)
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 2 3) global global global)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_cl_progv_computed_symbols_nested() {
           (cl-progv syms '((deeper)) probe-pgv-x))
         probe-pgv-x))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((inner) (deeper) outer)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,6 +50,6 @@ fn div_v8_cl_progv_empty_mismatched_lengths() {
       (cl-progv '(probe-pgv-y) '(42) probe-pgv-y)
       probe-pgv-y))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 19)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

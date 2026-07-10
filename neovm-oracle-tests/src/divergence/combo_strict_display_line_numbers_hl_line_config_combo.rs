@@ -19,7 +19,7 @@ fn div_v8_display_line_numbers_mode_toggle_config() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_hl_line_mode_toggle_face() {
         (kill-buffer (current-buffer))
         (list before after-on after-off)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable hl-line-mode)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_display_line_numbers_width_format_config() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (relative 4 visual t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

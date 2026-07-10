@@ -8,7 +8,7 @@ fn divergence_indent_line_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""    line1\n\tline2\n    line3\nline4\nline5OK (\"    line1\n\tline2\n    line3\nline4\nline5\" t t t t 1 0 t nil 4 t nil)""#
+        r#""OK (\"    line1\n\tline2\n    line3\nline4\nline5\" t t t t 1 0 t nil 4 t nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -45,7 +45,7 @@ fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""This is a long line\nthat should be\nfilled at the\nfill-column boundary\nwhen we call\nfill-paragraph.OK (t t t 20 t t \"This is a long line\nthat should be\nfilled at the\nfill-column boundary\nwhen we call\nfill-paragraph.\")""#
+        r#""OK (t t t 20 t t \"This is a long line that should be filled at the fill-column boundary\n when we call fill-paragraph.\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -71,9 +71,7 @@ fn divergence_fill_region_basic() {
 fn divergence_paragraph_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.OK (t t nil 69 0 0 t t 0 0 t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t nil 69 0 0 t t 0 0 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "First paragraph here.\n\nSecond paragraph here.\n\nThird paragraph here.")
@@ -100,9 +98,7 @@ fn divergence_paragraph_operations() {
 fn divergence_page_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""Page 1 content\n\u{c}Page 2 content\n\u{c}Page 3 contentERR (wrong-type-argument listp \"Page 1, line 1\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp \"Page 1, line 1\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Page 1 content\n\x0CPage 2 content\n\x0CPage 3 content")
@@ -142,7 +138,7 @@ fn divergence_comment_operations() {
 fn divergence_tab_stop_and_indent_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""        helloOK (t t t 4 t nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t 4 t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
@@ -167,7 +163,7 @@ fn divergence_tab_stop_and_indent_tabs() {
 fn divergence_current_column_with_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abc\tdef\tghiOK (0 t 3 t 4 t 7 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (0 t 3 t 4 t 7 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq tab-width 4)
@@ -193,8 +189,7 @@ fn divergence_current_column_with_mixed() {
 fn divergence_line_beginning_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""line1\nline2\nline3\nline4\nline5OK (t t t 1 1 t 30 5 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t 1 1 t 30 5 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
@@ -220,7 +215,7 @@ fn divergence_line_beginning_position() {
 fn divergence_delete_indentation_and_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello world\ntestOK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello\nworld\ntest")
@@ -240,7 +235,7 @@ fn divergence_delete_indentation_and_newline() {
 fn divergence_move_to_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcdefghijklmnOK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abcdefghijklmn")

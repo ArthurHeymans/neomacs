@@ -19,7 +19,9 @@ fn div_u7_string_multibyte_surrogate_and_invalid() {
       (condition-case err (aref "ab" 5) (args-out-of-range 'caught) (error 'other))
       (condition-case err (aset "abc" nil ?x) (wrong-type-argument 'caught) (error 'other)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"���\" \"����\" \"\u{10ffff}\" 1 4 \"����\" \"���\" caught caught)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +42,7 @@ fn div_u7_abbrev_table_operations() {
           (expand-abbrev)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil \"bar\" \"bar\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,7 +58,9 @@ fn div_u7_idle_timer_and_timer_idle_list() {
         (progn (cancel-timer tm)
                (not (memq tm timer-idle-list)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t ([nil 0 1000 0 nil (closure (t) nil nil) nil idle 0 nil]) t idle t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -75,7 +79,7 @@ fn div_u7_with_current_buffer_killed_edge() {
         (condition-case err (buffer-name b)
           (error (car err)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil error error nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -93,6 +97,6 @@ fn div_u7_map_concat_mapcan_filter_combo() {
       (cl-substitute 'X 2 '(1 2 3 2 1) :count 1)
       (cl-position 2 '(1 2 3 2 1) :from-end t))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

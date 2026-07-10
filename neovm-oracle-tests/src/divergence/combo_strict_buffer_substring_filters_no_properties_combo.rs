@@ -22,7 +22,7 @@ fn div_v8_buffer_substring_with_without_properties() {
         (text-properties-at 1 (buffer-substring 1 6))
         (get-text-property 2 'face (buffer-substring 1 6))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 21)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_filter_buffer_substring_filters_list() {
         (filter-buffer-substring 1 8 nil)
         (buffer-substring-no-properties 1 22)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable buffer-substring-filters)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +59,6 @@ fn div_v8_buffer_substring_edge_empty_full_mid() {
         (buffer-substring 5 6)
         (eq (buffer-substring 1 1) "")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"ABCDE\" \"BC\" \"\" \"\" 5 \"E\" nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

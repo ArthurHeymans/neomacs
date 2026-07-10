@@ -133,7 +133,7 @@ fn divergence_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""beforeOK ((image :type xpm) #(\"before\" 0 6 (display (image :type xpm))))""#
+        r#""OK ((image :type xpm) #(\"before\" 0 6 (display (image :type xpm))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -149,7 +149,7 @@ fn divergence_display_property() {
 fn divergence_invisible_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""visiblehiddenvisible2OK (nil t nil 21)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t nil 21)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "visible")
@@ -167,7 +167,7 @@ fn divergence_invisible_text_property() {
 fn divergence_line_beginning_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""line1\nline2\nline3OK (1 6 7 13 3)""#]];
+    let expect = expect_test::expect![[r#""OK (1 6 7 13 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3")
@@ -185,7 +185,7 @@ fn divergence_line_beginning_position() {
 fn divergence_point_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (1 12 12 nil t 5 nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 12 12 nil t 5 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")

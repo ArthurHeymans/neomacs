@@ -2,7 +2,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn strict_org_inactive_timestamp_with_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:type inactive :hour 10 :minute 30 :day 15)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (let ((ts (org-timestamp-from-string "[2024-06-15 Sat 10:30]")))

@@ -68,7 +68,7 @@ fn divergence_string_pad_alignment() {
 fn divergence_buffer_display_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloBeautiful  WorldERR (void-variable bs1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable bs1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -153,9 +153,7 @@ fn divergence_char_charset() {
 fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""This is a long line of text\nthat should be filled at the\nfill column boundary for\ntesting purposes.ERR (void-function every)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "This is a long line of text that should be filled at the fill column boundary for testing purposes.")
@@ -175,8 +173,7 @@ fn divergence_fill_region_basic() {
 fn divergence_indent_rigidly_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r##""line1\nline2\nline3\nERR (invalid-read-syntax \"#\" 12 49)""##]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 49)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "    line1\n    line2\n    line3\n")
@@ -198,7 +195,7 @@ fn divergence_indent_rigidly_negative() {
 fn divergence_current_column_with_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""hello\tworldERR (invalid-read-syntax \"#\" 15 41)""##]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 41)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello\tworld")

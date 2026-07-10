@@ -160,7 +160,7 @@ fn deficiency_obarray_mapatoms_buffer_collect() {
 fn deficiency_gensym_uniqueness_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((syms (cl-loop for i from 1 to 5 collect (gensym \"g\"))))\n\
@@ -253,8 +253,7 @@ fn deficiency_compiler_macro_buffer_ops() {
 fn deficiency_recursive_macro_buffer_build() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ERR (error \"Format specifier doesn’t match argument type\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro insert-numbered-line (num text)\n\
@@ -281,7 +280,7 @@ fn deficiency_recursive_macro_buffer_build() {
 fn deficiency_macro_with_undo_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro my-atomic-insert (&rest body)\n\

@@ -7,8 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_point_to_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ABCDEFGHIJOK (5 #<marker at 5 in  *neovm-oracle-stdout*>)""#]];
+    let expect = expect_test::expect![[r#""OK (5 #<marker at 5 in *scratch*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -26,7 +25,7 @@ fn divergence_point_to_register() {
 fn divergence_copy_to_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello World!OK (\"Hello\" \"Hello World!\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello\" \"Hello World!\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World!")
@@ -41,7 +40,7 @@ fn divergence_copy_to_register() {
 fn divergence_insert_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldHello!OK (\"Hello WorldHello!\" 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello WorldHello!\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World!")
@@ -75,7 +74,7 @@ fn divergence_register_contents() {
 fn divergence_narrow_to_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ine2\nline3\nOK (8 19 \"ine2\nline3\n\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (8 19 \"ine2\nline3\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3\nline4\nline5")
@@ -95,8 +94,7 @@ fn divergence_narrow_to_line() {
 fn divergence_widen_after_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""line1\nline2\nline3OK (1 18 \"line1\nline2\nline3\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 18 \"line1\nline2\nline3\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3")
@@ -112,7 +110,7 @@ fn divergence_widen_after_narrow() {
 fn divergence_narrow_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (3 8)""#]];
+    let expect = expect_test::expect![[r#""OK (3 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")

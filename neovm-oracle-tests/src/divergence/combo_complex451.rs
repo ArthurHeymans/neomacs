@@ -117,7 +117,7 @@ fn div_cx451_backtrace_get_frames() {
 #[test]
 fn div_cx451_mapbacktrace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 24""#]];
+    let expect = expect_test::expect![[r#""OK 17""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((count 0))
   (mapbacktrace (lambda (&rest _) (setq count (1+ count))))
@@ -144,7 +144,7 @@ fn div_cx451_text_property_search_forward() {
 #[test]
 fn div_cx451_thread_first_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 12""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function thread-first)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(thread-first 5
   (+ 3)
@@ -157,7 +157,7 @@ fn div_cx451_thread_first_functions() {
 #[test]
 fn div_cx451_thread_last_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\" \")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function thread-last)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(thread-last "hello world"
   (upcase)

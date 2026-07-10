@@ -21,7 +21,7 @@ fn div_v8_byte_compile_conditional_dispatch_apply() {
         (apply classify '(99))
         (funcall classify "test")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t (nil num str cons other) num str)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +38,7 @@ fn div_v8_byte_compile_recursive_closure_lexical_capture() {
         (let ((f (byte-compile (lambda (n acc) (if (= n 0) acc (funcall f (1- n) (* acc n)))))))
           (funcall f 5 1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable f)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +55,6 @@ fn div_v8_byte_compile_loop_mapcar_let_dynamic_lexical() {
         (compiled-function-p f)
         (funcall (byte-compile (lambda (s) (upcase s))) "hello")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (15 60 t \"HELLO\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

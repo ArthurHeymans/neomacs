@@ -50,7 +50,7 @@ fn oracle_event_accessors_ignore_touchscreen_update_posn_payloads() {
    (event-line-count nil)
    (event-line-count wheel-with-bad-count)
    (event-line-count wheel-with-count)))"#;
-    let expect = expect_test::expect![[r#""OK (t t nil 3 (0 . 0) 1 3 1 1 4)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil 1 (0 . 0) 1 3 1 1 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -81,7 +81,7 @@ fn oracle_posn_accessors_prefer_documented_slots() {
 fn oracle_window_print_includes_live_buffer_name() {
     let form = r#"
 (prin1-to-string (selected-window))"#;
-    let expect = expect_test::expect![[r##""OK \"#<window 1 on *neovm-test-evalreg*>\"""##]];
+    let expect = expect_test::expect![[r##""OK \"#<window 1 on *scratch*>\"""##]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -94,7 +94,7 @@ fn oracle_window_print_in_nested_structures_includes_live_buffer_name() {
    (prin1-to-string (vector w))
    (prin1-to-string (cons w w))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"(#<window 1 on *neovm-test-evalreg*>)\" \"[#<window 1 on *neovm-test-evalreg*>]\" \"(#<window 1 on *neovm-test-evalreg*> . #<window 1 on *neovm-test-evalreg*>)\")""#
+        r#""OK (\"(#<window 1 on *scratch*>)\" \"[#<window 1 on *scratch*>]\" \"(#<window 1 on *scratch*> . #<window 1 on *scratch*>)\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

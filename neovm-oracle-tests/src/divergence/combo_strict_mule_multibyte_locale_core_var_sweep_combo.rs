@@ -21,7 +21,7 @@ fn div_v8_multibyte_enable_language_environment_var_sweep() {
       (boundp 'locale-coding-system)
       (boundp 'language-info-alist))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t t t nil nil t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_charset_unify_translation_dos_codepage_var_sweep() {
       (boundp 'iso-2022-ctl)
       (boundp 'mule-version))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil nil nil nil nil t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_charset_priority_coding_detect_var_sweep() {
       (boundp 'char-coding-system-table)
       (boundp 'inhibit-iso-escape-detection))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t t nil nil nil t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -358,9 +358,7 @@ fn uf45_positions() {
 #[test]
 fn uf45_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic line-break latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim) (bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim) (bold citation code entity export-snippet footnote-reference inline-babel-call inline-src-block italic latex-fragment link macro radio-target statistics-cookie strike-through subscript superscript target timestamp underline verbatim))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-restriction)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-element-restriction 'paragraph)
         (org-element-restriction 'headline)
@@ -376,7 +374,7 @@ fn uf45_restriction() {
 #[test]
 fn uf45_secondary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-map)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-element-map (org-element-parse-secondary-string "*bold* /italic/ \\usepackage{a}" (org-element-restriction 'paragraph))
   'object

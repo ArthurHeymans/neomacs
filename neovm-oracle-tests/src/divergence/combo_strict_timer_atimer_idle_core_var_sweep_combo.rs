@@ -21,7 +21,7 @@ fn div_v8_timer_list_idle_list_max_repeats_var_sweep() {
       (boundp 'show-paren-style)
       (boundp 'show-paren-delay))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil nil t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_idle_delay_repeat_var_sweep() {
       (boundp 'line-number-display-limit)
       (boundp 'line-number-display-limit-width))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t nil nil nil nil nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_revert_autorevert_tail_var_sweep() {
       (boundp 'revert-buffer-preserve-modes)
       (boundp 'before-revert-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil t nil nil t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

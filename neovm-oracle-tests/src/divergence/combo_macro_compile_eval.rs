@@ -155,7 +155,7 @@ fn divergence_macro_winds_binding_stack() {
 fn divergence_macro_error_in_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (9 t (error \"expected odd number, got 4\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-oddp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-err-xxx (x)

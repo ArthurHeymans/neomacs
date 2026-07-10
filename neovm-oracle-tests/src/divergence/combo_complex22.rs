@@ -345,7 +345,7 @@ fn div_cx22_coding_system_for_write_file_roundtrip() {
 #[test]
 fn div_cx22_cl_defstruct_print_object_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Whiskers\" \"black\" t t 12)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

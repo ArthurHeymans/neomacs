@@ -289,7 +289,7 @@ fn div_cx23_window_resize_no_error() {
 #[test]
 fn div_cx23_cl_struct_slot_value_by_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 20 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

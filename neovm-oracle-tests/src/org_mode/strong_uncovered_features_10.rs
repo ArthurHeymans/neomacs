@@ -264,7 +264,7 @@ fn uf10_category() {
 #[test]
 fn uf10_entry_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"TODO [#A] Heading\" nil \"A\" \":tag:\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Heading\" \"TODO\" \"A\" \":tag:\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -723,7 +723,7 @@ fn uf10_move_item() {
 fn uf10_insert_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Existing\" nil) (\"New task\" \"IDEA\") (\"Right task\" \"IDEA\"))""#
+        r#""OK ((\"Existing\" nil) (\"New task\" \"TODO\") (\"Right task\" \"TODO\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -850,7 +850,7 @@ fn uf10_stats() {
 #[test]
 fn uf10_sparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"TODO A\" \"B\" \"TODO C\") nil)""#]];
+    let expect = expect_test::expect![[r#""OK ((\"A\" \"B\" \"C\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

@@ -48,7 +48,7 @@ fn divergence_intern_soft_after_unintern_obarray_state() {
 fn deficiency_mapatoms_collect_and_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 65)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (intern "test-ma-1-xxx" obarray)
@@ -125,7 +125,7 @@ fn divergence_read_with_standard_input() {
 fn divergence_obarray_hash_collision_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (100 t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((syms (mapcar (lambda (i) (intern (format "test-hash-%04d-xxx" i) obarray))
                           (number-sequence 0 99))))

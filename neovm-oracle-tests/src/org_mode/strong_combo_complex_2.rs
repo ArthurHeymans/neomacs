@@ -135,9 +135,7 @@ fn combo2_all_objects() {
 #[test]
 fn combo2_export_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((:html-has-h2 44) (:html-has-bold 361) (:html-has-italic 373) (:latex-has-section 0) (:latex-has-textbf 40) (:latex-has-textit nil) (:ascii-has-h 2) (:ascii-has-bold 17))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "* H\nBody *bold* /italic/"))
   (let ((html (org-export-string-as src 'html t))

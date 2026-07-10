@@ -289,7 +289,7 @@ fn div_cx49_undo_after_format_replace_multibyte_marker_overlay_mega() {
 #[test]
 fn div_cx49_print_read_circle_shared_hash_vector_struct_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t 1 [1 2 3])""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

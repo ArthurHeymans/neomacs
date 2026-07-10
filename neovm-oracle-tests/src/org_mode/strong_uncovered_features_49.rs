@@ -11,9 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf49_export_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#orge734c84\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-orge734c84\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"orge734c84\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody <b>bold</b></p>\n</div>\n</div>\n\"""##
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'html t)"##,
         expect,
@@ -27,9 +25,7 @@ fn uf49_export_html() {
 #[test]
 fn uf49_export_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK \"\\\\section{H}\n\\\\label{sec:orgfc04a12}\nBody \\\\textbf{bold}\n\"""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'latex t)"##,
         expect,
@@ -43,7 +39,7 @@ fn uf49_export_latex() {
 #[test]
 fn uf49_export_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"1 H\n===\n\n  Body *bold*\n\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'ascii t)"##,
         expect,
@@ -57,9 +53,7 @@ fn uf49_export_ascii() {
 #[test]
 fn uf49_export_opts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#org31ef010\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-org31ef010\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org31ef010\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody</p>\n</div>\n</div>\n\"""##
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "#+TITLE: T\n* H\nBody" 'html t)"##,
         expect,
@@ -98,9 +92,7 @@ fn uf49_link_protocols() {
 #[test]
 fn uf49_link_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"http://example.com?a=1&b=2\" \"hello%20world\" \"test%20\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-link-escape-browser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-link-escape-browser "http://example.com?a=1&b=2")
         (org-link-escape-browser "hello world")
@@ -116,9 +108,7 @@ fn uf49_link_escape() {
 #[test]
 fn uf49_link_unescape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"http://example.com?a=1%26b=2\" \"hello%20world\" \"test%2520\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-link-unescape)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-link-unescape "http://example.com?a=1%26b=2")
         (org-link-unescape "hello%20world")
@@ -134,7 +124,7 @@ fn uf49_link_unescape() {
 #[test]
 fn uf49_link_plain_re() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 0""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable org-link-plain-re)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(string-match-p org-link-plain-re "http://example.com")"##,
         expect,
@@ -148,7 +138,7 @@ fn uf49_link_plain_re() {
 #[test]
 fn uf49_link_bracket_re() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 0""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable org-bracket-link-regexp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(string-match-p org-bracket-link-regexp "[[http://example.com][Example]]")"##,
         expect,

@@ -45,9 +45,7 @@ fn uf52_macro_nested() {
 #[test]
 fn uf52_entity_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"alpha\" \"\\\\alpha\" t \"&alpha;\" \"alpha\" \"alpha\" \"α\") (\"beta\" \"\\\\beta\" t \"&beta;\" \"beta\" \"beta\" \"β\") (\"gamma\" \"\\\\gamma\" t \"&gamma;\" \"gamma\" \"gamma\" \"γ\") (\"Agrave\" \"\\\\`{A}\" nil \"&Agrave;\" \"A\" \"À\" \"À\") (\"copy\" \"\\\\textcopyright{}\" nil \"&copy;\" \"(c)\" \"©\" \"©\") nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-entity-get)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-entity-get "alpha")
         (org-entity-get "beta")

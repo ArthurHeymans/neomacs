@@ -26,7 +26,8 @@ fn div_v8_register_point_number_string_text() {
           (progn (jump-to-register ?a) (point))
           (progn (set-register ?s "changed") (get-register ?s)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (12 t 42 \"saved text\" \"hello\" 99 12 \"changed\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,7 +48,7 @@ fn div_v8_register_increment_window_config_rect() {
         (get-register ?t)
         (length (get-register ?t))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function register-same-line)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +65,8 @@ fn div_v8_register_kbd_insert_register_named() {
         (set-register (make-char 'greek-iso8859-7 97) "greek-key")
         (get-register (make-char 'greek-iso8859-7 97))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"inserted text\" 1 \"inserted text\" \"greek-key\" \"greek-key\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

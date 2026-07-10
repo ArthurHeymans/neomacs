@@ -85,7 +85,7 @@ fn combo69_export_custom_backend_all_transcoders() {
 #[test]
 fn combo69_agenda_column_view() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:column-view-fbound t :colview-fbound t)""#]];
+    let expect = expect_test::expect![[r#""OK (:column-view-fbound t :colview-fbound nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)

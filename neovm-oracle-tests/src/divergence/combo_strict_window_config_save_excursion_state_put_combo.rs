@@ -31,7 +31,7 @@ fn div_v8_window_configuration_save_set_roundtrip() {
     (kill-buffer b2)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 1 2 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -53,7 +53,7 @@ fn div_v8_save_window_excursion_restore() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 1 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -79,6 +79,6 @@ fn div_v8_window_state_get_put_parameter_survival() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

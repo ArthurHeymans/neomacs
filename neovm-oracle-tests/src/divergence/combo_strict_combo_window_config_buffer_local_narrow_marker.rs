@@ -32,7 +32,7 @@ fn div_v8_combo_window_config_buffer_local_narrow_marker() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable probe-combo-var)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,7 +57,7 @@ fn div_v8_combo_indirect_buffer_narrow_independent_marker() {
     (kill-buffer ind)
     (kill-buffer base)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 . 17) (5 . 12) 16 16 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -82,6 +82,6 @@ fn div_v8_combo_save_excursion_restriction_match_data_restore() {
           (point-max)
           (equal (match-data) md))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((8 5 15) 21 nil 1 21 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -80,7 +80,7 @@ fn combo_marker_types_multi_insert_delete_undo_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-TEXTAAAAAAAAAAAAAAAAAAAERR (wrong-type-argument listp t)""#
+        r#""OK ((#(\"AAAA-TEXTAAAAAAAAAAAAAAAAAAA\" 0 4 (half left) 9 14 (half left) 14 28 (half right)) 5 10 15 20 25 left ((1 4 0) (5 5 1) (5 12 2) (13 16 3) (17 20 4) (21 24 5) (25 28 6))) (#(\"AAAAAAAAAINSERTED-TEXTAAAAAAAAAAAAAAAAAAA\" 0 4 (half left) 4 9 (half left) 22 27 (half left) 27 41 (half right)) 5 23 28 33 38 left nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -135,7 +135,7 @@ fn combo_marker_types_narrow_regex_match_data_prop_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""alpha:100 beta:200 gamma:300 delta:400 epsilon:500OK (((#(\"beta\" 0 4 (word beta)) #(\"200\" 0 2 (word beta)) 11 19) (#(\"gamma\" 0 5 (word gamma)) #(\"300\" 0 1 (word gamma) 2 3 (word delta)) 20 29)) (1 10 19 28 37) (t nil t nil t) (10 36) alpha epsilon)""#
+        r#""OK (((#(\"beta\" 0 4 (word beta)) #(\"200\" 0 2 (word beta)) 11 19) (#(\"gamma\" 0 5 (word gamma)) #(\"300\" 0 1 (word gamma) 2 3 (word delta)) 20 29)) (1 10 19 28 37) (t nil t nil t) (10 36) alpha epsilon)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

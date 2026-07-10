@@ -170,7 +170,7 @@ fn div_cx542_format_S_obarray_default() {
 #[test]
 fn div_cx542_format_S_window_buffer_frame() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"#<buffer  *neovm-oracle-stdout*>\"""##]];
+    let expect = expect_test::expect![[r##""OK \"#<buffer *scratch*>\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(format "%S" (current-buffer))
 "##,

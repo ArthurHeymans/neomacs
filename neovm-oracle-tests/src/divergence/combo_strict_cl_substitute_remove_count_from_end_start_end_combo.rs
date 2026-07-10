@@ -16,7 +16,9 @@ fn div_v8_cl_substitute_count_from_end_start_end() {
       (cl-substitute 9 2 '(1 2 3 2 4 2 5) :start 2 :end 6)
       (cl-substitute 9 2 '(1 2 3 2 4 2 5) :start 3 :count 1))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 9 3 9 4 9 5) (1 9 3 9 4 2 5) (1 9 3 9 4 9 5) (1 2 3 2 4 9 5) (1 2 3 9 4 9 5) (1 2 3 9 4 2 5))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +34,9 @@ fn div_v8_cl_remove_count_from_end_key_test() {
       (cl-remove-duplicates '(1 2 3 2 1 4 3) :from-end t)
       (cl-remove-duplicates '((a . 1) (b . 2) (a . 3)) :key #'car))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 3 4 5) (1 3 2 4 2 5) (1 2 3 4 5) (1 2 3 4 2 5) (1 2 3 4) ((b . 2) (a . 3)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,6 +52,6 @@ fn div_v8_cl_substitute_if_key_test_predicate() {
       (cl-position 3 '(1 2 3 4 3 2) :from-end t)
       (cl-find 3 '(1 2 3 4) :start 3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 8 39)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

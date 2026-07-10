@@ -21,7 +21,7 @@ fn div_v8_cl_typep_compound_and_or_satisfies_member() {
       (cl-typep 4 '(satisfies cl-evenp))
       (cl-typep '(1 2) '(and list (satisfies (lambda (l) (> (length l) 0)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 79)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +41,7 @@ fn div_v8_cl_typecase_etypecase_dispatch() {
         (error (cons 'caught (car err))))
       (cl-typecase nil (null 'null) (list 'list))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 51)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,8 @@ fn div_v8_cl_check_type_assert_signal_messages() {
         (let ((n 0)) (cl-assert (= n 0)) 'assert-ok)
         (condition-case err (cl-assert nil) (error 'caught))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((caught . wrong-type-argument) ok caught assert-ok caught)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

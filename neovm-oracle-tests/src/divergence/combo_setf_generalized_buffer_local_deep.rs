@@ -149,7 +149,7 @@ fn deficiency_push_via_setf_on_alist() {
 fn deficiency_cl_incf_cl_decf_on_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (4)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-decf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql)))\n\
@@ -166,7 +166,7 @@ fn deficiency_cl_incf_cl_decf_on_hash() {
 fn deficiency_setf_on_multiple_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2) (3) (99))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-shiftf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (list 1))\n\

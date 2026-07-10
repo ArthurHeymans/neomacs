@@ -750,7 +750,7 @@ fn div_core_divergence_surface_frame_width_height_parameters() {
 fn div_core_divergence_surface_window_resize_split_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((10 15 (0 1 81 11) (0 11 81 26)) 8 17 (0 1 81 9) (0 9 81 26) 2)""#
+        r#""OK ((10 14 (0 1 80 11) (0 11 80 25)) 8 16 (0 1 80 9) (0 9 80 25) 2)""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((10 14 (0 1 80 11) (0 11 80 25)) 8 16 (0 1 80 9) (0 9 80 25) 2)
@@ -812,7 +812,7 @@ fn div_core_divergence_surface_window_start_end_scroll_state() {
 #[test]
 fn div_core_divergence_surface_window_margins_body_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 (2 . 3) (0 0 nil nil) 76)""#]];
+    let expect = expect_test::expect![[r#""OK (5 (2 . 3) (0 0 nil nil) 75)""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (5 (2 . 3) (0 0 nil nil) 75)
     // Neomacs:   OK (5 (2 . 3) (0 0 nil nil) 80)
@@ -838,7 +838,7 @@ fn div_core_divergence_surface_window_margins_body_width() {
 fn div_core_divergence_surface_switch_buffer_update_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\" *probe-switch-b*\" ((update \" *neovm-oracle-stdout*\") (update \" *probe-switch-a*\") (update \" *probe-switch-b*\")))""#
+        r#""OK (\" *probe-switch-b*\" ((update \"*scratch*\") (update \" *probe-switch-a*\") (update \" *probe-switch-b*\")))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (" *probe-switch-b*" ((update "*scratch*") (update " *probe-switch-a*") (update " *probe-switch-b*")))
@@ -1461,7 +1461,7 @@ fn div_core_divergence_surface_window_prev_buffers_after_previous_buffer() {
 fn div_core_divergence_surface_buffer_rename_update_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"probe-rename-new\" (\" *neovm-oracle-stdout*\" \"probe-rename-new\"))""#
+        r#""OK (\"probe-rename-new\" (\"*scratch*\" \"probe-rename-new\"))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("probe-rename-new" ("*scratch*" "probe-rename-new"))
@@ -1569,7 +1569,7 @@ fn div_core_divergence_surface_overlay_category_evaporate_delete() {
 fn div_core_divergence_surface_bury_buffer_update_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\" *probe-bury*\" (\" *neovm-oracle-stdout*\" \" *probe-bury*\" \" *probe-bury*\"))""#
+        r#""OK (\" *probe-bury*\" (\"*scratch*\" \" *probe-bury*\" \" *probe-bury*\"))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (" *probe-bury*" ("*scratch*" " *probe-bury*" " *probe-bury*"))
@@ -1783,7 +1783,7 @@ fn div_core_divergence_surface_text_category_modification_hooks() {
 fn div_core_divergence_surface_window_scroll_error_and_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((err beginning-of-buffer 13 13 201 50) (ok 201 141 201))""#]];
+        expect_test::expect![[r#""OK ((err beginning-of-buffer 13 13 201 50) (ok 201 145 201))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((err beginning-of-buffer 13 13 201 50) (ok 201 145 201))
     // Neomacs:   OK ((err end-of-buffer 1 1 93 50) (ok 189 189 201))
@@ -1895,7 +1895,7 @@ fn div_core_divergence_surface_set_window_configuration_killed_buffer() {
 #[test]
 fn div_core_divergence_surface_compare_window_configurations_split_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK nil   ; split + delete leaves a configuration GNU treats as different
     // Neomacs:   OK t     ; Neomacs treats it as identical to the pre-split configuration
@@ -2276,7 +2276,7 @@ fn div_core_divergence_surface_execute_kbd_macro_command_keys() {
 #[test]
 fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"abcxy\" \"xy\" nil \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"xy\" \"xy\" nil \"\")""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("xy" "xy" nil "")
     // Neomacs:   ERR (error "No keyboard macro has been defined")
@@ -2865,7 +2865,7 @@ fn div_core_divergence_surface_mutex_lock_blocks_other_thread() {
 #[test]
 fn div_core_divergence_surface_thread_dynamic_binding_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (global \" *neovm-oracle-stdout*\" local)""#]];
+    let expect = expect_test::expect![[r#""OK (global \"*scratch*\" local)""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (global "*scratch*" local)
     // Neomacs:   OK (main "*scratch*" local)
@@ -3601,7 +3601,7 @@ fn div_core_divergence_surface_standard_display_graphic_table_mutation() {
 fn div_core_divergence_surface_standard_display_default_g1_8bit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((char-table nil) (char-table nil) (char-table [2]) (char-table nil nil))""#
+        r#""OK ((char-table nil) (char-table nil) (char-table [0]) (char-table nil nil))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((char-table nil) (char-table nil) (char-table [0]) (char-table nil nil))
@@ -3769,7 +3769,7 @@ fn div_core_divergence_surface_frame_terminal_type_shape() {
 #[test]
 fn div_core_divergence_surface_standard_display_underline_table_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((char-table [3]) (char-table [4]))""#]];
+    let expect = expect_test::expect![[r#""OK ((char-table [0]) (char-table [1]))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ((char-table [0]) (char-table [1]))
     // Neomacs:   OK ((err wrong-type-argument arrayp) (char-table nil))

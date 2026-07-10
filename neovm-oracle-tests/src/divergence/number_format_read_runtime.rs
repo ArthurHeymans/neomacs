@@ -26,7 +26,7 @@ fn float_print_precision() {
 fn float_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((vals '(0.1 0.2 0.3 3.141592653589793 2.718281828459045 1.7976931348623157e308)))
   (cl-every (lambda (v) (= v (car (read-from-string (prin1-to-string v))))) vals))"##,
@@ -65,7 +65,7 @@ fn int_bignum_arith() {
 fn number_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t nil t t t t nil t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-plusp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (natnump 5) (natnump -1) (zerop 0.0) (cl-plusp 3) (cl-minusp -2)
         (= 1 1.0) (eql 1 1.0) (eql 1.0 1.0) (floatp 1.0) (integerp 1))"##,

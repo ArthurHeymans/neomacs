@@ -96,7 +96,7 @@ fn divergence_regex_shy_group() {
 fn divergence_regex_named_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (0 4 2 4)""#]];
+    let expect = expect_test::expect![[r#""OK (0 3 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (string-match "(?2:ab)(cd)" "abcd")
@@ -112,7 +112,7 @@ fn divergence_regex_named_group() {
 fn divergence_regex_replace_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXX bbb XXX bbb XXXOK (3 \"XXX bbb XXX bbb XXX\")""#]];
+    let expect = expect_test::expect![[r#""OK (3 \"XXX bbb XXX bbb XXX\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "aaa bbb aaa bbb aaa")

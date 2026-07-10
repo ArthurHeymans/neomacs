@@ -26,7 +26,7 @@ fn div_v8_window_tree_split_structure() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function window-root)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +49,7 @@ fn div_v8_window_child_parent_siblings_behavioral() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_frame_list_next_frame_iteration() {
         (length (frame-list))
         (eq (car (frame-list)) (selected-frame))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments next-frame 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

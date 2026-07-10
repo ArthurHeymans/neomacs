@@ -14,9 +14,8 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_match_data_preserved_across_let_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""aaa:111 bbb:222 ccc:333ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#]];
     // match-data must survive let-binding of dynamic variables.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -41,9 +40,8 @@ fn combo_match_data_preserved_across_let_binding() {
 fn combo_match_data_preserved_across_re_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""alpha:100 beta:200ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""ERR (search-failed \"\\\\([a-z]+\\\\):\\\\([0-9]+\\\\)\")""#]];
     // Outer match data preserved when inner re-search fails.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -65,7 +63,7 @@ fn combo_replace_match_marker_overlay_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""hello UNIVERSE hello UNIVERSE helloERR (wrong-type-argument listp t)""#
+        r#""OK ((#(\"hello UNIVERSE hello UNIVERSE hello\" 0 5 (word hello1) 15 20 (word hello2)) 7 22 1 15 16 31 nil hello2) (#(\"hello WORLD hello WORLD hello\" 0 5 (word hello1) 6 11 (word world1) 12 17 (word hello2) 18 23 (word world2)) 7 24 1 12 13 25 world1 world2))""#
     ]];
     // replace-match with fixedcase and literal, markers/overlays track.
     crate::common::assert_oracle_parity_expect(
@@ -152,9 +150,7 @@ fn combo_replace_match_shorter_markers_textprop_undo() {
 fn combo_match_data_with_group_replacement_and_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""alpha:100 beta:200 gamma:300 delta:400ERR (args-out-of-range 31 40)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 31 40)""#]];
     // Group capture + backreference replacement in narrowed buffer.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -193,7 +189,9 @@ fn combo_match_data_with_group_replacement_and_narrow() {
 fn combo_match_data_replace_loop_with_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XX XX XX XX XX XXERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"XX XX XX XX XX XX\" ((1 3 \"AA\") (4 7 \"CC\") (9 10 \"EE\"))) (\"AA BB CC DD EE FF\" ((7 10 \"EE\"))))""#
+    ]];
     // Loop replace with evaporate overlays; some should vanish.
     crate::common::assert_oracle_parity_expect(
         r#"(progn

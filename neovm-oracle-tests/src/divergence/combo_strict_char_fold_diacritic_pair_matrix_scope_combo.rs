@@ -24,7 +24,9 @@ fn div_v8_char_fold_diacritic_lowercase_matrix() {
                 (if (re-search-forward re nil t) 'match 'no-match))))
           pairs))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (match match match match match match match match match match)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +47,8 @@ fn div_v8_char_fold_diacritic_uppercase_matrix() {
                 (if (re-search-forward re nil t) 'match 'no-match))))
           pairs))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (match match match match match match match match)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +68,6 @@ fn div_v8_char_fold_combining_mark_decompose_matrix() {
                 (if (re-search-forward re nil t) 'match 'no-match))))
           combining-pairs))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (match match match match match match)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

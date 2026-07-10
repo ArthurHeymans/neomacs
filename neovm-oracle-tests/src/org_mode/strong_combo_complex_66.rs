@@ -207,7 +207,7 @@ fn combo66_table_sort_lines() {
 fn combo66_src_lang_modes_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:lang-modes-fbound t) (:src-mode-fbound t) (:edit-fbound t) (:exit-fbound t) (:fontify-fbound t))""#
+        r#""OK ((:lang-modes-fbound t) (:src-mode-fbound t) (:edit-fbound t) (:exit-fbound t) (:fontify-fbound nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

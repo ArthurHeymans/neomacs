@@ -41,8 +41,7 @@ fn div_cx325_print_circle_circular_list() {
 #[test]
 fn div_cx325_print_gensym_uninterned_in_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r##""OK (\"G-12\" \"#:G-12\" \"G-12\" \"(#1=#:G-12 #1#)\")""##]];
+    let expect = expect_test::expect![[r##""OK (\"G-0\" \"#:G-0\" \"G-0\" \"(#1=#:G-0 #1#)\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gs (gensym "G-")))

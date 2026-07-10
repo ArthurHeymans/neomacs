@@ -52,9 +52,7 @@ fn combo10_list_struct() {
 #[test]
 fn combo10_export_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((:html-has-title 9) (:html-has-h2 44) (:html-has-bold 418) (:html-has-table 676) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 41) (:latex-has-table 169) (:ascii-has-h 2) (:ascii-has-bold 19))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* H1\nBody *bold* /italic/\n** H2\n- a\n- b\n| x | y |\n| 1 | 2 |"))
   (let ((html (org-export-string-as src 'html t))

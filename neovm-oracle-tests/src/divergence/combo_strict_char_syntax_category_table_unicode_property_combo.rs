@@ -22,7 +22,9 @@ fn div_v8_char_syntax_category_unicode_property_combined() {
       (char-width ?a)
       (char-width ?日))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (119 32 40 34 #&128\"\\0\\0\\0\\0\\0@\\0\\0\\0\u{10}\\0\\0\u{2}\u{10}\u{4}\\0\" #&128\"\\0\\0\\0\\0\\0@@\\0\\0\\0\\0\\0\u{2}\u{10}\u{4}\\0\" nil nil L Ll 1 2)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +46,7 @@ fn div_v8_modify_syntax_entry_skip_syntax_custom_table() {
           (p2 (progn (skip-syntax-forward "'") (point))))
       (list w s2 p2))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (12 13 14)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +64,8 @@ fn div_v8_char_code_property_name_decimal_digit_old_name() {
       (get-char-code-property ?Ä 'lowercase)
       (get-char-code-property ?a 'uppercase))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"LATIN CAPITAL LETTER A\" nil \"CJK IDEOGRAPH-65E5\" 0 9 nil 5 228 65)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

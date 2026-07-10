@@ -28,7 +28,7 @@ fn div_v8_window_start_set_recenter_dynamics() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 500 791 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,6 +52,6 @@ fn div_v8_pos_visible_in_window_p_window_end_update() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t 1 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -136,7 +136,7 @@ fn div_cx32_set_buffer_multibyte_overlay_position_consistency() {
 #[test]
 fn div_cx32_cl_loop_for_hash_being_keys_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"0\" \"2\" \"4\" \"6\" \"8\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))

@@ -176,7 +176,7 @@ fn div_e4_encode_coding_various_lengths() {
 #[test]
 fn div_e4_current_active_maps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t 1 t Control-X-prefix find-file)""#]];
+    let expect = expect_test::expect![[r#""OK (t t 2 t Control-X-prefix find-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (keymapp (current-local-map))

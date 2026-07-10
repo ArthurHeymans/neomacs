@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r7_regex_matching_semantics_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 2)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0 0 0 0 0 nil 0 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (list (string-match-p "a*" "text")

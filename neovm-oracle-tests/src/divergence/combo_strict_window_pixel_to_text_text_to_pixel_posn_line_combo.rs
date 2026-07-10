@@ -24,7 +24,9 @@ fn div_v1_window_pixel_to_text_and_text_to_pixel() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((#<window 1 on *scratch*> 162 (3 . 2) 0 nil 162 (3 . 2) nil (0 . 0) (0 . 0)) (#<window 1 on *scratch*> 1 (0 . 0) 0 nil 1 (0 . 0) nil (0 . 0) (0 . 0)) nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,7 +57,7 @@ fn div_v1_indent_tabs_mode_tab_to_tab_stop() {
       (default-value 'indent-tabs-mode)
       (default-value 'tab-stop-list))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (8 4 \"\tabc\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -84,7 +86,7 @@ fn div_v1_cl_loop_while_for_collect_combo() {
                  while (< x 6)
                  sum x)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -105,7 +107,7 @@ fn div_v1_string_bytes_vs_length_unusual() {
       (length (encode-coding-string "日" 'shift_jis))
       (string-bytes (encode-coding-string "日" 'shift_jis)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 3 9 4 5 3 6 5 5 2 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -121,6 +123,6 @@ fn div_v1_compare_strings_case_fold_table() {
       (compare-strings "ABCdef" 0 3 "abcDEF" 0 3 t)
       (compare-strings "HELLO" nil nil "hello" nil nil t))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t 1 t t 3 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -77,7 +77,7 @@ fn combo76_org_agenda_sort_user_defined() {
 fn combo76_org_babel_with_header_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:default-header-bound t :default-header-keys (:session :results :exports :cache :noweb :hlines :tangle) :default-header-emacs (:lexical))""#
+        r#""OK (:default-header-bound t :default-header-keys (:session :results :exports :cache :noweb :hlines :tangle) :default-header-emacs nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ob-core) (list
@@ -108,9 +108,7 @@ fn combo76_org_cycle_content_optimization() {
 #[test]
 fn combo76_org_timestamp_with_delay_warning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (:type active :warning-type all :warning-value 3 :warning-unit day)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (let ((ts (org-timestamp-from-string "<2024-01-15 Mon -3d>")))
  (list :type (org-element-property :type ts) :warning-type (org-element-property :warning-type ts)

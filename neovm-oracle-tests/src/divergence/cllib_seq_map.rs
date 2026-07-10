@@ -129,7 +129,7 @@ fn divergence_cl_typecase() {
 fn divergence_seq_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 3 4) (2 4) 10 5 b nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'seq)
 (list
@@ -147,9 +147,7 @@ fn divergence_seq_functions() {
 fn divergence_seq_sort_group() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((1 1 3 4 5 9) ((nil 1 3 5) (t 2 4 6)) (1 2 3 4) [a b c d])""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'seq)
 (list

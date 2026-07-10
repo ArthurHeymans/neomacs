@@ -21,7 +21,7 @@ fn div_v8_cl_loop_destructuring_pairs_accumulate() {
                count (cl-evenp x) into evens
                finally (return (list mx mn evens))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((6 (a b c)) 140 (9 1 3))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_cl_loop_append_concat_nconc_accumulate() {
                finally (return flat))
       (cl-loop for i below 5 collect (* i i)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6) \"abcdef\" (a b c) (0 1 4 9 16))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,6 +54,7 @@ fn div_v8_cl_loop_while_until_for_parallel_conditional() {
                end
                finally (return (list evens odds))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3) (1 2 3) (11 22 33) ((2 4 6 8 10) (1 3 5 7 9)))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

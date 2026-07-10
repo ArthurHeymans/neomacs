@@ -7,9 +7,8 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_regex_backref_replace_preserve_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""quxXXXbaz quxYYYbaz quxZZZbazOK (\"quxXXXbaz quxYYYbaz quxZZZbaz\" 1 1 middle 1 nil nil)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"quxXXXbaz quxYYYbaz quxZZZbaz\" 1 1 middle 1 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "fooXXXbar fooYYYbar fooZZZbar")
@@ -66,7 +65,7 @@ fn divergence_replace_with_overlay_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-XXXX-CCCC-XXXX-EEEEOK (\"AAAA-XXXX-CCCC-XXXX-EEEE\" 4 5 6 10 14 15 a-b b-c c-d 24)""#
+        r#""OK (\"AAAA-XXXX-CCCC-XXXX-EEEE\" 4 5 6 10 14 15 a-b b-c c-d 24)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -98,7 +97,7 @@ fn divergence_regex_match_data_with_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""MATCH1 nomatch MATCH2 nomatch MATCH3OK ((\"MATCH2\") t t \"MATCH1 nomatch MATCH2 nomatch MATCH3\")""#
+        r#""OK ((\"MATCH2\") t t \"MATCH1 nomatch MATCH2 nomatch MATCH3\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -123,7 +122,7 @@ fn divergence_replace_preserves_textprop_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""keep-OK-keep-OK-keepOK (#(\"keep-OK-keep-OK-keep\" 0 4 (zone start) 8 12 (zone middle) 16 20 (zone end)) start t nil nil nil end nil nil 20)""#
+        r#""OK (#(\"keep-OK-keep-OK-keep\" 0 4 (zone start) 8 12 (zone middle) 16 20 (zone end)) start t nil nil nil end nil nil 20)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -155,9 +154,7 @@ fn divergence_replace_preserves_textprop_intervals() {
 fn divergence_regex_empty_match_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""a,b,,c,,,dERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 2)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "a,b,,c,,,d")
@@ -202,7 +199,7 @@ fn divergence_match_data_after_failed_search() {
 fn divergence_replace_case_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""hello world testOK (\"hello world test\" t t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello world test\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Test")
@@ -221,9 +218,8 @@ fn divergence_replace_case_conversion() {
 fn divergence_regex_with_overlay_modification_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""AAAA-XXXX-CCCC-DDDD-EEEEOK (\"AAAA-XXXX-CCCC-DDDD-EEEE\" (modified) t 5 6 24)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"AAAA-XXXX-CCCC-DDDD-EEEE\" (modified) t 5 6 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-rmh-log-xxx nil)
@@ -250,7 +246,7 @@ fn divergence_multi_group_regex_replace_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""name:Alice age:30 name:Bob age:25OK (((\"Alice\" 30) (\"Bob\" 25)) nil nil nil \"name:Alice age:30 name:Bob age:25\")""#
+        r#""OK (((\"Alice\" 30) (\"Bob\" 25)) nil nil nil \"name:Alice age:30 name:Bob age:25\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

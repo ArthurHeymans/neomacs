@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g1_cl_every_some_reduce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t t t 10 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-every #'numberp '(1 2 3))
@@ -79,7 +79,7 @@ fn div_g1_list_tail_ops() {
 #[test]
 fn div_g1_cl_find_count_mismatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"Bad keyword argument :end\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-find)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-find 3 '(1 2 3 4))

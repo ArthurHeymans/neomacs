@@ -145,7 +145,7 @@ fn deficiency_decompose_region_undo() {
 fn deficiency_cl_coerce_with_buffer_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable lst)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((vec [1 2 3 4 5]))\n\

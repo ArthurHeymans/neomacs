@@ -201,7 +201,7 @@ fn div_wf2_redesignate_display_after_make() {
 #[test]
 fn div_wf2_split_window_count_growth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 5 2)""#]];
+    let expect = expect_test::expect![[r#""OK (1 3 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n0 (count-windows)))
@@ -231,7 +231,7 @@ fn div_wf2_window_buffer_eq_after_set() {
 #[test]
 fn div_wf2_window_edges_after_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 1 10 7) (10 1 20 7))""#]];
+    let expect = expect_test::expect![[r#""OK ((0 0 40 24) (40 0 80 24))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
@@ -247,7 +247,7 @@ fn div_wf2_window_edges_after_split() {
 #[test]
 fn div_wf2_window_combined_p_after_splits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (errored . error)""#]];
+    let expect = expect_test::expect![[r#""OK (#<window 5> nil #<window 1 on *scratch*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err

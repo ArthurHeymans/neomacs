@@ -19,7 +19,7 @@ fn div_v8_iter_lambda_yield_next_sequence() {
             (condition-case nil (iter-next gen) (iter-end-of-sequence 'ended) (error 'caught))))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 2 3 ended)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -35,7 +35,7 @@ fn div_v8_iter_do_loop_collect_values() {
         (nreverse collected)))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 1 4 9 16)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +55,6 @@ fn div_v8_iter_close_and_exhaustion() {
         (list first closed)))
   (error (list 'caught (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable err)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

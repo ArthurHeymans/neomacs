@@ -130,7 +130,7 @@ fn div_cx89_register_jump_with_window() {
 fn div_cx89_window_configuration_register() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (2 1 (#<window-configuration> #<marker at 1 in  *neovm-oracle-stdout*>))""#
+        r#""OK (2 1 (#<window-configuration> #<marker at 1 in *scratch*>))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -195,7 +195,7 @@ fn div_cx89_kmacro_append_with_counter() {
 #[test]
 fn div_cx89_execute_kbd_macro_count_iterations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 \"XXXX\")""#]];
+    let expect = expect_test::expect![[r#""OK (4 \"XXX\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

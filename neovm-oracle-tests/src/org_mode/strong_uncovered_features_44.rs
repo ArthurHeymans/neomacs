@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf44_ts_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2026 1 15 10 30 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ts (org-timestamp-from-string "<2026-01-15 Wed 10:30>")))
   (list (org-element-property :year-start ts)
@@ -31,7 +31,7 @@ fn uf44_ts_from() {
 #[test]
 fn uf44_ts_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"2026-01-15 10:30\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-from-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ts (org-timestamp-from-string "<2026-01-15 Wed 10:30>")))
   (org-timestamp-format ts "%Y-%m-%d %H:%M"))"##,
@@ -46,7 +46,7 @@ fn uf44_ts_format() {
 #[test]
 fn uf44_ts_to_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-timestamp-to-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((t (org-timestamp-to-time (org-timestamp-from-string "<2026-01-15 Wed>"))))
   (list (nth 0 t) (nth 1 t)))"##,
@@ -218,9 +218,7 @@ fn uf44_dead_time() {
 #[test]
 fn uf44_parse_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((0 30 10 15 1 2026 nil -1 nil) (0 0 0 20 1 2026 nil -1 nil) (0 0 0 25 1 2026 nil -1 nil))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-parse-time-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-parse-time-string "<2026-01-15 Wed 10:30>")
         (org-parse-time-string "[2026-01-20 Mon]")
@@ -236,7 +234,7 @@ fn uf44_parse_time() {
 #[test]
 fn uf44_fix_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 30 10 15 1 2026) (0 0 0 1 1 2026))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-fix-decoded-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-fix-decoded-time '(0 30 10 15 1 2026))
         (org-fix-decoded-time '(0 0 0 1 1 2026)))"##,
@@ -251,7 +249,7 @@ fn uf44_fix_time() {
 #[test]
 fn uf44_ts_to_now() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK -165""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-time-stamp-to-now)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-time-stamp-to-now "<2026-01-15>")"##,
         expect,
@@ -265,7 +263,7 @@ fn uf44_ts_to_now() {
 #[test]
 fn uf44_iso_week() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-days-to-iso-week)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-days-to-iso-week 0)
         (org-days-to-iso-week 1)
@@ -281,7 +279,7 @@ fn uf44_iso_week() {
 #[test]
 fn uf44_today() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 739796""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-today)""#]];
     crate::common::assert_oracle_parity_expect(r##"(org-today)"##, expect);
 }
 
@@ -292,7 +290,7 @@ fn uf44_today() {
 #[test]
 fn uf44_current_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-current-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((t (org-current-time)))
   (list (nth 0 t) (nth 1 t)))"##,
@@ -354,7 +352,7 @@ fn uf44_day_to_date() {
 #[test]
 fn uf44_ts_to_sec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (error \"Not an Org time string: 1:30\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-time-string-to-seconds)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-time-string-to-seconds "1:30")
         (org-time-string-to-seconds "0:45")

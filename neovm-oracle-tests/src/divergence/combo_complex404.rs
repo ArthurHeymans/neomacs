@@ -89,7 +89,7 @@ fn div_cx404_set_buf_multibyte_mixed_content() {
 fn div_cx404_string_collate_mixed_case_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Apple\" \"Banana\" \"Zebra\" \"apple\" \"banana\" \"zebra\" \"Äpfel\" \"äpfel\") (\"Apple\" \"apple\" \"Banana\" \"banana\" \"Zebra\" \"zebra\" \"Äpfel\" \"äpfel\"))""#
+        r#""OK ((\"äpfel\" \"Äpfel\" \"apple\" \"Apple\" \"banana\" \"Banana\" \"zebra\" \"Zebra\") (\"Äpfel\" \"äpfel\" \"Apple\" \"apple\" \"Banana\" \"banana\" \"Zebra\" \"zebra\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

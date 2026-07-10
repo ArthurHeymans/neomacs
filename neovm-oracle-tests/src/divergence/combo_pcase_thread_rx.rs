@@ -119,7 +119,7 @@ fn divergence_pcase_with_app_pattern() {
 fn divergence_cl_typep_with_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 48)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typep)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-typep 42 'integer)
@@ -215,7 +215,7 @@ fn divergence_pcase_recursive_pattern() {
 fn divergence_cl_destructuring_bind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 34)""##]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-destructuring-bind (a (b c) &rest rest)
@@ -234,8 +234,7 @@ fn divergence_cl_destructuring_bind() {
 fn rx_pattern_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r##""foo123bar456baz789ERR (invalid-read-syntax \"#\" 14 35)""##]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 35)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo123bar456baz789")

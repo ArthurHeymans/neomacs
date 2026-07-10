@@ -30,7 +30,8 @@ fn div_v8_text_property_fboundp_sweep() {
       (fboundp 'set-properties)
       (fboundp 'properties-at-point))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,7 +60,7 @@ fn div_v8_char_table_extra_slot_fboundp_sweep() {
       (fboundp 'modify-category-entry)
       (fboundp 'char-category-set))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t nil t t t t t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -89,6 +90,6 @@ fn div_v8_syntax_table_fboundp_sweep() {
       (fboundp 'scan-sexps)
       (fboundp 'parse-partial-sexp))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

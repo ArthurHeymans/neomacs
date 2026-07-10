@@ -18,7 +18,7 @@ fn div_v8_narrow_to_region_point_min_max_buffer_size() {
         (buffer-substring (point-min) (point-max))
         (buffer-narrowed-p)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 12 16 \"BBBBCCC\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +37,7 @@ fn div_v8_save_restriction_widen_restore() {
           (point-max)
           (buffer-size))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 17 16) 5 12 16)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +56,6 @@ fn div_v8_save_excursion_narrow_combined_motion() {
                     (list (point) (point-min) (point-max))))))
     (list result (point) (buffer-size))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((8 5 12) 8 16)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

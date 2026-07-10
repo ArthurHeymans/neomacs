@@ -33,7 +33,7 @@ fn div_v8_combo_process_filter_coding_buffer_local() {
           (buffer-live-p buf)
           (kill-buffer buf))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t buf-local t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,7 +55,7 @@ fn div_v8_combo_call_process_region_call_process_coding() {
                   (with-current-buffer out-buf (count-lines (point-min) (point-max))))
           (kill-buffer out-buf)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

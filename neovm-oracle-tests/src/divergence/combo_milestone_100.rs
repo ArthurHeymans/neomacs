@@ -87,9 +87,7 @@ fn divergence_eieio_lifecycle_with_closures() {
 fn divergence_buffer_churn_with_overlays_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXYYYYYYYYYYYYYYYXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 200 ?X))
@@ -216,7 +214,7 @@ fn divergence_textprop_overlay_undo_full_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAAXXX-BBBB-CCCC-DDDD-EEEEYYYERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"AAAAXXX-BBBB-CCCC-DDDD-EEEEYYY\" 0 3 (face italic) 12 16 (face underline)) #(\"AAAAXXX-BBBB-CCCC-DDDD-EEEE\" 0 3 (face italic) 12 16 (face underline)) #(\"AAAAXXX-BBBB-CCCC-DDDD-EEEE\" 0 3 (face italic) 12 16 (face underline)) 5 12 5 5 12 italic t bold)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -281,7 +279,7 @@ fn divergence_closure_eval_obarray_deep() {
 fn divergence_multibyte_regex_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""cafe naïve resumeERR (void-variable s1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable s1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "caf\xc3\xa9 na\xc3\xafve r\xc3\xa9sum\xc3\xa9")

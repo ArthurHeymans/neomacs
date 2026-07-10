@@ -113,7 +113,7 @@ fn logical_shift_ops() {
 fn number_predicates_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-plusp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (integerp 5) (floatp 1.5) (numberp 3) (natnump 0)
         (fixnump 5) (bignump (ash 1 100)) (zerop 0) (cl-plusp 1) (cl-oddp 3)

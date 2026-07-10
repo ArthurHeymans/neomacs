@@ -21,7 +21,7 @@ fn div_v8_pop_up_windows_frames_display_buffer_var_sweep() {
       (boundp 'even-window-heights)
       (boundp 'switch-to-buffer-obey-display-actions))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_window_combination_split_threshold_var_sweep() {
       (boundp 'fit-frame-to-buffer)
       (boundp 'window-text-pixel-size))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +62,6 @@ fn div_v8_window_dedicated_balance_vars_sweep() {
       (boundp 'window-parameters)
       (boundp 'ignore-window-parameters))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

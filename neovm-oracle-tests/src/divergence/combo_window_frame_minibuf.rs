@@ -8,7 +8,7 @@ fn divergence_window_configuration_save_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""WINDOW-CONFIG-TESTOK (t t t t t #(\"WINDOW-CONFIG-TEST\" 0 7 (tag wconf)) t wconf nil)""#
+        r#""OK (t t t t t #(\"WINDOW-CONFIG-TEST\" 0 7 (tag wconf)) t wconf nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -154,9 +154,7 @@ fn divergence_window_buffer_relationship() {
 fn divergence_window_point_and_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (t t nil 1 t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t 1 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 500 ?X))
@@ -179,9 +177,7 @@ fn divergence_window_point_and_start() {
 fn divergence_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYOK (t t t t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 200 ?Y))
@@ -223,9 +219,7 @@ fn divergence_window_dedicated() {
 fn divergence_buffer_display_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""DISPLAY-TIME-TESTOK (t t nil \"DISPLAY-TIME-TEST\" t t nil nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t \"DISPLAY-TIME-TEST\" t t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "DISPLAY-TIME-TEST")

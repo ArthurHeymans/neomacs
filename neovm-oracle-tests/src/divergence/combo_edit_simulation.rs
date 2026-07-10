@@ -8,7 +8,7 @@ fn divergence_simulate_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""(defurenamed-n my-func (arg)\n  \"(* X.\"\n  (let ((x 1))\n    (+ x arg)))ERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"(defurenamed-n my-func (arg)\n  \\\"(* X.\\\"\n  (let ((x 1))\n    (+ x arg)))\" 0 4 (type keyword) 13 19 (type function) 20 22 (type args) 29 32 (type doc) 38 41 (type keyword) 42 44 (type var) 52 53 (type var) 54 57 (type args)) #(\"(defun my-func (arg)\n  \\\"Docstring.\\\"\n  (let ((x 1))\n    (+ x arg)))\" 0 4 (type keyword) 5 11 (type function) 12 14 (type args) 21 24 (type doc) 24 32 (type doc) 35 38 (type keyword) 39 41 (type var) 49 50 (type var) 51 54 (type args)) t 1 t 22 t font-lock-doc-face t font-lock-string-face t keyword t function t args t doc t keyword t var t var t args t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -64,9 +64,7 @@ fn divergence_simulate_code_edit_session() {
 fn divergence_simulate_text_reformatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""This is a very\nlong paragraph\nthat needs to\nbe reformatted\nproperly for\ndisplay.ERR (void-variable s)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-variable s)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq fill-column 15)
@@ -134,7 +132,7 @@ fn divergence_simulate_find_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""HELLO-bar-HELLO-baz-HELLO-qux-HELLOERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"HELLO-bar-HELLO-baz-HELLO-qux-HELLO\" 6 8 (token bar) 16 18 (token baz) 26 28 (token qux)) nil nil #(\"foo-bar-foo-baz-foo-qux-foo\" 0 2 (token foo) 4 6 (token bar) 8 10 (token foo) 12 14 (token baz) 16 18 (token foo) 20 22 (token qux) 24 26 (token foo)) t 4 nil 12 nil 20 nil 28 nil replace t foo t bar t foo t baz t foo t qux t foo t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -184,7 +182,7 @@ fn divergence_simulate_indent_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""line1\n    line2\n    line3\nline4ERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"line1\n    line2\n    line3\nline4\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 26 30 (line 4)) 11 #(\"line1\nline2\nline3\nline4\" 0 4 (line 1) 6 10 (line 2) 12 16 (line 3) 18 22 (line 4)) t 7 t t t 1 t 2 t 3 t 4 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -218,8 +216,9 @@ fn divergence_simulate_indent_region_undo() {
 fn divergence_simulate_delete_to_kill_ring_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""KEEP1-1-KEEP2-2-KEEP3ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"KEEP1-1-KEEP2-2-KEEP3\" 0 4 (zone keep1) 8 12 (zone keep2) 16 20 (zone keep3)) #(\"DELETE\" 0 6 (zone del2)) #(\"KEEP1-DELETE1-KEEP2-DELETE2-KEEP3\" 0 4 (zone keep1) 6 12 (zone del1) 14 18 (zone keep2) 20 26 (zone del2) 28 32 (zone keep3)) t 1 t 15 t 29 t main t keep1 t del1 t keep2 t del2 t keep3 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP1-DELETE1-KEEP2-DELETE2-KEEP3")
@@ -260,9 +259,7 @@ fn divergence_simulate_delete_to_kill_ring_yank() {
 fn divergence_simulate_multi_step_refactor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""(let ((new-var 1))\n  (+ new-var 2))ERR (wrong-type-argument listp t)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 88)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(let ((old-var 1))\n  (+ old-var 2))")
@@ -299,8 +296,9 @@ fn divergence_simulate_multi_step_refactor() {
 fn divergence_simulate_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""hello world\n foo bar\nbaz ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"hello world\n foo bar\nbaz \" 0 4 (word w1) 6 9 (word w2) 19 21 (word w5)) #(\"hello   world\n   foo    bar\nbaz   \" 0 4 (word w1) 7 8 (word w2) 8 11 (word w2) 15 17 (word w3) 22 24 (word w4) 26 28 (word w5)) t 9 nil t t w1 t w2 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello   world\n   foo    bar\nbaz   ")
@@ -333,8 +331,9 @@ fn divergence_simulate_whitespace_cleanup() {
 fn divergence_simulate_duplicate_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""LINE1\nLINE\nLINE2\nLINE3ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"LINE1\nLINE\nLINE2\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 11 15 (lnum 2) 17 21 (lnum 3)) 12 #(\"LINE1\nLINE2\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 12 16 (lnum 3)) t 7 t 1 t 2 t 3 t 1 t 2 t 3 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3")
@@ -373,9 +372,7 @@ fn divergence_simulate_duplicate_line() {
 fn divergence_simulate_transpose_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""alpha beta gamma deltaERR (error \"Don’t have two things to transpose\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (error \"Don’t have two things to transpose\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha beta gamma delta")

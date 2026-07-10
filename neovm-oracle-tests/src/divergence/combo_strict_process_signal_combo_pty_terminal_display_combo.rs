@@ -60,7 +60,7 @@ fn div_u1_pty_vs_pipe_output() {
         (string-trim pty-out)
         (string= (string-trim pipe-out) (string-trim pty-out))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\n\" \"hello\n\" \"hello\" \"hello\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -77,7 +77,7 @@ fn div_u1_terminal_parameter_ops() {
         (terminal-parameter term 'nonexistent)
         (length (terminal-list))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function terminalp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -108,7 +108,7 @@ fn div_u1_display_vscroll_scroll_recenter_combo() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 1 0 519 526 561 561 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

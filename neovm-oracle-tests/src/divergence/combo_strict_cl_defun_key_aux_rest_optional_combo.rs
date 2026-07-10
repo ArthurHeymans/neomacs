@@ -18,7 +18,9 @@ fn div_v8_cl_defun_key_aux_rest_optional() {
       (help-function-arglist 'probe-keyfn)
       (fboundp 'probe-keyfn))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Malformed argument list ends with: (&rest f &aux (g (+ a b)))\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +35,7 @@ fn div_v8_cl_defun_destructuring_key_allow_other_keys() {
       (probe-destr '(x y) :mode 'special)
       (probe-destr '(p q) :mode 'extra :unknown 99))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments probe-destr 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +51,6 @@ fn div_v8_cl_flet_key_labels_recursive_key() {
       (cl-flet ((g (&rest args) (length args)))
          (list (g 1 2 3) (g))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((6 15) (120 120) (3 0))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

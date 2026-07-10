@@ -93,7 +93,7 @@ fn div_cx97_set_face_attribute_temporary() {
 #[test]
 fn div_cx97_face_id_assignment_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (193 194 195 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (186 187 188 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

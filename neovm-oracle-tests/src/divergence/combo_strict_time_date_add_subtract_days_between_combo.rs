@@ -20,7 +20,8 @@ fn div_v8_time_add_subtract_less_equal() {
       (time-equal-p 5 6)
       (time-subtract 5 5))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (1 50 (0 100 0 500000) t nil nil t nil (0 0 0 0))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +38,7 @@ fn div_v8_days_between_time_to_seconds_to_string() {
       (seconds-to-string 3661)
       (seconds-to-string 86400))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (366 5 739252 1.0 0.0 \"61.02m\" \"24.00h\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +57,6 @@ fn div_v8_date_to_time_encode_decode_consistency() {
               (float-time (encode-time 0 0 0 2 1 1970 nil -1 nil))))
     (set-time-zone-rule tz)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((26581 27584) (26581 27584) 0.0 86400.0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

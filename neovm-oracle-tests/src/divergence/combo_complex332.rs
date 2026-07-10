@@ -143,7 +143,7 @@ fn div_cx332_backquote_deeply_nested_splicing() {
 #[test]
 fn div_cx332_cl_letf_with_symbol_function_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((orig-fn (symbol-function '+)))

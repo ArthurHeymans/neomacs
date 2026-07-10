@@ -139,9 +139,7 @@ fn divergence_narrow_marker_outside_visible() {
 fn divergence_save_excursion_restores_point_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (#<buffer  *neovm-oracle-stdout*> 1 \" *neovm-oracle-stdout*\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (#<buffer *scratch*> 1 \"*scratch*\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((buf1 (get-buffer-create " *test-buf1*"))
         (buf2 (get-buffer-create " *test-buf2*")))

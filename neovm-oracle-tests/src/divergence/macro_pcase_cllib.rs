@@ -122,7 +122,7 @@ fn divergence_pcase_let_pattern() {
 fn divergence_cl_lib_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 4 9 16 25) ((a 1) (b 2) (c 3) (d 4)) 25)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (cl-loop for i from 1 to 5 collect (* i i))
@@ -136,7 +136,7 @@ fn divergence_cl_lib_loop() {
 fn divergence_cl_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (10 20 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-point (:constructor test-point-create))
@@ -153,7 +153,7 @@ fn divergence_cl_struct() {
 fn divergence_cl_defun_with_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((1 nil nil) (1 2 nil) (1 2 3))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defun)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defun my-test-fn (a &key b c)

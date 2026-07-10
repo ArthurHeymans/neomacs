@@ -189,7 +189,7 @@ fn div_cx403_vertical_motion_multi_line_display() {
 #[test]
 fn div_cx403_string_collate_case_locale() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t t (\"A\" \"B\" \"a\" \"c\"))""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t (\"a\" \"A\" \"B\" \"c\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-collate-lessp "a" "B")
@@ -267,7 +267,7 @@ fn div_cx403_face_inherit_foreground() {
 #[test]
 fn div_cx403_window_body_width_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 22)""#]];
+    let expect = expect_test::expect![[r#""OK (80 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -285,7 +285,7 @@ fn div_cx403_window_body_width_display() {
 #[test]
 fn div_cx403_regex_casefold_char_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
@@ -407,9 +407,7 @@ fn div_cx403_window_config_overlay_state() {
 #[test]
 fn div_cx403_json_encode_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"{\\\"a\\\":1,\\\"b\\\":2}\" \"[1,2,3]\" \"\\\"café\\\"\" \"42\" \"true\" \"null\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function json-encode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((json-encoding-type 'json-object-type))

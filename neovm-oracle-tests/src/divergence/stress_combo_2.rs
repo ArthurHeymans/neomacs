@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_combo_narrow_undo_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCXEFGHIJOK (5 3 7 \"ABCXEFGHIJ\")""#]];
+    let expect = expect_test::expect![[r#""OK (5 3 7 \"ABCXEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -37,8 +37,7 @@ fn divergence_combo_narrow_undo_overlay_marker() {
 fn divergence_combo_insert_delete_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""012345678OK (\"0123456789\" \"012345678\" \"012345678\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"0123456789\" \"012345678\" \"012345678\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -59,7 +58,7 @@ fn divergence_combo_insert_delete_loop() {
 fn divergence_combo_save_excursion_kill_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABXYZFGHIJOK (\"ABXYZFGHIJ\" 6)""#]];
+    let expect = expect_test::expect![[r#""OK (\"ABXYZFGHIJ\" 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -81,7 +80,7 @@ fn divergence_combo_prop_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""CDEFGERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+        r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -107,7 +106,7 @@ fn divergence_combo_prop_narrow_undo() {
 fn divergence_combo_many_overlays_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXXXXYYYXXXXXXXXXXXOK ((2 10 14) (5 11 18) 3)""#]];
+    let expect = expect_test::expect![[r#""OK ((2 10 14) (5 11 18) 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 20 ?X))
@@ -130,7 +129,7 @@ fn divergence_combo_many_overlays_insert_delete() {
 fn divergence_combo_marker_insert_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDXXEFGHIJERR (wrong-type-argument markerp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument markerp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")

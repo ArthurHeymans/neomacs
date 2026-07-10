@@ -10,7 +10,7 @@ use crate::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_insert_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""abcOK \"abc\"""#]];
+    let expect = expect_test::expect![[r#""OK \"abc\"""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"ab\" 99) (buffer-string))",
         expect,

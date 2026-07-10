@@ -51,6 +51,6 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
 "#;
 
     let expect =
-        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/\" \"/tmp/nix-shell.XcUf3d\n\")""#]];
+        expect_test::expect![[r#""OK (\"/tmp/nix-shell.ZUFluE/\" \"/tmp/nix-shell.ZUFluE\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -136,8 +136,7 @@ fn divergence_pcase_and_pattern() {
 fn divergence_pcase_rx_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 8)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'pcase)
 (pcase "hello123"

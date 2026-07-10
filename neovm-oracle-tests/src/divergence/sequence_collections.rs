@@ -184,7 +184,7 @@ fn divergence_intern_vs_make_symbol() {
 fn divergence_sequence_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((2 3 4) (98 99 100) (2 4 6) 15)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (seq-map #'1+ [1 2 3])

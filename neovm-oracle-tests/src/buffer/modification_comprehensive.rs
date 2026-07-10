@@ -470,7 +470,7 @@ fn oracle_prop_buffer_mod_structured_document_building() {
           (let ((r4 (buffer-string)))
             (list r1 r2 r3 r4)))))))"##;
     let expect = expect_test::expect![[
-        r##""\n        OK (\"host = localhost\n        port = 8080\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        timeout = 30\n        \" \"# Config file\n        host = localhost\n        port = 9090\n        timeout = 30\n        \")""##
+        r##""OK (\"host = localhost\nport = 8080\ndebug = true\ntimeout = 30\n\" \"host = localhost\nport = 9090\ndebug = true\ntimeout = 30\n\" \"host = localhost\nport = 9090\ntimeout = 30\n\" \"# Config file\nhost = localhost\nport = 9090\ntimeout = 30\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

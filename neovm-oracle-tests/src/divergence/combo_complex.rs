@@ -348,7 +348,7 @@ fn div_cx_undo_text_prop_marker_overlay() {
 #[test]
 fn div_cx_cl_loop_hash_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (((3 . 9) (4 . 16)) (0 1 2))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table)))

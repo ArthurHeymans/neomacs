@@ -18,7 +18,7 @@ fn div_v8_call_process_synchronous_exit_stdout() {
           (goto-char (point-min))
           (buffer-substring (line-beginning-position) (line-end-position)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"line1\nline2\nline3\n\" 3 1 \"line1\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_make_process_filter_accumulate_status() {
         (> (process-id proc) 0)
         (memql (process-status proc) '(run exit))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t \"probe-mpf\" t nil t t (exit))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

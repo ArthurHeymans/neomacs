@@ -46,7 +46,7 @@ fn div_cx429_posn_at_point_xy() {
 #[test]
 fn div_cx429_coordinates_in_window_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK (0 . 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -76,7 +76,7 @@ fn div_cx429_mouse_position() {
 #[test]
 fn div_cx429_window_body_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 80 23)""#]];
+    let expect = expect_test::expect![[r#""OK (0 0 80 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -147,7 +147,7 @@ fn div_cx429_window_font_width_height() {
 #[test]
 fn div_cx429_window_total_width_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (80 23)""#]];
+    let expect = expect_test::expect![[r#""OK (80 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (window-total-width)
@@ -175,7 +175,7 @@ fn div_cx429_window_total_size() {
 #[test]
 fn div_cx429_window_use_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 2""#]];
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -246,7 +246,7 @@ fn div_cx429_coding_system_priority() {
 #[test]
 fn div_cx429_face_name_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"neo-cx429-fnid\" 216)""#]];
+    let expect = expect_test::expect![[r#""OK (\"neo-cx429-fnid\" 186)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-face 'neo-cx429-fnid)))

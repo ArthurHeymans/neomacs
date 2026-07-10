@@ -214,7 +214,7 @@ fn div_cx20_char_width_table_modify_move_to_column() {
 #[test]
 fn div_cx20_cl_defstruct_copier_predicate_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (42 \"data\" 42 \"data\" t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -304,7 +304,7 @@ fn div_cx20_decode_coding_string_unibyte_result_flag() {
 #[test]
 fn div_cx20_cl_typecase_with_satisfies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp :even)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-typecase)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typecase 5 (satisfies cl-evenp) :even (integer :odd))
@@ -318,7 +318,7 @@ fn div_cx20_cl_typecase_with_satisfies() {
 #[test]
 fn div_cx20_string_match_data_after_replace_in_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 22 3 21) 0 22)""#]];
+    let expect = expect_test::expect![[r#""OK ((0 3) 0 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

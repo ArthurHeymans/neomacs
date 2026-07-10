@@ -17,7 +17,9 @@ fn div_v8_print_level_length_truncation() {
         (let ((print-level nil) (print-length nil)) (prin1-to-string data))
         (let ((print-length 0)) (prin1-to-string '(a b c)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"((1 2 3 ... 10) (a b c d e f g h i j))\" \"((1 2 3 ...) (a b c ...))\" \"(... ...)\" \"((1 2 3 (4 5 (6 7 8) 9) 10) (a b c d e f g h i j))\" \"(...)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -30,7 +32,7 @@ fn div_v8_print_circle_circular_structure() {
     (setcdr (cddr x) x)
     (list (prin1-to-string x))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\")""##]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,6 +53,6 @@ fn div_v8_print_escape_nonascii_newline_quoted_vectors() {
       (princ-to-string "literal")
       (prin1-to-string ?A))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

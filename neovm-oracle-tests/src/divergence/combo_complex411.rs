@@ -235,7 +235,7 @@ fn div_cx411_define_prefix_command() {
 #[test]
 fn div_cx411_global_set_key_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil elisp-byte-compile-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))

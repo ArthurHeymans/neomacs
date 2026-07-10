@@ -22,7 +22,7 @@ fn div_v8_equal_structural_nested_types() {
       (equal (cons 1 2) (cons 1 2))
       (not (equal '(1 2) '(1 2 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#*\" 9 15)""##]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_v8_eq_eql_identity_numeric_edges() {
       (eql 1/2 1/2)
       (eq 1/2 1/2))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_equal_including_properties_identity_props() {
       (equal (propertize "x" 'face 'bold)
              (propertize "x" 'face 'bold)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

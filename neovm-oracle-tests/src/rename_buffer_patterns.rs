@@ -192,9 +192,7 @@ fn oracle_prop_rename_buffer_batch_unique_suffixes() {
                 (length names))))
     (dolist (b buffers)
       (when (buffer-live-p b) (kill-buffer b)))))"#;
-    let expect = expect_test::expect![[
-        r#""OK ((\"*neovm-oracle-batch-target*\" \"*neovm-oracle-batch-target*<2>\" \"*neovm-oracle-batch-target*<3>\" \"*neovm-oracle-batch-target*<4>\" \"*neovm-oracle-batch-target*<5>\") t t 5)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

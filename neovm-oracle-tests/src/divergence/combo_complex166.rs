@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx166_byte_compile_warnings_var_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable byte-compile-warnings)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-warnings)
@@ -23,7 +23,7 @@ fn div_cx166_byte_compile_warnings_var_query() {
 #[test]
 fn div_cx166_byte_compile_log_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'byte-compile-log)
@@ -38,7 +38,9 @@ fn div_cx166_byte_compile_log_functions() {
 #[test]
 fn div_cx166_byte_compile_simple_lambda_no_warnings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t 25)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Defining as dynamic an already lexical var\" byte-compile-error-on-warn)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (let ((lexical-binding t)) (lambda (x) (* x x))))
@@ -72,7 +74,7 @@ fn div_cx166_byte_compile_with_no_warnings_macro() {
 #[test]
 fn div_cx166_with_suppressed_warnings_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,7 +90,7 @@ fn div_cx166_with_suppressed_warnings_query() {
 #[test]
 fn div_cx166_byte_compile_dest_file_extension_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -125,7 +127,7 @@ fn div_cx166_byte_compile_function_make_byte_code() {
 #[test]
 fn div_cx166_byte_compile_error_on_warn_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable byte-compile-error-on-warn)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-error-on-warn)
@@ -139,7 +141,7 @@ fn div_cx166_byte_compile_error_on_warn_query() {
 #[test]
 fn div_cx166_byte_compile_dynamic_flag_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-dynamic)

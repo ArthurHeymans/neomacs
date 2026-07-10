@@ -27,7 +27,7 @@ fn div_v8_occur_build_buffer_line_numbers() {
       (when occur-buf (kill-buffer occur-buf))
       (kill-buffer src))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t 4 60)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,7 +50,9 @@ fn div_v8_occur_context_lines_surrounding() {
       (when occur-buf (kill-buffer occur-buf))
       (kill-buffer src))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t #(\"2 matches for \\\"match\\\" in buffer:  *probe-occur-ctx*\n       :l1\n      2:match\n       :l3\n-------\n       :l4\n      5:match\n       :l6\n\" 0 52 (face underline read-only t) 63 71 (mouse-face highlight help-echo \"mouse-2: go to this occurrence\" follow-link t occur-target ((#<marker in no buffer> . #<marker in no buffer>)) read-only t rear-nonsticky t front-sticky t occur-prefix t) 71 76 (mouse-face highlight occur-match t face match help-echo \"mouse-2: go to this occurrence\" follow-link t occur-target ((#<marker in no buffer> . #<marker in no buffer>))) 76 77 (occur-target ((#<marker in no buffer> . #<marker in no buffer>))) 107 115 (mouse-face highlight help-echo \"mouse-2: go to this occurrence\" follow-link t occur-target ((#<marker in no buffer> . #<marker in no buffer>)) read-only t rear-nonsticky t front-sticky t occur-prefix t) 115 120 (mouse-face highlight occur-match t face match help-echo \"mouse-2: go to this occurrence\" follow-link t occur-target ((#<marker in no buffer> . #<marker in no buffer>))) 120 121 (occur-target ((#<marker in no buffer> . #<marker in no buffer>)))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -76,6 +78,6 @@ fn div_v8_occur_no_matches_empty_buffer() {
       (when occur-buf (kill-buffer occur-buf))
       (kill-buffer src))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

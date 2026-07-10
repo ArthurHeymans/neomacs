@@ -23,7 +23,9 @@ fn div_v8_string_lessp_version_lessp_greatest() {
       (sort '("foo10" "foo2" "foo1" "foo20") #'string-version-lessp)
       (sort '("foo10" "foo2" "foo1" "foo20") #'string-lessp))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil t t t t t t (\"foo1\" \"foo2\" \"foo10\" \"foo20\") (\"foo1\" \"foo10\" \"foo2\" \"foo20\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +42,7 @@ fn div_v8_compare_strings_slices_ignore_case() {
       (compare-strings "abc" 1 nil "abx" 1 nil)
       (compare-strings "" 1 nil "" 1 nil))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range \"\" 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +62,8 @@ fn div_v8_assoc_string_case_fold_and_collate() {
       (string-collate-equalp "abc" "abc" "C")
       (string-collate-equalp "ABC" "abc" "C" t))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"b\" . 2) (\"B\" . 3) nil (\"b\" . 2) (b . 2) nil t nil t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

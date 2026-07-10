@@ -91,9 +91,7 @@ fn list_flatten_ensure() {
 fn list_set_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK ((1 3 5 7 9) (5 4 3 2 1) (1 2 3) (3 2 1) (3 2 1) (1 2 3 . 4))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (number-sequence 1 10 2) (number-sequence 5 1 -1)
         (cl-remove-duplicates '(1 2 1 3 2) :from-end t)

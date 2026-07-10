@@ -200,7 +200,7 @@ fn deficiency_deeply_nested_condition_case_with_prop_interval_stress() {
 fn deficiency_catch_from_within_mapcar_with_buffer_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cmw\")))\n\
@@ -269,7 +269,7 @@ fn deficiency_unwind_protect_in_recursive_edit_simulation() {
 fn deficiency_throw_past_dolist_with_overlay_evaporation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tdo\")))\n\

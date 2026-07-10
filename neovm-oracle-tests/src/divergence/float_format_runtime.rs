@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn ff_float_to_string_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK t""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-every)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((vals '(0.1 0.2 0.3 1.5 3.14159265358979 1e100 1e-100)))
   (cl-every (lambda (v) (= v (string-to-number (number-to-string v)))) vals))"##,

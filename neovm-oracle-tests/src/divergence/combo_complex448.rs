@@ -40,7 +40,7 @@ fn div_cx448_url_casefold_time() {
 #[test]
 fn div_cx448_info_overlay_collate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'info-look)
   (with-temp-buffer
@@ -171,7 +171,7 @@ fn div_cx448_copyright_casefold() {
 #[test]
 fn div_cx448_doctor_local_collate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil 19)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'doctor)
   (with-temp-buffer

@@ -127,7 +127,7 @@ fn div_cx438_string_equal_ignore_case_greek() {
 #[test]
 fn div_cx438_string_collate_locale_interact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-collate-lessp "ä" "z")
       (string-collate-lessp "ö" "o"))
@@ -225,7 +225,7 @@ fn div_cx438_split_char_charset_combo() {
 #[test]
 fn div_cx438_apropos_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 11""#]];
+    let expect = expect_test::expect![[r#""OK 9""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'apropos)
   (let ((buf (get-buffer-create "*Apropos*")))

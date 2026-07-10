@@ -14,7 +14,7 @@ fn div_v8_load_noerror_nosuffix_require_feature() {
       (fboundp 'car)
       (null (load "nonexistent-2" t)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -30,7 +30,7 @@ fn div_v8_autoload_do_load_function_expansion() {
       (load-suffixes)
       (load-file-rep-suffixes))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function load-suffixes)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,6 +45,6 @@ fn div_v8_after_load_alist_eval_after_load_provide() {
         (featurep 'probe-ala)
         (consp (assq 'probe-ala after-load-alist))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

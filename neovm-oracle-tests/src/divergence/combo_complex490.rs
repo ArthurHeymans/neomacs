@@ -65,7 +65,7 @@ fn div_cx490_tab_bar_exist() {
 #[test]
 fn div_cx490_horizontal_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 4""#]];
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (scroll-left 1)
@@ -78,7 +78,7 @@ fn div_cx490_horizontal_scroll() {
 #[test]
 fn div_cx490_recenter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK error""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (recenter 0)
@@ -91,7 +91,7 @@ fn div_cx490_recenter() {
 #[test]
 fn div_cx490_move_to_window_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK error""#]];
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (move-to-window-line 0)

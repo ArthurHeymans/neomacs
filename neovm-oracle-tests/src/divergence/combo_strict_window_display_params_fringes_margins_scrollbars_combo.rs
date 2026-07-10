@@ -20,7 +20,8 @@ fn div_v8_window_fringes_margins_roundtrip() {
         (progn (set-window-margins w 0) (window-margins w))
         (progn (set-window-fringes w 0 0) (window-fringes w))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((0 0 nil nil) (4 . 2) 80 74 (nil) (0 0 nil nil))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +39,7 @@ fn div_v8_window_scroll_bars_hscroll_vscroll() {
         (progn (set-window-hscroll w 0) (window-hscroll w))
         (progn (set-window-vscroll w 0) (window-vscroll w))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 0 (nil 0 t nil 0 t nil) 0 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +58,6 @@ fn div_v8_window_edges_body_pixel_geometry() {
         (window-body-height w 'pixel)
         (window-dedicated-p w)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function window-safe-p)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

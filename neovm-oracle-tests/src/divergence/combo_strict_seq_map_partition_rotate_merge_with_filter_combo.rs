@@ -22,7 +22,7 @@ fn div_v8_seq_partition_rotate_take_drop_keep() {
       (seq-group-by (lambda (x) (% x 2)) '(1 2 3 4 5 6))
       (seq-sort-by '("ccc" "a" "bb") #'length #'<)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function seq-rotate)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,7 +47,8 @@ fn div_v8_map_merge_with_filter_keys_values() {
         (map-contains-key m1 'z)
         (map-length m2)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (cl-no-applicable-method map-into ((b . 3) (c . 4)) +)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -66,6 +67,6 @@ fn div_v8_map_apply_pairs_do_map_resize() {
         (sort (map-apply (lambda (k v) (list k v)) m)
               (lambda (p q) (string< (symbol-name (car p)) (symbol-name (car q)))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -18,7 +18,7 @@ fn div_v8_display_buffer_pop_to_buffer_action() {
     (delete-other-windows)
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument windowp #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_display_buffer_use_some_window_action() {
     (kill-buffer b1)
     (kill-buffer b2)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -61,6 +61,6 @@ fn div_v8_display_buffer_alist_custom_override() {
     (delete-other-windows)
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

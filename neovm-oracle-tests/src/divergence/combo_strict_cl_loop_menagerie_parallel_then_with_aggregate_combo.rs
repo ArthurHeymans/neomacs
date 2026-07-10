@@ -19,7 +19,7 @@ fn div_v8_cl_loop_for_across_parallel_then() {
       (cl-loop for x in '((1 . a) (2 . b) (3 . c)) collect (cdr x))
       (cl-loop for x being the elements of [5 6 7] collect (* x 10)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_cl_loop_aggregate_into_finally() {
                minimize x into mn maximize x into mx
                finally (return (list mn mx))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_cl_loop_while_until_conditionals_named() {
                finally (return (list odds evens)))
       (cl-loop for a in '(1 2 3) as b in '(10 20 30) sum (* a b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

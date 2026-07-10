@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_defstruct_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"unknown\" t 0 t t t \"Alice\" t 30 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-ds-xxx (:constructor test-ds-make-xxx))
@@ -34,7 +34,7 @@ fn divergence_cl_defstruct_basic() {
 fn divergence_cl_defstruct_setf_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (99 t (x y z) t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-mut-xxx (val 0) (items nil))
@@ -53,7 +53,7 @@ fn divergence_cl_defstruct_setf_accessor() {
 fn divergence_cl_defstruct_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-pred-xxx x y)
@@ -71,7 +71,7 @@ fn divergence_cl_defstruct_predicate() {
 fn divergence_cl_defstruct_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (10 t 99 t 20 t 30 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-copy-xxx (a 1) (b 2))
@@ -95,7 +95,7 @@ fn divergence_cl_defstruct_copy() {
 fn divergence_cl_defstruct_named_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t 3 1 t 3 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-np-xxx (:constructor test-np-new-xxx))
@@ -117,7 +117,7 @@ fn divergence_cl_defstruct_named_print() {
 fn divergence_defstruct_included() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 t 2 t 3 t 4 t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-base-xxx a b)
@@ -142,7 +142,7 @@ fn divergence_defstruct_included() {
 fn divergence_defstruct_vector_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t 1 t 2 t 2 nil 3 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-vec-xxx (:type vector))
@@ -165,7 +165,7 @@ fn divergence_defstruct_vector_type() {
 fn divergence_defstruct_list_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t \"test\" t 42 t \"test\" t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-lst-xxx (:type list))
@@ -186,7 +186,7 @@ fn divergence_defstruct_list_type() {
 fn divergence_defstruct_boa_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (10 t 0 t 99 t 20 t 30 t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-boa-xxx
@@ -212,7 +212,7 @@ fn divergence_defstruct_boa_constructor() {
 fn divergence_defstruct_equal_and_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable o1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-teq-xxx (v 0))

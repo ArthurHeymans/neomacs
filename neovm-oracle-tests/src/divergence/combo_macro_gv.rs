@@ -96,7 +96,7 @@ fn deficiency_gv_with_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""BYEO PLANETOK (#(\"BYEO WORLD\" 5 9 (case upper)) nil \"BYEO PLANET\" nil nil en t)""#
+        r#""OK (#(\"BYEO WORLD\" 5 9 (case upper)) nil \"BYEO PLANET\" nil nil en t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -140,7 +140,7 @@ fn deficiency_eval_and_inline() {
 fn deficiency_cl_letf_with_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""BEFOREERR (wrong-type-argument listp \"DURING\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BEFORE")

@@ -78,8 +78,7 @@ fn div_e9_match_data_save_set_restore() {
 #[test]
 fn div_e9_replace_with_case_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (replace-regexp-in-string "\\b\\w"

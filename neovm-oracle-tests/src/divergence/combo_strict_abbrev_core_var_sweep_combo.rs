@@ -21,7 +21,7 @@ fn div_v8_abbrev_mode_table_name_list_var_sweep() {
       (boundp 'abbrev-start-location)
       (boundp 'abbrev-start-location-buffer))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,6 +42,6 @@ fn div_v8_abbrev_local_table_editing_var_sweep() {
       (boundp 'define-mode-abbrev)
       (boundp 'quietly-read-abbrev-file))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

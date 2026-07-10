@@ -22,7 +22,7 @@ fn div_v8_ewoc_create_enter_count_buffer() {
           (buffer-string)
           (eq (ewoc-buffer ew) (current-buffer)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function ewoc-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,7 +46,7 @@ fn div_v8_ewoc_map_locate_filter() {
             (nreverse collected)
             (buffer-string)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function ewoc-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +68,6 @@ fn div_v8_ewoc_delete_refresh_invalidate() {
       (ewoc-refresh ew)
       (list c1 buf1 (buffer-string) (ewoc-count ew)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function ewoc-count)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

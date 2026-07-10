@@ -31,7 +31,7 @@ fn div_v8_window_config_state_fboundp_sweep() {
       (fboundp 'walk-windows)
       (fboundp 'get-buffer-window))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,7 +60,7 @@ fn div_v8_frame_terminal_fboundp_sweep() {
       (fboundp 'suspend-emacs)
       (fboundp 'suspend-tty))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -90,6 +90,6 @@ fn div_v8_face_color_fboundp_sweep() {
       (fboundp 'color-complement)
       (fboundp 'color-distance))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

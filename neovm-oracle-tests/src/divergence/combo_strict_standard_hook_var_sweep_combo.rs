@@ -22,7 +22,7 @@ fn div_v8_init_startup_lifecycle_hook_var_sweep() {
       (boundp 'save-place-alist)
       (boundp 'post-gc-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_buffer_change_post_command_hook_var_sweep() {
       (boundp 'menu-bar-update-hook)
       (boundp 'echo-area-clear-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_mark_special_event_hook_var_sweep() {
       (boundp 'focus-in-hook)
       (boundp 'focus-out-hook))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

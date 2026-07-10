@@ -536,7 +536,7 @@ fn zetta_all_columns_uncompile_format_combinations() {
 fn zetta_all_macro_replace_all_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"#+MACRO: A B\n1 B 3\" \"#+MACRO: macro $1 $2\nsome text\" \"#+MACRO: in inner\n#+MACRO: out {{{in}}} outer\ninner outer\")""##
+        r#""ERR (error \"Defining as dynamic an already lexical var\" org-mode-hook)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

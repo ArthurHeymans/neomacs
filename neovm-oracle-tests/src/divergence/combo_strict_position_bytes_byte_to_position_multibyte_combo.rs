@@ -27,7 +27,7 @@ fn div_v8_position_bytes_byte_to_position_ascii_cjk() {
         (char-after 4)
         (char-after 7)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 4 7 10 13 14 1 4 5 6 7 97 26085 100)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_position_bytes_combining_marks_emoji() {
         (byte-to-position 7)
         (byte-to-position 10)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (6 1 2 4 5 8 11 12 1 2 3 4 5)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_position_bytes_empty_boundaries() {
   (list (position-bytes 1)
         (byte-to-position 1)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -83,7 +83,7 @@ fn div_cx152_directory_files_full_paths() {
 #[test]
 fn div_cx152_dired_recursive_compress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (20 (\"file.txt.gz\"))""#]];
+    let expect = expect_test::expect![[r#""OK (20 (\"file.txt\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -150,7 +150,7 @@ fn div_cx152_dired_filename_quoting() {
 #[test]
 fn div_cx152_dired_sort_by_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

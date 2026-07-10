@@ -50,7 +50,7 @@ fn div_cx160_package_version_format() {
 #[test]
 fn div_cx160_package_version_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"1.2.3\" \"1.2.3.4\" \"1\" \"\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function package-version-join)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (package-version-join '(1 2 3))
@@ -96,7 +96,7 @@ fn div_cx160_eval_when_compile_basic() {
 #[test]
 fn div_cx160_load_history_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (require 'cl-lib)
@@ -129,7 +129,7 @@ fn div_cx160_elpa_archive_path_query() {
 #[test]
 fn div_cx160_package_archive_priorities_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable package-archive-priorities)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'package-archive-priorities)
@@ -143,7 +143,7 @@ fn div_cx160_package_archive_priorities_query() {
 #[test]
 fn div_cx160_package_init_helper_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'package-initialize)

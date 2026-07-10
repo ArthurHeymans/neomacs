@@ -32,7 +32,9 @@ fn div_v8_field_property_motion_boundary_edges() {
         (get-char-property 8 'field)
         (get-char-property 11 'field)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (1 6 1 6 #(\"BBBBB\" 0 5 (field field-x)) 6 11 11 6 9 field-x field-y)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +50,9 @@ fn div_v8_replace_regexp_in_string_function_subexp_literal() {
       ;; fixed-case preserve, capitalized replacement
       (replace-regexp-in-string "hello" "HELLO" "Hello hello HELLO"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World Foo\" \"<a> <bb> <ccc>\" \"world hello\" \"ab-ab cd-cd\" \"HELLO HELLO HELLO\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,7 +69,9 @@ fn div_v8_format_specifier_matrix_floats_bignum_pad() {
       (format "%.10g" 1.0)
       (format "%5s|%-5s|" "ab" "ab"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\" 3.14|3.14 |+3.14|03.14\" \"0.0001|1.234568e+08|1.235e+06|0.5\" \"A|255|10|ff|#xff|#o10\" \"00042|   42|42   |+42\" \"a\\\"b|\\\"a\\\\\\\"b\\\"|b\" \"18446744073709551616\" \"1\" \"   ab|ab   |\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -90,7 +96,7 @@ fn div_v8_hash_table_equal_test_fresh_cons_remhash() {
             (hash-table-p h)
             (eq (hash-table-test h) 'equal)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 second second missing 0 gone 0 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -116,6 +122,6 @@ fn div_v8_string_char_width_combining_cjk_emoji() {
         (substring cjk 0 2)
         (aref cjk 1)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 6 1 1 2 3 9 1 2 4 \"日本\" 26412)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

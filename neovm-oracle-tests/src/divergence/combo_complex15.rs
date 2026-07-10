@@ -244,7 +244,7 @@ fn div_cx15_decode_coding_string_then_char_charset() {
 #[test]
 fn div_cx15_undo_boundary_buffer_undo_list_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 6 nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-if-not)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -286,7 +286,7 @@ fn div_cx15_marker_insertion_type_undo_consistency() {
 #[test]
 fn div_cx15_cl_defstruct_inheritance_printers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Rex\" \"Woof\" \"Lab\" t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

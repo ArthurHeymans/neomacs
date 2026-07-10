@@ -20,7 +20,7 @@ fn div_v8_indent_to_current_indentation_column() {
           (indent-to 5 1)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (4 0 2 10 \"x    \")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_move_to_column_force_tab_to_tab_stop() {
         (cforce (progn (move-to-column 8 t) (current-column))))
     (list c3 c0 cforce)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 0 8)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,6 +55,6 @@ fn div_v8_indent_relative_line_prefix_indent_rigidly() {
           (progn (indent-rigidly (line-beginning-position) (line-end-position) -2)
                  (current-indentation)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (4 \"    world\" 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

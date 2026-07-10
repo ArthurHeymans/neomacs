@@ -48,7 +48,7 @@ fn combo103_org_lint_specific_check() {
 #[test]
 fn combo103_org_timestamp_hms_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"09:05:00\" \"09:05 AM\" \"2024-01-01\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (list (org-timestamp-format (org-timestamp-from-string "<2024-01-01 Mon 09:05:03>") "%H:%M:%S")

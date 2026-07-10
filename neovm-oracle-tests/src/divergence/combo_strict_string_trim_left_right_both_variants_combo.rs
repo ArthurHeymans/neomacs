@@ -16,7 +16,9 @@ fn div_v8_string_trim_default_whitespace() {
       (string-trim "")
       (string-trim "no-trim-needed"))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"hello\" \"hello\" \"hello\" \"\" \"no-trim-needed\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +34,8 @@ fn div_v8_string_trim_custom_pattern() {
       (string-trim-right "abc123" "[0-9]+")
       (string-trim "  x  " nil))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"hello\" \"hello\" \"hello###\" \"123\" \"abc\" \"x\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,6 +51,7 @@ fn div_v8_string_pad_chop_truncate_combo() {
       (string-chop-newline "hello")
       (length (string-pad "x" 10 ?-)))
 "####;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"hi   \" \"***hi\" \"hello\" \"hello\" \"hello\" 10)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -40,7 +40,7 @@ fn strong_gtd_task_workflow() {
 fn strong_project_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Project Alpha\" nil nil) (\"TODO Design phase\" nil \"<2026-02-01>\") (\"TODO Implementation\" nil \"<2026-03-01>\") (\"TODO Testing\" nil \"<2026-04-01>\"))""#
+        r#""OK ((\"Project Alpha\" nil nil) (\"Design phase\" \"TODO\" \"<2026-02-01>\") (\"Implementation\" \"TODO\" \"<2026-03-01>\") (\"Testing\" \"TODO\" \"<2026-04-01>\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -68,7 +68,7 @@ fn strong_project_planning_workflow() {
 fn strong_meeting_notes_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((1 \"Meeting 2026-01-15\" nil) (2 \"Attendees\" nil) (2 \"Action items\" nil) (3 \"TODO Alice: Prepare report\" nil) (3 \"TODO Bob: Review code\" nil) (2 \"Notes\" nil))""#
+        r#""OK ((1 \"Meeting 2026-01-15\" nil) (2 \"Attendees\" nil) (2 \"Action items\" nil) (3 \"Alice: Prepare report\" \"TODO\") (3 \"Bob: Review code\" \"TODO\") (2 \"Notes\" nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -296,7 +296,7 @@ fn strong_workout_tracking_workflow() {
 fn strong_travel_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((1 \"Trip to Paris\" nil) (2 \"Flights\" nil) (3 \"TODO Book outbound\" nil) (3 \"TODO Book return\" nil) (2 \"Hotels\" nil) (3 \"TODO Book hotel\" nil) (2 \"Activities\" nil))""#
+        r#""OK ((1 \"Trip to Paris\" nil) (2 \"Flights\" nil) (3 \"Book outbound\" \"TODO\") (3 \"Book return\" \"TODO\") (2 \"Hotels\" nil) (3 \"Book hotel\" \"TODO\") (2 \"Activities\" nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -346,7 +346,7 @@ fn strong_shopping_list_workflow() {
 fn strong_kanban_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((nil \"BACKLOG Feature A\") (nil \"TODO Feature B\") (nil \"IN-PROGRESS Feature C\") (nil \"DONE Feature D\") (nil \"BACKLOG Feature E\"))""#
+        r#""OK ((nil \"BACKLOG Feature A\") (\"TODO\" \"Feature B\") (nil \"IN-PROGRESS Feature C\") (\"DONE\" \"Feature D\") (nil \"BACKLOG Feature E\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -467,7 +467,9 @@ fn strong_expense_tracking_workflow() {
 #[test]
 fn strong_goal_tracking_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"Run marathon\" \"TODO\" nil) (\"Lose 10kg\" \"TODO\" nil) (\"Get promotion\" \"TODO\" nil) (\"Learn Rust\" \"TODO\" nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -492,7 +494,7 @@ fn strong_goal_tracking_workflow() {
 fn strong_release_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Release v2.0\" nil \"8d\") (\"TODO Feature A\" nil \"8d\") (\"TODO Feature B\" nil \"8d\") (\"DONE Bugfix 1\" nil \"8d\") (\"TODO Feature C\" nil \"8d\"))""#
+        r#""OK ((\"Release v2.0\" nil \"8d\") (\"Feature A\" \"TODO\" \"8d\") (\"Feature B\" \"TODO\" \"8d\") (\"Bugfix 1\" \"DONE\" \"8d\") (\"Feature C\" \"TODO\" \"8d\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -517,7 +519,7 @@ fn strong_release_planning_workflow() {
 fn strong_book_notes_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((1 \"Deep Work by Cal Newport\") (2 \"Chapter 1: Deep Work is Valuable\") (2 \"Chapter 2: Deep Work is Rare\") (2 \"Chapter 3: Deep Work is Meaningful\") (2 \"Action Items\") (3 \"TODO Block 2 hours daily for deep work\") (3 \"TODO Turn off notifications\"))""#
+        r#""OK ((1 \"Deep Work by Cal Newport\") (2 \"Chapter 1: Deep Work is Valuable\") (2 \"Chapter 2: Deep Work is Rare\") (2 \"Chapter 3: Deep Work is Meaningful\") (2 \"Action Items\") (3 \"Block 2 hours daily for deep work\") (3 \"Turn off notifications\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -541,7 +543,7 @@ fn strong_book_notes_workflow() {
 fn strong_event_planning_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Annual Conference 2026\" nil nil nil) (\"TODO Book venue\" nil nil nil) (\"TODO Invite speakers\" nil nil nil) (\"TODO Arrange catering\" nil nil nil) (\"DONE Set date\" nil nil nil))""#
+        r#""OK ((\"Annual Conference 2026\" nil nil nil) (\"Book venue\" \"TODO\" nil nil) (\"Invite speakers\" \"TODO\" nil nil) (\"Arrange catering\" \"TODO\" nil nil) (\"Set date\" \"DONE\" nil nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -567,7 +569,7 @@ fn strong_event_planning_workflow() {
 fn strong_learning_log_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Rust Programming\" nil) (\"TODO Ownership and Borrowing\" nil) (\"DONE Variables and Types\" nil) (\"TODO Error Handling\" nil) (\"Emacs Lisp\" nil) (\"DONE Basic Functions\" nil) (\"TODO Macros\" nil))""#
+        r#""OK ((\"Rust Programming\" nil) (\"Ownership and Borrowing\" \"TODO\") (\"Variables and Types\" \"DONE\") (\"Error Handling\" \"TODO\") (\"Emacs Lisp\" nil) (\"Basic Functions\" \"DONE\") (\"Macros\" \"TODO\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -643,7 +645,7 @@ fn strong_subscription_workflow() {
 fn strong_plant_watering_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Plants\" nil \"Kitchen\") (\"TODO Water fern\" nil \"Kitchen\") (\"TODO Water cactus\" nil \"Kitchen\") (\"TODO Water orchid\" nil \"Kitchen\"))""#
+        r#""OK ((\"Plants\" nil \"Kitchen\") (\"Water fern\" \"TODO\" \"Kitchen\") (\"Water cactus\" \"TODO\" \"Kitchen\") (\"Water orchid\" \"TODO\" \"Kitchen\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -668,7 +670,7 @@ fn strong_plant_watering_workflow() {
 fn strong_car_maintenance_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"Car Maintenance 2026\" nil nil nil) (\"DONE Oil change\" nil nil nil) (\"TODO Tire rotation\" nil nil nil) (\"TODO Brake inspection\" nil nil nil))""#
+        r#""OK ((\"Car Maintenance 2026\" nil nil nil) (\"Oil change\" \"DONE\" nil nil) (\"Tire rotation\" \"TODO\" nil nil) (\"Brake inspection\" \"TODO\" nil nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

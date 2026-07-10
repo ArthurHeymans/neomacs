@@ -16,7 +16,7 @@ fn div_cx507_collate_basic_ascii() {
 #[test]
 fn div_cx507_collate_uppercase() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-collate-lessp "A" "a") (string-collate-lessp "a" "A"))
 "##,
@@ -115,7 +115,7 @@ fn div_cx507_collate_multibyte() {
 #[test]
 fn div_cx507_collate_sort_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"A\" \"B\" \"C\" \"a\" \"b\" \"c\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"a\" \"A\" \"b\" \"B\" \"c\" \"C\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(sort '("a" "B" "c" "A" "b" "C") #'string-collate-lessp)
 "##,
@@ -126,7 +126,7 @@ fn div_cx507_collate_sort_mixed() {
 #[test]
 fn div_cx507_collate_sort_diacritic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"a\" \"o\" \"u\" \"ä\" \"ö\" \"ü\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"a\" \"ä\" \"o\" \"ö\" \"u\" \"ü\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(sort '("a" "ä" "o" "ö" "u" "ü") #'string-collate-lessp)
 "##,
@@ -138,7 +138,7 @@ fn div_cx507_collate_sort_diacritic() {
 fn div_cx507_collate_sort_mixed_case_diacritic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"A\" \"O\" \"U\" \"a\" \"o\" \"u\" \"ä\" \"ö\" \"ü\")""#]];
+        expect_test::expect![[r#""OK (\"a\" \"A\" \"ä\" \"o\" \"O\" \"ö\" \"u\" \"U\" \"ü\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(sort '("A" "ä" "O" "ö" "U" "ü" "a" "o" "u") #'string-collate-lessp)
 "##,

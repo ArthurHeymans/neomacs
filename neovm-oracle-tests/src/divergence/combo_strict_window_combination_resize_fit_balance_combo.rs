@@ -30,7 +30,9 @@ fn div_v6_window_combination_limit_resize() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Combination limit is meaningful for internal windows only\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,7 +61,7 @@ fn div_v6_buffer_local_var_frame_local_inheritance() {
       (kill-buffer b1)
       (kill-buffer b2))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (global buf1 buf2 t t global changed buf1 buf2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -78,7 +80,7 @@ fn div_v6_read_from_string_partial_and_trailing() {
           (list val pos (substring s pos))))
       (condition-case err (read-from-string "") (end-of-file 'caught)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function multiple-value-bind)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -102,7 +104,9 @@ fn div_v6_text_property_stickiness_edge_with_deletion() {
           (text-properties-at 4)
           (text-properties-at 5))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((rear-nonsticky nil face bold) (front-sticky nil face italic) (front-sticky nil face italic) (face underline)) #(\"AAACCC\" 0 3 (rear-nonsticky nil face bold) 3 5 (face underline)) (rear-nonsticky nil face bold) (face underline) (face underline))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -128,6 +132,6 @@ fn div_v6_cl_loop_maximize_minimize_into_finally() {
                concat c into result
                finally (return result)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

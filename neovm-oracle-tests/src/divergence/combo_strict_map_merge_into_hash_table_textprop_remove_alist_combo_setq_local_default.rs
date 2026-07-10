@@ -24,7 +24,7 @@ fn div_v7_map_merge_into_hash_table() {
           (map-elt h1 'b)
           (map-elt h2 'a))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-merge)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +52,9 @@ fn div_v7_text_property_remove_overlapping() {
                                      (text-properties-at 3))))
         (list before after-remove after-remove-list)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((italic heavy red (color red)) (nil heavy red (color red)) (nil nil nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,7 +74,7 @@ fn div_v7_alist_get_default_and_assoc_variants() {
         (alist-get 'd al)
         (length al)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil 1 nil default 3 3 missing 4 4 4)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -100,7 +102,9 @@ fn div_v7_setq_local_default_kill_combo() {
               (default-value 'probe-sldk-var)))
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (global global nil local global new-default local new-default nil new-default)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -121,6 +125,6 @@ fn div_v7_process_large_output_buffering() {
       (kill-buffer buf)
       lines)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

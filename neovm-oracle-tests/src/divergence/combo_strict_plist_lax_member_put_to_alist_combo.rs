@@ -17,7 +17,7 @@ fn div_v8_plist_get_member_put_lax() {
         (progn (plist-put p 'd 4) p)
         (progn (plist-put p 'a 99) (plist-get p 'a))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 nil (b 2 c 3 d 4) nil (a 99 b 2 c 3 d 4) 99)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,7 @@ fn div_v8_lax_plist_get_put_dotted() {
         (progn (lax-plist-put lp 'd 4) lp)
         (progn (lax-plist-put lp 'a 99) (lax-plist-get lp 'a))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function lax-plist-member)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -50,6 +50,6 @@ fn div_v8_plist_to_alist_alist_to_plist_roundtrip() {
         (sort (mapcar #'car al)
               (lambda (a b) (string< (symbol-name a) (symbol-name b))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function plist-to-alist)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

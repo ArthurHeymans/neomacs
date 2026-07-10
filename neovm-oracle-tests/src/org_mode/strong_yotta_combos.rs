@@ -198,7 +198,7 @@ fn strong_y_exp() {
 fn strong_y_ec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:todo \"TODO\" :pri 65 :tags (\"tag\") :var \"val\") (:todo \"PROG\" :pri 66 :tags (\"n\") :var \"n\" :title \"C\"))""#
+        r#""OK ((:todo \"TODO\" :pri 65 :tags (\"tag\") :var \"val\") (:todo \"DONE\" :pri 66 :tags (\"n\") :var \"n\" :title \"C\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

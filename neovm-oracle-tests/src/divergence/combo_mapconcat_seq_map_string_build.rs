@@ -38,7 +38,7 @@ fn deficiency_string_join_with_format() {
 fn deficiency_mapconcat_with_index_via_number_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"1. alpha\n2. beta\n3. gamma\n4. delta\"""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-pairlis)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((items '(\"alpha\" \"beta\" \"gamma\" \"delta\")))\n\

@@ -81,7 +81,7 @@ fn divergence_eieio_slot_with_undo() {
 fn divergence_cl_struct_nested_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-nst (:constructor test-nst-make))
@@ -232,8 +232,9 @@ fn divergence_cl_flet_labels_interplay() {
 fn divergence_nested_condition_case_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA-XXXBBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"AAAA-XXXBBBB-CCCC-DDDD\" 0 3 (zone a) 8 11 (zone b) 13 16 (zone c) 18 21 (zone d)) #(\"AAAA-BBBB-CCCC-DDDD\" 0 3 (zone a) 5 8 (zone b) 10 13 (zone c) 15 18 (zone d)) t t a t b t c t d t all t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -273,7 +274,9 @@ fn divergence_nested_condition_case_with_undo() {
 fn divergence_propertized_string_concat_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""GOODBYE WORLDERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"GOODBYE WORLD\" 7 8 (separator t) 8 13 (face italic)) #(\"HELLO WORLD\" 0 5 (face bold) 5 6 (separator t) 6 11 (face italic)) t bold t t t italic t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((s1 (propertize "HELLO" 'face 'bold))
@@ -307,8 +310,7 @@ fn divergence_propertized_string_concat_undo() {
 fn divergence_multibyte_propertized_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""café résumé naïve déjeunerERR (args-out-of-range 23 30)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 23 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "café résumé naïve déjeuner")

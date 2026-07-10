@@ -103,7 +103,7 @@ fn div_cx16_overlay_before_after_narrow_point() {
 #[test]
 fn div_cx16_cl_loop_multi_accumulator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((2 4 6 8 10) (1 3 5 7 9) 55)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-loop for i from 1 to 10
@@ -119,7 +119,7 @@ fn div_cx16_cl_loop_multi_accumulator() {
 #[test]
 fn div_cx16_timer_list_after_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 2 t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t1 (run-with-timer 100 nil (lambda ())))

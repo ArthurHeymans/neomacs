@@ -20,7 +20,7 @@ fn div_v8_cl_flet_labels_local_recursive() {
       (cl-flet ((f (x) (cl-flet ((g (y) (* y y))) (g x))))
         (f 4)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (10 120 7 16)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_v8_cl_macrolet_symbol_macrolet() {
         (let ((cs-counter 0))
           (list counter counter counter))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (extra ran (42 84) (1 2 3))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -58,6 +58,6 @@ fn div_v8_cl_flet_shadowing_builtin_interaction() {
         (cl-flet ((first (l) (nth 1 l)))
           (first lst))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 1 7 13 b)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -26,7 +26,7 @@ fn div_v8_cl_rotatef_shiftf_psetf() {
         (cl-psetf a 100 b 200 c 300)
         (list a b c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-rotatef)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -48,7 +48,7 @@ fn div_v8_cl_incf_decf_generalized_places() {
         (let ((x 5)) (cl-incf x x) x)
         (let ((x 10)) (cl-decf x 3) x)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-decf)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -69,6 +69,6 @@ fn div_v8_cl_push_pushnew_pop_remf_getf_plist() {
           (cl-getf plist 'c 'missing)
           (progn (cl-remf plist 'a) (cl-getf plist 'a 'gone)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-pushnew)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

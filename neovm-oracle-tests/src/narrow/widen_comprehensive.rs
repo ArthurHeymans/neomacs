@@ -392,6 +392,8 @@ fn oracle_prop_narrow_accumulate_section_stats() {
                           sections)))))
         (setq i (1+ i))))
     (nreverse sections)))"###;
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((\"Section A\" (words . 5) (lines . 2) (chars . 26)) (\"Section B\" (words . 7) (lines . 2) (chars . 38)) (\"Section C\" (words . 10) (lines . 1) (chars . 20)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

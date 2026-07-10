@@ -16,7 +16,7 @@ fn div_v8_cl_if_not_complement_predicates() {
       (cl-position-if-not #'numberp '(1 2 a 3 b))
       (cl-find-if-not #'numberp '(1 2 a 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 7 45)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +32,7 @@ fn div_v8_cl_mismatch_search_sequence() {
       (cl-search '(c d) '(a b c d e))
       (cl-search '(x) '(a b c)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 nil 1 2 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,6 +46,6 @@ fn div_v8_cl_mismatch_search_with_key_from_end() {
       (cl-mismatch '(1 2 3 4) '(1 2 9 4) :from-end t)
       (cl-mismatch "abc" "abd"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil 2 2 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

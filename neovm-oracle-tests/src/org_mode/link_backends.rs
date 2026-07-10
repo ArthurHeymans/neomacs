@@ -90,9 +90,7 @@ fn org_info_man_store_link_context_combo() {
 fn org_link_abbrev_custom_follow_export_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""ERR (error \"No match for fuzzy expression: ticket:ABC-123\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-variable followed)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

@@ -190,7 +190,7 @@ fn divergence_advised_function_in_condition_case() {
 fn divergence_cl_block_return_from_nested_flet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (void-variable --cl-block-outer--)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         "(cl-flet ((check (x) (when (> x 5) (cl-return-from outer x))))
   (cl-block outer

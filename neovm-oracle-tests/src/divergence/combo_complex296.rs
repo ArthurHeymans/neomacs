@@ -100,7 +100,7 @@ fn div_cx296_byte_compile_constant_folding() {
 #[test]
 fn div_cx296_byte_compile_warning_categories_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable byte-compile-warnings)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((categories '(free-vars unresolved callargs redefine obsolete
@@ -116,7 +116,7 @@ fn div_cx296_byte_compile_warning_categories_query() {
 #[test]
 fn div_cx296_byte_compile_dest_file_function_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function byte-compile-dest-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((el (expand-file-name "neo-cx296-test.el" temporary-file-directory))

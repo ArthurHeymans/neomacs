@@ -26,9 +26,7 @@ fn div_cx154_byte_compile_dest_file_function() {
 #[test]
 fn div_cx154_byte_compile_dest_file_extension() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/tmp/nix-shell.XcUf3d/foo.el\" \"/tmp/nix-shell.XcUf3d/foo.elc\" t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -46,7 +44,7 @@ fn div_cx154_byte_compile_dest_file_extension() {
 #[test]
 fn div_cx154_byte_recompile_directory_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'byte-recompile-directory)
@@ -111,7 +109,7 @@ fn div_cx154_loaddefs_generate_availability() {
 #[test]
 fn div_cx154_generated_autoload_file_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable generated-autoload-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'generated-autoload-file)
@@ -125,7 +123,7 @@ fn div_cx154_generated_autoload_file_var() {
 #[test]
 fn div_cx154_byte_compile_dynamic_binding_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'byte-compile-dynamic)

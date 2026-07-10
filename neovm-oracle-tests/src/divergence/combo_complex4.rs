@@ -126,7 +126,7 @@ fn div_cx4_print_gensym_notation() {
 #[test]
 fn div_cx4_cl_rotatef_hash_table_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-rotatef)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table)))
@@ -214,7 +214,7 @@ fn div_cx4_overlay_before_string_under_narrowing() {
 #[test]
 fn div_cx4_print_gensym_circular_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(#1=#:g25 #1#)\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(#1=#:g0 #1#)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-gensym t) (print-circle t))

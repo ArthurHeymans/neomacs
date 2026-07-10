@@ -177,7 +177,7 @@ fn div_cx180_mega_advice_clloop_closure_coding_charset_obarray_secure_hash() {
 #[test]
 fn div_cx180_mega_pcase_rx_syntax_textprop_marker_overlay_register_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -223,7 +223,7 @@ fn div_cx180_mega_pcase_rx_syntax_textprop_marker_overlay_register_window_config
 #[test]
 fn div_cx180_mega_search_replace_format_time_buflocal_undo_invis_textprop_clloop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)

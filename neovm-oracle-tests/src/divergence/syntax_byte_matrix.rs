@@ -8,63 +8,63 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_syntax_byte_0() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 0)", expect);
 }
 
 #[test]
 fn div_syntax_byte_1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 1)", expect);
 }
 
 #[test]
 fn div_syntax_byte_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 2)", expect);
 }
 
 #[test]
 fn div_syntax_byte_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 3)", expect);
 }
 
 #[test]
 fn div_syntax_byte_4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 4)", expect);
 }
 
 #[test]
 fn div_syntax_byte_5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 5)", expect);
 }
 
 #[test]
 fn div_syntax_byte_6() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 6)", expect);
 }
 
 #[test]
 fn div_syntax_byte_7() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 7)", expect);
 }
 
 #[test]
 fn div_syntax_byte_8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 8)", expect);
 }
 
@@ -78,14 +78,14 @@ fn div_syntax_byte_9() {
 #[test]
 fn div_syntax_byte_10() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 32""#]];
+    let expect = expect_test::expect![[r#""OK 62""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 10)", expect);
 }
 
 #[test]
 fn div_syntax_byte_11() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 11)", expect);
 }
 
@@ -99,133 +99,133 @@ fn div_syntax_byte_12() {
 #[test]
 fn div_syntax_byte_13() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 32""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 13)", expect);
 }
 
 #[test]
 fn div_syntax_byte_14() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 14)", expect);
 }
 
 #[test]
 fn div_syntax_byte_15() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 15)", expect);
 }
 
 #[test]
 fn div_syntax_byte_16() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 16)", expect);
 }
 
 #[test]
 fn div_syntax_byte_17() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 17)", expect);
 }
 
 #[test]
 fn div_syntax_byte_18() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 18)", expect);
 }
 
 #[test]
 fn div_syntax_byte_19() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 19)", expect);
 }
 
 #[test]
 fn div_syntax_byte_20() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 20)", expect);
 }
 
 #[test]
 fn div_syntax_byte_21() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 21)", expect);
 }
 
 #[test]
 fn div_syntax_byte_22() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 22)", expect);
 }
 
 #[test]
 fn div_syntax_byte_23() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 23)", expect);
 }
 
 #[test]
 fn div_syntax_byte_24() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 24)", expect);
 }
 
 #[test]
 fn div_syntax_byte_25() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 25)", expect);
 }
 
 #[test]
 fn div_syntax_byte_26() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 26)", expect);
 }
 
 #[test]
 fn div_syntax_byte_27() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 27)", expect);
 }
 
 #[test]
 fn div_syntax_byte_28() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 28)", expect);
 }
 
 #[test]
 fn div_syntax_byte_29() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 29)", expect);
 }
 
 #[test]
 fn div_syntax_byte_30() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 30)", expect);
 }
 
 #[test]
 fn div_syntax_byte_31() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 31)", expect);
 }
 
@@ -239,7 +239,7 @@ fn div_syntax_byte_32() {
 #[test]
 fn div_syntax_byte_33() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 33)", expect);
 }
 
@@ -253,21 +253,21 @@ fn div_syntax_byte_34() {
 #[test]
 fn div_syntax_byte_35() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 39""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 35)", expect);
 }
 
 #[test]
 fn div_syntax_byte_36() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 119""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 36)", expect);
 }
 
 #[test]
 fn div_syntax_byte_37() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 119""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 37)", expect);
 }
 
@@ -281,7 +281,7 @@ fn div_syntax_byte_38() {
 #[test]
 fn div_syntax_byte_39() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 39""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 39)", expect);
 }
 
@@ -316,7 +316,7 @@ fn div_syntax_byte_43() {
 #[test]
 fn div_syntax_byte_44() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 39""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 44)", expect);
 }
 
@@ -330,7 +330,7 @@ fn div_syntax_byte_45() {
 #[test]
 fn div_syntax_byte_46() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 46)", expect);
 }
 
@@ -414,14 +414,14 @@ fn div_syntax_byte_57() {
 #[test]
 fn div_syntax_byte_58() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 58)", expect);
 }
 
 #[test]
 fn div_syntax_byte_59() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 60""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 59)", expect);
 }
 
@@ -449,14 +449,14 @@ fn div_syntax_byte_62() {
 #[test]
 fn div_syntax_byte_63() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 63)", expect);
 }
 
 #[test]
 fn div_syntax_byte_64() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 64)", expect);
 }
 
@@ -666,7 +666,7 @@ fn div_syntax_byte_93() {
 #[test]
 fn div_syntax_byte_94() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 94)", expect);
 }
 
@@ -680,7 +680,7 @@ fn div_syntax_byte_95() {
 #[test]
 fn div_syntax_byte_96() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 39""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 96)", expect);
 }
 
@@ -869,7 +869,7 @@ fn div_syntax_byte_122() {
 #[test]
 fn div_syntax_byte_123() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 40""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 123)", expect);
 }
 
@@ -883,21 +883,21 @@ fn div_syntax_byte_124() {
 #[test]
 fn div_syntax_byte_125() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 41""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 125)", expect);
 }
 
 #[test]
 fn div_syntax_byte_126() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 126)", expect);
 }
 
 #[test]
 fn div_syntax_byte_127() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 46""#]];
+    let expect = expect_test::expect![[r#""OK 95""#]];
     crate::common::assert_oracle_parity_expect("(char-syntax 127)", expect);
 }
 

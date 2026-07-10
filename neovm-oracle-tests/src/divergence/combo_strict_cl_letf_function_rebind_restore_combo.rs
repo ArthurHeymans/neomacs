@@ -20,7 +20,7 @@ fn div_v8_cl_letf_function_mock_restore() {
             (probe-clf)))
         (probe-clf)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +41,7 @@ fn div_v8_cl_letf_variable_value_builtin_mock() {
             (gethash 'k ht))
           (gethash 'k ht))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-letf)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_cl_letf_unwind_restore_on_nonlocal_exit() {
           (error 'caught))
         (probe-letf-unwind)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught orig)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

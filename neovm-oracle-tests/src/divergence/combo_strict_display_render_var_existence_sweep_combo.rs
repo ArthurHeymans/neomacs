@@ -27,7 +27,7 @@ fn div_v8_display_cursor_spacing_scroll_var_sweep() {
       (boundp 'mouse-yank-at-point)
       (boundp 'make-cursor-line-fully-visible))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_bidi_fringe_boundary_indicator_var_sweep() {
       (boundp 'tab-width)
       (boundp 'indent-tabs-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -72,6 +72,6 @@ fn div_v8_display_table_glyph_var_sweep() {
       (boundp 'hl-line-mode)
       (boundp 'global-hl-line-mode))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

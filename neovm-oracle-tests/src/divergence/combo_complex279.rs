@@ -91,7 +91,7 @@ fn div_cx279_read_circle_shared_round_trip() {
 #[test]
 fn div_cx279_prin1_print_gensym_uninterned() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK (\"G-19\" \"#:G-19\" \"G-19\")""##]];
+    let expect = expect_test::expect![[r##""OK (\"G-0\" \"#:G-0\" \"G-0\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gs (gensym "G-")))

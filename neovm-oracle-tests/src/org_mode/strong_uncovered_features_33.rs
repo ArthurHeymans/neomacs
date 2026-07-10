@@ -115,7 +115,7 @@ fn uf33_id_find_file() {
 #[test]
 fn uf33_id_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK #s(hash-table test equal)""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-id-update-id-locations nil)

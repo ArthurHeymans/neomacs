@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello World FooERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello World Foo\" nil t nil \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -26,7 +26,9 @@ fn divergence_undo_basic() {
 fn divergence_undo_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (\"Hello World\" t t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World\" ((6 . 12) nil (1 . 6) (t . 0)) (nil (6 . 12) nil (1 . 6) (t . 0)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -43,8 +45,7 @@ fn divergence_undo_boundary() {
 fn divergence_undo_with_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""HelloBeautiful  WorldERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -61,7 +62,7 @@ fn divergence_undo_with_marker() {
 fn divergence_undo_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""HelloERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello\" nil \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -77,7 +78,7 @@ fn divergence_undo_delete() {
 fn divergence_undo_prop_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -141,7 +142,7 @@ fn divergence_undo_auto() {
 fn divergence_undo_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAAABBBBCCCCERR (wrong-type-argument sequencep t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"AAAABBBB\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA")
@@ -163,7 +164,7 @@ fn divergence_undo_repeat() {
 fn divergence_undo_nil_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (\"Hello World\" ((6 . 12)) t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello World\" ((6 . 12)) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")

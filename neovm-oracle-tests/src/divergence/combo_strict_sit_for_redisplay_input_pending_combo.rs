@@ -18,7 +18,7 @@ fn div_v8_sit_for_redisplay_input_pending_batch() {
       (or (null (input-pending-p)) (input-pending-p))
       (sit-for 0.001))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -33,7 +33,7 @@ fn div_v8_redisplay_force_mode_line_update() {
     (kill-buffer (current-buffer))
     (list r1 m1 (eq m1 nil))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,6 +45,6 @@ fn div_v8_sleep_for_minimal_no_input() {
       (sit-for 0)
       (redisplay))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

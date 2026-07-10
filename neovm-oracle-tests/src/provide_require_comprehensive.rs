@@ -413,7 +413,7 @@ fn oracle_prop_provide_require_eval_after_load_deferred() {
              (equal snapshot neovm--test-deferred-log)))))
     (setq features (delq 'neovm--test-deferred-feat features))
     (makunbound 'neovm--test-deferred-log)))"#;
-    let expect = expect_test::expect![[r#""OK (nil nil 0 t)""#]];
+    let expect = expect_test::expect![[r#""OK (nil (deferred-2 deferred-1) 2 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

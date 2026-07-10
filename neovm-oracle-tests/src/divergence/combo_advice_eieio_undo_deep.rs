@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_advice_on_buffer_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""LLOERR (void-function advice--cdar)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-aobf-log-xxx nil)
@@ -71,7 +71,7 @@ fn divergence_keymap_with_eieio_command() {
 fn divergence_undo_with_advised_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""PREFIX-MODIFIEDERR (void-function advice--cdar)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-uwai-count-xxx 0)
@@ -141,8 +141,9 @@ fn divergence_eieio_with_advised_methods() {
 fn divergence_closure_with_buffer_local_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""CONTENTINSERTED--HEREERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (modified t 17 t #(\"CONTENTINSERTED--HERE\" 0 6 (section header) 16 20 (section body)) #(\"CONTENT-HERE\" 0 6 (section header) 7 11 (section body)) t 8 t modified t local t header t body t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-cwblu-xxx)
@@ -181,8 +182,7 @@ fn divergence_closure_with_buffer_local_and_undo() {
 fn divergence_keymap_advice_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""EDITABLEXX-MODIFIED-HEREERR (void-function advice--cdar)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "EDITABLE-CONTENT-HERE")
@@ -231,7 +231,7 @@ fn divergence_recursive_edit_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""STATE-BEFORE-APPENDEDOK (13 nil 6 t #(\"STATE-BEFORE\" 0 4 (part state) 5 10 (part before)) t state t #(\"STATE-BEFORE-APPENDED\" 0 4 (part state) 5 10 (part before) 11 12 (part appended) 12 19 (part appended)) t state t appended t modified t)""#
+        r#""OK (13 nil 6 t #(\"STATE-BEFORE\" 0 4 (part state) 5 10 (part before)) t state t #(\"STATE-BEFORE-APPENDED\" 0 4 (part state) 5 10 (part before) 11 12 (part appended) 12 19 (part appended)) t state t appended t modified t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -266,7 +266,7 @@ fn divergence_recursive_edit_with_state() {
 fn divergence_multibyte_undo_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCαβ�����ERR (args-out-of-range 4 9)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 4 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABC\x03B1\x03B2\x03B3DEF")
@@ -306,7 +306,9 @@ fn divergence_multibyte_undo_with_overlay_props() {
 fn divergence_edit_session_full_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""NEDIT1--MIDDLEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"NEDIT1--MIDDLE\" 7 8 (region body)) 1 15 1 15 #(\"SESSION-START\" 0 6 (region header) 7 8 (region body) 8 12 (region body)) t 1 t 9 nil 1 t active t header t body t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "SESSION-START")
@@ -349,7 +351,7 @@ fn divergence_propagate_props_through_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""aaa-REPLACED-ccc-REPLACED-eee-REPLACED-gggERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"aaa-REPLACED-ccc-REPLACED-eee-REPLACED-ggg\" 0 2 (idx 1) 13 15 (idx 3) 26 28 (idx 5) 39 41 (idx 7)) 1 nil nil nil #(\"aaa-bbb-ccc-ddd-eee-fff-ggg\" 0 2 (idx 1) 4 6 (idx 2) 8 10 (idx 3) 12 14 (idx 4) 16 18 (idx 5) 20 22 (idx 6) 24 26 (idx 7)) t 1 t 2 t 3 t 4 t 5 t 6 t 7 t all t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

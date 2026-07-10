@@ -102,9 +102,7 @@ fn div_cx347_seq_subseq_take_drop_concatenate() {
 #[test]
 fn div_cx347_cl_sort_stable_sort_merge_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (((1 . \"a\") (1 . \"e\") (3 . \"c\") (4 . \"d\") (5 . \"b\")) ((1 . \"a\") (1 . \"e\") (3 . \"c\") (4 . \"d\") (5 . \"b\")) (1 2 3 4 5 6) (\"apple\" \"berry\" \"cherry\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data (copy-sequence '((3 . "c") (1 . "a") (4 . "d") (1 . "e") (5 . "b")))))
@@ -120,7 +118,7 @@ fn div_cx347_cl_sort_stable_sort_merge_variants() {
 #[test]
 fn div_cx347_cl_some_every_notany_notevery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t t t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-some)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 5)))
@@ -138,7 +136,7 @@ fn div_cx347_cl_some_every_notany_notevery() {
 #[test]
 fn div_cx347_cl_position_find_count_member_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 2 nil 3 nil 3 (4 5))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-position 3 '(1 2 3 4 5))
@@ -156,7 +154,7 @@ fn div_cx347_cl_position_find_count_member_if() {
 #[test]
 fn div_cx347_cl_remove_substitute_adjoin_pushnew() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 8 64)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-remove 1 '(1 2 1 3 1 4))

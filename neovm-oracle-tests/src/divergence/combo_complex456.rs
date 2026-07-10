@@ -124,7 +124,7 @@ fn div_cx456_inhibit_message() {
 #[test]
 fn div_cx456_define_widget_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""value\nOK neo-cx456-widget""#]];
+    let expect = expect_test::expect![[r#""OK neo-cx456-widget""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'wid-edit)
   (define-widget 'neo-cx456-widget 'editable-field "Custom Widget")

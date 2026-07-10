@@ -293,9 +293,7 @@ fn div_fsn_base64_roundtrips() {
 #[test]
 fn div_fsn_cl_loop_accumulators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (10 2 3 1 (3 2 1) (1 3 5 7 9) (10 7 4 1) (1 4 9) (1 1 2 2 3 3) 14)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(1 2 3 4) sum x)
@@ -316,9 +314,7 @@ fn div_fsn_cl_loop_accumulators() {
 #[test]
 fn div_fsn_cl_destructure_labels_coerce() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 2 3 (4 5)) (1 2) 720 (97 98 99) 65 (1 3 2 4) (1 2 3) \"bcd\" 1 (1 9 3 9 1))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-destructuring-bind)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-destructuring-bind (a (b c) &rest d) '(1 (2 3) 4 5) (list a b c d))

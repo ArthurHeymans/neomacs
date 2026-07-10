@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_t5_buffer_local_inheritance_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable probe-bli-var)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let* ((base (get-buffer-create " *probe-bli-base*"))
@@ -38,7 +38,9 @@ fn div_t5_buffer_local_inheritance_indirect() {
 #[test]
 fn div_t5_face_attribute_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Monospace\" bold \"Monospace\" bold 120 probe-inherit-face ((:family . unspecified) (:foundry . unspecified) (:width . unspecified) (:height . unspecified) (:weight . unspecified) (:slant . unspecified) (:underline . unspecified) (:overline . unspecified) (:extend . unspecified) (:strike-through . unspecified) (:box . unspecified) (:inverse-video . unspecified) (:foreground . unspecified) (:background . unspecified) (:stipple . unspecified) (:inherit . probe-inherit-face)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let ((probe-face (make-face 'probe-inherit-face)))
@@ -61,7 +63,7 @@ fn div_t5_face_attribute_inheritance_chain() {
 #[test]
 fn div_t5_circular_vector_read_write() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 t 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let* ((v (vector 1 2 3))
@@ -79,7 +81,9 @@ fn div_t5_circular_vector_read_write() {
 #[test]
 fn div_t5_print_escape_multibyte_exotic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"caf\\\\x00e9\\\\x65e5\\\\x672c\\\"\" \"\\\"café日本\\\"\" \"\\\"\\\\x0080\\\\x00ff\\\\x0100\\\"\" \"\\\"café\\\"\" \"\\\"\\\\x00e9\\\\x0159\\\\ A\\\"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (list (let ((print-escape-multibyte t)) (prin1-to-string "café日本"))
@@ -96,7 +100,7 @@ fn div_t5_print_escape_multibyte_exotic() {
 #[test]
 fn div_t5_setf_generalized_places_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-rotatef)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let ((lst (list 1 2 3))

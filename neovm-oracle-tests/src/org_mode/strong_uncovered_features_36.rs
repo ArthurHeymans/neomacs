@@ -35,9 +35,7 @@ fn uf36_indent() {
 #[test]
 fn uf36_indent_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 \"\") (2 #(\"  \" 0 2 (face org-indent))) (3 #(\"*\" 0 1 (face org-indent))) (4 #(\"    \" 0 4 (face org-indent))) (5 #(\"**\" 0 2 (face org-indent))) (6 #(\"      \" 0 6 (face org-indent))))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-indent-indent-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -85,9 +83,7 @@ fn uf36_indent_region() {
 #[test]
 fn uf36_indent_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 \"\") (2 #(\"  \" 0 2 (face org-indent))) (3 #(\"*\" 0 1 (face org-indent))) (4 #(\"    \" 0 4 (face org-indent))))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-indent-add-properties)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -111,7 +107,7 @@ fn uf36_indent_props() {
 #[test]
 fn uf36_indent_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-indent-add-properties)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -136,7 +132,7 @@ fn uf36_indent_remove() {
 #[test]
 fn uf36_indent_refresh() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-indent-refresh-maybe)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

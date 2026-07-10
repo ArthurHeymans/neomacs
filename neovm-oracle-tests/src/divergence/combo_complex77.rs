@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx77_syntax_class_of_chars_in_default_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((97 119) (65 119) (48 119) (95 95) (45 95) (32 32) (9 32) (40 40) (41 41) (34 34) (59 46) (46 46) (44 46) (39 46) (92 92) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46))""#
+        r#""OK ((97 119) (65 119) (48 119) (95 95) (45 95) (32 32) (9 32) (40 40) (41 41) (34 34) (59 60) (46 95) (44 39) (39 39) (92 92) (35 39) (36 95) (37 95) (38 95) (42 95) (43 95) (60 95) (62 95) (64 95) (47 95) (124 95) (126 95))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

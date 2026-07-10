@@ -90,7 +90,7 @@ fn divergence_condition_case_error_data_integrity() {
 fn divergence_save_excursion_restore_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (t 11 11)""#]];
+    let expect = expect_test::expect![[r#""OK (t 11 11)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -110,7 +110,7 @@ fn divergence_save_excursion_restore_on_error() {
 fn divergence_save_restriction_restore_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""CDEFOK (3 7 3 7 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (3 7 3 7 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -131,7 +131,7 @@ fn divergence_save_restriction_restore_on_error() {
 fn divergence_marker_recovery_after_failed_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCD123EFGHIJOK (5 \"ABCD123EFGHIJ\")""#]];
+    let expect = expect_test::expect![[r#""OK (5 \"ABCD123EFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")

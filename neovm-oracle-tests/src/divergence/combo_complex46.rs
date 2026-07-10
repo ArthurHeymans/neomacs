@@ -194,7 +194,7 @@ fn div_cx46_timer_run_cancel_process_exit_coding_env_mega() {
 #[test]
 fn div_cx46_print_circle_gensym_quoted_struct_propertized_length_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 70)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -411,9 +411,7 @@ fn div_cx46_format_escape_all_multibyte_circle_gensym_propertized_mega() {
 #[test]
 fn div_cx46_coding_priority_list_utf8_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (20 (utf-8 iso-2022-7bit iso-latin-1 iso-2022-7bit-lock iso-2022-8bit-ss2 emacs-mule raw-text iso-2022-jp in-is13194-devanagari chinese-iso-8bit utf-8-auto utf-8-with-signature utf-16 utf-16be-with-signature utf-16le-with-signature utf-16be utf-16le japanese-shift-jis chinese-big5 undecided) 0)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((prio (coding-system-priority-list)))
@@ -443,7 +441,7 @@ fn div_cx46_process_kill_buffer_query_exit_flag_off_kill() {
 #[test]
 fn div_cx46_cl_coerce_cycle_with_text_properties_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (4 4 4 4 (face bold) nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café" 'face 'bold))

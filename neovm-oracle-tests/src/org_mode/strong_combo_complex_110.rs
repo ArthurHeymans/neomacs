@@ -20,7 +20,7 @@ fn combo110_org_babel_ob_awk_script() {
 #[test]
 fn combo110_org_timestamp_with_time_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function list:type)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn(require'org)(let((ts(org-timestamp-from-string"<2024-06-15 Sat 10:00-11:00>")))(list:type(org-element-property:type ts):h-start(org-element-property:hour-start ts):h-end(org-element-property:hour-end ts))))"##,
         expect,

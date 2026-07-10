@@ -17,7 +17,7 @@ fn div_t6_char_fold_table_customization() {
             (string-match-p (char-fold-to-regexp "a") "á"))
     (setq char-fold-table old-table)))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable char-fold-table)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +39,7 @@ fn div_t6_syntax_table_string_syntax_variants() {
           (nth 3 (syntax-pp 20))
           (nth 3 (syntax-pp 22))))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,7 +63,7 @@ fn div_t6_cl_struct_type_vector_and_list() {
                  (probe-vec-struct-b vs))
           (length vs))))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -85,7 +85,7 @@ fn div_t6_face_remap_add_relative_stacking() {
             (face-remap-remove-relative c2))))
     (kill-buffer b)))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t 1 (default default))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -102,6 +102,6 @@ fn div_t6_cl_coerce_type_conversions() {
       (condition-case err (cl-coerce "ab" 'character) (error (car err)))
       (cl-coerce '(1 2) 'simple-vector))
 "#;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

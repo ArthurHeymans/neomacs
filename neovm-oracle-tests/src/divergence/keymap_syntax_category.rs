@@ -43,7 +43,7 @@ fn divergence_keymap_parent_inheritance() {
 fn divergence_current_active_maps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (1 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (2 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((maps (current-active-maps)))
   (list (length maps)
@@ -57,7 +57,7 @@ fn divergence_current_active_maps() {
 fn divergence_where_is() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK ([7])""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(where-is-internal 'keyboard-quit (current-global-map))"#,
         expect,

@@ -19,7 +19,7 @@ fn div_v8_compose_string_region_decompose() {
           (get-text-property 1 'composition)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t nil \"hello world\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -36,7 +36,7 @@ fn div_v8_compose_string_explicit_components() {
           (get-text-property 4 'composition)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -54,6 +54,8 @@ fn div_v8_auto_compose_chars_composition_func() {
           (get-text-property 11 'composition)
           (buffer-size))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((9 . [49 50 51 52 53 54 55 56 57 48])) ((9 . [49 50 51 52 53 54 55 56 57 48])) nil 24)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

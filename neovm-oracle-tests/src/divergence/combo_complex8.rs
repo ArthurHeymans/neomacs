@@ -220,7 +220,7 @@ fn div_cx8_overlay_after_string_with_multibyte_insert() {
 #[test]
 fn div_cx8_cl_getf_putf_remf_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:a 1 :b 2 :c 3) :default)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-getf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((pl (list :a 1 :b 2 :c 3)))

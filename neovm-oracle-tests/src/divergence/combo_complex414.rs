@@ -29,7 +29,7 @@ fn div_cx414_define_symbol_macro() {
 #[test]
 fn div_cx414_cl_flet_labels_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (void-function g)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-flet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -132,13 +132,7 @@ fn div_cx414_native_comp_availability() {
 fn div_cx414_documentation_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#"OK ("Return the car of LIST.  If LIST is nil, return nil.
-Error if LIST is not nil and not a cons cell.  See also `car-safe'.
-
-See Info node `(elisp)Cons Cells' for a discussion of related basic
-Lisp concepts such as car, cdr, cons cell and list.
-
-(fn LIST)" nil)"#
+        r#""OK (\"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also `car-safe'.\n\nSee Info node `(elisp)Cons Cells' for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

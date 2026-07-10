@@ -21,7 +21,7 @@ fn div_v8_overlay_modification_hooks_fire() {
       (delete-region 3 4))
     (nreverse fired)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (before after before after)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_overlay_insert_in_front_behind_hooks() {
       (insert "B"))
     (list front-fired behind-fired)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -60,6 +60,6 @@ fn div_v8_overlay_invisible_filter_buffer_atomic() {
           (filter-buffer-substring 1 22 t)
           (buffer-substring-no-properties 1 22))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 22)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

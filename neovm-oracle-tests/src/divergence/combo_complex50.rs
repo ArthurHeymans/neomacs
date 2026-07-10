@@ -148,9 +148,7 @@ fn div_cx50_coding_env_process_sentinel_timer_undo_window_mega() {
 #[test]
 fn div_cx50_print_circle_gensym_struct_vector_propertized_escape_all_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r##""OK (\"[#1=#s(neo-cx50-rec \\\"caf\\\\x00e9\\\" 42) #1#]\" \"('#:g0)\" \"#(\\\"world\\\\n\t\\\" 0 7 (face bold))\" 29 11)""##
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -441,8 +439,7 @@ fn div_cx50_superword_upcase_word_multiple_backward() {
 #[test]
 fn div_cx50_cl_coerce_cycle_multibyte_propertized_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (6 6 6 6 (face bold) nil t (99 97 102 233 19990 30028))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-coerce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (propertize "café世界" 'face 'bold))

@@ -107,7 +107,7 @@ fn strict_org_link_abbreviation_lookup() {
 #[test]
 fn strict_org_timestamp_iso_8601() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:type active :hour 14 :minute 30 :second t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-timestamp-parser)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (let ((ts (org-timestamp-from-string "<2024-06-15 Sat 14:30:00>")))

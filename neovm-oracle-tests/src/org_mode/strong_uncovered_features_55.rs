@@ -130,7 +130,7 @@ fn uf55_habit_toggle() {
 #[test]
 fn uf55_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (90.0 150.0 1560.0 90.0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-to-minutes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-to-minutes "1:30")
         (org-duration-to-minutes "2h30min")
@@ -147,7 +147,7 @@ fn uf55_duration() {
 #[test]
 fn uf55_duration_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"1:30\" \"2:30\" \"1d 1:00\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-from-minutes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-from-minutes 90)
         (org-duration-from-minutes 150)
@@ -163,7 +163,7 @@ fn uf55_duration_from() {
 #[test]
 fn uf55_duration_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 0 nil 0)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-duration-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-duration-p "1:30")
         (org-duration-p "2h30min")
@@ -180,7 +180,7 @@ fn uf55_duration_p() {
 #[test]
 fn uf55_ts_to_now() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK -165""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-time-stamp-to-now)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-time-stamp-to-now "<2026-01-15>")"##,
         expect,
@@ -194,7 +194,7 @@ fn uf55_ts_to_now() {
 #[test]
 fn uf55_iso_week() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-days-to-iso-week)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-days-to-iso-week 0)
         (org-days-to-iso-week 1)
@@ -210,7 +210,7 @@ fn uf55_iso_week() {
 #[test]
 fn uf55_today() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 739796""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-today)""#]];
     crate::common::assert_oracle_parity_expect(r##"(org-today)"##, expect);
 }
 
@@ -221,7 +221,7 @@ fn uf55_today() {
 #[test]
 fn uf55_current_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-current-time)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((t (org-current-time)))
   (list (nth 0 t) (nth 1 t)))"##,

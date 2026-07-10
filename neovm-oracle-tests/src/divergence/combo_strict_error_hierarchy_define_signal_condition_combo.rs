@@ -22,7 +22,9 @@ fn div_v8_define_error_hierarchy_inheritance_match() {
         (get 'probe-specific-err 'error-message)
         (get 'probe-base-err 'error-conditions)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((caught-specific \"detail\") (caught-base \"d2\") (probe-specific-err probe-base-err error) \"specific error\" (probe-base-err error))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +45,9 @@ fn div_v8_signal_data_formats_error_to_string() {
       (condition-case err (signal 'arith-error nil)
          (arith-error (cdr err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((integerp stringp) (\"plain message\") (\"multi\" \"part\") no-list-data (\"convenience\") nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +66,8 @@ fn div_v8_error_message_string_hierarchy_walk() {
         (error-message-string '(error "x"))
         (member 'probe-msg-l1 (get 'probe-msg-l3 'error-conditions))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((caught-at-l1 \"deep\") \"level three: \\\"deep\\\"\" \"Wrong type argument: integerp, stringp\" \"x\" (probe-msg-l1 error))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

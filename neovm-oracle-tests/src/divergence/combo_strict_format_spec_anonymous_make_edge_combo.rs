@@ -16,7 +16,9 @@ fn div_v8_format_spec_edge_multibyte_special() {
         (format-spec "no specs" spec)
         (format-spec "%%literal %n" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"café 日本語\" \"\" \"café-日本語-\" \"no specs\" \"%literal café\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -32,7 +34,7 @@ fn div_v8_format_spec_make_from_string_edge() {
         (format-spec "s=%s" s2)
         (format-spec "no match" s3)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function format-spec-make)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -46,6 +48,8 @@ fn div_v8_format_spec_with_predicate_filter() {
         (length (format-spec "%a%b%c" spec))
         (format-spec "x%ay%bz%cw" spec)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"apple banana cherry\" \"apple-banana-cherry-apple\" 17 \"xappleybananazcherryw\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

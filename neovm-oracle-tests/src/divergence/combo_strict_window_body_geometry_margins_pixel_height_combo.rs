@@ -22,7 +22,7 @@ fn div_v8_window_body_width_across_margin_configs() {
         (set-window-margins w 0 0)
         (list zero left-only both pixel)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (80 77 75 75)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,7 +40,7 @@ fn div_v8_window_body_height_margins_total_size() {
       (set-window-margins w 0 0)
       (list total-h body-h total-w body-h-after-margin))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (24 23 80 23)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +57,6 @@ fn div_v8_window_pixel_width_text_pixel_size_count_screen() {
       (set-window-margins w 0 0)
       (list pw ph pw-after (window-body-width w) (eq pw pw-after)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (80 24 80 80 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

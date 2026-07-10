@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_window_point_sync_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAAAAAAAAAOK (5 t 8 t t)""#]];
+    let expect = expect_test::expect![[r#""OK (5 t 8 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
@@ -31,8 +31,7 @@ fn divergence_window_point_sync_across_buffers() {
 fn divergence_temporary_buffer_set_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""MAINERR (wrong-type-argument number-or-marker-p nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "MAIN")
@@ -52,7 +51,7 @@ fn divergence_temporary_buffer_set_marker() {
 fn divergence_marker_insertion_type_across_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AXXAAAOK (4 2 t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (4 2 t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))
@@ -81,7 +80,7 @@ fn divergence_marker_insertion_type_across_buffers() {
 fn divergence_save_excursion_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""BCDXXEFGHIOK (12 nil \"BCDXXEFGHI\" 3 9 test)""#]];
+    let expect = expect_test::expect![[r#""OK (12 nil \"BCDXXEFGHI\" 3 9 test)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -128,7 +127,7 @@ fn divergence_buffer_list_order_after_switch() {
 fn divergence_point_min_max_after_multiple_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (3 8 4 7 1 11 t t t t t nil 5)""#]];
+    let expect = expect_test::expect![[r#""OK (3 8 4 7 1 11 t t t t t nil 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -152,7 +151,9 @@ fn divergence_point_min_max_after_multiple_narrow() {
 fn divergence_kill_buffer_undo_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ORIGXXINALOK (t t t 10 10 t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((5 . 7) 9 nil (1 . 9) (t . 0)) ((5 . 7) 9 nil (1 . 9) (t . 0)) t 10 10 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ORIGINAL")
@@ -199,7 +200,7 @@ fn divergence_get_buffer_create_existing() {
 fn divergence_marker_after_revert_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XYZOK (1 1 \"XYZ\" t nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (1 1 \"XYZ\" t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -221,7 +222,7 @@ fn divergence_marker_after_revert_buffer() {
 fn divergence_window_buffer_swap_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""AAAAOK (5 5 nil nil t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (5 5 nil nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (current-buffer))

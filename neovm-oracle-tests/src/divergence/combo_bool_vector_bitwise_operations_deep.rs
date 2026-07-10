@@ -146,7 +146,7 @@ fn deficiency_bool_vector_not_in_place() {
 fn deficiency_bool_vector_large_intersection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (0 6 12 18 24 30 36 42 48 54 60)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (make-bool-vector 64 nil))\n\

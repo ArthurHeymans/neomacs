@@ -118,7 +118,7 @@ fn div_cx92_mark_ring_push_pop_cycle() {
 #[test]
 fn div_cx92_append_next_kill_combines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"first third\" 1)""#]];
+    let expect = expect_test::expect![[r#""OK (\" third\" 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

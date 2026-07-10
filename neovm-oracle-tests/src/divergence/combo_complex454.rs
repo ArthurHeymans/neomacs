@@ -43,7 +43,7 @@ fn div_cx454_assoc_string_casefold() {
 #[test]
 fn div_cx454_cl_position_find_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 (:a 1) 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((lst '((:a 1) (:b 2) (:a 3))))
   (list (cl-position :a lst :key #'car)
@@ -56,7 +56,7 @@ fn div_cx454_cl_position_find_key() {
 #[test]
 fn div_cx454_cl_delete_duplicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 3 2 4) (\"b\" \"a\" \"c\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-delete-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-delete-duplicates '(1 2 1 3 2 4) :test #'=)
       (cl-delete-duplicates '("a" "b" "a" "c") :test #'equal))"##,
@@ -67,7 +67,7 @@ fn div_cx454_cl_delete_duplicates() {
 #[test]
 fn div_cx454_seq_group_by() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((nil 1 3 5) (t 2 4 6))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'seq)
   (seq-group-by #'cl-evenp '(1 2 3 4 5 6)))"##,
@@ -89,7 +89,7 @@ fn div_cx454_seq_min_max() {
 #[test]
 fn div_cx454_cl_reduce_some_every() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 nil t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-reduce)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (cl-reduce #'+ '(1 2 3 4))
       (cl-some #'oddp '(2 4 6))

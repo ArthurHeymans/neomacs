@@ -21,7 +21,7 @@ fn div_v8_char_after_before_at_positions() {
         (char-before 7)
         (char-to-string (char-after 1))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (97 99 102 nil nil 97 101 102 \"a\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +41,7 @@ fn div_v8_following_preceding_char_under_motion() {
         (progn (goto-char (point-max)) (following-char))
         (progn (goto-char (point-max)) (preceding-char))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (99 98 100 100 97 0 0 102)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -62,6 +62,6 @@ fn div_v8_char_accessors_multibyte_and_end_of_line() {
         (progn (goto-char 6) (preceding-char))
         (char-to-string (char-after 7))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (108 26085 26412 10 110 26085 10 10 49 \"日\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

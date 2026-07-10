@@ -28,7 +28,7 @@ fn div_t9_window_pixel_after_text_scale() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK ((1 1 80 24) 1 1 80 80 80 24)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -55,7 +55,7 @@ fn div_t9_combo_syntax_fontlock_textprop_indent() {
     (push (list 'widened (buffer-string)) log)
     (nreverse log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function syntax-pp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -91,7 +91,7 @@ fn div_t9_buffer_swap_text_undo_markers() {
     (kill-buffer a)
     (kill-buffer b)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -137,6 +137,6 @@ fn div_t9_number_range_and_predicate_edge() {
       (cl-oddp (expt 2 64))
       (cl-evenp (expt 2 64)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-plusp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

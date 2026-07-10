@@ -27,7 +27,7 @@ fn div_v8_syntax_table_custom_modify_char_syntax_lookup() {
         (char-syntax ?a st)
         (char-syntax ?  st)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments char-syntax 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_syntax_table_custom_traversal_forward_sexp() {
             (nth 0 parse-state)
             (nth 3 parse-state)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (12 13 12 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -77,6 +77,6 @@ fn div_v8_syntax_table_delim_pairs_comment_class() {
             (scan-lists 1 1 0)
             (scan-lists 11 -1 0)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments char-syntax 2)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -19,7 +19,7 @@ fn div_v8_face_remap_add_relative_cookie_remove() {
               (memq cookie (get 'default 'face-remapping)))
       (face-remap-remove-relative cookie))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t default nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_text_scale_set_increase_decrease_buffer_local() {
                     text-scale-mode
                     (numberp text-scale-mode-amount))))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil 3 2 3 t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_face_remap_multiple_cookies_reset_all() {
         (list (>= count-before 2)
               count-after)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

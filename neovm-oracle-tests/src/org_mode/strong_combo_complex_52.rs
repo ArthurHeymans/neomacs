@@ -241,7 +241,7 @@ fn combo52_sort_multi_criteria_chain() {
 fn combo52_drawer_property_logbook_clock_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\n:PROPERTIES:\n:STATUS:   active\n:OWNER:    alice\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\"))""#
+        r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\n:PROPERTIES:\n:STATUS:   active\n:OWNER:    alice\n:END:\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  0:00\n:END:\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

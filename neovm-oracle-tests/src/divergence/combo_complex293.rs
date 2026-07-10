@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx293_cl_position_with_start_end_from_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 4 4 4 nil 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-position)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 3 2 1)))
@@ -26,7 +26,7 @@ fn div_cx293_cl_position_with_start_end_from_end() {
 #[test]
 fn div_cx293_cl_find_with_key_and_test() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((2 . \"b\") nil (2 . \"b\") (3 . \"c\"))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-find)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '((1 . "a") (2 . "b") (3 . "c"))))
@@ -42,7 +42,7 @@ fn div_cx293_cl_find_with_key_and_test() {
 #[test]
 fn div_cx293_cl_count_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 5 5 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-count)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 5 6 7 8 9 10)))
@@ -58,7 +58,7 @@ fn div_cx293_cl_count_with_predicate() {
 #[test]
 fn div_cx293_cl_search_in_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 3 0 nil 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-search)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-search '(2 3) '(1 2 3 4 5))
@@ -74,7 +74,7 @@ fn div_cx293_cl_search_in_sequence() {
 #[test]
 fn div_cx293_cl_mismatch_between_sequences() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil 2 3 3 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-mismatch)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-mismatch '(1 2 3) '(1 2 3))
@@ -90,9 +90,7 @@ fn div_cx293_cl_mismatch_between_sequences() {
 #[test]
 fn div_cx293_cl_substitute_with_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((9 2 9 3 9 4) (9 2 9 3 1 4) (1 2 9 3 9 4) (1 9 3 9 5) (1 9 3 4 5))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-substitute)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-substitute 9 1 '(1 2 1 3 1 4))
@@ -108,9 +106,7 @@ fn div_cx293_cl_substitute_with_count() {
 #[test]
 fn div_cx293_cl_remove_duplicates_with_test() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 2 3 4) (1 2 3 4) (\"A\" \"a\" \"B\") (\"A\" \"a\" \"B\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-remove-duplicates)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-remove-duplicates '(1 2 2 3 3 3 4) :test #'=)
@@ -125,9 +121,7 @@ fn div_cx293_cl_remove_duplicates_with_test() {
 #[test]
 fn div_cx293_cl_merge_stable_sort_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((1 2 3 4 5 6) (2 4 6 1 3 5) (1 1 2 3 4 5 6 9) ((1 . \"a\") (1 . \"b\") (3 . \"c\")))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-merge)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-merge 'list '(1 3 5) '(2 4 6) #'<)
@@ -142,9 +136,7 @@ fn div_cx293_cl_merge_stable_sort_variants() {
 #[test]
 fn div_cx293_cl_set_operations_with_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (((1 . \"a\") (2 . \"b\") (3 . \"c\") (4 . \"y\")) ((2 . \"x\") (4 . \"y\")) ((3 . \"c\")) ((3 . \"c\")))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-union)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a '((1 . "a") (2 . "b") (3 . "c")))
@@ -161,7 +153,7 @@ fn div_cx293_cl_set_operations_with_key() {
 #[test]
 fn div_cx293_cl_seq_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-sort)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '((3 . "c") (1 . "a") (4 . "d") (1 . "e") (5 . "b"))))

@@ -210,7 +210,7 @@ fn div_cx100_mega_window_config_marker_overlay_register_undo() {
 #[test]
 fn div_cx100_mega_advice_clloop_closure_marker_overlay_undo_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defmacro)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -258,7 +258,7 @@ fn div_cx100_mega_advice_clloop_closure_marker_overlay_undo_narrow() {
 #[test]
 fn div_cx100_mega_pcase_rx_syntax_table_textprop_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument characterp nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

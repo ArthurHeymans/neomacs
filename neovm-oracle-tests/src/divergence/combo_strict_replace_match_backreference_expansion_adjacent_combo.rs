@@ -28,7 +28,7 @@ fn div_v8_replace_match_backref_reorder_adjacent() {
       (let ((s "e5")) (string-match "\\(.\\)\\(.\\)" s)
         (replace-match "[\\1][\\2]" nil nil nil s)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integerp \"abc\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_replace_match_whole_amp_reuse_literal_mix() {
       (let ((s "x1y2")) (string-match "\\(.\\)\\(.\\)\\(.\\)\\(.\\)" s)
         (replace-match "\\4\\3\\2\\1" nil nil nil s)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integerp \"hello\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -70,6 +70,8 @@ fn div_v8_match_substitute_replacement_variants() {
           (r3 (match-substitute-replacement "[\\1][\\2]")))
       (list r1 r2 r3 m0))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[a1]\" \"2b\" \"[b][2]\" (#<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer>))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

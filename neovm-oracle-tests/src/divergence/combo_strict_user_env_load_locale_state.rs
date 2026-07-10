@@ -29,7 +29,7 @@ fn div_g0_user_identity() {
 fn div_g0_file_paths_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"~/Projects/github.com/eval-exec/neomacs-main/\" \"/tmp/nix-shell.XcUf3d/\" t t t)""#
+        r#""OK (\"~/Projects/github.com/eval-exec/neomacs/neovm-oracle-tests/\" \"/tmp/nix-shell.ZUFluE/\" t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -63,9 +63,7 @@ fn div_g0_doc_directory() {
 #[test]
 fn div_g0_load_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t (\".so\" \".elc\" \".el\") \"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/program-14800-100.el\" t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t (\".so\" \".elc\" \".el\") nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (> (length load-path) 5)

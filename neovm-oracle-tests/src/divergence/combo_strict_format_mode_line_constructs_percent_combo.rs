@@ -24,7 +24,7 @@ fn div_v8_format_mode_line_percent_constructs() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,8 @@ fn div_v8_format_mode_line_propertize_eval_construct() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument windowp #<buffer  *probe-ml2*>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +64,6 @@ fn div_v8_header_line_tab_line_format_construct() {
     (kill-buffer (current-buffer))
     result))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" t \"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -99,7 +99,8 @@ fn div_cx127_eieio_eql_specializer_dispatch() {
 #[test]
 fn div_cx127_eieio_around_method_with_call_next_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
+    let expect =
+        expect_test::expect![[r#""OK (:primary-result (:around-begin :primary :around-end))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

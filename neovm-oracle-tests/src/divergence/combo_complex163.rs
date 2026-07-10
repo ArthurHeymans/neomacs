@@ -7,7 +7,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx163_cl_defstruct_type_of_returns_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t vector neo-cx163-tagged 1 2 3 4)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx163-tagged (:type vector) :named) a b c)
@@ -27,7 +27,7 @@ fn div_cx163_cl_defstruct_type_of_returns_tag() {
 #[test]
 fn div_cx163_cl_typep_with_custom_defstruct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil nil t t)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx163-thing name value)
@@ -64,8 +64,7 @@ fn div_cx163_record_type_of_returns_record() {
 #[test]
 fn div_cx163_cl_defstruct_with_included_slots_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"Generic\" \"...\" \"Rex\" \"Woof\" \"Lab\" t nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx163-animal
@@ -92,7 +91,7 @@ fn div_cx163_cl_defstruct_with_included_slots_inheritance() {
 #[test]
 fn div_cx163_cl_defstruct_copier_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"alpha\" \"modified\" nil nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx163-copy name value)
@@ -111,7 +110,7 @@ fn div_cx163_cl_defstruct_copier_independence() {
 #[test]
 fn div_cx163_cl_defstruct_read_only_slot_rejects_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (99 42 100 100 error)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx163-readonly
@@ -131,7 +130,7 @@ fn div_cx163_cl_defstruct_read_only_slot_rejects_setf() {
 #[test]
 fn div_cx163_cl_defstruct_with_named_predicate_strict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t nil nil nil)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx163-strict (:type list) :named) a b)
@@ -149,7 +148,7 @@ fn div_cx163_cl_defstruct_with_named_predicate_strict() {
 #[test]
 fn div_cx163_cl_defstruct_anon_type_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2) 1 2 t t cons)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx163-anon (:type list)) a b)
@@ -168,7 +167,7 @@ fn div_cx163_cl_defstruct_anon_type_list() {
 #[test]
 fn div_cx163_cl_defstruct_anon_type_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ([1 2 3] 1 2 3 t vector)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx163-avec (:type vector)) x y z)

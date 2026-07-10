@@ -31,7 +31,7 @@ fn div_u3_window_state_with_dedicated_and_parameters() {
     (when (buffer-live-p b2) (kill-buffer b2))
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (1 \" *probe-ws-a*\" nil test)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -52,7 +52,7 @@ fn div_u3_marker_through_replace_match_case_conversion() {
           (buffer-substring 1 4)
           (buffer-substring 5 10))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"The QUICK brown FOX\" 5 t \"The\" \"QUICK\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -71,7 +71,7 @@ fn div_u3_kbd_macro_execution_state() {
           (vectorp last-kbd-macro)
           (length last-kbd-macro))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (\"abc\" nil t nil 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -95,7 +95,7 @@ fn div_u3_cl_defmethod_combination_ordering() {
   (list (probe-mc 5)
         (nreverse log)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (10 (around-in before primary after around-out))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -126,6 +126,7 @@ fn div_u3_overlay_priority_face_merge_at_exact_boundary() {
                         (lambda (a b) (< (overlay-get a 'priority)
                                          (overlay-get b 'priority))))))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect =
+        expect_test::expect![[r#""OK (bold bold italic italic underline underline nil (1 2 3))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

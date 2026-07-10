@@ -56,7 +56,7 @@ fn divergence_mega_combo_edit_undo_overlays_markers_textprops() {
 fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""TRACXXKINGERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 36 73)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-mega-obj-xxx ()
@@ -102,8 +102,7 @@ fn divergence_mega_combo_eieio_closure_eval_advice_marker() {
 fn divergence_mega_combo_buffer_narrow_overlay_undo_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#"" SECTION2-YYYY SECTION3-CERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 40 38)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "SECTION1-AAAA SECTION2-BBBB SECTION3-CCCC SECTION4-DDDD")

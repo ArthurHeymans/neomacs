@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_char_syntax_non_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (119 119 119 119 119 119 32 32 95 119)""#]];
+    let expect = expect_test::expect![[r#""OK (119 119 119 119 119 119 32 62 95 119)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (list (char-syntax ?a) (char-syntax ?A) (char-syntax ?1)
@@ -163,8 +163,7 @@ fn div_utf8_char_fold_search_accent_insensitive() {
 #[test]
 fn div_utf8_regex_multibyte_group_and_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 6 8)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 6 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (progn

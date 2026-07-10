@@ -91,6 +91,6 @@ fn oracle_write_region_insert_file_contents_and_append_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 77 50)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

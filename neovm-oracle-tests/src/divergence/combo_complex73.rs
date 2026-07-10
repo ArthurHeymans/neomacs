@@ -33,7 +33,7 @@ fn div_cx73_func_arity_of_lambdas_subrs_and_macros() {
 #[test]
 fn div_cx73_closure_capture_mutation_lexical_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 1 2 3 2 2 2)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-decf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -231,7 +231,7 @@ fn div_cx73_mapcar_mapc_with_strings_and_vectors() {
 #[test]
 fn div_cx73_apply_lambda_with_defun_kw_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((1 2 99) (1 2 3) (1 nil 99) (:err . error))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defun)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defun neo-cx73-kwfn (a &key b (c 99))

@@ -41,7 +41,7 @@ fn div_cx407_keymap_parent_inherit() {
 fn div_cx407_window_edges_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((0 1 80 24) (0 1 80 23) (0 1 80 24) (0 1 80 23))""#]];
+        expect_test::expect![[r#""OK ((0 0 80 24) (0 0 80 23) (0 0 80 24) (0 0 80 23))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -132,7 +132,7 @@ fn div_cx407_rx_choices_multibyte() {
 #[test]
 fn div_cx407_regex_char_class_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 4)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))

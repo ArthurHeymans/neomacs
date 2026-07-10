@@ -29,7 +29,7 @@ fn div_utf8_bidi_direction_across_scripts() {
 #[test]
 fn div_utf8_bidi_paragraph_direction_variable_honored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (right-to-left left-to-right)""#]];
+    let expect = expect_test::expect![[r#""OK (left-to-right left-to-right)""#]];
     // Forcing the paragraph direction via the variable.
     crate::common::assert_oracle_parity_expect(
         r#"

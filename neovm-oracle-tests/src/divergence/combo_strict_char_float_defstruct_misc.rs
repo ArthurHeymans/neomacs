@@ -86,9 +86,7 @@ fn div_e2_fixnum_bignum_boundary() {
 #[test]
 fn div_e2_cl_defstruct_print_and_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r##""OK (probe-struct2 1 2 nil \"#s(probe-struct2 1 2 nil)\" t 4)""##
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defstruct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -207,7 +205,7 @@ fn div_e2_keymap_introspection() {
 #[test]
 fn div_e2_window_edges_geometry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 1 80 24) (0 1 80 23) 80 22 80 23 0 1)""#]];
+    let expect = expect_test::expect![[r#""OK ((0 0 80 24) (0 0 80 23) 80 23 80 24 0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-edges*")))

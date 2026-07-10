@@ -17,7 +17,9 @@ fn div_v8_hash_table_weakness_key_value_setup() {
         (puthash "key" 'val h)
         (list (hash-table-count h) (hash-table-weakness h))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (key-and-value key value key-or-value nil (1 key-and-value))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -39,7 +41,7 @@ fn div_v8_hash_table_weak_garbage_collect_entries() {
             (gethash 'stable-key h)
             (>= c2 1)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 weak-val stable-val t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -56,6 +58,6 @@ fn div_v8_hash_table_rehash_size_threshold_growth() {
         (gethash 'k5 h)
         (hash-table-empty-p h)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-empty-p)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

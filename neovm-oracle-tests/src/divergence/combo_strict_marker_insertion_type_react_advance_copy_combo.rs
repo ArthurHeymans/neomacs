@@ -23,7 +23,7 @@ fn div_v8_marker_insertion_type_advance_vs_stay() {
           (marker-insertion-type m-adv)
           (buffer-string))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (4 5 nil t \"ABCXDEF\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_marker_react_to_insertion_delete_combination() {
           (marker-buffer m1)
           (buffer-substring 1 5))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function marker-react-to-insertion)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,6 +67,6 @@ fn div_v8_marker_copy_isolation_delete_sequence() {
           (eq (marker-buffer m1) (marker-buffer m2))
           (eq m1 m2))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (5 5 5 t 3 3 3 t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

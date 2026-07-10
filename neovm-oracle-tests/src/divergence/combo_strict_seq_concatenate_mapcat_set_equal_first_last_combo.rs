@@ -18,7 +18,9 @@ fn div_v8_seq_concatenate_mapcat_multiple_types() {
       (seq-concatenate 'list nil '(1 2))
       (seq-concatenate 'string "" "x"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) [1 2 3 4] \"abcd\" (1 2 3) (1 1 2 2) (1 2) \"x\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -38,7 +40,7 @@ fn div_v8_seq_contains_set_equal_first_last() {
       (seq-last '(1 2 3))
       (seq-last "abc")))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function seq-last)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +59,6 @@ fn div_v8_seq_into_find_position_copy_count() {
       (seq-copy '(1 2 3))
       (eq (seq-copy '(1 2 3)) '(1 2 3))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-evenp)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

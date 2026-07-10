@@ -21,7 +21,7 @@ fn div_v8_frame_alist_window_system_var_sweep() {
       (boundp 'icon-title-format)
       (boundp 'iconify-child-frame))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -42,7 +42,7 @@ fn div_v8_mouse_yank_drag_autoselect_var_sweep() {
       (boundp 'mouse-avoidance-mode)
       (boundp 'mouse-avoidance-threshold))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +63,6 @@ fn div_v8_terminal_tool_bar_tab_bar_var_sweep() {
       (boundp 'horizontal-scroll-bar-mode)
       (boundp 'horizontal-scroll-bar-height))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

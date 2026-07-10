@@ -148,7 +148,7 @@ fn div_cx254_flymake_diagnostics_availability() {
 #[test]
 fn div_cx254_flymake_diagnostic_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

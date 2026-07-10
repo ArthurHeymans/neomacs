@@ -124,7 +124,7 @@ fn div_cx401_vertical_motion_display_glyph() {
 #[test]
 fn div_cx401_window_text_pixel_size_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((12 . 1) 12 1)""#]];
+    let expect = expect_test::expect![[r#""OK ((0 . 0) 0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -472,7 +472,7 @@ fn div_cx401_display_space_spec_column() {
 fn div_cx401_string_collate_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\") (\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\"))""#
+        r#""OK ((\"a\" \"ä\" \"o\" \"ö\" \"ß\" \"u\" \"ü\" \"z\") (\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

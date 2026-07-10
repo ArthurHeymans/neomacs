@@ -219,8 +219,7 @@ fn div_cx42_process_output_buffer_overlay_textprop_mega() {
 #[test]
 fn div_cx42_regex_match_data_save_replace_multibyte_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 2 6)""#]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer *scratch*> 2 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -240,7 +239,7 @@ fn div_cx42_regex_match_data_save_replace_multibyte_mega() {
 #[test]
 fn div_cx42_timer_run_idle_cancel_count_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 2 3 2)""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 0 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t1 (run-with-timer 100 nil (lambda ())))

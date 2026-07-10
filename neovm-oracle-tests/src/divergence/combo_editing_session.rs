@@ -8,7 +8,7 @@ fn divergence_simulated_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""fn main()// comment\n     {\n    println!(\"world\");\n}\nERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"fn main() {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 24 26 (syntax string)) #(\"fn main()// comment\n     {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 39 41 (syntax string)) 25 32 40 47 35 #(\"fn main() {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 24 26 (syntax string)) function t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -51,7 +51,7 @@ fn divergence_multi_region_edit_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""REGION1-XXAAAA REGION2-BBBBYY REGION3-CCCCERR (wrong-type-argument listp t)""#
+        r#""OK (#(\"REGION1-XXAAAA REGION2-BBBBYY REGION3-CCCC\" 0 8 (zone 1) 10 13 (zone 1) 14 25 (zone 2) 26 27 (zone 3) 29 39 (zone 3)) 1 2 3 t t t #(\"REGION1-XXAAAA REGION2-BBBB REGION3-CCCC\" 0 8 (zone 1) 10 13 (zone 1) 14 25 (zone 2) 26 27 (zone 3) 27 37 (zone 3)) nil 1 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -91,9 +91,7 @@ fn divergence_multi_region_edit_with_props() {
 fn divergence_ediff_style_region_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""line1 common\nline2 only-A\nline3 common\nline4 only-A\nline5 common\nERR (args-out-of-range 61 75)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 61 75)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1 common\nline2 only-A\nline3 common\nline4 only-A\nline5 common\n")
@@ -131,9 +129,7 @@ fn divergence_ediff_style_region_comparison() {
 fn divergence_refactor_rename_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""var bar = 1;\nvar bar = 2;\nprint(bar);\nbar = 3;\nERR (void-function every)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function every)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "var foo = 1;\nvar foo = 2;\nprint(foo);\nfoo = 3;\n")
@@ -164,8 +160,9 @@ fn divergence_refactor_rename_with_markers() {
 fn divergence_overlay_chain_delete_reinsert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""AAAA--EEEE-FFFF-GGGG-HHHHERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"AAAA--EEEE-FFFF-GGGG-HHHH\" \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH\" t nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH")
@@ -201,7 +198,9 @@ fn divergence_overlay_chain_delete_reinsert() {
 fn divergence_nested_narrow_widen_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""XXE-START INNEERR (wrong-type-argument listp t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (13 42 18 30 #(\"XXE-START INNE\" 2 9 (level middle) 10 14 (level inner)) 22 20 45 outer t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "OUTER-START MIDDLE-START INNER-END MIDDLE-END OUTER-END")
@@ -266,7 +265,7 @@ fn divergence_kill_yank_ring_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""AAAA-BBBB-CCCC-DDDD-EEE-BBBEERR (wrong-type-argument listp t)""#
+        r#""OK (\"AAAAB-CCCC-DDDD-EEE-BBBE\" \"AAAA-BBBB-CCCC-DDDD-EEE-BBBE\" 1 6 \"\" nil 1 1)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -299,9 +298,7 @@ fn divergence_kill_yank_ring_with_markers() {
 fn divergence_text_property_search_replace_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""keep ALPHA replace BETA keep GAMMA replace DELTA keepERR (args-out-of-range 50 55)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 50 55)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "keep ALPHA replace BETA keep GAMMA replace DELTA keep")

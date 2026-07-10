@@ -226,7 +226,7 @@ fn oracle_prop_progn_in_macro_expansion() {
                    (+ x 5))))))
         (list result neovm--trace))
     (fmakunbound 'neovm--test-with-trace)))"#;
-    let expect = expect_test::expect![[r#""ERR (void-variable neovm--trace)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-variable result)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

@@ -22,7 +22,7 @@ fn div_v8_cons_cells_floats_vectors_consed_var_sweep() {
       (boundp 'memory-full)
       (boundp 'memory-signal-data))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -43,7 +43,7 @@ fn div_v8_gc_threshold_percentage_messages_pure_var_sweep() {
       (boundp 'memory-use-counts)
       (boundp 'purecopy))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_misc_alloc_pure_marker_var_sweep() {
       (boundp 'set-marker-insertion-type)
       (boundp 'marker-react-to-insertion))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t t t nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

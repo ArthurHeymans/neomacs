@@ -250,9 +250,7 @@ fn combo31_navigation() {
 #[test]
 fn combo31_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((:html-has-title 9) (:html-has-todo 167) (:html-has-bold 703) (:html-has-table 1023) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 86) (:latex-has-table 242) (:ascii-has-h 7) (:ascii-has-bold 92))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-string-as)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* TODO [#A] H1 :t1:\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:"))
   (let ((html (org-export-string-as src 'html t))

@@ -181,7 +181,7 @@ fn div_wf_split_window_vertical() {
 #[test]
 fn div_wf_split_window_horizontal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil #<window 1 on *scratch*> 3)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil #<window 1 on *scratch*> 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
@@ -199,7 +199,7 @@ fn div_wf_split_window_horizontal() {
 #[test]
 fn div_wf_split_then_delete_other_windows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 1)""#]];
+    let expect = expect_test::expect![[r#""OK (3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case err
@@ -236,7 +236,7 @@ fn div_wf_window_buffer_roundtrip() {
 #[test]
 fn div_wf_get_buffer_window_lru_mru() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (windowp (get-lru-window))

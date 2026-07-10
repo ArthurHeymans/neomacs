@@ -18,7 +18,7 @@ fn div_v8_frame_char_width_height_metrics_shape() {
         (integerp (frame-cols f))
         (integerp (frame-lines f))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function frame-cols)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -34,7 +34,7 @@ fn div_v8_display_pixel_mm_dimensions_shape() {
         (or (integerp (display-mm-width)) (null (display-mm-width)))
         (or (integerp (display-mm-height)) (null (display-mm-height)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function frame-monitor)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,6 +49,6 @@ fn div_v8_frame_monitor_attributes_shape() {
         (assq 'mm-size attrs)
         (integerp (frame-monitor-attributes nil nil 'geometry))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 1) 3)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -43,7 +43,7 @@ fn divergence_expand_file_name_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/foo/baz\" \"/home/exec/test\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/test\" \"/absolute/path\" t nil)""#
+        r#""OK (\"/home/exec/Projects/github.com/eval-exec/neomacs/neovm-oracle-tests/foo/baz\" \"/home/exec/test\" \"/home/exec/Projects/github.com/eval-exec/neomacs/neovm-oracle-tests/test\" \"/absolute/path\" t nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list

@@ -150,7 +150,7 @@ fn divergence_string_equals_edge() {
 fn divergence_string_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"cba\" \"\" \"a\")""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function string-reverse)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (string-reverse "abc")

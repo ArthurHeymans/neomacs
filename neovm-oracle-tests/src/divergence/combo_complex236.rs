@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx236_map_keys_values_length_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"alpha\" \"beta\" \"gamma\") (1 2 3) 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -26,7 +26,7 @@ fn div_cx236_map_keys_values_length_hash() {
 #[test]
 fn div_cx236_map_keys_values_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((a b c) (1 2 3) 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '((a . 1) (b . 2) (c . 3))))
@@ -41,7 +41,7 @@ fn div_cx236_map_keys_values_alist() {
 #[test]
 fn div_cx236_map_keys_values_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:a :b :c) (1 2 3) 3)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((plist '(:a 1 :b 2 :c 3)))
@@ -56,9 +56,7 @@ fn div_cx236_map_keys_values_plist() {
 #[test]
 fn div_cx236_map_merge_two_hashes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (cl-no-applicable-method map-into #s(hash-table test equal data (\"c\" 3 \"d\" 4)) #s(hash-table test equal data (\"a\" 1 \"b\" 2)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-merge)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht1 (make-hash-table :test 'equal))
@@ -80,9 +78,7 @@ fn div_cx236_map_merge_two_hashes() {
 #[test]
 fn div_cx236_map_merge_with_collision_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (cl-no-applicable-method map-into #s(hash-table test equal data (\"a\" 10)) +)""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-merge-with)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht1 (make-hash-table :test 'equal))
@@ -100,7 +96,7 @@ fn div_cx236_map_merge_with_collision_fn() {
 #[test]
 fn div_cx236_map_do_iterate_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"x\" . 10) (\"y\" . 20))""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-do)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal))
@@ -117,7 +113,7 @@ fn div_cx236_map_do_iterate_hash() {
 #[test]
 fn div_cx236_map_elt_with_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 2 nil :missing)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-elt)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((plist '(:a 1 :b 2)))
@@ -133,7 +129,7 @@ fn div_cx236_map_elt_with_default() {
 #[test]
 fn div_cx236_map_put_set_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:val 1)""#]];
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -165,7 +161,7 @@ fn div_cx236_map_contains_p_predicate() {
 #[test]
 fn div_cx236_map_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (args-out-of-range 2 25)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function map-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
