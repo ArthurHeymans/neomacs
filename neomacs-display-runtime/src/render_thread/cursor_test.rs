@@ -16,6 +16,43 @@ fn make_target(x: f32, y: f32, w: f32, h: f32, style: CursorStyle) -> CursorTarg
     }
 }
 
+#[test]
+fn config_snapshot_copies_settings_and_stops_disabled_animations() {
+    let mut source = CursorState::default();
+    source.blink_enabled = false;
+    source.blink_interval = Duration::from_millis(275);
+    source.anim_enabled = false;
+    source.anim_speed = 8.5;
+    source.anim_style = CursorAnimStyle::Linear;
+    source.anim_duration = 0.4;
+    source.trail_size = 2.25;
+    source.size_transition_enabled = false;
+    source.size_transition_duration = 0.8;
+
+    let mut target = CursorState::default();
+    target.animating = true;
+    target.size_animating = true;
+    target.apply_config(source.config_snapshot());
+
+    assert_eq!(target.blink_enabled, source.blink_enabled);
+    assert_eq!(target.blink_interval, source.blink_interval);
+    assert_eq!(target.anim_enabled, source.anim_enabled);
+    assert_eq!(target.anim_speed, source.anim_speed);
+    assert_eq!(target.anim_style, source.anim_style);
+    assert_eq!(target.anim_duration, source.anim_duration);
+    assert_eq!(target.trail_size, source.trail_size);
+    assert_eq!(
+        target.size_transition_enabled,
+        source.size_transition_enabled
+    );
+    assert_eq!(
+        target.size_transition_duration,
+        source.size_transition_duration
+    );
+    assert!(!target.animating);
+    assert!(!target.size_animating);
+}
+
 // ---------------------------------------------------------------
 // Easing functions: boundary values, monotonicity, specific values
 // ---------------------------------------------------------------

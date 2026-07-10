@@ -694,9 +694,10 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn sync_cursor_config(&mut self, defaults: &CursorState, dirty: bool) {
-        self.cursor.copy_config_from(defaults);
+        let config = defaults.config_snapshot();
+        self.cursor.apply_config(config);
         for cursor in self.compositor.visual_cursors.values_mut() {
-            cursor.copy_config_from(defaults);
+            cursor.apply_config(config);
         }
         if dirty {
             self.compositor.dirty = true;

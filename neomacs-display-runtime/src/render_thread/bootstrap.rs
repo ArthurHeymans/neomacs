@@ -193,7 +193,7 @@ impl RenderApp {
             primary
                 .render
                 .cursor
-                .copy_config_from(&self.cursor_defaults);
+                .apply_config(self.cursor_defaults.config_snapshot());
             primary.render.compositor.transitions.policy = self.transition_policy;
         }
 

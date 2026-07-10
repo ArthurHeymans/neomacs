@@ -3,53 +3,10 @@
 use super::RenderApp;
 use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
 use crate::core::types::DisplayFrameId;
-use crate::render_thread::cursor::CursorTarget;
+use crate::render_thread::cursor::{CursorConfigSnapshot, CursorTarget};
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
-
-#[derive(Clone, Copy)]
-struct CursorConfigSnapshot {
-    blink_enabled: bool,
-    blink_interval: std::time::Duration,
-    anim_enabled: bool,
-    anim_speed: f32,
-    anim_style: crate::core::types::CursorAnimStyle,
-    anim_duration: f32,
-    trail_size: f32,
-    size_transition_enabled: bool,
-    size_transition_duration: f32,
-}
-
-impl CursorConfigSnapshot {
-    fn from_cursor(cursor: &crate::render_thread::cursor::CursorState) -> Self {
-        Self {
-            blink_enabled: cursor.blink_enabled,
-            blink_interval: cursor.blink_interval,
-            anim_enabled: cursor.anim_enabled,
-            anim_speed: cursor.anim_speed,
-            anim_style: cursor.anim_style,
-            anim_duration: cursor.anim_duration,
-            trail_size: cursor.trail_size,
-            size_transition_enabled: cursor.size_transition_enabled,
-            size_transition_duration: cursor.size_transition_duration,
-        }
-    }
-
-    fn apply_to(&self, cursor: &mut crate::render_thread::cursor::CursorState) {
-        cursor.copy_config_from_values(
-            self.blink_enabled,
-            self.blink_interval,
-            self.anim_enabled,
-            self.anim_speed,
-            self.anim_style,
-            self.anim_duration,
-            self.trail_size,
-            self.size_transition_enabled,
-            self.size_transition_duration,
-        );
-    }
-}
 
 struct CursorSyncOutcome {
     target: CursorTarget,
@@ -109,7 +66,7 @@ impl RenderApp {
         render.set_compact_bar(compact_bar);
         render.set_current_frame(Some(frame), Some(row_damage));
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
-        render.sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
+        render.sync_visual_cursors_from_current_frame(|cursor| cursor.apply_config(cursor_config));
         render.mark_dirty();
         cursor_sync
     }
@@ -151,7 +108,7 @@ impl RenderApp {
             }
         }
 
-        cursor_config.apply_to(&mut render.cursor);
+        render.cursor.apply_config(cursor_config);
         if let Some(new_target) = active_cursor {
             let old_cursor_rect = (
                 render.cursor.current_x,
@@ -463,7 +420,7 @@ impl RenderApp {
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(frame_id.get()) {
-                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                    let cursor_config = self.cursor_defaults.config_snapshot();
                     let cursor_sync = Self::ingest_frame_window_root_frame(
                         window_state,
                         frame,
@@ -506,7 +463,7 @@ impl RenderApp {
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id.get()) {
-                    let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                    let cursor_config = self.cursor_defaults.config_snapshot();
                     if window_state.render.update_child_frame(frame) {
                         let cursor_sync =
                             Self::sync_frame_window_cursor(window_state, cursor_config);
@@ -578,7 +535,7 @@ impl RenderApp {
                         false
                     };
                 }
-                let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+                let cursor_config = self.cursor_defaults.config_snapshot();
                 if let Some(primary_frame) = self
                     .frame_windows
                     .primary_window_mut()
@@ -597,15 +554,16 @@ impl RenderApp {
             }
         }
 
-        let cursor_config = CursorConfigSnapshot::from_cursor(&self.cursor_defaults);
+        let cursor_config = self.cursor_defaults.config_snapshot();
         if let Some(primary_frame) = self
             .frame_windows
             .primary_window_mut()
             .map(|ws| &mut ws.render)
         {
             let cursor_sync = Self::sync_render_cursor(primary_frame, cursor_config);
-            primary_frame
-                .sync_visual_cursors_from_current_frame(|cursor| cursor_config.apply_to(cursor));
+            primary_frame.sync_visual_cursors_from_current_frame(|cursor| {
+                cursor.apply_config(cursor_config)
+            });
             if let Some(cursor_sync) = cursor_sync {
                 self.update_ime_cursor_area_if_needed(&cursor_sync.target);
             } else {

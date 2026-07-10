@@ -32,6 +32,20 @@ pub(super) struct CornerSpring {
     pub(super) omega: f32,
 }
 
+/// Copyable cursor settings, excluding live animation and target state.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct CursorConfigSnapshot {
+    blink_enabled: bool,
+    blink_interval: std::time::Duration,
+    anim_enabled: bool,
+    anim_speed: f32,
+    anim_style: CursorAnimStyle,
+    anim_duration: f32,
+    trail_size: f32,
+    size_transition_enabled: bool,
+    size_transition_duration: f32,
+}
+
 /// Cursor animation, blinking, and size transition state.
 ///
 /// Extracted from RenderApp to group all cursor-related fields together.
@@ -135,47 +149,36 @@ impl Default for CursorState {
 }
 
 impl CursorState {
-    pub(super) fn copy_config_from_values(
-        &mut self,
-        blink_enabled: bool,
-        blink_interval: std::time::Duration,
-        anim_enabled: bool,
-        anim_speed: f32,
-        anim_style: CursorAnimStyle,
-        anim_duration: f32,
-        trail_size: f32,
-        size_transition_enabled: bool,
-        size_transition_duration: f32,
-    ) {
-        self.blink_enabled = blink_enabled;
-        self.blink_interval = blink_interval;
-        self.anim_enabled = anim_enabled;
-        self.anim_speed = anim_speed;
-        self.anim_style = anim_style;
-        self.anim_duration = anim_duration;
-        self.trail_size = trail_size;
-        self.size_transition_enabled = size_transition_enabled;
-        self.size_transition_duration = size_transition_duration;
+    pub(super) fn config_snapshot(&self) -> CursorConfigSnapshot {
+        CursorConfigSnapshot {
+            blink_enabled: self.blink_enabled,
+            blink_interval: self.blink_interval,
+            anim_enabled: self.anim_enabled,
+            anim_speed: self.anim_speed,
+            anim_style: self.anim_style,
+            anim_duration: self.anim_duration,
+            trail_size: self.trail_size,
+            size_transition_enabled: self.size_transition_enabled,
+            size_transition_duration: self.size_transition_duration,
+        }
+    }
+
+    pub(super) fn apply_config(&mut self, config: CursorConfigSnapshot) {
+        self.blink_enabled = config.blink_enabled;
+        self.blink_interval = config.blink_interval;
+        self.anim_enabled = config.anim_enabled;
+        self.anim_speed = config.anim_speed;
+        self.anim_style = config.anim_style;
+        self.anim_duration = config.anim_duration;
+        self.trail_size = config.trail_size;
+        self.size_transition_enabled = config.size_transition_enabled;
+        self.size_transition_duration = config.size_transition_duration;
         if !self.anim_enabled {
             self.animating = false;
         }
         if !self.size_transition_enabled {
             self.size_animating = false;
         }
-    }
-
-    pub(super) fn copy_config_from(&mut self, source: &CursorState) {
-        self.copy_config_from_values(
-            source.blink_enabled,
-            source.blink_interval,
-            source.anim_enabled,
-            source.anim_speed,
-            source.anim_style,
-            source.anim_duration,
-            source.trail_size,
-            source.size_transition_enabled,
-            source.size_transition_duration,
-        );
     }
 
     pub(super) fn set_target(&mut self, new_target: CursorTarget) -> (bool, bool) {
