@@ -2660,6 +2660,10 @@ pub struct TaggedHeap {
     /// `mark_and_sweep_weak_table_contents`). Holds raw object pointers, valid
     /// only within a single collection; cleared each cycle.
     weak_hash_tables: Vec<*mut HashTableObj>,
+    /// Membership shadow for `weak_hash_tables`: registration used to dedup
+    /// with a linear contains per table, O(T^2) across a cycle. The vector
+    /// stays authoritative for deterministic sweep order.
+    weak_hash_tables_set: rustc_hash::FxHashSet<*mut HashTableObj>,
     /// Weak hash tables that have become PERMANENT (tenured old generation or
     /// mapped pdump image). The main mark never re-runs `trace_veclike` on a
     /// permanent-black object, so such a table would otherwise never re-register
@@ -2670,6 +2674,8 @@ pub struct TaggedHeap {
     /// weak_tables` so permanent weak tables are swept against the CURRENT cycle's
     /// marks exactly like young ones. Permanent, so its pointers never dangle.
     permanent_weak_hash_tables: Vec<*mut HashTableObj>,
+    /// Membership shadow for `permanent_weak_hash_tables` (same pattern).
+    permanent_weak_hash_tables_set: rustc_hash::FxHashSet<*mut HashTableObj>,
     /// Every live finalizer object, registered at allocation — the Rust-side
     /// equivalent of GNU's intrusive `finalizers` list (alloc.c). Scanned at
     /// mark termination by `mark_and_queue_doomed_finalizers`: unmarked
@@ -3024,7 +3030,9 @@ impl TaggedHeap {
             gray_queue: Vec::new(),
             marked_symbols: FxHashSet::default(),
             weak_hash_tables: Vec::new(),
+            weak_hash_tables_set: rustc_hash::FxHashSet::default(),
             permanent_weak_hash_tables: Vec::new(),
+            permanent_weak_hash_tables_set: rustc_hash::FxHashSet::default(),
             finalizer_registry: Vec::new(),
             doomed_finalizer_functions: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
@@ -4604,6 +4612,7 @@ impl TaggedHeap {
         self.gray_queue.clear();
         self.marked_symbols.clear();
         self.weak_hash_tables.clear();
+        self.weak_hash_tables_set.clear();
         self.mark_cons_block_cache = None;
         // New mark cycle: the per-cycle SATB pre-image dedup set must start empty
         // so each owner's full pre-image is snapshotted once for THIS cycle's
@@ -4678,8 +4687,9 @@ impl TaggedHeap {
                     if (*vptr).type_tag == VecLikeType::HashTable {
                         let ht_ptr = vptr as *mut HashTableObj;
                         if (*ht_ptr).table.weakness.is_some()
-                            && !self.permanent_weak_hash_tables.contains(&ht_ptr)
+                            && !self.permanent_weak_hash_tables_set.contains(&ht_ptr)
                         {
+                            self.permanent_weak_hash_tables_set.insert(ht_ptr);
                             self.permanent_weak_hash_tables.push(ht_ptr);
                         }
                     }
@@ -4757,7 +4767,7 @@ impl TaggedHeap {
             })
             .collect();
         for ht_ptr in mapped_weak {
-            if !self.permanent_weak_hash_tables.contains(&ht_ptr) {
+            if self.permanent_weak_hash_tables_set.insert(ht_ptr) {
                 self.permanent_weak_hash_tables.push(ht_ptr);
             }
         }
@@ -5510,7 +5520,7 @@ impl TaggedHeap {
         if !is_weak {
             return None;
         }
-        if !self.weak_hash_tables.contains(&ht_ptr) {
+        if self.weak_hash_tables_set.insert(ht_ptr) {
             self.weak_hash_tables.push(ht_ptr);
         }
         let mut nonweak = Vec::new();
@@ -5804,7 +5814,7 @@ impl TaggedHeap {
         // already registered by `trace_veclike` / `register_weak_hash_table_for_
         // sweep` during this cycle's mark.
         for &tptr in &self.permanent_weak_hash_tables {
-            if !self.weak_hash_tables.contains(&tptr) {
+            if self.weak_hash_tables_set.insert(tptr) {
                 self.weak_hash_tables.push(tptr);
             }
         }
@@ -5862,6 +5872,7 @@ impl TaggedHeap {
 
         // -- Sweep phase: drop entries that did not survive. --
         let tables = std::mem::take(&mut self.weak_hash_tables);
+        self.weak_hash_tables_set.clear();
         for tptr in tables {
             // SAFETY: as above; exclusive heap access.
             let (weakness, entries): (
@@ -7293,7 +7304,10 @@ impl TaggedHeap {
                     // young, tenured, and dumped tables alike. The weak sweep runs
                     // before `verify_dump_partition`, so dead entries are removed
                     // before the verifier enumerates — no UAF.
-                    self.weak_hash_tables.push(obj as *mut HashTableObj);
+                    let tptr = obj as *mut HashTableObj;
+                    if self.weak_hash_tables_set.insert(tptr) {
+                        self.weak_hash_tables.push(tptr);
+                    }
                 } else {
                     // Trace all values in the hash table
                     for slot in ht.data.values() {
