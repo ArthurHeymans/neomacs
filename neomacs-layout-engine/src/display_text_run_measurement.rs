@@ -182,11 +182,16 @@ impl DisplayTextRunMeasurement {
     pub(crate) fn advance_for(&self, char_offset: usize, byte_offset: usize) -> Option<f32> {
         match self {
             Self::PerChar => None,
+            // Every constructor emits advances in ascending char_offset
+            // order (they iterate `char_indices`), so a binary search
+            // replaces the former whole-vector scan that made row building
+            // quadratic on long runs. The byte_offset equality keeps the
+            // exact old match condition.
             Self::Measured(advances) => advances
-                .iter()
-                .find(|advance| {
-                    advance.char_offset == char_offset && advance.byte_offset == byte_offset
-                })
+                .binary_search_by(|advance| advance.char_offset.cmp(&char_offset))
+                .ok()
+                .map(|index| &advances[index])
+                .filter(|advance| advance.byte_offset == byte_offset)
                 .and_then(|advance| {
                     (advance.advance_px.is_finite() && advance.advance_px >= 0.0)
                         .then_some(advance.advance_px)
@@ -196,43 +201,28 @@ impl DisplayTextRunMeasurement {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct DisplayTextRunClusterAdvance {
-    byte_offset: usize,
-    advance_px: f32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 struct DisplayTextRunClusterAdvances {
-    advances: Vec<DisplayTextRunClusterAdvance>,
+    advances: std::collections::HashMap<usize, f32>,
 }
 
 impl DisplayTextRunClusterAdvances {
     fn from_shaped_glyphs(text_len: usize, glyphs: impl IntoIterator<Item = ShapedGlyph>) -> Self {
-        let mut advances: Vec<DisplayTextRunClusterAdvance> = Vec::new();
+        // Aggregate per-cluster advances by byte offset. Each cluster's sum
+        // accumulates its glyphs in encounter order exactly as the former
+        // linear-scan version did; the map only replaces the O(glyphs *
+        // clusters) lookup that made shaping measurement quadratic.
+        let mut advances = std::collections::HashMap::new();
         for glyph in glyphs {
             if glyph.cluster_start > text_len {
                 continue;
             }
-            if let Some(advance) = advances
-                .iter_mut()
-                .find(|advance| advance.byte_offset == glyph.cluster_start)
-            {
-                advance.advance_px += glyph.x_advance;
-            } else {
-                advances.push(DisplayTextRunClusterAdvance {
-                    byte_offset: glyph.cluster_start,
-                    advance_px: glyph.x_advance,
-                });
-            }
+            *advances.entry(glyph.cluster_start).or_insert(0.0) += glyph.x_advance;
         }
         Self { advances }
     }
 
     fn advance_at(&self, byte_offset: usize) -> Option<f32> {
-        self.advances
-            .iter()
-            .find(|advance| advance.byte_offset == byte_offset)
-            .map(|advance| advance.advance_px)
+        self.advances.get(&byte_offset).copied()
     }
 }
 
