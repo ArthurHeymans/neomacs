@@ -4721,7 +4721,12 @@ pub fn load_runtime_image_with_features(
     extra_features: &[&str],
     dump_path: Option<&Path>,
 ) -> Result<super::eval::Context, EvalError> {
-    let executable = std::env::current_exe()
+    let executable = runtime_image_executable(role, dump_path);
+    load_runtime_image_with_features_for_executable(role, extra_features, dump_path, &executable)
+}
+
+fn runtime_image_executable(role: RuntimeImageRole, dump_path: Option<&Path>) -> PathBuf {
+    std::env::current_exe()
         .ok()
         .and_then(|path| path.canonicalize().ok().or(Some(path)))
         .unwrap_or_else(|| {
@@ -4730,8 +4735,19 @@ pub fn load_runtime_image_with_features(
             } else {
                 default_runtime_image_path(role)
             }
-        });
-    load_runtime_image_with_features_for_executable(role, extra_features, dump_path, &executable)
+        })
+}
+
+/// Whether any runtime image candidate for ROLE exists on disk for the
+/// running executable. Lets startup pick a degradation tier (final image,
+/// bootstrap image, source bootstrap) before attempting a load, so a
+/// merely-absent image never has to be distinguished from a corrupt one
+/// after the fact.
+pub fn runtime_image_available(role: RuntimeImageRole) -> bool {
+    let executable = runtime_image_executable(role, None);
+    runtime_image_candidate_paths_for_executable(&executable, role)
+        .iter()
+        .any(|candidate| candidate.exists())
 }
 
 pub(crate) fn load_runtime_image_with_features_for_executable(

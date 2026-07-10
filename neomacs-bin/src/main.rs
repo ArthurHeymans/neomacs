@@ -2050,15 +2050,7 @@ fn font_height_tenths_for_face(face: &neovm_core::face::Face) -> i32 {
 
 fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions) -> Context {
     match mode {
-        RuntimeMode::Raw => {
-            let startup_surface = raw_loadup_startup_surface(startup, None);
-            neovm_core::emacs_core::load::create_bootstrap_evaluator_with_startup_surface(
-                BOOTSTRAP_CORE_FEATURES,
-                None,
-                Some(&startup_surface),
-            )
-            .expect("raw bootstrap should succeed")
-        }
+        RuntimeMode::Raw => raw_source_bootstrap_evaluator(startup),
         RuntimeMode::BootstrapUse => {
             neovm_core::emacs_core::load::load_runtime_image_with_features(
                 RuntimeImageRole::Bootstrap,
@@ -2072,18 +2064,67 @@ fn create_startup_evaluator_for_mode(mode: RuntimeMode, startup: &StartupOptions
                 )
             })
         }
-        RuntimeMode::FinalRun => neovm_core::emacs_core::load::load_runtime_image_with_features(
-            RuntimeImageRole::Final,
-            BOOTSTRAP_CORE_FEATURES,
-            startup.dump_file_override.as_deref(),
-        )
-        .unwrap_or_else(|err| {
-            panic!(
-                "final image should load: {}",
-                render_startup_image_error(&err)
-            )
-        }),
+        RuntimeMode::FinalRun => {
+            // Degrade by image availability instead of panicking on a
+            // missing dump: a debug build after cargo clean (or before the
+            // release-only cargo xtask fresh-build pipeline has run) has no
+            // final image, which used to abort every debug launch. A dump
+            // that exists but fails to load still panics loudly - that is
+            // corruption, not absence. An explicit --dump-file keeps the
+            // strict behavior.
+            if startup.dump_file_override.is_some()
+                || neovm_core::emacs_core::load::runtime_image_available(RuntimeImageRole::Final)
+            {
+                neovm_core::emacs_core::load::load_runtime_image_with_features(
+                    RuntimeImageRole::Final,
+                    BOOTSTRAP_CORE_FEATURES,
+                    startup.dump_file_override.as_deref(),
+                )
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "final image should load: {}",
+                        render_startup_image_error(&err)
+                    )
+                })
+            } else if neovm_core::emacs_core::load::runtime_image_available(
+                RuntimeImageRole::Bootstrap,
+            ) {
+                tracing::warn!(
+                    "final runtime image not found; falling back to the bootstrap \
+                     image (slower startup, compile-main lisp loads from source). \
+                     Run cargo xtask fresh-build --release to build runtime images."
+                );
+                neovm_core::emacs_core::load::load_runtime_image_with_features(
+                    RuntimeImageRole::Bootstrap,
+                    BOOTSTRAP_CORE_FEATURES,
+                    None,
+                )
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "bootstrap image should load: {}",
+                        render_startup_image_error(&err)
+                    )
+                })
+            } else {
+                tracing::warn!(
+                    "no runtime images found; bootstrapping from lisp sources \
+                     (slow startup). Run cargo xtask fresh-build --release to \
+                     build runtime images."
+                );
+                raw_source_bootstrap_evaluator(startup)
+            }
+        }
     }
+}
+
+fn raw_source_bootstrap_evaluator(startup: &StartupOptions) -> Context {
+    let startup_surface = raw_loadup_startup_surface(startup, None);
+    neovm_core::emacs_core::load::create_bootstrap_evaluator_with_startup_surface(
+        BOOTSTRAP_CORE_FEATURES,
+        None,
+        Some(&startup_surface),
+    )
+    .expect("raw bootstrap should succeed")
 }
 
 fn raw_loadup_command_line(
