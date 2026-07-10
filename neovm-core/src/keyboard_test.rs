@@ -621,3 +621,30 @@ fn render_key_transport_drops_key_releases() {
     crate::test_utils::init_test_tracing();
     assert!(render_key_transport_to_input_event(XK_RETURN, 0, false, 0).is_none());
 }
+
+#[test]
+fn read_key_sequence_with_timeout_returns_nil_like_gnu() {
+    // GNU parity (oracle divergence cx429): in batch, with no input
+    // arriving, a with-timeout timer must fire during read-key-sequence's
+    // wait and throw out of it, so the form returns nil - not an empty key
+    // sequence string. The evaluator here has no input receiver, which is
+    // exactly the batch shape.
+    crate::test_utils::init_test_tracing();
+    // with-timeout is timer.el lisp, so this needs the bootstrapped runtime.
+    let mut eval =
+        crate::emacs_core::load::create_bootstrap_evaluator_cached().expect("bootstrap evaluator");
+    let result = eval
+        .eval_str_each(
+            "(condition-case e
+                 (with-timeout (0.01) (read-key-sequence \"test: \"))
+               (error (car e)))",
+        )
+        .pop()
+        .expect("one form")
+        .expect("evaluation succeeds");
+    assert!(
+        result.is_nil(),
+        "expected nil from timed-out read-key-sequence, got {}",
+        crate::emacs_core::print::print_value(&result)
+    );
+}

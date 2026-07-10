@@ -854,7 +854,6 @@ impl super::eval::Context {
         self.service_wait_request_once(&WaitRequest::timer_service(true))
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn service_timers_without_redisplay(&mut self) -> Result<(), Flow> {
         self.service_wait_request_once(&WaitRequest::timer_service(false))
     }

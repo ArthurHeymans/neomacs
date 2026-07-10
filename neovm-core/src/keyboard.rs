@@ -4112,8 +4112,21 @@ impl crate::emacs_core::eval::Context {
 
             if self.input_rx.is_none() {
                 // No host input channel means this evaluator cannot block for
-                // future keyboard input. Once queued Lisp/keyboard events and
-                // due timers are drained, report EOF to the caller.
+                // future keyboard input. A pending ordinary timer can still
+                // become due and throw - GNU blocks in select with the timer
+                // deadline as its timeout, which is how
+                //   (with-timeout (0.01) (read-key-sequence "p"))
+                // returns nil in batch: the timer fires mid-wait and its
+                // handler throws out of the read. Wait out the earliest
+                // pending timer and service it (a thrown Flow propagates);
+                // report EOF only when no timer can ever fire.
+                if let Some(timer_timeout) = self.next_ordinary_gnu_timer_timeout_before(None) {
+                    if !timer_timeout.is_zero() {
+                        std::thread::sleep(timer_timeout.min(std::time::Duration::from_millis(50)));
+                    }
+                    self.service_timers_without_redisplay()?;
+                    continue;
+                }
                 self.timer_stop_idle();
                 return Ok(None);
             }
