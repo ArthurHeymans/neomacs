@@ -10971,6 +10971,49 @@ fn save_window_excursion_with_help_window_restores_original_window_buffer() {
 }
 
 #[test]
+fn redisplay_does_not_copy_unrelated_current_buffer_point_into_selected_window() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let selected_buffer = ev.buffers.create_buffer("*redisplay-selected*");
+    ev.buffers.set_current(selected_buffer);
+    ev.buffers
+        .get_mut(selected_buffer)
+        .expect("selected buffer")
+        .insert("selected buffer\n");
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(selected_buffer, crate::buffer::EmacsBytePos::new(0))
+        .expect("move selected buffer point");
+    ev.frames.create_frame("F1", 960, 640, selected_buffer);
+    let frame_id = ev.frames.selected_frame().expect("selected frame").id;
+    let selected_window = ev.frames.get(frame_id).expect("frame").selected_window;
+
+    let current_buffer = ev.buffers.create_buffer("*redisplay-current*");
+    ev.buffers.set_current(current_buffer);
+    ev.buffers
+        .get_mut(current_buffer)
+        .expect("current buffer")
+        .insert("current buffer point should not affect the selected window\n");
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(current_buffer, crate::buffer::EmacsBytePos::new(40))
+        .expect("move current buffer point");
+
+    ev.redisplay_fn = Some(Box::new(|_| {}));
+    ev.redisplay();
+
+    let selected_window_point = ev
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(selected_window))
+        .and_then(|window| match window {
+            crate::window::Window::Leaf { point, .. } => Some(*point),
+            crate::window::Window::Internal { .. } => None,
+        })
+        .expect("selected window point");
+    assert_eq!(selected_window_point, crate::buffer::LispCharPos1::ONE);
+}
+
+#[test]
 fn save_window_excursion_restores_selected_window_point_and_requests_final_redisplay() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

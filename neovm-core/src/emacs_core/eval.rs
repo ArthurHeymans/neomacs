@@ -7183,20 +7183,16 @@ impl Context {
                 buf_id,
             );
         }
-        // GNU Emacs xdisp.c:20616 — sync selected window's pointm from
-        // the buffer's current PT before redisplay.  With markers this
-        // sync is less critical (markers auto-adjust), but we keep it
-        // for the selected window to ensure buffer.pt changes are
-        // reflected even when no text edit occurred.
-        if let Some(buffer) = self.buffers.current_buffer() {
-            if buffer.is_modified() {
-                let pt = buffer.point_char_pos().to_lisp();
-                if let Some(frame) = self.frames.selected_frame_mut() {
-                    if let Some(win) = frame.selected_window_mut() {
-                        win.set_point(pt);
-                    }
-                }
-            }
+        // GNU's selected-window point belongs to the selected window's buffer,
+        // even when Lisp has temporarily made another buffer current.  Refresh
+        // only the selected window cache from its own buffer; redisplay must
+        // not realign `current-buffer` with the selected window here.
+        if let Some(frame_id) = self.frames.selected_frame().map(|frame| frame.id) {
+            super::window_cmds::remember_selected_window_point_in_state(
+                &mut self.frames,
+                &self.buffers,
+                frame_id,
+            );
         }
         let before_signature = self.redisplay_signature();
         // A pending exact echo-area resize (GNU `resize_echo_area_exactly`)
