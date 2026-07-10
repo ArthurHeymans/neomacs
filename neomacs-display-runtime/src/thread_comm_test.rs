@@ -336,7 +336,7 @@ fn thread_comms_split_wakeup_fd_matches() {
     let comms = ThreadComms::new().unwrap();
     let wakeup_fd = comms.wakeup.read_fd();
     let (emacs, _render) = comms.split();
-    assert_eq!(emacs.wakeup_read_fd, wakeup_fd);
+    assert_eq!(emacs.wakeup_reader.read_fd(), wakeup_fd);
 }
 
 // ===================================================================
@@ -366,11 +366,11 @@ fn render_comms_send_input_delivers_event_and_wakes() {
     }
 
     // Wakeup pipe should have been written to, clear it
-    emacs.wakeup_clear.clear();
+    emacs.wakeup_reader.clear();
 }
 
 // ===================================================================
-// WakeupClear
+// WakeupReader
 // ===================================================================
 
 #[cfg(unix)]
@@ -384,22 +384,32 @@ fn wakeup_clear_drains_pipe() {
     render.wakeup.wake();
 
     // Clear via EmacsComms
-    emacs.wakeup_clear.clear();
+    emacs.wakeup_reader.clear();
 
     // Pipe should be empty
     let mut buf = [0u8; 1];
     let n = unsafe {
-        let flags = libc::fcntl(emacs.wakeup_read_fd, libc::F_GETFL);
-        libc::fcntl(
-            emacs.wakeup_read_fd,
-            libc::F_SETFL,
-            flags | libc::O_NONBLOCK,
-        );
-        let n = libc::read(emacs.wakeup_read_fd, buf.as_mut_ptr() as *mut _, 1);
-        libc::fcntl(emacs.wakeup_read_fd, libc::F_SETFL, flags);
+        let wakeup_fd = emacs.wakeup_reader.read_fd();
+        let flags = libc::fcntl(wakeup_fd, libc::F_GETFL);
+        libc::fcntl(wakeup_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        let n = libc::read(wakeup_fd, buf.as_mut_ptr() as *mut _, 1);
+        libc::fcntl(wakeup_fd, libc::F_SETFL, flags);
         n
     };
-    assert!(n <= 0, "pipe should be drained after WakeupClear::clear()");
+    assert!(n <= 0, "pipe should be drained after WakeupReader::clear()");
+}
+
+#[cfg(unix)]
+#[test]
+fn split_reader_remains_valid_after_render_endpoint_drops() {
+    let comms = ThreadComms::new().unwrap();
+    let (emacs, render) = comms.split();
+    let read_fd = emacs.wakeup_reader.read_fd();
+
+    drop(render);
+
+    let result = unsafe { libc::fcntl(read_fd, libc::F_GETFD) };
+    assert!(result >= 0, "render endpoint must not own the reader fd");
 }
 
 // ===================================================================
@@ -1930,7 +1940,7 @@ fn cross_thread_input_event_delivery() {
         other => panic!("Expected WindowResize, got {:?}", other),
     }
 
-    emacs.wakeup_clear.clear();
+    emacs.wakeup_reader.clear();
 }
 
 #[test]

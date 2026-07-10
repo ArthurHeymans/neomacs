@@ -4,9 +4,9 @@
 
 use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
 #[cfg(unix)]
-use std::os::unix::io::RawFd;
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 #[cfg(windows)]
-use std::os::windows::io::RawHandle;
+use std::os::windows::io::{AsRawHandle, OwnedHandle, RawHandle};
 
 /// Platform file descriptor type for the wakeup pipe.
 #[cfg(unix)]
@@ -637,108 +637,101 @@ pub enum RenderCommand {
     Config(ConfigCommand),
 }
 
-/// Wakeup pipe for signaling Emacs from render thread
 #[cfg(unix)]
-pub struct WakeupPipe {
-    read_fd: RawFd,
-    write_fd: RawFd,
+type OwnedWakeupEndpoint = OwnedFd;
+#[cfg(windows)]
+type OwnedWakeupEndpoint = OwnedHandle;
+
+/// Emacs-owned read endpoint of the render-to-evaluator wakeup pipe.
+pub struct WakeupReader {
+    endpoint: OwnedWakeupEndpoint,
 }
 
-#[cfg(unix)]
+/// Render-owned write endpoint of the render-to-evaluator wakeup pipe.
+pub struct WakeupWriter {
+    endpoint: OwnedWakeupEndpoint,
+}
+
+/// Wakeup pipe before its endpoints are split between thread owners.
+pub struct WakeupPipe {
+    reader: WakeupReader,
+    writer: WakeupWriter,
+}
+
 impl WakeupPipe {
-    /// Create a new wakeup pipe
     pub fn new() -> std::io::Result<Self> {
         let (read, write) = os_pipe::pipe()?;
-        use std::os::unix::io::IntoRawFd;
         Ok(Self {
-            read_fd: read.into_raw_fd(),
-            write_fd: write.into_raw_fd(),
+            reader: WakeupReader {
+                endpoint: read.into(),
+            },
+            writer: WakeupWriter {
+                endpoint: write.into(),
+            },
         })
     }
 
-    /// Get the read fd for Emacs to select() on
     pub fn read_fd(&self) -> WakeupFd {
-        self.read_fd
+        self.reader.read_fd()
     }
 
-    /// Signal Emacs to wake up (called from render thread)
     pub fn wake(&self) {
-        unsafe {
-            libc::write(self.write_fd, [1u8].as_ptr() as *const _, 1);
-        }
+        self.writer.wake();
     }
 
-    /// Clear the wakeup signal (called from Emacs thread)
     pub fn clear(&self) {
+        self.reader.clear();
+    }
+
+    fn into_endpoints(self) -> (WakeupReader, WakeupWriter) {
+        (self.reader, self.writer)
+    }
+}
+
+#[cfg(unix)]
+impl WakeupReader {
+    pub fn read_fd(&self) -> WakeupFd {
+        self.endpoint.as_raw_fd()
+    }
+
+    pub fn clear(&self) {
+        let fd = self.read_fd();
         let mut buf = [0u8; 64];
         unsafe {
-            // Non-blocking read to drain the pipe
-            let flags = libc::fcntl(self.read_fd, libc::F_GETFL);
-            libc::fcntl(self.read_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            while libc::read(self.read_fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
-            libc::fcntl(self.read_fd, libc::F_SETFL, flags);
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            while libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
+            libc::fcntl(fd, libc::F_SETFL, flags);
         }
     }
 }
 
 #[cfg(unix)]
-impl Drop for WakeupPipe {
-    fn drop(&mut self) {
-        unsafe {
-            libc::close(self.read_fd);
-            libc::close(self.write_fd);
-        }
-    }
-}
-
-/// Wakeup pipe for signaling Emacs from render thread (Windows)
-#[cfg(windows)]
-pub struct WakeupPipe {
-    read_handle: RawHandle,
-    write_handle: RawHandle,
-}
-
-#[cfg(windows)]
-impl WakeupPipe {
-    /// Create a new wakeup pipe
-    pub fn new() -> std::io::Result<Self> {
-        let (read, write) = os_pipe::pipe()?;
-        use std::os::windows::io::IntoRawHandle;
-        Ok(Self {
-            read_handle: read.into_raw_handle(),
-            write_handle: write.into_raw_handle(),
-        })
-    }
-
-    /// Get the read handle for wakeup signaling
-    pub fn read_fd(&self) -> WakeupFd {
-        self.read_handle
-    }
-
-    /// Signal Emacs to wake up (called from render thread)
+impl WakeupWriter {
     pub fn wake(&self) {
-        use windows_sys::Win32::Storage::FileSystem::WriteFile;
+        let fd = self.endpoint.as_raw_fd();
         unsafe {
-            WriteFile(
-                self.write_handle as _,
-                [1u8].as_ptr() as _,
-                1,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            );
+            libc::write(fd, [1u8].as_ptr() as *const _, 1);
         }
     }
+}
 
-    /// Clear the wakeup signal (called from Emacs thread)
+#[cfg(windows)]
+impl WakeupReader {
+    pub fn read_fd(&self) -> WakeupFd {
+        self.endpoint.as_raw_handle()
+    }
+
     pub fn clear(&self) {
         use windows_sys::Win32::Storage::FileSystem::ReadFile;
         use windows_sys::Win32::System::Pipes::PeekNamedPipe;
+        let handle = self.read_fd();
         let mut buf = [0u8; 64];
         loop {
             let mut avail: u32 = 0;
             unsafe {
                 PeekNamedPipe(
-                    self.read_handle as _,
+                    handle as _,
                     std::ptr::null_mut(),
                     0,
                     std::ptr::null_mut(),
@@ -752,7 +745,7 @@ impl WakeupPipe {
             let mut read_bytes: u32 = 0;
             unsafe {
                 ReadFile(
-                    self.read_handle as _,
+                    handle as _,
                     buf.as_mut_ptr() as _,
                     buf.len() as u32,
                     &mut read_bytes,
@@ -767,23 +760,20 @@ impl WakeupPipe {
 }
 
 #[cfg(windows)]
-impl Drop for WakeupPipe {
-    fn drop(&mut self) {
-        use windows_sys::Win32::Foundation::CloseHandle;
+impl WakeupWriter {
+    pub fn wake(&self) {
+        use windows_sys::Win32::Storage::FileSystem::WriteFile;
         unsafe {
-            CloseHandle(self.read_handle as _);
-            CloseHandle(self.write_handle as _);
+            WriteFile(
+                self.endpoint.as_raw_handle() as _,
+                [1u8].as_ptr() as _,
+                1,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
         }
     }
 }
-
-// SAFETY: WakeupPipe handles are OS pipe endpoints; each end is used by
-// exactly one thread (write on render, read on emacs). The raw handles
-// are safe to transfer across threads.
-#[cfg(windows)]
-unsafe impl Send for WakeupPipe {}
-#[cfg(windows)]
-unsafe impl Sync for WakeupPipe {}
 
 /// Channel capacities
 // Frame channel: unbounded so try_send never drops frames.
@@ -836,21 +826,19 @@ impl ThreadComms {
 
     /// Split into Emacs-side and Render-side handles
     pub fn split(self) -> (EmacsComms, RenderComms) {
+        let (wakeup_reader, wakeup_writer) = self.wakeup.into_endpoints();
         let emacs = EmacsComms {
             frame_tx: self.frame_tx,
             cmd_tx: self.cmd_tx,
             input_rx: self.input_rx,
-            wakeup_read_fd: self.wakeup.read_fd(),
-            wakeup_clear: WakeupClear {
-                fd: self.wakeup.read_fd(),
-            },
+            wakeup_reader,
         };
 
         let render = RenderComms {
             frame_rx: self.frame_rx,
             cmd_rx: self.cmd_rx,
             input_tx: self.input_tx,
-            wakeup: self.wakeup,
+            wakeup: wakeup_writer,
         };
 
         (emacs, render)
@@ -862,92 +850,15 @@ pub struct EmacsComms {
     pub frame_tx: Sender<FrameDisplayState>,
     pub cmd_tx: Sender<RenderCommand>,
     pub input_rx: Receiver<InputEvent>,
-    pub wakeup_read_fd: WakeupFd,
-    pub wakeup_clear: WakeupClear,
+    pub wakeup_reader: WakeupReader,
 }
-
-// SAFETY: EmacsComms is used exclusively on the Emacs thread.
-// The WakeupFd (RawHandle) it holds is a valid OS handle.
-#[cfg(windows)]
-unsafe impl Send for EmacsComms {}
-#[cfg(windows)]
-unsafe impl Sync for EmacsComms {}
-
-/// Handle for clearing wakeup pipe (Unix)
-#[cfg(unix)]
-pub struct WakeupClear {
-    fd: WakeupFd,
-}
-
-#[cfg(unix)]
-impl WakeupClear {
-    pub fn clear(&self) {
-        let mut buf = [0u8; 64];
-        unsafe {
-            let flags = libc::fcntl(self.fd, libc::F_GETFL);
-            libc::fcntl(self.fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            while libc::read(self.fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
-            libc::fcntl(self.fd, libc::F_SETFL, flags);
-        }
-    }
-}
-
-/// Handle for clearing wakeup pipe (Windows)
-#[cfg(windows)]
-pub struct WakeupClear {
-    fd: WakeupFd,
-}
-
-#[cfg(windows)]
-impl WakeupClear {
-    pub fn clear(&self) {
-        use windows_sys::Win32::Storage::FileSystem::ReadFile;
-        use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-        let mut buf = [0u8; 64];
-        loop {
-            let mut avail: u32 = 0;
-            unsafe {
-                PeekNamedPipe(
-                    self.fd as _,
-                    std::ptr::null_mut(),
-                    0,
-                    std::ptr::null_mut(),
-                    &mut avail,
-                    std::ptr::null_mut(),
-                );
-            }
-            if avail == 0 {
-                break;
-            }
-            let mut read_bytes: u32 = 0;
-            unsafe {
-                ReadFile(
-                    self.fd as _,
-                    buf.as_mut_ptr() as _,
-                    buf.len() as u32,
-                    &mut read_bytes,
-                    std::ptr::null_mut(),
-                );
-            }
-            if read_bytes == 0 {
-                break;
-            }
-        }
-    }
-}
-
-// SAFETY: WakeupClear holds a read-end handle used only on the Emacs thread.
-#[cfg(windows)]
-unsafe impl Send for WakeupClear {}
-#[cfg(windows)]
-unsafe impl Sync for WakeupClear {}
 
 /// Render thread communication handle
 pub struct RenderComms {
     pub frame_rx: Receiver<FrameDisplayState>,
     pub cmd_rx: Receiver<RenderCommand>,
     pub input_tx: Sender<InputEvent>,
-    pub wakeup: WakeupPipe,
+    pub wakeup: WakeupWriter,
 }
 
 impl RenderComms {

@@ -2519,7 +2519,7 @@ fn run_gui_evaluator_worker(
         })
         .expect("Failed to spawn input bridge thread");
 
-    evaluator.init_input_system(input_rx, emacs_comms.wakeup_read_fd);
+    evaluator.init_input_system(input_rx, emacs_comms.wakeup_reader.read_fd());
 
     tty_layout::LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
@@ -2835,7 +2835,7 @@ pub fn run(mode: RuntimeMode) {
             .expect("Failed to spawn input bridge thread");
 
         // 7. Connect evaluator to input system
-        let wakeup_fd = emacs_comms.wakeup_read_fd;
+        let wakeup_fd = emacs_comms.wakeup_reader.read_fd();
         evaluator.init_input_system(input_rx, wakeup_fd);
     }
 
