@@ -1,0 +1,31 @@
+//! divergence/combos/strict/loaded oracle parity tests.
+
+mod avltree_generator_radixtree;
+mod calc_imenu_ccmode;
+mod calendar_dateconv_urlutil;
+mod checkdoc_custom_eldoc_findfunc;
+mod countwords_cursor_orgfootnote_mmutil;
+mod easymenu_tablist_jitlock_completion;
+mod html_xml_mailparse_flowfill;
+mod json_dom_rfc2047_url;
+mod org_element;
+mod orgbabel_execute;
+mod orgexport_ascii_mml;
+mod orgexport_html_texinfo;
+mod orgexport_latex_md;
+mod orgtable_enriched_ccl;
+mod parsec_outline_addlog_rot13;
+mod python_sh_ruby_indent;
+mod qp_maiextr_ietfdrums;
+mod seq_map_lib;
+mod shr_css_smtpmail;
+mod shr_deep;
+mod studly_morse;
+mod svg_generate;
+mod tempo_skeleton_muleutil_hilock;
+mod textsec_treesit;
+mod thingatpt_ring_pp_subword;
+mod timedate_ansicolor_widget_parsetime;
+mod ucs_normalize_clextra;
+mod ucs_normalize_deep;
+mod whitespace_tildify_whichfunc_reveal;
