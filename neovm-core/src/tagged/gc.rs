@@ -162,6 +162,18 @@ thread_local! {
     /// Mirrors `TaggedHeap::concurrent_mark_running` so the write-barrier hot
     /// path keeps reaching `record_heap_write` (for the concurrent SATB log)
     /// even when owner-tracking is Disabled and the partition is inactive.
+    ///
+    /// PROTOCOL STATE, NOT SCOPE STATE — deliberately not wrapped in a Drop
+    /// guard. The set(true)/set(false) pair lives in `launch_concurrent_mark`
+    /// / `join_concurrent_mark`: the true-window spans those two calls across
+    /// arbitrarily many mutator frames, so no lexical scope contains it, and a
+    /// guard that restored the previous value on unwind would disarm the SATB
+    /// barrier while the GC thread is still marking (lost pre-images => live
+    /// objects collected). The two writes are kept adjacent to the
+    /// `concurrent_mark_running` transitions they mirror (no panic point can
+    /// split them), and `set_tagged_heap` re-derives the mirror from the heap
+    /// bool whenever a heap is (re)installed on a thread — that resync, not a
+    /// guard, is the panic-recovery point.
     static TAGGED_HEAP_CONCURRENT_ACTIVE: Cell<bool> = const { Cell::new(false) };
     /// Auto-allocated heap for tests that construct Values without a Context.
     #[cfg(test)]
