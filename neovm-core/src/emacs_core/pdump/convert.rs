@@ -1333,6 +1333,7 @@ impl<'a> LoadDecoder<'a> {
                 }
             }
             DumpHeapObject::ByteCode(_) => Value::make_bytecode(ByteCodeFunction {
+                source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
                 ops: Vec::new(),
                 constants: Vec::new(),
                 max_stack: 0,
@@ -3900,6 +3901,7 @@ fn load_bytecode_owned(
         .map(|value| decoder.load_value_owned(value))
         .unwrap_or_else(|| crate::emacs_core::builtins::lambda_params_to_value(&params));
     Ok(ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops: bc
             .ops
             .into_iter()

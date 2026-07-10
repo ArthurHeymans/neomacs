@@ -1,11 +1,18 @@
 //! ByteCode chunk — compiled function representation.
 
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::opcode::Op;
 use crate::emacs_core::value::{LambdaParams, Value, ValueKind};
 use crate::heap_types::LispString;
+
+static NEXT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
+
+pub(crate) fn fresh_bytecode_source_id() -> u64 {
+    NEXT_SOURCE_ID.fetch_add(1, AtomicOrdering::Relaxed)
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct GnuByteOffsetMapEntry {
@@ -43,6 +50,8 @@ fn arglist_value_from_params(params: &LambdaParams) -> Value {
 /// A compiled bytecode function.
 #[derive(Debug)]
 pub struct ByteCodeFunction {
+    /// Runtime identity of the source code object, preserved by `make-closure`.
+    pub(crate) source_id: u64,
     /// The bytecode instructions.
     pub ops: Vec<Op>,
     /// Constant pool: values referenced by Constant/VarRef/VarSet/etc.
@@ -118,6 +127,7 @@ impl Clone for ByteCodeFunction {
         BYTECODE_FUNCTION_CLONE_COUNT.fetch_add(1, Ordering::Relaxed);
 
         Self {
+            source_id: self.source_id,
             ops: self.ops.clone(),
             constants: self.constants.clone(),
             max_stack: self.max_stack,
@@ -143,6 +153,7 @@ impl ByteCodeFunction {
     pub fn new(params: LambdaParams) -> Self {
         let arglist = arglist_value_from_params(&params);
         Self {
+            source_id: fresh_bytecode_source_id(),
             ops: Vec::new(),
             constants: Vec::new(),
             max_stack: 0,

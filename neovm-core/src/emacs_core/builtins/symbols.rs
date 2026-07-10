@@ -14,9 +14,6 @@ use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
-use std::sync::atomic::{AtomicBool, Ordering};
-
-static PROFILER_MEMORY_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// GNU `init_obarray_once` creates the initial obarray with size_bits = 15.
 pub(crate) const GNU_INITIAL_OBARRAY_SIZE: usize = 1 << 15;
@@ -3079,57 +3076,88 @@ pub(crate) fn builtin_optimize_char_table(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_profiler_cpu_log(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_cpu_log(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-cpu-log", &args, 0)?;
-    Ok(Value::NIL)
+    Ok(ctx.profiler_cpu_log().unwrap_or(Value::NIL))
 }
 
-pub(crate) fn builtin_profiler_cpu_running_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_cpu_running_p(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-cpu-running-p", &args, 0)?;
-    Ok(Value::NIL)
+    Ok(Value::bool(ctx.profiler_cpu_running()))
 }
 
-pub(crate) fn builtin_profiler_cpu_start(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_cpu_start(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-cpu-start", &args, 1)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_profiler_cpu_stop(args: Vec<Value>) -> EvalResult {
-    expect_args("profiler-cpu-stop", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_profiler_memory_log(args: Vec<Value>) -> EvalResult {
-    expect_args("profiler-memory-log", &args, 0)?;
-    let was_running = PROFILER_MEMORY_RUNNING.swap(false, Ordering::SeqCst);
-    if was_running {
-        PROFILER_MEMORY_RUNNING.store(true, Ordering::SeqCst);
+    if ctx.profiler_cpu_running() {
+        return Err(signal(
+            "error",
+            vec![Value::string("CPU profiler is already running")],
+        ));
     }
-    Ok(Value::NIL)
+    let Some(interval) = args[0].as_fixnum().filter(|interval| *interval > 0) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid sampling interval")],
+        ));
+    };
+    debug_assert!(ctx.profiler_cpu_start(interval as u64));
+    Ok(Value::T)
 }
 
-pub(crate) fn builtin_profiler_memory_running_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_cpu_stop(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("profiler-cpu-stop", &args, 0)?;
+    Ok(Value::bool(ctx.profiler_cpu_stop()))
+}
+
+pub(crate) fn builtin_profiler_memory_log(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("profiler-memory-log", &args, 0)?;
+    Ok(ctx.profiler_memory_log().unwrap_or(Value::NIL))
+}
+
+pub(crate) fn builtin_profiler_memory_running_p(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-memory-running-p", &args, 0)?;
-    Ok(Value::bool(PROFILER_MEMORY_RUNNING.load(Ordering::SeqCst)))
+    Ok(Value::bool(ctx.profiler_memory_running()))
 }
 
-pub(crate) fn builtin_profiler_memory_start(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_memory_start(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-memory-start", &args, 0)?;
-    match PROFILER_MEMORY_RUNNING.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-    {
-        Ok(_) => Ok(Value::T),
-        Err(_) => Err(signal(
+    if !ctx.profiler_memory_start() {
+        Err(signal(
             "error",
             vec![Value::string("Memory profiler is already running")],
-        )),
+        ))
+    } else {
+        Ok(Value::T)
     }
 }
 
-pub(crate) fn builtin_profiler_memory_stop(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_profiler_memory_stop(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("profiler-memory-stop", &args, 0)?;
-    Ok(Value::bool(
-        PROFILER_MEMORY_RUNNING.swap(false, Ordering::SeqCst),
-    ))
+    Ok(Value::bool(ctx.profiler_memory_stop()))
 }
 
 pub(crate) fn builtin_pdumper_stats(args: Vec<Value>) -> EvalResult {
@@ -6408,6 +6436,7 @@ fn make_byte_code_from_parts_with_slots(
 
     // 7. Build ByteCodeFunction
     let bc = ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
         constants,
         max_stack,

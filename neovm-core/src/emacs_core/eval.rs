@@ -1833,6 +1833,8 @@ pub struct Context {
     /// Specpdl — special binding stack that writes directly to the obarray.
     /// Matches GNU Emacs's specpdl design.
     pub(crate) specpdl: Vec<SpecBinding>,
+    /// GNU-compatible CPU and managed-allocation profiler state.
+    pub(crate) profiler: super::profiler::ProfilerState,
     /// Lexical environment: flat cons alist mirroring GNU Emacs's
     /// `Vinternal_interpreter_environment`.
     pub(crate) lexenv: Value,
@@ -4852,6 +4854,11 @@ impl Context {
             obarray.set_symbol_value(name, Value::fixnum(0));
             obarray.make_special(name);
         }
+        // --- src/profiler.c: syms_of_profiler ---
+        obarray.set_symbol_value("profiler-max-stack-depth", Value::fixnum(16));
+        obarray.make_special("profiler-max-stack-depth");
+        obarray.set_symbol_value("profiler-log-size", Value::fixnum(10_000));
+        obarray.make_special("profiler-log-size");
         // DEFVAR_INT, default 65536 (bignum digit-width limit).
         obarray.set_symbol_value("integer-width", Value::fixnum(65536));
         obarray.make_special("integer-width");
@@ -5163,6 +5170,7 @@ impl Context {
             after_pdump_load_hook_pending: false,
             obarray,
             specpdl: Vec::new(),
+            profiler: super::profiler::ProfilerState::default(),
             lexenv: Value::NIL,
             internal_interpreter_environment_symbol: core_eval_symbols
                 .internal_interpreter_environment_symbol,
@@ -5346,6 +5354,7 @@ impl Context {
             after_pdump_load_hook_pending: false,
             obarray,
             specpdl: Vec::new(),
+            profiler: super::profiler::ProfilerState::default(),
             lexenv,
             internal_interpreter_environment_symbol: core_eval_symbols
                 .internal_interpreter_environment_symbol,
@@ -5590,6 +5599,8 @@ impl Context {
                 _ => {}
             }
         }
+        group("profiler");
+        self.trace_profiler_roots(visit);
         group("misc");
         visit(self.lexenv);
         visit(self.quit_flag);
@@ -7399,7 +7410,9 @@ impl Context {
     /// in-flight incremental mark), matching GNU `garbage-collect` semantics.
     #[tracing::instrument(level = "debug", skip(self))]
     pub fn gc_collect_exact(&mut self) {
+        self.profiler_gc_start();
         self.gc_collect_from_current_roots_impl(true);
+        self.profiler_gc_finish();
     }
 
     /// Safe-point GC entry. Uses concurrent marking after the heap's
@@ -7411,7 +7424,9 @@ impl Context {
     /// allocation-bearing safe point, which an asynchronous concurrent cycle
     /// would both defer and de-randomize.
     fn gc_collect_from_current_roots(&mut self) {
+        self.profiler_gc_start();
         self.gc_collect_from_current_roots_impl(self.gc_stress);
+        self.profiler_gc_finish();
     }
 
     /// Drive a collection from the current roots.
@@ -11700,6 +11715,7 @@ impl Context {
         };
 
         let bc = ByteCodeFunction {
+            source_id: super::bytecode::fresh_bytecode_source_id(),
             ops,
             constants,
             max_stack,
@@ -12170,6 +12186,7 @@ impl Context {
     }
 
     pub(crate) fn push_backtrace_frame(&mut self, function: Value, args: &[Value]) {
+        self.profiler_poll();
         let args = self.backtrace_args_from_slice(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -12180,6 +12197,7 @@ impl Context {
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
+        self.profiler_poll();
         let args = self.backtrace_args_from_owned(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -12194,6 +12212,7 @@ impl Context {
         args_start: usize,
         nargs: usize,
     ) {
+        self.profiler_poll();
         let args = match nargs {
             0 => BacktraceArgs::Evaluated0,
             1 => BacktraceArgs::Evaluated1(self.bc_buf[args_start]),
@@ -12215,6 +12234,7 @@ impl Context {
     /// argument forms — XCDR of the original form. The walker emits
     /// `(nil FUNC FORMS FLAGS)` for these frames.
     pub(crate) fn push_unevalled_backtrace_frame(&mut self, function: Value, original_args: Value) {
+        self.profiler_poll();
         self.specpdl.push(SpecBinding::Backtrace {
             function,
             args: BacktraceArgs::Unevalled(original_args),
@@ -12674,6 +12694,7 @@ impl Context {
     }
 
     pub(crate) fn unbind_to_with_result(&mut self, count: usize, result: EvalResult) -> EvalResult {
+        self.profiler_poll();
         let specpdl_len = self.specpdl.len();
         if specpdl_len == count {
             return result;
@@ -12739,6 +12760,7 @@ impl Context {
             );
 
         if can_pop {
+            self.profiler_poll();
             self.specpdl.pop();
             return result;
         }
@@ -12763,6 +12785,7 @@ impl Context {
                 ),
             "fast bytecode subr call should only pop its own trivial backtrace frame"
         );
+        self.profiler_poll();
         self.specpdl.pop();
     }
 
@@ -14710,6 +14733,7 @@ impl Context {
     }
 
     pub(crate) fn unbind_to_result(&mut self, count: usize) -> Result<(), Flow> {
+        self.profiler_poll();
         // Mirrors GNU `unbind_to` in `eval.c:3907-3930`: suppress a
         // pending quit during cleanup so `unwind-protect` cleanup forms
         // run to completion, then restore the pending state on exit if

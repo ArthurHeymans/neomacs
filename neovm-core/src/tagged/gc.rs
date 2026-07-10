@@ -2654,6 +2654,8 @@ pub struct TaggedHeap {
     gc_threshold_overridden: bool,
     /// Approximate Lisp heap bytes allocated since the last full collection.
     bytes_since_gc: usize,
+    /// Monotonic managed allocation bytes used by the Lisp memory profiler.
+    total_allocated_bytes: u64,
     /// Approximate bytes retained by the live heap after the last sweep.
     live_bytes: usize,
 
@@ -3073,6 +3075,7 @@ impl TaggedHeap {
             gc_threshold: 1_000_000 * size_of::<usize>(),
             gc_threshold_overridden: false,
             bytes_since_gc: 0,
+            total_allocated_bytes: 0,
             live_bytes: 0,
             must_finish_count: 0,
             forced_termination_pending: false,
@@ -3624,7 +3627,12 @@ impl TaggedHeap {
 
     fn note_allocation_bytes(&mut self, bytes: usize) {
         self.bytes_since_gc = self.bytes_since_gc.saturating_add(bytes);
+        self.total_allocated_bytes = self.total_allocated_bytes.saturating_add(bytes as u64);
         self.live_bytes = self.live_bytes.saturating_add(bytes);
+    }
+
+    pub(crate) fn total_allocated_bytes(&self) -> u64 {
+        self.total_allocated_bytes
     }
 
     fn vector_storage_bytes<T>(values: &Vec<T>) -> usize {

@@ -49,6 +49,12 @@ use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
 /// `value.kind()` → `ValueKind`.
 pub type Value = TaggedValue;
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub(crate) enum FunctionSourceIdentity {
+    ClosureCode(usize),
+    ByteCode(u64),
+}
+
 // Re-export tagged types for downstream use.
 pub use crate::tagged::header::VecLikeType;
 pub use crate::tagged::value::ValueKind;
@@ -1818,6 +1824,26 @@ impl TaggedValue {
 
     pub fn closure_body_value(self) -> Option<Value> {
         self.closure_slot(CLOSURE_CODE)
+    }
+
+    pub(crate) fn function_source_identity(self) -> Option<FunctionSourceIdentity> {
+        if let Some(code) = self.closure_body_value() {
+            return Some(FunctionSourceIdentity::ClosureCode(code.bits()));
+        }
+        self.get_bytecode_data()
+            .map(|function| FunctionSourceIdentity::ByteCode(function.source_id))
+    }
+
+    /// GNU `function-equal`: closures are equal when they share their source
+    /// code object; other functions use ordinary identity.
+    pub(crate) fn function_equal(self, other: Value) -> bool {
+        if self.bits() == other.bits() {
+            return true;
+        }
+        matches!(
+            (self.function_source_identity(), other.function_source_identity()),
+            (Some(left), Some(right)) if left == right
+        )
     }
 
     pub fn closure_env(self) -> Option<Option<Value>> {

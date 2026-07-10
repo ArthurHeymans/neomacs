@@ -1,0 +1,629 @@
+use std::time::Instant;
+
+use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
+
+use super::eval::{Context, SpecBinding};
+use super::value::{
+    FunctionSourceIdentity, HashKey, HashTableTest, Value, build_hash_table_literal_value,
+};
+
+const DEFAULT_MAX_STACK_DEPTH: usize = 16;
+const DEFAULT_LOG_SIZE: usize = 10_000;
+const MAX_STACK_DEPTH: usize = 4_096;
+const MAX_LOG_SIZE: usize = 1_000_000;
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+enum FrameKey {
+    Identity(usize),
+    FunctionSource(FunctionSourceIdentity),
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+struct StackKey(SmallVec<[FrameKey; DEFAULT_MAX_STACK_DEPTH]>);
+
+struct Sample {
+    frames: SmallVec<[Value; DEFAULT_MAX_STACK_DEPTH]>,
+    count: u64,
+}
+
+struct ProfilerLog {
+    depth: usize,
+    capacity: usize,
+    entries: FxHashMap<StackKey, Sample>,
+    gc_count: u64,
+    discarded: u64,
+}
+
+impl ProfilerLog {
+    fn new(depth: usize, capacity: usize) -> Self {
+        Self {
+            depth,
+            capacity,
+            entries: FxHashMap::default(),
+            gc_count: 0,
+            discarded: 0,
+        }
+    }
+
+    fn record(&mut self, active_frames: &[Value], count: u64) {
+        if count == 0 {
+            return;
+        }
+        if self.capacity == 0 {
+            self.discarded = self.discarded.saturating_add(count);
+            return;
+        }
+
+        let mut frames: SmallVec<[Value; DEFAULT_MAX_STACK_DEPTH]> =
+            SmallVec::with_capacity(self.depth);
+        frames.extend(active_frames.iter().copied().take(self.depth));
+        frames.resize(self.depth, Value::NIL);
+        let key = StackKey(
+            frames
+                .iter()
+                .map(|value| {
+                    value
+                        .function_source_identity()
+                        .map_or(FrameKey::Identity(value.bits()), FrameKey::FunctionSource)
+                })
+                .collect(),
+        );
+
+        if let Some(sample) = self.entries.get_mut(&key) {
+            sample.count = sample.count.saturating_add(count);
+            return;
+        }
+
+        if self.entries.len() >= self.capacity {
+            self.evict_cold_half();
+        }
+        self.entries.insert(key, Sample { frames, count });
+    }
+
+    fn evict_cold_half(&mut self) {
+        let remove_count = (self.entries.len() / 2).max(1);
+        let mut counts: Vec<_> = self.entries.values().map(|sample| sample.count).collect();
+        counts.select_nth_unstable(remove_count - 1);
+        let cutoff = counts[remove_count - 1];
+        let below_cutoff = self
+            .entries
+            .values()
+            .filter(|sample| sample.count < cutoff)
+            .count();
+        let mut cutoff_entries_to_remove = remove_count - below_cutoff;
+        self.entries.retain(|_, sample| {
+            let remove =
+                sample.count < cutoff || (sample.count == cutoff && cutoff_entries_to_remove > 0);
+            if remove {
+                self.discarded = self.discarded.saturating_add(sample.count);
+                if sample.count == cutoff {
+                    cutoff_entries_to_remove -= 1;
+                }
+            }
+            !remove
+        });
+    }
+
+    fn record_gc(&mut self, count: u64) {
+        self.gc_count = self.gc_count.saturating_add(count);
+    }
+
+    fn trace_roots(&self, visit: &mut dyn FnMut(Value)) {
+        for sample in self.entries.values() {
+            for frame in sample.frames.iter().copied() {
+                visit(frame);
+            }
+        }
+    }
+
+    fn to_value(&self) -> Value {
+        let mut normal_entries: FxHashMap<HashKey, (Value, u64)> = FxHashMap::default();
+        for sample in self.entries.values() {
+            let frames = Value::vector(sample.frames.iter().copied().collect());
+            let key = frames.to_hash_key(&HashTableTest::Equal);
+            normal_entries
+                .entry(key)
+                .and_modify(|(_, count)| *count = count.saturating_add(sample.count))
+                .or_insert((frames, sample.count));
+        }
+        let mut entries = Vec::with_capacity(
+            normal_entries.len() + usize::from(self.gc_count > 0) + usize::from(self.discarded > 0),
+        );
+        entries.extend(
+            normal_entries
+                .into_values()
+                .map(|(frames, count)| (frames, Value::fixnum(fixnum_count(count)))),
+        );
+        if self.gc_count > 0 {
+            entries.push((
+                Value::vector(vec![Value::symbol("Automatic GC"), Value::NIL]),
+                Value::fixnum(fixnum_count(self.gc_count)),
+            ));
+        }
+        if self.discarded > 0 {
+            entries.push((
+                Value::vector(vec![Value::symbol("Discarded Samples"), Value::NIL]),
+                Value::fixnum(fixnum_count(self.discarded)),
+            ));
+        }
+        build_hash_table_literal_value(
+            HashTableTest::Equal,
+            None,
+            entries.len().max(1) as i64,
+            None,
+            1.5,
+            0.8125,
+            entries,
+        )
+    }
+}
+
+fn fixnum_count(count: u64) -> i64 {
+    count.min(Value::MOST_POSITIVE_FIXNUM as u64) as i64
+}
+
+pub(crate) struct ProfilerState {
+    cpu_log: Option<ProfilerLog>,
+    cpu_running: bool,
+    cpu_interval_ns: u64,
+    cpu_last_ns: u64,
+    cpu_remainder_ns: u64,
+    memory_log: Option<ProfilerLog>,
+    memory_running: bool,
+    memory_last_allocated: u64,
+}
+
+impl Default for ProfilerState {
+    fn default() -> Self {
+        Self {
+            cpu_log: None,
+            cpu_running: false,
+            cpu_interval_ns: 0,
+            cpu_last_ns: 0,
+            cpu_remainder_ns: 0,
+            memory_log: None,
+            memory_running: false,
+            memory_last_allocated: 0,
+        }
+    }
+}
+
+impl ProfilerState {
+    #[inline]
+    pub(crate) fn is_active(&self) -> bool {
+        self.cpu_running || self.memory_running
+    }
+
+    fn max_active_depth(&self) -> usize {
+        let cpu = self
+            .cpu_running
+            .then(|| self.cpu_log.as_ref().map_or(0, |log| log.depth))
+            .unwrap_or(0);
+        let memory = self
+            .memory_running
+            .then(|| self.memory_log.as_ref().map_or(0, |log| log.depth))
+            .unwrap_or(0);
+        cpu.max(memory)
+    }
+
+    fn poll(&mut self, active_frames: &[Value], allocated_bytes: u64) {
+        if self.cpu_running {
+            let now = thread_cpu_time_ns();
+            let elapsed = now.saturating_sub(self.cpu_last_ns);
+            self.cpu_last_ns = now;
+            let accumulated = elapsed.saturating_add(self.cpu_remainder_ns);
+            let samples = accumulated / self.cpu_interval_ns;
+            self.cpu_remainder_ns = accumulated % self.cpu_interval_ns;
+            if let Some(log) = self.cpu_log.as_mut() {
+                log.record(active_frames, samples);
+            }
+        }
+
+        if self.memory_running {
+            let allocated = allocated_bytes.saturating_sub(self.memory_last_allocated);
+            self.memory_last_allocated = allocated_bytes;
+            if let Some(log) = self.memory_log.as_mut() {
+                log.record(active_frames, allocated);
+            }
+        }
+    }
+
+    fn finish_gc(&mut self, allocated_bytes: u64) {
+        if self.cpu_running {
+            let now = thread_cpu_time_ns();
+            let elapsed = now.saturating_sub(self.cpu_last_ns);
+            self.cpu_last_ns = now;
+            let accumulated = elapsed.saturating_add(self.cpu_remainder_ns);
+            let samples = accumulated / self.cpu_interval_ns;
+            self.cpu_remainder_ns = accumulated % self.cpu_interval_ns;
+            if let Some(log) = self.cpu_log.as_mut() {
+                log.record_gc(samples);
+            }
+        }
+        if self.memory_running {
+            self.memory_last_allocated = allocated_bytes;
+        }
+    }
+
+    fn trace_roots(&self, visit: &mut dyn FnMut(Value)) {
+        if let Some(log) = &self.cpu_log {
+            log.trace_roots(visit);
+        }
+        if let Some(log) = &self.memory_log {
+            log.trace_roots(visit);
+        }
+    }
+}
+
+impl Context {
+    #[inline]
+    pub(crate) fn profiler_poll(&mut self) {
+        if !self.profiler.is_active() {
+            return;
+        }
+
+        let depth = self.profiler.max_active_depth();
+        let frames: SmallVec<[Value; DEFAULT_MAX_STACK_DEPTH]> = self
+            .specpdl
+            .iter()
+            .rev()
+            .filter_map(|binding| match binding {
+                SpecBinding::Backtrace { function, .. } => Some(*function),
+                _ => None,
+            })
+            .take(depth)
+            .collect();
+        let allocated_bytes = self.tagged_heap.total_allocated_bytes();
+        self.profiler.poll(&frames, allocated_bytes);
+    }
+
+    pub(crate) fn profiler_cpu_start(&mut self, interval_ns: u64) -> bool {
+        if self.profiler.cpu_running || interval_ns == 0 {
+            return false;
+        }
+        if self.profiler.cpu_log.is_none() {
+            let (depth, capacity) = self.profiler_settings();
+            self.profiler.cpu_log = Some(ProfilerLog::new(depth, capacity));
+        }
+        self.profiler.cpu_interval_ns = interval_ns;
+        self.profiler.cpu_last_ns = thread_cpu_time_ns();
+        self.profiler.cpu_remainder_ns = 0;
+        self.profiler.cpu_running = true;
+        true
+    }
+
+    pub(crate) fn profiler_gc_start(&mut self) {
+        self.profiler_poll();
+    }
+
+    pub(crate) fn profiler_gc_finish(&mut self) {
+        if self.profiler.is_active() {
+            let allocated_bytes = self.tagged_heap.total_allocated_bytes();
+            self.profiler.finish_gc(allocated_bytes);
+        }
+    }
+
+    pub(crate) fn profiler_cpu_stop(&mut self) -> bool {
+        if !self.profiler.cpu_running {
+            return false;
+        }
+        self.profiler_poll();
+        self.profiler.cpu_running = false;
+        true
+    }
+
+    pub(crate) fn profiler_cpu_running(&self) -> bool {
+        self.profiler.cpu_running
+    }
+
+    pub(crate) fn profiler_cpu_log(&mut self) -> Option<Value> {
+        self.profiler_poll();
+        let was_running = std::mem::replace(&mut self.profiler.cpu_running, false);
+        let Some(log) = self.profiler.cpu_log.as_ref() else {
+            self.profiler.cpu_running = was_running;
+            return None;
+        };
+        let value = log.to_value();
+        let log = self
+            .profiler
+            .cpu_log
+            .take()
+            .expect("profiler log checked above");
+        if was_running {
+            self.profiler.cpu_log = Some(ProfilerLog::new(log.depth, log.capacity));
+            self.profiler.cpu_last_ns = thread_cpu_time_ns();
+            self.profiler.cpu_remainder_ns = 0;
+            self.profiler.cpu_running = true;
+        }
+        Some(value)
+    }
+
+    pub(crate) fn profiler_memory_start(&mut self) -> bool {
+        if self.profiler.memory_running {
+            return false;
+        }
+        if self.profiler.memory_log.is_none() {
+            let (depth, capacity) = self.profiler_settings();
+            self.profiler.memory_log = Some(ProfilerLog::new(depth, capacity));
+        }
+        self.profiler.memory_last_allocated = self.tagged_heap.total_allocated_bytes();
+        self.profiler.memory_running = true;
+        true
+    }
+
+    pub(crate) fn profiler_memory_stop(&mut self) -> bool {
+        if !self.profiler.memory_running {
+            return false;
+        }
+        self.profiler_poll();
+        self.profiler.memory_running = false;
+        true
+    }
+
+    pub(crate) fn profiler_memory_running(&self) -> bool {
+        self.profiler.memory_running
+    }
+
+    pub(crate) fn profiler_memory_log(&mut self) -> Option<Value> {
+        self.profiler_poll();
+        let was_running = std::mem::replace(&mut self.profiler.memory_running, false);
+        let Some(log) = self.profiler.memory_log.as_ref() else {
+            self.profiler.memory_running = was_running;
+            return None;
+        };
+        let value = log.to_value();
+        let log = self
+            .profiler
+            .memory_log
+            .take()
+            .expect("profiler log checked above");
+        if was_running {
+            self.profiler.memory_log = Some(ProfilerLog::new(log.depth, log.capacity));
+            self.profiler.memory_last_allocated = self.tagged_heap.total_allocated_bytes();
+            self.profiler.memory_running = true;
+        }
+        Some(value)
+    }
+
+    pub(crate) fn trace_profiler_roots(&self, visit: &mut dyn FnMut(Value)) {
+        self.profiler.trace_roots(visit);
+    }
+
+    fn profiler_settings(&self) -> (usize, usize) {
+        let bounded_setting = |name: &str, default: usize, maximum: usize| {
+            self.obarray
+                .symbol_value(name)
+                .and_then(|value| value.as_fixnum())
+                .map(|value| value.clamp(0, maximum as i64) as usize)
+                .unwrap_or(default)
+        };
+        (
+            bounded_setting(
+                "profiler-max-stack-depth",
+                DEFAULT_MAX_STACK_DEPTH,
+                MAX_STACK_DEPTH,
+            ),
+            bounded_setting("profiler-log-size", DEFAULT_LOG_SIZE, MAX_LOG_SIZE),
+        )
+    }
+}
+
+#[cfg(unix)]
+fn thread_cpu_time_ns() -> u64 {
+    let mut time = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let result = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut time) };
+    if result == 0 {
+        (time.tv_sec as u64)
+            .saturating_mul(1_000_000_000)
+            .saturating_add(time.tv_nsec as u64)
+    } else {
+        monotonic_fallback_ns()
+    }
+}
+
+#[cfg(windows)]
+fn thread_cpu_time_ns() -> u64 {
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::Threading::{GetCurrentThread, GetThreadTimes};
+
+    let mut creation = FILETIME::default();
+    let mut exit = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    let ok = unsafe {
+        GetThreadTimes(
+            GetCurrentThread(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    if ok == 0 {
+        return monotonic_fallback_ns();
+    }
+    let ticks = filetime_ticks(kernel).saturating_add(filetime_ticks(user));
+    ticks.saturating_mul(100)
+}
+
+#[cfg(windows)]
+fn filetime_ticks(time: windows_sys::Win32::Foundation::FILETIME) -> u64 {
+    ((time.dwHighDateTime as u64) << 32) | time.dwLowDateTime as u64
+}
+
+#[cfg(not(any(unix, windows)))]
+fn thread_cpu_time_ns() -> u64 {
+    monotonic_fallback_ns()
+}
+
+fn monotonic_fallback_ns() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_nanos()
+        .min(u64::MAX as u128) as u64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounded_log_evicts_cold_samples_and_reports_discarded_weight() {
+        let mut log = ProfilerLog::new(2, 2);
+        log.record(&[Value::symbol("hot")], 10);
+        log.record(&[Value::symbol("cold")], 1);
+        log.record(&[Value::symbol("new")], 2);
+
+        assert_eq!(log.entries.len(), 2);
+        assert_eq!(log.discarded, 1);
+    }
+
+    #[test]
+    fn same_source_closure_instances_merge_like_gnu_function_equal() {
+        let mut ctx = Context::new();
+        let closures = ctx
+            .eval_str(
+                "(let ((make-closure (lambda () (lambda (value) value))))
+                   (list (funcall make-closure) (funcall make-closure)))",
+            )
+            .unwrap();
+        let first = closures.cons_car();
+        let second = closures.cons_cdr().cons_car();
+        assert_ne!(first.bits(), second.bits());
+        assert!(first.function_equal(second));
+
+        let mut log = ProfilerLog::new(1, 10);
+        log.record(&[first], 2);
+        log.record(&[second], 3);
+        assert_eq!(log.entries.len(), 1);
+        assert_eq!(log.entries.values().next().unwrap().count, 5);
+    }
+
+    #[test]
+    fn same_source_compiled_closure_instances_merge_like_gnu_function_equal() {
+        let mut ctx = Context::new();
+        let closures = ctx
+            .eval_str(
+                r#"(let* ((prototype (make-byte-code 0 "\300\207" [nil] 1))
+                          (first (make-closure prototype 1))
+                          (second (make-closure prototype 2)))
+                     (list first second))"#,
+            )
+            .unwrap();
+        let first = closures.cons_car();
+        let second = closures.cons_cdr().cons_car();
+        assert_ne!(first.bits(), second.bits());
+        assert!(first.function_equal(second));
+
+        let mut log = ProfilerLog::new(1, 10);
+        log.record(&[first], 2);
+        log.record(&[second], 3);
+        assert_eq!(log.entries.len(), 1);
+        assert_eq!(log.entries.values().next().unwrap().count, 5);
+    }
+
+    #[test]
+    fn structurally_equal_export_keys_preserve_all_counts() {
+        let mut ctx = Context::new();
+        let first = ctx.eval_str("(lambda (value) value)").unwrap();
+        let second = ctx.eval_str("(lambda (value) value)").unwrap();
+        assert_ne!(first.bits(), second.bits());
+        assert!(!first.function_equal(second));
+
+        let mut log = ProfilerLog::new(1, 10);
+        log.record(&[first], 2);
+        log.record(&[second], 3);
+        assert_eq!(log.entries.len(), 2);
+
+        let table = log.to_value();
+        let table = table.as_hash_table().unwrap();
+        assert_eq!(table.data.len(), 1);
+        assert_eq!(table.data.values().next().unwrap().as_fixnum(), Some(5));
+    }
+
+    #[test]
+    fn zero_capacity_discards_samples_without_panicking() {
+        let mut log = ProfilerLog::new(0, 0);
+        log.record(&[Value::symbol("ignored")], 7);
+        assert!(log.entries.is_empty());
+        assert_eq!(log.discarded, 7);
+    }
+
+    #[test]
+    fn automatic_gc_samples_use_the_gnu_special_bucket() {
+        let mut log = ProfilerLog::new(4, 10);
+        log.record_gc(9);
+        let table = log.to_value();
+        let table = table.as_hash_table().unwrap();
+        let key = *table.key_snapshots.values().next().unwrap();
+        let frames = key.as_vector_data().unwrap();
+        assert_eq!(frames.len(), 2);
+        assert!(frames[0].is_symbol_named("Automatic GC"));
+        assert_eq!(table.data.values().next().unwrap().as_fixnum(), Some(9));
+    }
+
+    #[test]
+    fn profiler_frames_remain_gc_roots_after_the_call_returns() {
+        let mut ctx = Context::new();
+        let closure = ctx.eval_str("(lambda (value) value)").unwrap();
+        let mut log = ProfilerLog::new(1, 10);
+        log.record(&[closure], 1);
+        ctx.profiler.memory_log = Some(log);
+
+        ctx.gc_collect_exact();
+
+        let table = ctx.profiler_memory_log().unwrap();
+        let key = *table
+            .as_hash_table()
+            .unwrap()
+            .key_snapshots
+            .values()
+            .next()
+            .unwrap();
+        let frame = key.as_vector_data().unwrap()[0];
+        assert!(frame.is_lambda());
+    }
+
+    #[test]
+    fn profiler_el_public_memory_workflow_builds_and_renders_a_report() {
+        let mut ctx = crate::emacs_core::load::create_bootstrap_evaluator_cached().unwrap();
+        let lisp_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../lisp")
+            .canonicalize()
+            .unwrap();
+        let profiler_el = lisp_root.join("profiler.el");
+        ctx.obarray.set_symbol_value(
+            "load-path",
+            Value::list(vec![
+                Value::string(lisp_root.to_string_lossy()),
+                Value::string(lisp_root.join("emacs-lisp").to_string_lossy()),
+            ]),
+        );
+        let load_result = ctx.eval_str(&format!(
+            r#"(load {:?} nil t t)"#,
+            profiler_el.to_string_lossy()
+        ));
+        assert_eq!(crate::emacs_core::format_eval_result(&load_result), "OK t");
+
+        ctx.eval_str("(profiler-start 'mem)").unwrap();
+        ctx.eval_str("(make-list 256 'profiled-value)").unwrap();
+        ctx.eval_str("(profiler-stop)").unwrap();
+        assert!(
+            ctx.eval_str("(and (hash-table-p profiler-memory-log) (> (hash-table-count profiler-memory-log) 0))")
+                .unwrap()
+                .is_truthy()
+        );
+        assert!(
+            ctx.eval_str("(profiler-calltree-p (profiler-calltree-build profiler-memory-log))")
+                .unwrap()
+                .is_truthy()
+        );
+        ctx.eval_str("(profiler-report)").unwrap();
+    }
+}

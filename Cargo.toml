@@ -178,7 +178,7 @@ webpki-roots = "1.0"
 rustls-pki-types = "1"
 
 # Windows
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Pipes", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 
 # Dev / test
 proptest = "1.6"
@@ -191,6 +191,11 @@ lto = true
 codegen-units = 1
 debug = false
 strip = "debuginfo"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"
 
 [patch.crates-io]
 cosmic-text = { git = "https://github.com/eval-exec/cosmic-text", rev = "5dd3fec8572e771794e3f203ab6780d828e9ce09" }

@@ -87,6 +87,7 @@ pub(crate) mod position;
 pub(crate) mod prefix;
 pub mod print;
 pub mod process;
+pub(crate) mod profiler;
 #[cfg(test)]
 mod quit_regression_test;
 pub mod reader;

@@ -5909,7 +5909,7 @@ fn pure_dispatch_open_overlay_placeholders_match_compat_contracts() {
 }
 
 #[test]
-fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
+fn pure_dispatch_profiler_primitives_collect_cpu_and_memory_logs() {
     crate::test_utils::init_test_tracing();
     let cpu_log = dispatch_builtin_pure("profiler-cpu-log", vec![])
         .expect("builtin profiler-cpu-log should resolve")
@@ -5924,12 +5924,40 @@ fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
     let cpu_start = dispatch_builtin_pure("profiler-cpu-start", vec![Value::fixnum(1)])
         .expect("builtin profiler-cpu-start should resolve")
         .expect("builtin profiler-cpu-start should evaluate");
-    assert!(cpu_start.is_nil());
+    assert!(cpu_start.is_truthy());
+
+    let cpu_running = dispatch_builtin_pure("profiler-cpu-running-p", vec![])
+        .expect("builtin profiler-cpu-running-p should resolve")
+        .expect("builtin profiler-cpu-running-p should evaluate");
+    assert!(cpu_running.is_truthy());
+
+    let cpu_second_start = dispatch_builtin_pure("profiler-cpu-start", vec![Value::fixnum(1)])
+        .expect("builtin profiler-cpu-start should resolve");
+    assert!(cpu_second_start.is_err());
+
+    for value in 0..10_000 {
+        std::hint::black_box(value * value);
+    }
 
     let cpu_stop = dispatch_builtin_pure("profiler-cpu-stop", vec![])
         .expect("builtin profiler-cpu-stop should resolve")
         .expect("builtin profiler-cpu-stop should evaluate");
-    assert!(cpu_stop.is_nil());
+    assert!(cpu_stop.is_truthy());
+
+    let cpu_log = dispatch_builtin_pure("profiler-cpu-log", vec![])
+        .expect("builtin profiler-cpu-log should resolve")
+        .expect("builtin profiler-cpu-log should evaluate");
+    assert!(cpu_log.is_hash_table());
+    assert!(!cpu_log.as_hash_table().unwrap().data.is_empty());
+
+    let cpu_log = dispatch_builtin_pure("profiler-cpu-log", vec![])
+        .expect("builtin profiler-cpu-log should resolve")
+        .expect("builtin profiler-cpu-log should evaluate");
+    assert!(cpu_log.is_nil());
+
+    let invalid_cpu_start = dispatch_builtin_pure("profiler-cpu-start", vec![Value::fixnum(0)])
+        .expect("builtin profiler-cpu-start should resolve");
+    assert!(invalid_cpu_start.is_err());
 
     let mem_log = dispatch_builtin_pure("profiler-memory-log", vec![])
         .expect("builtin profiler-memory-log should resolve")
@@ -5948,6 +5976,9 @@ fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
         .expect("builtin profiler-memory-start should evaluate");
     assert!(mem_start.is_truthy());
 
+    let allocated = Value::list((0..256).map(Value::fixnum).collect());
+    std::hint::black_box(allocated);
+
     let mem_running = dispatch_builtin_pure("profiler-memory-running-p", vec![])
         .expect("builtin profiler-memory-running-p should resolve")
         .expect("builtin profiler-memory-running-p should evaluate");
@@ -5961,6 +5992,17 @@ fn pure_dispatch_profiler_placeholders_match_compat_contracts() {
         .expect("builtin profiler-memory-stop should resolve")
         .expect("builtin profiler-memory-stop should evaluate");
     assert!(mem_stop.is_truthy());
+
+    let mem_log = dispatch_builtin_pure("profiler-memory-log", vec![])
+        .expect("builtin profiler-memory-log should resolve")
+        .expect("builtin profiler-memory-log should evaluate");
+    assert!(mem_log.is_hash_table());
+    assert!(!mem_log.as_hash_table().unwrap().data.is_empty());
+
+    let mem_log = dispatch_builtin_pure("profiler-memory-log", vec![])
+        .expect("builtin profiler-memory-log should resolve")
+        .expect("builtin profiler-memory-log should evaluate");
+    assert!(mem_log.is_nil());
 
     let mem_stop = dispatch_builtin_pure("profiler-memory-stop", vec![])
         .expect("builtin profiler-memory-stop should resolve")

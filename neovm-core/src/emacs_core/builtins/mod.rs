@@ -5501,6 +5501,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             };
 
             let bc = ByteCodeFunction {
+                source_id: super::bytecode::fresh_bytecode_source_id(),
                 ops,
                 constants,
                 max_stack,
@@ -5794,49 +5795,49 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "profiler-cpu-log",
-        |_ctx, args| builtin_profiler_cpu_log(args),
+        |ctx, args| builtin_profiler_cpu_log(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-cpu-running-p",
-        |_ctx, args| builtin_profiler_cpu_running_p(args),
+        |ctx, args| builtin_profiler_cpu_running_p(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-cpu-start",
-        |_ctx, args| builtin_profiler_cpu_start(args),
+        |ctx, args| builtin_profiler_cpu_start(ctx, args),
         1,
         Some(1),
     );
     ctx.defsubr(
         "profiler-cpu-stop",
-        |_ctx, args| builtin_profiler_cpu_stop(args),
+        |ctx, args| builtin_profiler_cpu_stop(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-log",
-        |_ctx, args| builtin_profiler_memory_log(args),
+        |ctx, args| builtin_profiler_memory_log(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-running-p",
-        |_ctx, args| builtin_profiler_memory_running_p(args),
+        |ctx, args| builtin_profiler_memory_running_p(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-start",
-        |_ctx, args| builtin_profiler_memory_start(args),
+        |ctx, args| builtin_profiler_memory_start(ctx, args),
         0,
         Some(0),
     );
     ctx.defsubr(
         "profiler-memory-stop",
-        |_ctx, args| builtin_profiler_memory_stop(args),
+        |ctx, args| builtin_profiler_memory_stop(ctx, args),
         0,
         Some(0),
     );

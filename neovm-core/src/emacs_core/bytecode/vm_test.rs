@@ -2134,6 +2134,7 @@ fn vm_switch_branches_using_hash_table_jump_table() {
     });
 
     let func = ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops: vec![
             Op::Constant(1),
             Op::Constant(0),
@@ -2296,6 +2297,7 @@ fn vm_keymap_predicate_and_lookup_resolve_symbol_function_cells() {
 fn vm_throw_restores_saved_stack_before_resuming_catch() {
     crate::test_utils::init_test_tracing();
     let func = ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops: vec![
             Op::Constant(0),
             Op::Constant(1),
@@ -9672,6 +9674,7 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
     crate::test_utils::init_test_tracing();
     let arg_descriptor = 3 | (4 << 8) | 128;
     let func = ByteCodeFunction {
+        source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops: vec![
             Op::StackRef(4),
             Op::StackRef(4),

@@ -429,7 +429,7 @@ pub(crate) fn builtin_equal_2(eval: &mut super::eval::Context, a: Value, b: Valu
 
 pub(crate) fn builtin_function_equal(args: Vec<Value>) -> EvalResult {
     expect_args("function-equal", &args, 2)?;
-    Ok(Value::bool_val(eq_value(&args[0], &args[1])))
+    Ok(Value::bool_val(args[0].function_equal(args[1])))
 }
 
 pub(crate) fn builtin_module_function_p(args: Vec<Value>) -> EvalResult {
