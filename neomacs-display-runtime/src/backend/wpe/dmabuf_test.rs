@@ -1,4 +1,5 @@
 use super::*;
+use std::ptr;
 
 #[test]
 fn test_dmabuf_exporter_without_display() {
