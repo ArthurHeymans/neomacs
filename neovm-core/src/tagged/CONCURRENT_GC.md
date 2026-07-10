@@ -364,27 +364,34 @@ regression; single-mutator reads stay `Relaxed`. Regression test
 `gc_concurrent_obarray_scan_vs_defalias_churn` (a TSan gate — the race was
 benign on x86, so a functional pass does not prove the fix). TSan: 9 races → 0.
 
-**KNOWN BENIGN RACE — DEFERRED (task #24, 2026-07):** the concurrent-claim
-dispatcher (`concurrent_try_mark_owned`) reads an arena object's
-`GcHeader.tenured` byte (a plain `bool`, not atomic) while the mutator's arena
-`ptr::write` (a non-atomic whole-header memcpy in `alloc_bytecode` /
-`alloc_float` / `alloc_vector`) writes the header — no happens-before because
-the publication chain (symbol/cons/vector cell stores + the GC's reads) is all
-`Ordering::Relaxed`. BENIGN on x86-64 (TSO retires the memcpy before the
-Relaxed publication store; `tenured` is a single byte, cannot tear; a reused
-slot's prior occupant was non-tenured, so a stale read is still `false` →
-never misclassifies → no UAF). REAL UB on weak memory (ARM / Apple Silicon),
-where a StoreStore reorder could expose a torn/premature header. `run-gc-tsan.sh`
-therefore has ONE known-benign residual race on
-`gc_concurrent_leaked_subr_drop_under_pdump_verifiers` (the bytecode/float/vector
-tenured class). DEFERRED (benign-on-x86; owner decision 2026-07-04). Fix space
-when revived — needs a design + two-critic round (hot GC path): (A)
-Release/Acquire on the mutator publication stores + the GC-thread acquisition
-loads — FREE on x86 (Acquire-load/Release-store are plain `mov` under TSO), adds
-the required barriers on ARM, unifies the whole class; (B) atomic-write only the
-concurrently-read header bytes (marked@0, tenured@2) in the arena alloc instead
-of the full-header `ptr::write` (contained to gc.rs/header.rs, but changes the
-full-header-write invariant + needs a stale-byte/Drop review); (C) a TSan
-suppression (cheap, hides the UB, x86-only). Repro: `run-gc-tsan.sh
-gc_concurrent_leaked_subr_drop_under_pdump_verifiers` with
-`TSAN_OPTIONS=halt_on_error=0`.
+**HEADER-PUBLICATION ORDERING — FIXED (task #24 option A, 2026-07-10):** the
+concurrent-claim dispatcher (`concurrent_try_mark_owned`) reads an arena
+object's `GcHeader.tenured` byte (a plain `bool`) after reaching it through a
+heap pointer; the mutator's arena `ptr::write` (a non-atomic whole-header
+memcpy in `alloc_bytecode` / `alloc_float` / `alloc_vector`) writes that
+header just before publishing the pointer. This chain used to be all
+`Ordering::Relaxed` — benign on x86-64 (TSO retires the memcpy before the
+publication store; a single byte cannot tear; a reused slot's prior occupant
+was non-tenured, so a stale read was still `false`), but REAL UB on weak
+memory (ARM / Apple Silicon), where a StoreStore reorder could expose a
+torn/premature header. Fixed with option A, RELEASE/ACQUIRE ON THE
+PUBLICATION CHAIN (`header.rs`): every mutator store that can make a heap
+pointer GC-visible mid-mark — `ConsCell::set_car`/`set_cdr`,
+`LispValueVec::store_atomic`, `store_value_atomic` (symbol value/function/
+plist cells and object fields route through these) — is now `Release`, and
+every GC-thread first-acquisition load — `ConsCell::load_car`/`load_cdr`,
+`LispValueVec::load_atomic`/`iter_atomic`, `load_value_atomic` (the obarray +
+Tier-B vector scans and the gray drain read through these) — is `Acquire`.
+The pairing makes the constructor's header write happen-before any dispatcher
+dereference, closing the whole class (tenured/kind/type_tag reads AND the
+born-black parity-bit visibility for mid-cycle objects in reused snapshot
+slots). FREE on x86 (both orderings are plain `mov` under TSO; `stlr`/`ldar`
+on AArch64). Objects reached through pre-cycle channels (start-handshake
+snapshots, the gray-queue channel handoff, the SATB/deferred mutexes) already
+carried happens-before from those seams; the mark bits (`GcHeader.marked`,
+cons block bitmaps) intentionally stay `Relaxed` — they never publish field
+data, and a claim's field reads are ordered by the pointer chain, not by the
+bit. The canonical contract comment lives on `load_value_atomic`
+(`header.rs`). This removes the one known-benign residual TSan race
+(`gc_concurrent_leaked_subr_drop_under_pdump_verifiers`); `run-gc-tsan.sh`
+gates the surface.

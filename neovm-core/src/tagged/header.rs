@@ -44,33 +44,40 @@ impl ConsCell {
         unsafe { self.cdr_or_next.cdr }
     }
 
-    /// Atomic (relaxed) read of `car` — used by GC tracing, which may run on a
+    /// Atomic (acquire) read of `car` — used by GC tracing, which may run on a
     /// concurrent collector thread while the mutator stores via `set_car`.
+    /// Acquire pairs with the release publication stores (see the module's
+    /// publication-ordering contract on [`load_value_atomic`]): dereferencing
+    /// a freshly-published heap pointer loaded here observes the pointee's
+    /// fully-written `GcHeader`.
     #[inline]
     pub unsafe fn load_car(&self) -> TaggedValue {
         let p = &self.car as *const TaggedValue as *const AtomicUsize;
-        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+        TaggedValue(unsafe { (*p).load(Ordering::Acquire) })
     }
 
-    /// Atomic (relaxed) read of `cdr` (the cdr/next-free union word).
+    /// Atomic (acquire) read of `cdr` (the cdr/next-free union word).
     #[inline]
     pub unsafe fn load_cdr(&self) -> TaggedValue {
         let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
-        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+        TaggedValue(unsafe { (*p).load(Ordering::Acquire) })
     }
 
-    /// Store `car` atomically (relaxed) so a concurrent GC read sees a whole
-    /// value, never a torn word. On x86 this is a plain `mov`.
+    /// Store `car` atomically so a concurrent GC read sees a whole value,
+    /// never a torn word. Release-ordered: publishing a heap pointer into a
+    /// GC-visible cell must happen-after the pointee's header/constructor
+    /// writes (the publication-ordering contract on [`load_value_atomic`]).
+    /// On x86-TSO both release stores and plain stores compile to `mov`.
     #[inline]
     pub unsafe fn set_car(&mut self, value: TaggedValue) {
         let p = &self.car as *const TaggedValue as *const AtomicUsize;
-        unsafe { (*p).store(value.0, Ordering::Relaxed) };
+        unsafe { (*p).store(value.0, Ordering::Release) };
     }
 
     #[inline]
     pub unsafe fn set_cdr(&mut self, value: TaggedValue) {
         let p = &self.cdr_or_next as *const ConsCdrOrNext as *const AtomicUsize;
-        unsafe { (*p).store(value.0, Ordering::Relaxed) };
+        unsafe { (*p).store(value.0, Ordering::Release) };
     }
 
     #[inline]
@@ -484,31 +491,34 @@ impl LispValueVec {
         }
     }
 
-    /// Atomic (relaxed) load of element `i`, for GC tracing that may run on a
-    /// concurrent collector thread while the mutator stores via `store_atomic`.
+    /// Atomic (acquire) load of element `i`, for GC tracing that may run on a
+    /// concurrent collector thread while the mutator stores via `store_atomic`
+    /// (see the publication-ordering contract on [`load_value_atomic`]).
     /// Panics on out-of-bounds, like slice indexing.
     #[inline]
     pub fn load_atomic(&self, i: usize) -> TaggedValue {
         let p = &self.as_slice()[i] as *const TaggedValue as *const AtomicUsize;
-        TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+        TaggedValue(unsafe { (*p).load(Ordering::Acquire) })
     }
 
-    /// Atomic (relaxed) store to element `i` of owned storage. The element must
+    /// Atomic (release) store to element `i` of owned storage. The element must
     /// exist; this is for in-place slot writes (e.g. `aset`), not growth.
+    /// Release publishes the stored pointee's header/constructor writes to the
+    /// GC thread's acquire loads (contract on [`load_value_atomic`]).
     #[inline]
     pub fn store_atomic(&mut self, i: usize, value: TaggedValue) {
         let data = self.ensure_owned();
         let p = &data[i] as *const TaggedValue as *const AtomicUsize;
-        unsafe { (*p).store(value.0, Ordering::Relaxed) };
+        unsafe { (*p).store(value.0, Ordering::Release) };
     }
 
-    /// Iterate every element via atomic (relaxed) loads — the GC tracing read
+    /// Iterate every element via atomic (acquire) loads — the GC tracing read
     /// path. Yields owned `TaggedValue`s (snapshots of each slot word).
     #[inline]
     pub fn iter_atomic(&self) -> impl Iterator<Item = TaggedValue> + '_ {
         self.as_slice().iter().map(|slot| {
             let p = slot as *const TaggedValue as *const AtomicUsize;
-            TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+            TaggedValue(unsafe { (*p).load(Ordering::Acquire) })
         })
     }
 
@@ -652,20 +662,43 @@ impl VectorScanSnapshot {
     }
 }
 
-/// Atomic (relaxed) load of a single `TaggedValue` slot in place — for GC reads
+/// Atomic (acquire) load of a single `TaggedValue` slot in place — for GC reads
 /// of individual object fields (char-table default/parent/..., symbol-with-pos,
-/// xwidget, overlay plist, module-function docs).
+/// xwidget, overlay plist, module-function docs) and the concurrent obarray /
+/// vector-backing scans.
+///
+/// PUBLICATION-ORDERING CONTRACT (concurrent GC, task #24 fix A): every store
+/// that can make a heap pointer visible to the GC thread mid-mark (cons
+/// car/cdr, vector slots, symbol value/function/plist cells — this module's
+/// atomic store helpers) is `Release`, and every GC-thread load that can be
+/// the first acquisition of such a pointer (cons car/cdr, slot/field loads —
+/// this module's atomic load helpers) is `Acquire`. The pairing makes the
+/// mutator's pre-publication writes — the arena `ptr::write` of the whole
+/// `GcHeader`/constructor, including `tenured`, `kind`, and the born-black
+/// parity bit — happen-before any dereference by the claim dispatcher
+/// (`concurrent_try_mark_owned`), which may otherwise read a torn/premature
+/// header on weakly-ordered targets (real UB on ARM; x86-TSO retired the
+/// writes in order anyway). Both orderings compile to plain `mov` on x86-64,
+/// and to `stlr`/`ldar` on AArch64. Objects reached through pre-cycle
+/// channels (start-handshake snapshots, the gray-queue channel handoff, the
+/// SATB/deferred mutexes) already carry happens-before from those seams; this
+/// contract closes the one remaining path — a fresh pointer stored into an
+/// already-snapshotted cell and read back mid-cycle. The mark bits themselves
+/// (`GcHeader.marked`, cons block bitmaps) stay `Relaxed`: they never
+/// publish field data, and a claim's field reads are ordered by this
+/// contract's pointer chain, not by the bit.
 #[inline]
 pub fn load_value_atomic(slot: &TaggedValue) -> TaggedValue {
     let p = slot as *const TaggedValue as *const AtomicUsize;
-    TaggedValue(unsafe { (*p).load(Ordering::Relaxed) })
+    TaggedValue(unsafe { (*p).load(Ordering::Acquire) })
 }
 
-/// Atomic (relaxed) store to a single `TaggedValue` slot in place.
+/// Atomic (release) store to a single `TaggedValue` slot in place. See the
+/// publication-ordering contract on [`load_value_atomic`].
 #[inline]
 pub fn store_value_atomic(slot: &mut TaggedValue, value: TaggedValue) {
     let p = slot as *const TaggedValue as *const AtomicUsize;
-    unsafe { (*p).store(value.0, Ordering::Relaxed) };
+    unsafe { (*p).store(value.0, Ordering::Release) };
 }
 
 impl From<Vec<TaggedValue>> for LispValueVec {
