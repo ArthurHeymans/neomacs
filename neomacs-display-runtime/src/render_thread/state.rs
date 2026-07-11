@@ -384,6 +384,13 @@ impl PointerAppearanceState {
         self.active
     }
 
+    pub(super) fn selection_for(
+        self,
+        frame: &FrameGlyphBuffer,
+    ) -> Option<PointerAppearanceSelection> {
+        self.active.and_then(|active| active.selection_for(frame))
+    }
+
     #[cfg(test)]
     pub(super) const fn pressed(self) -> Option<PresentedAppearanceKey> {
         self.pressed

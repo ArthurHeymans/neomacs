@@ -13,7 +13,7 @@ use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
+use neomacs_display_protocol::types::{Color, DisplayWindowId};
 use neomacs_display_protocol::{
     FrameRect, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
     PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
@@ -223,139 +223,6 @@ fn cursor_visible_false_suppresses_cursor() {
     }
     eprintln!("cursor_visible=false red pixels: {}", red);
     assert_eq!(red, 0, "cursor_visible=false must draw no cursor");
-}
-
-fn presented_pointer_integration_mouse_face_frame() -> FrameGlyphBuffer {
-    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
-    frame.presentation_id = PresentationId::new(501);
-    frame.background = Color::rgb(0.05, 0.06, 0.07);
-    frame.set_face(
-        FaceId::new(1),
-        Color::WHITE,
-        Some(Color::rgb(0.1, 0.2, 0.8)),
-        400,
-        false,
-        0,
-        None,
-        0,
-        None,
-        0,
-        None,
-    );
-    frame.add_char(' ', 16.0, 16.0, 48.0, 24.0, 18.0, false);
-    frame.set_face(
-        FaceId::new(2),
-        Color::BLACK,
-        Some(Color::rgb(0.9, 0.15, 0.1)),
-        700,
-        false,
-        0,
-        None,
-        0,
-        None,
-        0,
-        None,
-    );
-    frame
-        .install_presented_pointer(
-            vec![PresentedPointerRegion::new(
-                FrameRect::new(16.0, 16.0, 48.0, 24.0).unwrap(),
-                None,
-                Some(PointerAppearanceId::try_from(0usize).unwrap()),
-            )],
-            vec![PresentedPointerAppearance::new(
-                vec![PresentedPaintSpan::new(
-                    PresentedPrimitiveKind::Glyph,
-                    0,
-                    1,
-                    FrameRect::new(16.0, 16.0, 48.0, 24.0).unwrap(),
-                )],
-                PointerDrawMode::Face(FaceId::new(2)),
-                PointerDrawMode::Face(FaceId::new(2)),
-            )],
-        )
-        .unwrap();
-    frame
-}
-
-#[test]
-fn presented_pointer_integration_mouse_face_changes_pixels_and_leave_restores_base() {
-    let Some(mut h) = try_harness() else {
-        eprintln!("SKIP: no GPU adapter");
-        return;
-    };
-    let frame = presented_pointer_integration_mouse_face_frame();
-    let presentation = frame.presentation_id;
-
-    h.renderer.render_frame_glyphs(
-        &h.view,
-        &frame,
-        &mut h.atlas,
-        W,
-        H,
-        false,
-        None,
-        (24.0, 24.0),
-        None,
-        None,
-        None,
-    );
-    let base = read_back(&h);
-
-    h.renderer.render_frame_glyphs(
-        &h.view,
-        &frame,
-        &mut h.atlas,
-        W,
-        H,
-        false,
-        None,
-        (24.0, 24.0),
-        None,
-        Some(PointerAppearanceSelection::new(
-            PointerAppearanceId::try_from(0usize).unwrap(),
-            PointerAppearancePhase::Hover,
-        )),
-        None,
-    );
-    let hovered = read_back(&h);
-
-    assert_eq!(
-        frame.presentation_id, presentation,
-        "hover does not publish a frame"
-    );
-    assert!(
-        hovered
-            .iter()
-            .zip(&base)
-            .any(|(hovered, base)| hovered != base),
-        "mouse-face must alter the rendered pixels"
-    );
-    let base_pixel = px(&base, 32, 24);
-    let hovered_pixel = px(&hovered, 32, 24);
-    assert!(
-        base_pixel[2] > base_pixel[0] && hovered_pixel[0] > hovered_pixel[2],
-        "expected blue base and red mouse-face pixels, got {base_pixel:?} -> {hovered_pixel:?}"
-    );
-
-    h.renderer.render_frame_glyphs(
-        &h.view,
-        &frame,
-        &mut h.atlas,
-        W,
-        H,
-        false,
-        None,
-        (80.0, 50.0),
-        None,
-        None,
-        None,
-    );
-    let restored = read_back(&h);
-    assert_eq!(
-        restored, base,
-        "leaving restores byte-identical base rendering"
-    );
 }
 
 fn presented_pointer_integration_relief(pressed: bool, background: Color) -> PointerImageRelief {

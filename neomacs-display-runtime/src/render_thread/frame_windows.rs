@@ -439,6 +439,16 @@ impl GuiFrameRenderState {
         changed
     }
 
+    /// Resolve the active runtime appearance only when it belongs to this
+    /// exact immutable frame snapshot. Renderer entry points use this seam so
+    /// stale state can never become an unqualified appearance ID.
+    pub(super) fn pointer_selection_for(
+        &self,
+        frame: &FrameGlyphBuffer,
+    ) -> Option<neomacs_display_protocol::PointerAppearanceSelection> {
+        self.pointer_appearance.selection_for(frame)
+    }
+
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
         self.compositor
             .glyph_atlas

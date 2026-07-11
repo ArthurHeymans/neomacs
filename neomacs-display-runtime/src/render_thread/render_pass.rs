@@ -918,10 +918,7 @@ impl RenderApp {
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
         super::frame_stats::count(&super::frame_stats::ROOT_GLYPH_PASSES);
-        let pointer_selection = render
-            .pointer_appearance
-            .active()
-            .and_then(|active| active.selection_for(frame));
+        let pointer_selection = render.pointer_selection_for(frame);
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
             atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
         }
@@ -955,13 +952,11 @@ impl RenderApp {
         child_frame_style: &ChildFrameStyle,
         scroll_indicators_enabled: bool,
     ) {
+        let pointer_appearance = render.pointer_appearance;
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             for &child_id in render.compositor.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = render.compositor.child_frames.frames.get(&child_id) {
-                    let pointer_selection = render
-                        .pointer_appearance
-                        .active()
-                        .and_then(|active| active.selection_for(&child_entry.frame));
+                    let pointer_selection = pointer_appearance.selection_for(&child_entry.frame);
                     if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
                         atlas.set_current_frame_fonts(
                             &child_entry.frame.fonts,

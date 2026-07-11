@@ -101,9 +101,10 @@ fn presented_pointer_integration_relief(pressed: bool) -> PointerImageRelief {
 fn presented_pointer_integration_frame(presentation: u64) -> FrameGlyphBuffer {
     let mut frame = FrameGlyphBuffer::with_size(140.0, 24.0);
     frame.presentation_id = PresentationId::new(presentation);
-    frame
-        .faces
-        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
+    frame.background = Color::rgb(0.05, 0.06, 0.07);
+    let mut base = Face::new(FaceId::new(0));
+    base.background = Color::rgb(0.1, 0.2, 0.8);
+    frame.faces.insert(FaceId::new(0), base);
     let mut hover = Face::new(FaceId::new(9));
     hover.background = Color::rgb(0.8, 0.2, 0.1);
     frame.faces.insert(FaceId::new(9), hover);
@@ -153,6 +154,197 @@ fn presented_pointer_integration_frame(presentation: u64) -> FrameGlyphBuffer {
         )
         .expect("valid integration pointer map");
     frame
+}
+
+struct PresentedPointerRuntimeRenderHarness {
+    renderer: neomacs_renderer_wgpu::WgpuRenderer,
+    atlas: neomacs_renderer_wgpu::WgpuGlyphAtlas,
+    target: wgpu::Texture,
+    view: wgpu::TextureView,
+}
+
+fn presented_pointer_runtime_render_harness() -> Option<PresentedPointerRuntimeRenderHarness> {
+    const WIDTH: u32 = 140;
+    const HEIGHT: u32 = 24;
+    let renderer = neomacs_renderer_wgpu::WgpuRenderer::new(None, WIDTH, HEIGHT).ok()?;
+    let atlas = neomacs_renderer_wgpu::WgpuGlyphAtlas::new(renderer.device());
+    let target = renderer.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("presented-pointer-runtime-render-target"),
+        size: wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+    Some(PresentedPointerRuntimeRenderHarness {
+        renderer,
+        atlas,
+        target,
+        view,
+    })
+}
+
+fn presented_pointer_runtime_render_readback(
+    harness: &PresentedPointerRuntimeRenderHarness,
+) -> Vec<u8> {
+    const WIDTH: u32 = 140;
+    const HEIGHT: u32 = 24;
+    let unpadded = WIDTH * 4;
+    let padded =
+        unpadded.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let buffer = harness
+        .renderer
+        .device()
+        .create_buffer(&wgpu::BufferDescriptor {
+            label: Some("presented-pointer-runtime-readback"),
+            size: u64::from(padded * HEIGHT),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+    let mut encoder = harness
+        .renderer
+        .device()
+        .create_command_encoder(&Default::default());
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &harness.target,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(HEIGHT),
+            },
+        },
+        wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
+    );
+    harness
+        .renderer
+        .queue()
+        .submit(std::iter::once(encoder.finish()));
+    let slice = buffer.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    harness
+        .renderer
+        .device()
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(3)),
+        })
+        .expect("pointer render poll");
+    let mapped = slice.get_mapped_range();
+    let mut pixels = vec![0; (unpadded * HEIGHT) as usize];
+    for row in 0..HEIGHT {
+        let source = (row * padded) as usize;
+        let destination = (row * unpadded) as usize;
+        pixels[destination..destination + unpadded as usize]
+            .copy_from_slice(&mapped[source..source + unpadded as usize]);
+    }
+    pixels
+}
+
+fn presented_pointer_runtime_render_pixel(pixels: &[u8], x: u32, y: u32) -> [u8; 4] {
+    const WIDTH: u32 = 140;
+    let index = ((y * WIDTH + x) * 4) as usize;
+    [
+        pixels[index + 2],
+        pixels[index + 1],
+        pixels[index],
+        pixels[index + 3],
+    ]
+}
+
+#[test]
+fn presented_pointer_integration_runtime_motion_drives_same_frame_mouse_face_pixels() {
+    let Some(mut harness) = presented_pointer_runtime_render_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(presented_pointer_integration_frame(69)), None);
+    let frame = render.current_frame_clone().unwrap();
+
+    let base_selection = render.pointer_selection_for(&frame);
+    harness.renderer.render_frame_glyphs(
+        &harness.view,
+        &frame,
+        &mut harness.atlas,
+        140,
+        24,
+        false,
+        None,
+        (84.0, 10.0),
+        None,
+        base_selection,
+        None,
+    );
+    let base = presented_pointer_runtime_render_readback(&harness);
+
+    assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
+    let hover_selection = render.pointer_selection_for(&frame);
+    harness.renderer.render_frame_glyphs(
+        &harness.view,
+        &frame,
+        &mut harness.atlas,
+        140,
+        24,
+        false,
+        None,
+        (84.0, 10.0),
+        None,
+        hover_selection,
+        None,
+    );
+    let hovered = presented_pointer_runtime_render_readback(&harness);
+    assert_eq!(
+        render
+            .compositor
+            .current_frame
+            .as_ref()
+            .unwrap()
+            .presentation_id,
+        PresentationId::new(69),
+        "motion reuses the displayed presentation"
+    );
+    let base_pixel = presented_pointer_runtime_render_pixel(&base, 40, 10);
+    let hovered_pixel = presented_pointer_runtime_render_pixel(&hovered, 40, 10);
+    assert!(
+        base_pixel[2] > base_pixel[0] && hovered_pixel[0] > hovered_pixel[2],
+        "runtime-selected mouse-face should change blue to red: {base_pixel:?} -> {hovered_pixel:?}"
+    );
+
+    assert!(render.update_presented_pointer_motion(None));
+    let leave_selection = render.pointer_selection_for(&frame);
+    harness.renderer.render_frame_glyphs(
+        &harness.view,
+        &frame,
+        &mut harness.atlas,
+        140,
+        24,
+        false,
+        None,
+        (130.0, 20.0),
+        None,
+        leave_selection,
+        None,
+    );
+    let restored = presented_pointer_runtime_render_readback(&harness);
+    assert_eq!(restored, base, "runtime leave restores byte-identical base");
 }
 
 #[test]
@@ -228,32 +420,133 @@ fn presented_pointer_integration_published_frame_drives_hover_press_leave_and_st
 
     assert!(render.update_presented_pointer_motion(None));
     assert_eq!(render.pointer_appearance.active(), None);
-    let retired = close;
+    assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
+    assert!(render.pointer_appearance.active().is_some());
+    render.set_dirty(false);
     render.set_current_frame(Some(presented_pointer_integration_frame(71)), None);
+    assert_eq!(render.pointer_appearance.active(), None);
+    assert!(
+        render.compositor.dirty,
+        "retiring active paint dirties base rendering"
+    );
     assert_eq!(
-        retired.selection_for(render.compositor.current_frame.as_ref().unwrap()),
-        None,
-        "a selection from the old presentation cannot paint the replacement"
+        render.pointer_selection_for(render.compositor.current_frame.as_ref().unwrap()),
+        None
     );
 }
 
+fn presented_pointer_integration_offset_frame(
+    presentation: u64,
+    width: f32,
+    height: f32,
+    regions: &[(f32, f32, f32, f32)],
+) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(width, height);
+    frame.presentation_id = PresentationId::new(presentation);
+    frame
+        .faces
+        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
+    frame
+        .faces
+        .insert(FaceId::new(9), Face::new(FaceId::new(9)));
+    let (x, y, width, height) = regions[0];
+    frame.add_char('x', x, y, width, height, height - 2.0, false);
+    frame
+        .install_presented_pointer(
+            regions
+                .iter()
+                .map(|&(x, y, width, height)| {
+                    PresentedPointerRegion::new(
+                        FrameRect::new(x, y, width, height).unwrap(),
+                        None,
+                        Some(PointerAppearanceId::try_from(0usize).unwrap()),
+                    )
+                })
+                .collect(),
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Glyph,
+                    0,
+                    1,
+                    FrameRect::new(x, y, width, height).unwrap(),
+                )],
+                PointerDrawMode::Face(FaceId::new(9)),
+                PointerDrawMode::Face(FaceId::new(9)),
+            )],
+        )
+        .unwrap();
+    frame
+}
+
 #[test]
-fn presented_pointer_integration_root_and_child_use_the_published_target_snapshot() {
-    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.set_current_frame(Some(presented_pointer_integration_frame(80)), None);
-    let mut child = presented_pointer_integration_frame(81);
+fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_fallback() {
+    let mut app = make_test_app(300, 200, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_emacs_frame_id(0x42);
+    render.set_current_frame(
+        Some(presented_pointer_integration_offset_frame(
+            80,
+            300.0,
+            200.0,
+            &[(110.0, 85.0, 20.0, 10.0), (10.0, 5.0, 20.0, 10.0)],
+        )),
+        None,
+    );
+    let mut lower_child =
+        presented_pointer_integration_offset_frame(82, 60.0, 40.0, &[(10.0, 5.0, 20.0, 10.0)]);
+    lower_child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x98);
+    lower_child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
+    lower_child.parent_x = 100.0;
+    lower_child.parent_y = 80.0;
+    lower_child.z_order = 5;
+    render.update_child_frame(lower_child);
+    let mut child =
+        presented_pointer_integration_offset_frame(81, 60.0, 40.0, &[(10.0, 5.0, 20.0, 10.0)]);
     child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
     child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
+    child.parent_x = 100.0;
+    child.parent_y = 80.0;
+    child.z_order = 10;
     render.update_child_frame(child);
 
-    assert!(render.update_presented_pointer_motion(Some((0x99, 110.0, 10.0))));
+    let window = app.frame_windows.primary_window_mut().unwrap();
+    let child_owner = RenderApp::pointer_owner(window, 115.0, 88.0);
+    assert!(matches!(
+        child_owner,
+        PointerOwner::Child {
+            frame_id: 0x99,
+            x: 15.0,
+            y: 8.0
+        }
+    ));
+    let child_target = child_owner
+        .target()
+        .map(|(x, y, frame_id)| (frame_id, x, y));
+    assert!(window.render.update_presented_pointer_motion(child_target));
     assert_eq!(
-        render.pointer_appearance.active().unwrap().presentation(),
+        window
+            .render
+            .pointer_appearance
+            .active()
+            .unwrap()
+            .presentation(),
         PresentationId::new(81)
     );
-    assert!(render.update_presented_pointer_motion(Some((0x42, 20.0, 10.0))));
+
+    let root_owner = RenderApp::pointer_owner(window, 15.0, 8.0);
+    assert!(matches!(
+        root_owner,
+        PointerOwner::Root { frame_id: 0x42, .. }
+    ));
+    let root_target = root_owner.target().map(|(x, y, frame_id)| (frame_id, x, y));
+    assert!(window.render.update_presented_pointer_motion(root_target));
     assert_eq!(
-        render.pointer_appearance.active().unwrap().presentation(),
+        window
+            .render
+            .pointer_appearance
+            .active()
+            .unwrap()
+            .presentation(),
         PresentationId::new(80)
     );
 }
@@ -268,11 +561,31 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     render.set_current_frame(Some(presented_pointer_integration_frame(90)), None);
     let window = app.frame_windows.primary_window_mut().unwrap();
 
+    let body = RenderApp::capture_tab_bar_press(window, 20.0, 10.0).unwrap();
+    let body_release = RenderApp::take_tab_bar_release_events(&mut window.render, 20.0, 10.0);
     let close = RenderApp::capture_tab_bar_press(window, 84.0, 10.0).unwrap();
     let close_release = RenderApp::take_tab_bar_release_events(&mut window.render, 84.0, 10.0);
     let add = RenderApp::capture_tab_bar_press(window, 110.0, 10.0).unwrap();
     let add_release = RenderApp::take_tab_bar_release_events(&mut window.render, 110.0, 10.0);
 
+    assert!(matches!(
+        body,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
+            interaction: 1,
+            pressed: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        body_release.as_slice(),
+        [crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
+            interaction: 1,
+            pressed: false,
+            ..
+        }]
+    ));
     assert!(matches!(
         close,
         crate::thread_comm::InputEvent::PresentedPointer {
@@ -285,6 +598,7 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     assert!(matches!(
         close_release.as_slice(),
         [crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
             interaction: 2,
             pressed: false,
             ..
@@ -302,6 +616,7 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     assert!(matches!(
         add_release.as_slice(),
         [crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
             interaction: 3,
             pressed: false,
             ..
