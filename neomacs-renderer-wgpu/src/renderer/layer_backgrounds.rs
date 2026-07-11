@@ -15,8 +15,7 @@ use super::WgpuRenderer;
 use super::frame_pass::{BoxSpan, BoxSpanSet, FrameParams, FramePassCtx};
 
 impl WgpuRenderer {
-    /// Merge adjacent boxed glyphs into spans and compute the rounded-box
-    /// background-suppression margin.
+    /// Merge adjacent boxed glyphs into spans.
     pub(super) fn collect_box_spans(&self, params: &FrameParams<'_>) -> BoxSpanSet {
         let frame_glyphs = params.frame_glyphs;
         let faces = params.faces;
@@ -110,23 +109,7 @@ impl WgpuRenderer {
                 }
             }
         }
-        // Helper: test whether a glyph position overlaps any ROUNDED box span.
-        // Only suppresses backgrounds for rounded boxes (corner_radius > 0).
-        // Standard boxes (corner_radius=0) keep normal rect backgrounds.
-        let box_margin: f32 = box_spans
-            .iter()
-            .filter_map(|s| {
-                faces
-                    .get(&s.face_id)
-                    .filter(|f| f.box_corner_radius > 0)
-                    .map(|f| f.box_line_width as f32)
-            })
-            .fold(0.0_f32, f32::max);
-
-        BoxSpanSet {
-            spans: box_spans,
-            rounded_margin: box_margin,
-        }
+        BoxSpanSet { spans: box_spans }
     }
 
     /// Collect the non-overlay background layer: background gradient, window
@@ -140,7 +123,6 @@ impl WgpuRenderer {
         let frame_glyphs = params.frame_glyphs;
         let faces = params.faces;
         let box_spans = &spans.spans;
-        let box_margin = spans.rounded_margin;
         let has_line_anims = params.has_line_anims;
         let background_gradient = params.background_gradient;
         let logical_w = params.logical_w;
@@ -236,8 +218,16 @@ impl WgpuRenderer {
                     else {
                         continue;
                     };
-                    if Self::overlaps_rounded_box_span(
-                        draw_x, draw_y, false, box_spans, faces, box_margin,
+                    if Self::paint_has_rounded_box_span(
+                        *x,
+                        *y,
+                        *width,
+                        *height,
+                        face_id,
+                        effective_clip.as_ref(),
+                        *row_role,
+                        box_spans,
+                        faces,
                     ) {
                         continue;
                     }
@@ -326,8 +316,16 @@ impl WgpuRenderer {
                         else {
                             continue;
                         };
-                        if Self::overlaps_rounded_box_span(
-                            draw_x, draw_y, false, box_spans, faces, box_margin,
+                        if Self::paint_has_rounded_box_span(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            face_id,
+                            effective_clip.as_ref(),
+                            *row_role,
+                            box_spans,
+                            faces,
                         ) {
                             continue;
                         }
@@ -579,7 +577,6 @@ impl WgpuRenderer {
         let frame_glyphs = params.frame_glyphs;
         let faces = params.faces;
         let box_spans = &spans.spans;
-        let box_margin = spans.rounded_margin;
         // --- Collect overlay backgrounds ---
         let mut overlay_rect_vertices: Vec<RectVertex> = Vec::new();
 
@@ -618,8 +615,16 @@ impl WgpuRenderer {
                     else {
                         continue;
                     };
-                    if Self::overlaps_rounded_box_span(
-                        draw_x, draw_y, true, box_spans, faces, box_margin,
+                    if Self::paint_has_rounded_box_span(
+                        *x,
+                        *y,
+                        *width,
+                        *height,
+                        face_id,
+                        effective_clip.as_ref(),
+                        *row_role,
+                        box_spans,
+                        faces,
                     ) {
                         continue;
                     }
@@ -700,8 +705,16 @@ impl WgpuRenderer {
                         else {
                             continue;
                         };
-                        if Self::overlaps_rounded_box_span(
-                            draw_x, draw_y, true, box_spans, faces, box_margin,
+                        if Self::paint_has_rounded_box_span(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            face_id,
+                            effective_clip.as_ref(),
+                            *row_role,
+                            box_spans,
+                            faces,
                         ) {
                             continue;
                         }

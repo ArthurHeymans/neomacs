@@ -8,7 +8,7 @@ use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
 #[test]
-fn rounded_box_background_suppression_respects_effective_clip() {
+fn rounded_box_background_suppression_matches_exact_face_paint() {
     use crate::renderer::frame_pass::BoxSpan;
     use neomacs_display_protocol::face::{BoxType, Face};
     use neomacs_display_protocol::types::Rect;
@@ -31,12 +31,36 @@ fn rounded_box_background_suppression_respects_effective_clip() {
         clip: Some(Rect::new(10.0, 0.0, 10.0, 10.0)),
     }];
 
-    assert!(super::WgpuRenderer::overlaps_rounded_box_span(
-        15.0, 5.0, false, &spans, &faces, 1.0,
+    let alternate_clip = Rect::new(10.0, 0.0, 10.0, 10.0);
+    assert!(super::WgpuRenderer::paint_has_rounded_box_span(
+        0.0,
+        0.0,
+        30.0,
+        10.0,
+        face_id,
+        Some(&alternate_clip),
+        GlyphRowRole::Text,
+        &spans,
+        &faces,
     ));
-    assert!(!super::WgpuRenderer::overlaps_rounded_box_span(
-        2.0, 5.0, false, &spans, &faces, 1.0,
-    ));
+
+    let base_face_id = FaceId::new(1);
+    for base_clip in [
+        Rect::new(0.0, 0.0, 10.0, 10.0),
+        Rect::new(20.0, 0.0, 10.0, 10.0),
+    ] {
+        assert!(!super::WgpuRenderer::paint_has_rounded_box_span(
+            0.0,
+            0.0,
+            30.0,
+            10.0,
+            base_face_id,
+            Some(&base_clip),
+            GlyphRowRole::Text,
+            &spans,
+            &faces,
+        ));
+    }
 }
 
 fn make_cursor(

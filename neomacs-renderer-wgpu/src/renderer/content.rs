@@ -14,6 +14,7 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
+use super::frame_pass::BoxSpan;
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
@@ -290,6 +291,7 @@ impl WgpuRenderer {
                     height,
                     bg: _,
                     face_id,
+                    row_role,
                     stipple_id,
                     stipple_fg,
                     clip_rect,
@@ -306,6 +308,19 @@ impl WgpuRenderer {
                         else {
                             continue;
                         };
+                        if Self::paint_has_rounded_box_span(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            face_id,
+                            effective_clip.as_ref(),
+                            *row_role,
+                            &box_spans,
+                            faces,
+                        ) {
+                            continue;
+                        }
                         self.add_rect(
                             &mut bg_vertices,
                             draw_x + offset_x,
@@ -337,6 +352,7 @@ impl WgpuRenderer {
                     width,
                     height,
                     face_id,
+                    row_role,
                     clip_rect,
                     ..
                 } => {
@@ -353,6 +369,19 @@ impl WgpuRenderer {
                         else {
                             continue;
                         };
+                        if Self::paint_has_rounded_box_span(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            face_id,
+                            effective_clip.as_ref(),
+                            *row_role,
+                            &box_spans,
+                            faces,
+                        ) {
+                            continue;
+                        }
                         self.add_rect(
                             &mut bg_vertices,
                             draw_x + offset_x,
@@ -1816,23 +1845,25 @@ impl WgpuRenderer {
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
         for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
-            let (gx, gy, gw, gh, base_face_id) = match glyph {
+            let (gx, gy, gw, gh, base_face_id, row_role) = match glyph {
                 FrameGlyph::Char {
                     x,
                     y,
                     width,
                     height,
                     face_id,
+                    row_role,
                     ..
-                } => (*x, *y, *width, *height, *face_id),
+                } => (*x, *y, *width, *height, *face_id, *row_role),
                 FrameGlyph::Stretch {
                     x,
                     y,
                     width,
                     height,
                     face_id,
+                    row_role,
                     ..
-                } => (*x, *y, *width, *height, *face_id),
+                } => (*x, *y, *width, *height, *face_id, *row_role),
                 _ => continue,
             };
             for paint in
@@ -1853,6 +1884,7 @@ impl WgpuRenderer {
 
                 let merged = if let Some(last) = box_spans.last_mut() {
                     let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
+                    let same_role = last.row_role == row_role;
                     let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
                     // Strict same-face merge for every span. The frame-glyph path
                     // additionally merges sharp overlay (mode-line) spans across
@@ -1862,7 +1894,7 @@ impl WgpuRenderer {
                     let same_face = last.face_id == gface_id;
                     let same_clip = last.clip == effective_clip;
 
-                    if same_row && adjacent && same_face && same_clip {
+                    if same_row && same_role && adjacent && same_face && same_clip {
                         last.width = gx + gw - last.x;
                         true
                     } else {
@@ -1879,6 +1911,7 @@ impl WgpuRenderer {
                         width: gw,
                         height: gh,
                         face_id: gface_id,
+                        row_role,
                         bg: g_bg,
                         clip: effective_clip,
                     });
@@ -1893,14 +1926,3 @@ impl WgpuRenderer {
 #[cfg(test)]
 #[path = "content_test.rs"]
 mod tests;
-
-/// A merged span of adjacent boxed glyphs on the same row.
-struct BoxSpan {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    face_id: FaceId,
-    bg: Option<Color>,
-    clip: Option<Rect>,
-}

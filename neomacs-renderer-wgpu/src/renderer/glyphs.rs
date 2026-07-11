@@ -1628,48 +1628,30 @@ impl WgpuRenderer {
             .unwrap_or(false)
     }
 
-    // Test whether a glyph position overlaps any rounded box span.
-    // Only suppresses backgrounds for rounded boxes (corner_radius > 0).
-    // Standard boxes (corner_radius=0) keep normal rect backgrounds.
-    pub(super) fn overlaps_rounded_box_span(
+    /// Whether this exact face paint is replaced by a rendered rounded fill.
+    /// Matching face, clip, row and primitive coverage keeps transient paint
+    /// complements independent even though their geometry is adjacent.
+    pub(super) fn paint_has_rounded_box_span(
         gx: f32,
         gy: f32,
-        want_overlay: bool,
+        width: f32,
+        height: f32,
+        face_id: FaceId,
+        clip: Option<&Rect>,
+        row_role: GlyphRowRole,
         box_spans: &[BoxSpan],
         faces: &HashMap<FaceId, Face>,
-        box_margin: f32,
     ) -> bool {
-        if box_margin <= 0.0 {
-            return false;
-        }
+        let right = gx + width;
         box_spans.iter().any(|s| {
-            // Only check rounded box spans in the same chrome/text layer.
-            if s.row_role.is_chrome() != want_overlay {
-                return false;
-            }
-            if !Self::face_has_rounded_box(faces, s.face_id) {
-                return false;
-            }
-            let span_right = s.x + s.width;
-            let span_bottom = s.y + s.height;
-            let clipped_x = s.x.max(s.clip.as_ref().map_or(s.x, |clip| clip.x));
-            let clipped_y = s.y.max(s.clip.as_ref().map_or(s.y, |clip| clip.y));
-            let clipped_right = span_right.min(
-                s.clip
-                    .as_ref()
-                    .map_or(span_right, |clip| clip.x + clip.width),
-            );
-            let clipped_bottom = span_bottom.min(
-                s.clip
-                    .as_ref()
-                    .map_or(span_bottom, |clip| clip.y + clip.height),
-            );
-            clipped_right > clipped_x
-                && clipped_bottom > clipped_y
-                && gx >= clipped_x - box_margin - 0.5
-                && gx < clipped_right + box_margin + 0.5
-                && gy >= clipped_y - box_margin - 0.5
-                && gy < clipped_bottom + box_margin + 0.5
+            s.face_id == face_id
+                && s.clip.as_ref() == clip
+                && s.row_role == row_role
+                && Self::face_has_rounded_box(faces, s.face_id)
+                && (s.y - gy).abs() < 0.5
+                && (s.height - height).abs() < 0.5
+                && gx >= s.x - 0.5
+                && right <= s.x + s.width + 0.5
         })
     }
 

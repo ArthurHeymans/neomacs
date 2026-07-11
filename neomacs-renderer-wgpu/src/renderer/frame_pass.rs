@@ -64,11 +64,9 @@ pub(super) struct BoxSpan {
     pub(super) clip: Option<Rect>,
 }
 
-/// All merged box spans of a frame plus the widest rounded-box border width
-/// (the margin used to suppress plain backgrounds under rounded boxes).
+/// All merged box spans of a frame.
 pub(super) struct BoxSpanSet {
     pub(super) spans: Vec<BoxSpan>,
-    pub(super) rounded_margin: f32,
 }
 
 /// Cursor, window border, and scroll bar vertex sets collected before the
