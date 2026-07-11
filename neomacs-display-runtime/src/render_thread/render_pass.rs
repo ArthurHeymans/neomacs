@@ -910,9 +910,12 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) {
+    /// Render and present one top-level frame window. Returns whether a
+    /// frame was actually presented; false means nothing reached the screen
+    /// (no committed frame yet, window inactive, or surface unavailable).
+    pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) -> bool {
         if self.lifecycle_flags.shutdown_requested {
-            return;
+            return false;
         }
         self.prepare_frame_state_for_render();
 
@@ -927,10 +930,10 @@ impl RenderApp {
 
         let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
         let Some(renderer) = self.renderer.as_mut() else {
-            return;
+            return false;
         };
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
-            return;
+            return false;
         };
         window_state.render.compositor.transitions.policy = self.transition_policy;
 
@@ -994,6 +997,15 @@ impl RenderApp {
                     "child_frame_lifecycle: present_begin"
                 );
             }
+            // Let winit arm platform pacing (the Wayland surface frame
+            // callback) for the upcoming present; a no-op elsewhere.
+            if let Some(window) = self
+                .frame_windows
+                .get(emacs_frame_id)
+                .and_then(|window_state| window_state.window())
+            {
+                window.pre_present_notify();
+            }
             output.present();
             super::frame_stats::note_present(std::time::Instant::now());
             if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
@@ -1004,6 +1016,8 @@ impl RenderApp {
                     "child_frame_lifecycle: present_done"
                 );
             }
+            return true;
         }
+        false
     }
 }

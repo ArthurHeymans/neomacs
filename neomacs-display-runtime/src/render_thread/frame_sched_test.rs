@@ -404,6 +404,16 @@ fn timeout_backs_off_instead_of_retrying_immediately() {
         other => panic!("expected bounded backoff, got {:?}", other),
     }
     assert!(!c.request_pending(win(1)));
+    // The retry survives as a scheduled deadline and delivers the work.
+    let deadline = c.next_wake_deadline().expect("recovery deadline");
+    assert!(deadline > now + ms(2));
+    let retry = c.begin_frame(win(1), tick_at(deadline));
+    assert_eq!(
+        retry.work,
+        RenderWork::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        }
+    );
 }
 
 #[test]

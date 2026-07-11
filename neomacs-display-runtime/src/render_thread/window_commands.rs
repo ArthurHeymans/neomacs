@@ -223,6 +223,11 @@ impl RenderApp {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("AdoptPrimaryFrame request: frame_id=0x{:x}", emacs_frame_id);
                 self.frame_windows.adopt_primary_frame_id(emacs_frame_id);
+                // The window's scheduling identity moves from the pending id
+                // (0) to the adopted Emacs frame id; retire the old entry so
+                // its deadlines and request token cannot go stale.
+                self.frame_coordinator
+                    .remove_window(super::frame_sched::NativeWindowId(0));
             }
             WindowCommand::ShowChildFrame { frame_id } => {
                 tracing::info!(

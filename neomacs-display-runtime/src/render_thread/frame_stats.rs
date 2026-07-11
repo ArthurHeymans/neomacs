@@ -25,6 +25,11 @@ pub(super) static SCENE_COMMITS: AtomicU64 = AtomicU64::new(0);
 pub(super) static ROOT_GLYPH_PASSES: AtomicU64 = AtomicU64::new(0);
 /// Surface presents on top-level frame windows.
 pub(super) static SURFACE_PRESENTS: AtomicU64 = AtomicU64::new(0);
+/// Frame plans by render work class (frame scheduling plan, Stage 2).
+pub(super) static PLAN_NONE: AtomicU64 = AtomicU64::new(0);
+pub(super) static PLAN_COMPOSITE_ONLY: AtomicU64 = AtomicU64::new(0);
+pub(super) static PLAN_REPAINT_LAYERS: AtomicU64 = AtomicU64::new(0);
+pub(super) static PLAN_REBUILD_SCENE: AtomicU64 = AtomicU64::new(0);
 /// Microseconds from the most recently consumed scene commit to its present.
 pub(super) static LAST_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 /// Worst observed commit-to-present latency in microseconds.
@@ -50,6 +55,18 @@ fn tick_us(now: Instant) -> u64 {
 
 pub(super) fn count(counter: &AtomicU64) {
     counter.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Record a frame plan's render work class.
+pub(super) fn count_plan(work: &super::frame_sched::RenderWork) {
+    use super::frame_sched::RenderWork;
+    let counter = match work {
+        RenderWork::None => &PLAN_NONE,
+        RenderWork::CompositeOnly { .. } => &PLAN_COMPOSITE_ONLY,
+        RenderWork::RepaintLayers { .. } => &PLAN_REPAINT_LAYERS,
+        RenderWork::RebuildScene => &PLAN_REBUILD_SCENE,
+    };
+    count(counter);
 }
 
 /// Record that a scene commit arrived; starts the commit-to-present clock if
@@ -81,6 +98,10 @@ pub(crate) struct FrameSchedSnapshot {
     pub scene_commits: u64,
     pub root_glyph_passes: u64,
     pub presents: u64,
+    pub plan_none: u64,
+    pub plan_composite_only: u64,
+    pub plan_repaint_layers: u64,
+    pub plan_rebuild_scene: u64,
     pub last_commit_to_present_us: u64,
     pub max_commit_to_present_us: u64,
 }
@@ -93,6 +114,10 @@ pub(crate) fn snapshot() -> FrameSchedSnapshot {
         scene_commits: SCENE_COMMITS.load(Ordering::Relaxed),
         root_glyph_passes: ROOT_GLYPH_PASSES.load(Ordering::Relaxed),
         presents: SURFACE_PRESENTS.load(Ordering::Relaxed),
+        plan_none: PLAN_NONE.load(Ordering::Relaxed),
+        plan_composite_only: PLAN_COMPOSITE_ONLY.load(Ordering::Relaxed),
+        plan_repaint_layers: PLAN_REPAINT_LAYERS.load(Ordering::Relaxed),
+        plan_rebuild_scene: PLAN_REBUILD_SCENE.load(Ordering::Relaxed),
         last_commit_to_present_us: LAST_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         max_commit_to_present_us: MAX_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
     }
@@ -129,6 +154,10 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         scene_commits = snap.scene_commits,
         root_glyph_passes = snap.root_glyph_passes,
         presents = snap.presents,
+        plan_none = snap.plan_none,
+        plan_composite_only = snap.plan_composite_only,
+        plan_repaint_layers = snap.plan_repaint_layers,
+        plan_rebuild_scene = snap.plan_rebuild_scene,
         last_commit_to_present_us = snap.last_commit_to_present_us,
         max_commit_to_present_us = snap.max_commit_to_present_us,
         "frame_sched_stats"

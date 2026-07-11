@@ -388,10 +388,53 @@ impl RenderApp {
             WindowEvent::RedrawRequested => {
                 super::frame_stats::count(&super::frame_stats::REDRAW_EVENTS);
                 if let Some(emacs_fid) = self.frame_windows.event_frame_for_winit(window_id) {
+                    use super::frame_sched::{
+                        ClockSource, FrameTick, NativeWindowId, PacingAction, PresentResult,
+                    };
+                    let sched_id = NativeWindowId(emacs_fid);
+                    let now = std::time::Instant::now();
+                    let estimated_interval = self
+                        .frame_windows
+                        .get(emacs_fid)
+                        .map(|window_state| {
+                            std::time::Duration::from_secs_f64(
+                                1.0 / f64::from(Self::window_max_rate(window_state).get()),
+                            )
+                        })
+                        .unwrap_or(std::time::Duration::from_millis(16));
+                    let tick = FrameTick {
+                        frame_time: now,
+                        target_presentation_time: now + estimated_interval,
+                        estimated_interval,
+                        source: ClockSource::Synthetic,
+                    };
+                    let plan = self.frame_coordinator.begin_frame(sched_id, tick);
+                    super::frame_stats::count_plan(&plan.work);
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);
                     }
-                    self.render_frame_window(emacs_fid);
+                    // Stage 2: every tick still renders through the legacy
+                    // path; the plan feeds coordinator bookkeeping and the
+                    // work-class counters until the renderer consumes plans.
+                    let presented = self.render_frame_window(emacs_fid);
+                    let result = if presented {
+                        PresentResult::Presented
+                    } else {
+                        // No frame could be produced (no committed frame yet,
+                        // surface unavailable): bounded backoff, never a spin.
+                        PresentResult::Timeout
+                    };
+                    let action = self.frame_coordinator.finish_frame(
+                        sched_id,
+                        &plan,
+                        result,
+                        std::time::Instant::now(),
+                    );
+                    if action == PacingAction::RequestRedraw
+                        && let Some(window_state) = self.frame_windows.get(emacs_fid)
+                    {
+                        window_state.request_redraw();
+                    }
                 }
             }
 

@@ -345,6 +345,9 @@ pub(super) struct RenderApp {
     pub(super) debug_first_frame_readback_pending: bool,
     pub(super) debug_surface_readback_frames_remaining: u32,
     pub(super) lifecycle_flags: RenderLifecycle,
+    /// Demand-driven frame scheduler: owns per-window redraw coalescing and
+    /// wake deadlines (frame scheduling plan, Stage 2).
+    pub(super) frame_coordinator: super::frame_sched::FrameCoordinator,
 }
 
 pub(super) struct RenderLifecycle {
@@ -445,6 +448,7 @@ impl RenderApp {
                 }
             }),
             lifecycle_flags: RenderLifecycle::new(poll_when_idle),
+            frame_coordinator: super::frame_sched::FrameCoordinator::new(),
         }
     }
 }

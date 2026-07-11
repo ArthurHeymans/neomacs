@@ -1658,28 +1658,6 @@ impl GuiFrameWindowManager {
         });
     }
 
-    pub(super) fn any_redrawable_top_level_dirty(&self) -> bool {
-        self.windows
-            .values()
-            .any(GuiFrameWindowState::has_presentable_dirty_content)
-    }
-
-    pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
-        self.windows.values().any(|window_state| {
-            window_state
-                .render
-                .compositor
-                .renderer_effects
-                .needs_redraw()
-        })
-    }
-
-    pub(super) fn any_top_level_transitions_active(&self) -> bool {
-        self.windows
-            .values()
-            .any(|window_state| window_state.render.compositor.transitions.has_active())
-    }
-
     pub(super) fn mark_active_top_level_visuals_dirty(&mut self) -> bool {
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
@@ -1737,32 +1715,6 @@ impl GuiFrameWindowManager {
     pub(super) fn clear_top_level_idle_dim(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
             window_state.render.clear_idle_dim();
-        });
-    }
-
-    pub(super) fn any_top_level_cursor_animating(&self) -> bool {
-        self.windows
-            .values()
-            .any(|window_state| window_state.render.cursor.is_animating())
-    }
-
-    pub(super) fn any_top_level_idle_dim_active(&self) -> bool {
-        self.windows
-            .values()
-            .any(|window_state| window_state.render.overlays.idle_dim.active)
-    }
-
-    pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
-        self.for_each_top_level_window(|window_state| {
-            if window_state.has_presentable_dirty_content() {
-                window_state.request_redraw();
-            }
-        });
-    }
-
-    pub(super) fn request_redraw_for_top_level_windows(&self) {
-        self.for_each_top_level_window(|window_state| {
-            window_state.request_redraw();
         });
     }
 

@@ -24,11 +24,6 @@
 //! - Ineligible (occluded/hidden) windows retain demand but are never asked
 //!   to present; regaining eligibility issues exactly one recovery request.
 
-// Stage 1 wires deadline aggregation only; begin_frame/finish_frame and the
-// presentation-state surface are consumed when Stage 2 makes requests
-// one-shot. Remove this allow with that stage.
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 use std::num::NonZeroU16;
 use std::time::{Duration, Instant};
@@ -76,15 +71,6 @@ pub(crate) enum Invalidation {
 }
 
 impl Invalidation {
-    fn rank(self) -> u8 {
-        match self {
-            Invalidation::None => 0,
-            Invalidation::CompositeOnly { .. } => 1,
-            Invalidation::RepaintLayers { .. } => 2,
-            Invalidation::RebuildScene => 3,
-        }
-    }
-
     /// Strongest-wins merge. Equal-strength classes union their layers; a
     /// stronger class absorbs a weaker one because every presented frame
     /// composes all layers anyway.
@@ -110,6 +96,9 @@ impl Invalidation {
 }
 
 /// When the demanded work should reach the screen.
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Cadence {
     /// Fold into whatever frame happens next; never forces a frame.
@@ -125,6 +114,9 @@ pub(crate) enum Cadence {
 /// Why a frame is wanted. Diagnostic identity, not policy encoded as strings.
 /// Deadline demands are keyed by this, so each reason holds at most one
 /// scheduled deadline per window.
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum DemandReason {
     EditorCommit,
@@ -148,6 +140,9 @@ pub(crate) struct FrameDemand {
     pub reason: DemandReason,
 }
 
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClockSource {
     Native,
@@ -156,6 +151,9 @@ pub(crate) enum ClockSource {
 
 /// One opportunity to produce a frame: timing input, not an instruction to
 /// rebuild editor state.
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FrameTick {
     pub frame_time: Instant,
@@ -198,6 +196,9 @@ impl RenderWork {
 }
 
 /// Pure decision for one tick of one window.
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FramePlan {
     pub tick: FrameTick,
@@ -219,6 +220,9 @@ pub(crate) enum PacingAction {
 }
 
 /// Presentation outcome, fed back as scheduling input.
+// Interface variants/fields defined by the scheduling plan; consumed as
+// later stages migrate effects onto the coordinator.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PresentResult {
     Presented,
@@ -379,6 +383,12 @@ impl FrameCoordinator {
 
     pub(crate) fn remove_window(&mut self, id: NativeWindowId) {
         self.windows.remove(&id);
+    }
+
+    /// Drop scheduling state for windows that no longer exist, so a
+    /// destroyed window's deadlines cannot keep waking the loop.
+    pub(crate) fn prune_windows(&mut self, keep: impl Fn(NativeWindowId) -> bool) {
+        self.windows.retain(|id, _| keep(*id));
     }
 
     /// Declare demand. Returns the immediate action; duplicate driving
@@ -558,8 +568,18 @@ impl FrameCoordinator {
                 return Self::drive(ws);
             }
             PresentResult::Timeout => {
-                // Bounded retry; never an immediate spin.
-                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                // Bounded retry; never an immediate spin. The retry is
+                // scheduled (not just returned) so next_wake_deadline() keeps
+                // the recovery alive even if the caller drops the action.
+                let invalidation = plan.work.to_invalidation();
+                if invalidation != Invalidation::None {
+                    ws.schedule(ScheduledDemand {
+                        reason: DemandReason::Expose,
+                        at: now + TIMEOUT_BACKOFF,
+                        invalidation,
+                        period: None,
+                    });
+                }
                 return PacingAction::WakeAt(now + TIMEOUT_BACKOFF);
             }
         }
@@ -574,6 +594,9 @@ impl FrameCoordinator {
 
     /// Update visibility/focus/occlusion. Regaining eligibility with retained
     /// demand issues exactly one recovery request.
+    // Wired when occlusion/visibility events land (plan Stage 7); the
+    // behavior is already covered by the scheduler tests.
+    #[allow(dead_code)]
     pub(crate) fn update_window_state(
         &mut self,
         id: NativeWindowId,
@@ -601,6 +624,9 @@ impl FrameCoordinator {
 
     /// Active demand reasons for diagnostics ("why is this window still
     /// rendering?").
+    // Exposed to the diagnostic snapshot when GUI-test tooling consumes it
+    // (plan: Observability); covered by the scheduler tests.
+    #[allow(dead_code)]
     pub(crate) fn active_reasons(&self, id: NativeWindowId) -> Vec<DemandReason> {
         let Some(ws) = self.windows.get(&id) else {
             return Vec::new();

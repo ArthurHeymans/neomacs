@@ -212,7 +212,11 @@ fn pending_dirty_primary_window_is_not_redrawable_active_work() {
             .dirty
     );
     assert!(
-        !app.frame_windows.any_redrawable_top_level_dirty(),
+        !app
+            .frame_windows
+            .windows
+            .values()
+            .any(|window_state| window_state.has_presentable_dirty_content()),
         "a pending window has no native surface to receive RedrawRequested"
     );
 }

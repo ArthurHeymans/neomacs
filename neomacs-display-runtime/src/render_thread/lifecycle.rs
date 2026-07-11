@@ -259,8 +259,6 @@ impl RenderApp {
             self.frame_windows.mark_top_level_dirty();
         }
 
-        let has_active_content = self.has_webkit_needing_redraw() || self.has_playing_videos();
-
         #[cfg(feature = "wpe-webkit")]
         if self.has_webkit_needing_redraw() {
             self.frame_windows
@@ -271,70 +269,41 @@ impl RenderApp {
                 });
         }
 
-        self.frame_windows
-            .request_redraw_for_dirty_top_level_windows();
-
-        let top_level_dirty = self.frame_windows.any_redrawable_top_level_dirty();
-        if top_level_dirty || has_active_content {
-            tracing::debug!(
-                top_level_dirty,
-                has_active_content,
-                renderer_effects_need_redraw = self
-                    .frame_windows
-                    .any_top_level_renderer_effects_need_redraw(),
-                cursor_animating = self.frame_windows.any_top_level_cursor_animating(),
-                idle_dim_active = self.frame_windows.any_top_level_idle_dim_active(),
-                transitions_active = self.frame_windows.any_top_level_transitions_active(),
-                "requesting redraw"
-            );
-            if has_active_content {
-                self.frame_windows.request_redraw_for_top_level_windows();
-            }
-            if has_active_content
-                && let Some(window) = self
-                    .frame_windows
-                    .primary_window()
-                    .and_then(|ws| ws.window())
-            {
-                super::frame_stats::count(&super::frame_stats::REDRAW_REQUESTS);
-                window.request_redraw();
-            }
-        }
-
-        // Stage 1 of the frame scheduling plan: the wake decision is
-        // expressed as typed frame demand and the coordinator chooses the
-        // deadline. Demands are declared afresh each pass from current state,
-        // so signal cessation needs no retraction bookkeeping. Stage 2 makes
-        // the coordinator persistent and requests one-shot.
+        // Stage 2 of the frame scheduling plan: legacy activity latches are
+        // reconciled into the persistent frame coordinator, which owns
+        // one-shot redraw requests (coalesced per window) and the loop's
+        // wake deadline. Continuous activity is paced at the estimated
+        // display cadence instead of a 4 ms poll; new-content demand fires
+        // immediately on its first frame after idle.
         let now = std::time::Instant::now();
-        match self.compat_frame_demand_deadline(now, has_active_content) {
+        self.declare_frame_demands(now);
+        match self.frame_coordinator.next_wake_deadline() {
             Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
         }
     }
 
-    /// Stage 1 compatibility adapter: translate the legacy activity signals
-    /// into typed [`super::frame_sched::FrameDemand`] and let the frame
-    /// coordinator pick the earliest wake deadline. This is the only place
-    /// the legacy 4 ms active cadence and 16 ms idle-poll cadence are
-    /// selected.
-    fn compat_frame_demand_deadline(
-        &self,
-        now: std::time::Instant,
-        has_active_content: bool,
-    ) -> Option<std::time::Instant> {
+    /// Reconcile the legacy activity latches into the persistent frame
+    /// coordinator: declare demand for active signals, retract reasons whose
+    /// signals ceased, and execute the coordinator's one-shot redraw
+    /// requests. Continuous demand is paced at the estimated display cadence
+    /// (the plan's bounded synthetic clock); this replaced the legacy 4 ms
+    /// active poll.
+    fn declare_frame_demands(&mut self, now: std::time::Instant) {
         use super::frame_sched::{
-            Cadence, Damage, DemandReason, FrameCoordinator, FrameDemand, Invalidation, LayerMask,
-            NativeWindowId,
+            Cadence, Damage, DemandReason, FrameDemand, Invalidation, LayerMask, NativeWindowId,
+            PacingAction,
         };
-        const LEGACY_ACTIVE_WAKE: std::time::Duration = std::time::Duration::from_millis(4);
         const LEGACY_IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(16);
-        /// Loop-global demands (media polling, idle poll) before/beyond any
-        /// specific frame window. Compat-only; deleted with this adapter.
+        /// Loop-global demands (idle poll) with no specific frame window.
+        /// Compat-only; deleted when poll_when_idle's owners migrate.
         const LOOP_WINDOW: NativeWindowId = NativeWindowId(u64::MAX);
 
+        // The coordinator is keyed by the event frame id: 0 for the primary
+        // window before Emacs adopts it, the Emacs frame id afterwards
+        // (matching RedrawRequested dispatch).
         let native_window_id = |key: &super::frame_windows::FrameKey| match key {
-            super::frame_windows::FrameKey::Pending => NativeWindowId(u64::MAX - 1),
+            super::frame_windows::FrameKey::Pending => NativeWindowId(0),
             super::frame_windows::FrameKey::Adopted(id) => NativeWindowId(*id),
         };
         let legacy_repaint = Invalidation::RepaintLayers {
@@ -342,9 +311,32 @@ impl RenderApp {
             damage: Damage::FullLayer,
         };
 
-        let mut sched = FrameCoordinator::new();
+        // Media signals are process-wide; they demand frames on every
+        // top-level window (matching the legacy request targeting).
+        let webkit_active = self.has_webkit_needing_redraw();
+        let videos_active = self.has_playing_videos();
+
+        // Destroyed windows must not keep waking the loop.
+        let live: std::collections::HashSet<NativeWindowId> = self
+            .frame_windows
+            .windows
+            .keys()
+            .map(|key| native_window_id(key))
+            .collect();
+        self.frame_coordinator
+            .prune_windows(|id| id == LOOP_WINDOW || live.contains(&id));
+
         for (key, window_state) in &self.frame_windows.windows {
             let id = native_window_id(key);
+            if window_state.window().is_none() {
+                // A window with no native surface cannot render; drop any
+                // scheduling state so a stale outstanding-request token or
+                // deadline cannot survive to its activation.
+                self.frame_coordinator.remove_window(id);
+                continue;
+            }
+            let max_rate = Self::window_max_rate(window_state);
+
             let legacy_active = window_state.has_presentable_dirty_content()
                 || window_state
                     .render
@@ -353,44 +345,71 @@ impl RenderApp {
                     .needs_redraw()
                 || window_state.render.cursor.is_animating()
                 || window_state.render.compositor.transitions.has_active();
+            let mut action = PacingAction::Sleep;
             if legacy_active {
-                sched.submit_demand(
+                action = self.frame_coordinator.submit_demand(
                     id,
                     FrameDemand {
                         invalidation: legacy_repaint,
-                        cadence: Cadence::At(now + LEGACY_ACTIVE_WAKE),
+                        cadence: Cadence::MaxRate(max_rate),
                         reason: DemandReason::LegacyActivity,
                     },
                     now,
                 );
+            } else {
+                self.frame_coordinator
+                    .retract(id, DemandReason::LegacyActivity);
             }
-            if let Some(blink) = window_state.render.cursor.next_blink_deadline() {
-                sched.submit_demand(
-                    id,
-                    FrameDemand {
-                        invalidation: Invalidation::CompositeOnly {
-                            layers: LayerMask::CURSOR_EFFECTS,
+
+            for (active, reason) in [
+                (webkit_active, DemandReason::WebKit),
+                (videos_active, DemandReason::Video),
+            ] {
+                if active {
+                    let media_action = self.frame_coordinator.submit_demand(
+                        id,
+                        FrameDemand {
+                            invalidation: legacy_repaint,
+                            cadence: Cadence::MaxRate(max_rate),
+                            reason,
                         },
-                        cadence: Cadence::At(blink),
-                        reason: DemandReason::CursorAnimation,
-                    },
-                    now,
-                );
+                        now,
+                    );
+                    if media_action == PacingAction::RequestRedraw {
+                        action = PacingAction::RequestRedraw;
+                    }
+                } else {
+                    self.frame_coordinator.retract(id, reason);
+                }
+            }
+
+            match window_state.render.cursor.next_blink_deadline() {
+                Some(blink) => {
+                    self.frame_coordinator.submit_demand(
+                        id,
+                        FrameDemand {
+                            invalidation: Invalidation::CompositeOnly {
+                                layers: LayerMask::CURSOR_EFFECTS,
+                            },
+                            cadence: Cadence::At(blink),
+                            reason: DemandReason::CursorAnimation,
+                        },
+                        now,
+                    );
+                }
+                None => {
+                    self.frame_coordinator
+                        .retract(id, DemandReason::CursorAnimation);
+                }
+            }
+
+            if action == PacingAction::RequestRedraw {
+                window_state.request_redraw();
             }
         }
-        if has_active_content {
-            sched.submit_demand(
-                LOOP_WINDOW,
-                FrameDemand {
-                    invalidation: legacy_repaint,
-                    cadence: Cadence::At(now + LEGACY_ACTIVE_WAKE),
-                    reason: DemandReason::Video,
-                },
-                now,
-            );
-        }
+
         if self.lifecycle_flags.poll_when_idle {
-            sched.submit_demand(
+            self.frame_coordinator.submit_demand(
                 LOOP_WINDOW,
                 FrameDemand {
                     invalidation: legacy_repaint,
@@ -400,7 +419,22 @@ impl RenderApp {
                 now,
             );
         }
-        sched.next_wake_deadline()
+    }
+
+    /// Estimated display cadence for a window: the monitor-reported refresh
+    /// rate is an initial estimate (refined by measurement in later stages),
+    /// clamped to a sane range, defaulting to 60 Hz.
+    pub(super) fn window_max_rate(
+        window_state: &super::frame_windows::GuiFrameWindowState,
+    ) -> std::num::NonZeroU16 {
+        let hz = window_state
+            .window()
+            .and_then(|window| window.current_monitor())
+            .and_then(|monitor| monitor.refresh_rate_millihertz())
+            .map(|mhz| ((mhz as f64) / 1000.0).round() as u16)
+            .unwrap_or(60)
+            .clamp(30, 240);
+        std::num::NonZeroU16::new(hz).unwrap_or(std::num::NonZeroU16::new(60).unwrap())
     }
     pub(super) fn handle_exiting(&mut self) {
         // Explicitly drop wgpu resources while the Wayland connection is still alive.
