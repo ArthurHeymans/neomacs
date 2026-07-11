@@ -1,35 +1,41 @@
-//! Builds renderer-ready pointer metadata for a completed frame presentation.
-//!
-//! Producer integration follows in later pointer-map tasks; keep this seam
-//! crate-private until those call sites submit resolved rendered runs.
+//! Production builder for source-addressed pointer presentation metadata.
 
 use std::collections::HashMap;
 
+use neomacs_display_protocol::glyph_matrix::{GlyphPointerAppearance, GlyphPointerSourceIdentity};
 use neomacs_display_protocol::{
-    FrameGlyphBuffer, FrameRect, InteractionId, PointerAppearanceId, PointerDrawMode,
-    PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerMapError,
-    PresentedPointerRegion,
+    DisplaySlotId, DisplayWindowId, FrameRect, GlyphRowRole, PointerAppearanceId, PointerDrawMode,
+    PresentedPointerRegion, PresentedPointerSourceAppearance, PresentedPointerSourceMap,
+    PresentedPrimitiveKind, PresentedSourcePaintSpan,
 };
 
-/// Stable identity of one semantic source range's transient appearance.
+/// Stable producer-local identity used by non-buffer pointer plans.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[allow(dead_code)] // Producer wiring lands in later pointer-map tasks.
 pub(crate) struct PointerAppearanceRangeId(u64);
 
-#[allow(dead_code)]
 impl PointerAppearanceRangeId {
     pub(crate) const fn new(value: u64) -> Self {
         Self(value)
     }
 }
 
-/// Failure to aggregate or install layout-side pointer observations.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct AppearanceKey {
+    window_id: DisplayWindowId,
+    source: GlyphPointerSourceIdentity,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)]
 pub(crate) enum PresentedPointerMapBuildError {
-    ConflictingAppearanceModes(PointerAppearanceRangeId),
+    ConflictingAppearanceModes,
     TooManyAppearances,
-    Protocol(PresentedPointerMapError),
+    Protocol(neomacs_display_protocol::PresentedPointerMapError),
+}
+
+impl From<neomacs_display_protocol::PresentedPointerMapError> for PresentedPointerMapBuildError {
+    fn from(error: neomacs_display_protocol::PresentedPointerMapError) -> Self {
+        Self::Protocol(error)
+    }
 }
 
 impl std::fmt::Display for PresentedPointerMapBuildError {
@@ -40,206 +46,160 @@ impl std::fmt::Display for PresentedPointerMapBuildError {
 
 impl std::error::Error for PresentedPointerMapBuildError {}
 
-impl From<PresentedPointerMapError> for PresentedPointerMapBuildError {
-    fn from(error: PresentedPointerMapError) -> Self {
-        Self::Protocol(error)
-    }
-}
-
-/// One renderer-ready paint contribution to a semantic appearance range.
-#[allow(dead_code)]
-pub(crate) struct RenderedPointerAppearance {
-    identity: PointerAppearanceRangeId,
-    paint_span: PresentedPaintSpan,
-    hover: PointerDrawMode,
-    pressed: PointerDrawMode,
-}
-
-#[allow(dead_code)]
-impl RenderedPointerAppearance {
-    pub(crate) fn new(
-        identity: PointerAppearanceRangeId,
-        paint_span: PresentedPaintSpan,
-        hover: PointerDrawMode,
-        pressed: PointerDrawMode,
-    ) -> Self {
-        Self {
-            identity,
-            paint_span,
-            hover,
-            pressed,
-        }
-    }
-}
-
-/// One fully resolved rendered run observed by pointer-map construction.
-#[allow(dead_code)]
-pub(crate) struct RenderedPointerRun {
-    hit_bounds: FrameRect,
-    interaction: Option<InteractionId>,
-    appearance_identity: Option<PointerAppearanceRangeId>,
-    appearance: Option<RenderedPointerAppearance>,
-}
-
-#[allow(dead_code)]
-impl RenderedPointerRun {
-    pub(crate) fn new(
-        hit_bounds: FrameRect,
-        interaction: Option<InteractionId>,
-        appearance: Option<RenderedPointerAppearance>,
-    ) -> Self {
-        let appearance_identity = appearance.as_ref().map(|appearance| appearance.identity);
-        Self {
-            hit_bounds,
-            interaction,
-            appearance_identity,
-            appearance,
-        }
-    }
-
-    pub(crate) fn referencing_appearance(
-        hit_bounds: FrameRect,
-        interaction: Option<InteractionId>,
-        appearance_identity: PointerAppearanceRangeId,
-    ) -> Self {
-        Self {
-            hit_bounds,
-            interaction,
-            appearance_identity: Some(appearance_identity),
-            appearance: None,
-        }
-    }
-}
-
-#[allow(dead_code)]
 struct PendingRegion {
     bounds: FrameRect,
-    interaction: Option<InteractionId>,
-    appearance: Option<PointerAppearanceRangeId>,
+    appearance_index: usize,
 }
 
-#[allow(dead_code)]
 struct AppearanceAggregate {
-    paint_spans: Vec<PresentedPaintSpan>,
-    hover: PointerDrawMode,
-    pressed: PointerDrawMode,
+    paint_spans: Vec<PresentedSourcePaintSpan>,
+    mode: PointerDrawMode,
 }
 
-/// Collects resolved layout observations and publishes validated pointer data.
-#[allow(dead_code)]
+/// Aggregates finalized row runs into the frame's canonical source map.
 pub(crate) struct PresentedPointerMapBuilder {
-    regions: Vec<PendingRegion>,
-    appearance_positions: HashMap<PointerAppearanceRangeId, usize>,
+    positions: HashMap<AppearanceKey, usize>,
     appearances: Vec<AppearanceAggregate>,
+    regions: Vec<PendingRegion>,
     error: Option<PresentedPointerMapBuildError>,
 }
 
-#[allow(dead_code)]
 impl PresentedPointerMapBuilder {
     pub(crate) fn new() -> Self {
         Self {
-            regions: Vec::new(),
-            appearance_positions: HashMap::new(),
+            positions: HashMap::new(),
             appearances: Vec::new(),
+            regions: Vec::new(),
             error: None,
         }
     }
 
-    pub(crate) fn observe_rendered_run(&mut self, run: RenderedPointerRun) {
-        if run.interaction.is_none() && run.appearance_identity.is_none() {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn observe_glyph_run(
+        &mut self,
+        window_id: DisplayWindowId,
+        row_role: GlyphRowRole,
+        row: u32,
+        first_col: u16,
+        glyph_len: u32,
+        bounds: FrameRect,
+        appearance: GlyphPointerAppearance,
+    ) {
+        if glyph_len == 0 {
             return;
         }
-
-        let appearance_identity = run.appearance_identity;
-        if let Some(appearance) = run.appearance {
-            if let Some(&index) = self.appearance_positions.get(&appearance.identity) {
-                let aggregate = &mut self.appearances[index];
-                if aggregate.hover != appearance.hover || aggregate.pressed != appearance.pressed {
-                    self.error.get_or_insert(
-                        PresentedPointerMapBuildError::ConflictingAppearanceModes(
-                            appearance.identity,
-                        ),
-                    );
-                } else {
-                    aggregate.paint_spans.push(appearance.paint_span);
-                }
-            } else {
-                let index = self.appearances.len();
-                self.appearance_positions.insert(appearance.identity, index);
-                self.appearances.push(AppearanceAggregate {
-                    paint_spans: vec![appearance.paint_span],
-                    hover: appearance.hover,
-                    pressed: appearance.pressed,
-                });
+        let key = AppearanceKey {
+            window_id,
+            source: appearance.source,
+        };
+        let mode = PointerDrawMode::Face(appearance.face_id);
+        let index = if let Some(&index) = self.positions.get(&key) {
+            if self.appearances[index].mode != mode {
+                self.error
+                    .get_or_insert(PresentedPointerMapBuildError::ConflictingAppearanceModes);
+                return;
             }
+            index
+        } else {
+            let index = self.appearances.len();
+            self.positions.insert(key, index);
+            self.appearances.push(AppearanceAggregate {
+                paint_spans: Vec::new(),
+                mode,
+            });
+            index
+        };
+
+        let span = PresentedSourcePaintSpan::new_run(
+            PresentedPrimitiveKind::Glyph,
+            row_role,
+            DisplaySlotId {
+                window_id,
+                row,
+                col: first_col,
+            },
+            glyph_len,
+            bounds,
+        );
+        let spans = &mut self.appearances[index].paint_spans;
+        if let Some(previous) = spans.last_mut()
+            && previous.kind() == span.kind()
+            && previous.row_role() == span.row_role()
+            && previous.slot().window_id == span.slot().window_id
+            && previous.slot().row == span.slot().row
+            && u32::from(previous.slot().col) + previous.len() == u32::from(span.slot().col)
+            && let Some(combined) = adjacent_rect(previous.clip(), span.clip())
+        {
+            *previous = PresentedSourcePaintSpan::new_run(
+                previous.kind(),
+                previous.row_role(),
+                previous.slot(),
+                previous.len().saturating_add(span.len()),
+                combined,
+            );
+        } else {
+            spans.push(span);
         }
 
         if let Some(previous) = self.regions.last_mut()
-            && previous.interaction == run.interaction
-            && previous.appearance == appearance_identity
-            && previous.bounds.y() == run.hit_bounds.y()
-            && previous.bounds.height() == run.hit_bounds.height()
-            && previous.bounds.x() + previous.bounds.width() == run.hit_bounds.x()
-            && let Ok(combined) = FrameRect::new(
-                previous.bounds.x(),
-                previous.bounds.y(),
-                previous.bounds.width() + run.hit_bounds.width(),
-                previous.bounds.height(),
-            )
+            && previous.appearance_index == index
+            && let Some(combined) = adjacent_rect(previous.bounds, bounds)
         {
             previous.bounds = combined;
-            return;
+        } else {
+            self.regions.push(PendingRegion {
+                bounds,
+                appearance_index: index,
+            });
         }
-
-        self.regions.push(PendingRegion {
-            bounds: run.hit_bounds,
-            interaction: run.interaction,
-            appearance: appearance_identity,
-        });
     }
 
-    pub(crate) fn finish_into(
-        self,
-        frame: &mut FrameGlyphBuffer,
-    ) -> Result<(), PresentedPointerMapBuildError> {
+    pub(crate) fn finish(self) -> Result<PresentedPointerSourceMap, PresentedPointerMapBuildError> {
         if let Some(error) = self.error {
             return Err(error);
         }
-
         let appearances = self
             .appearances
             .into_iter()
             .map(|appearance| {
-                PresentedPointerAppearance::new(
+                PresentedPointerSourceAppearance::new(
                     appearance.paint_spans,
-                    appearance.hover,
-                    appearance.pressed,
+                    appearance.mode,
+                    appearance.mode,
                 )
             })
             .collect();
-        let mut regions = Vec::with_capacity(self.regions.len());
-
-        for region in self.regions {
-            let appearance = if let Some(identity) = region.appearance {
-                let index = self.appearance_positions[&identity];
-                Some(
-                    PointerAppearanceId::try_from(index)
-                        .map_err(|_| PresentedPointerMapBuildError::TooManyAppearances)?,
-                )
-            } else {
-                None
-            };
-            regions.push(PresentedPointerRegion::new(
-                region.bounds,
-                region.interaction,
-                appearance,
-            ));
-        }
-
-        frame
-            .install_presented_pointer(regions, appearances)
-            .map_err(Into::into)
+        let regions = self
+            .regions
+            .into_iter()
+            .map(|region| {
+                let appearance = PointerAppearanceId::try_from(region.appearance_index)
+                    .map_err(|_| PresentedPointerMapBuildError::TooManyAppearances)?;
+                Ok::<_, PresentedPointerMapBuildError>(PresentedPointerRegion::new(
+                    region.bounds,
+                    None,
+                    Some(appearance),
+                ))
+            })
+            .collect::<Result<Vec<_>, PresentedPointerMapBuildError>>()?;
+        Ok(PresentedPointerSourceMap::new(regions, appearances))
     }
+}
+
+fn adjacent_rect(left: FrameRect, right: FrameRect) -> Option<FrameRect> {
+    if left.y() != right.y()
+        || left.height() != right.height()
+        || left.x() + left.width() != right.x()
+    {
+        return None;
+    }
+    FrameRect::new(
+        left.x(),
+        left.y(),
+        left.width() + right.width(),
+        left.height(),
+    )
+    .ok()
 }
 
 #[cfg(test)]

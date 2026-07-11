@@ -135,7 +135,13 @@ pub struct PresentedSourcePaintSpan {
     kind: PresentedPrimitiveKind,
     row_role: crate::GlyphRowRole,
     slot: DisplaySlotId,
+    #[serde(default = "source_span_default_len")]
+    len: u32,
     clip: FrameRect,
+}
+
+const fn source_span_default_len() -> u32 {
+    1
 }
 
 impl PresentedSourcePaintSpan {
@@ -150,6 +156,24 @@ impl PresentedSourcePaintSpan {
             kind,
             row_role,
             slot,
+            len: 1,
+            clip,
+        }
+    }
+
+    #[must_use]
+    pub const fn new_run(
+        kind: PresentedPrimitiveKind,
+        row_role: crate::GlyphRowRole,
+        slot: DisplaySlotId,
+        len: u32,
+        clip: FrameRect,
+    ) -> Self {
+        Self {
+            kind,
+            row_role,
+            slot,
+            len,
             clip,
         }
     }
@@ -167,6 +191,11 @@ impl PresentedSourcePaintSpan {
     #[must_use]
     pub const fn row_role(&self) -> crate::GlyphRowRole {
         self.row_role
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> u32 {
+        self.len
     }
 
     #[must_use]
@@ -558,7 +587,7 @@ impl PresentedPointerSourceMap {
         let mut appearance_remap = Vec::with_capacity(self.appearances.len());
         for appearance in &self.appearances {
             let mut seen = std::collections::HashSet::new();
-            let mut paint_spans = Vec::new();
+            let mut paint_spans: Vec<PresentedPaintSpan> = Vec::new();
             for source_span in &appearance.paint_spans {
                 let Some(&index) = primitive_index.get(&(
                     source_span.kind,
@@ -572,12 +601,46 @@ impl PresentedPointerSourceMap {
                 }
                 let first = u32::try_from(index)
                     .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)?;
-                paint_spans.push(PresentedPaintSpan::new(
-                    source_span.kind,
-                    first,
-                    1,
-                    source_span.clip,
-                ));
+                let len = source_span.len;
+                let end = index
+                    .checked_add(len as usize)
+                    .ok_or(PresentedPointerMapError::PaintSpanOutOfRange)?;
+                let primitives = frame
+                    .glyphs
+                    .get(index..end)
+                    .ok_or(PresentedPointerMapError::PaintSpanOutOfRange)?;
+                let compatible = primitives.iter().all(|primitive| {
+                    let same_source_row = primitive.slot_id().is_some_and(|slot| {
+                        slot.window_id == source_span.slot.window_id
+                            && slot.row == source_span.slot.row
+                    }) && primitive.row_role() == Some(source_span.row_role);
+                    same_source_row
+                        && match source_span.kind {
+                            PresentedPrimitiveKind::Glyph => matches!(
+                                primitive,
+                                FrameGlyph::Char { .. } | FrameGlyph::Stretch { .. }
+                            ),
+                            PresentedPrimitiveKind::Image => {
+                                matches!(primitive, FrameGlyph::Image { .. })
+                            }
+                        }
+                });
+                if !compatible {
+                    return Err(PresentedPointerMapError::PrimitiveKindMismatch);
+                }
+                let next = PresentedPaintSpan::new(source_span.kind, first, len, source_span.clip);
+                if let Some(previous) = paint_spans.last_mut()
+                    && previous.kind == next.kind
+                    && previous.clip == next.clip
+                    && previous.first + previous.len == next.first
+                {
+                    previous.len = previous
+                        .len
+                        .checked_add(next.len)
+                        .ok_or(PresentedPointerMapError::PaintSpanOutOfRange)?;
+                } else {
+                    paint_spans.push(next);
+                }
             }
             if paint_spans.is_empty() {
                 appearance_remap.push(None);
@@ -822,13 +885,15 @@ impl PresentedPointerMap {
                     return Err(PresentedPointerMapError::PaintSpanOutOfRange);
                 }
             }
-            for (index, span) in appearance.paint_spans.iter().enumerate() {
-                let span_end = span.first + span.len;
-                for other in &appearance.paint_spans[index + 1..] {
-                    let other_end = other.first + other.len;
-                    if span.first < other_end && other.first < span_end {
-                        return Err(PresentedPointerMapError::OverlappingPaintSpans);
-                    }
+            let mut intervals = appearance
+                .paint_spans
+                .iter()
+                .map(|span| (span.first, span.first + span.len))
+                .collect::<Vec<_>>();
+            intervals.sort_unstable_by_key(|&(first, end)| (first, end));
+            for pair in intervals.windows(2) {
+                if pair[1].0 < pair[0].1 {
+                    return Err(PresentedPointerMapError::OverlappingPaintSpans);
                 }
             }
         }

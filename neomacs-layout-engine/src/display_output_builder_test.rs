@@ -1611,6 +1611,7 @@ fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
         .intern_pointer_appearance(pointer)
         .expect("pointer appearance token");
     retained.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer_token);
+    retained.rebuild_pointer_runs(8.0, 80.0);
 
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(3, 2, 10, Rect::new(2.0, 4.0, 80.0, 40.0), true);
@@ -1624,4 +1625,80 @@ fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
     assert_eq!(regions[0].bounds().y(), 15.0);
     assert_eq!(regions[0].bounds().width(), 9.0);
     assert_eq!(regions[0].bounds().height(), 18.0);
+}
+
+#[test]
+fn long_buffer_mouse_face_publishes_one_region_and_one_source_span() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    const GLYPHS: usize = 10_000;
+    let pointer = GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 0,
+            range_end: GLYPHS as u64,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    };
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let token = row
+        .intern_pointer_appearance(pointer)
+        .expect("pointer token");
+    row.glyphs[GlyphArea::Text.index()] = (0..GLYPHS)
+        .map(|charpos| Glyph {
+            pointer_appearance: Some(token),
+            ..Glyph::char('x', FaceId::new(0), charpos).with_pixel_width(8.0)
+        })
+        .collect();
+
+    crate::display_row_finalizer::reset_pointer_run_glyph_visits();
+    let mut builder = DisplayOutputBuilder::new();
+    builder.install_output_face(
+        FaceId::new(9),
+        neomacs_display_protocol::face::Face::default(),
+    );
+    builder.begin_window(
+        3,
+        1,
+        GLYPHS,
+        Rect::new(0.0, 0.0, GLYPHS as f32 * 8.0, 16.0),
+        true,
+    );
+    builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
+    assert_eq!(
+        crate::display_row_finalizer::pointer_run_glyph_visits(),
+        GLYPHS
+    );
+    builder.end_window();
+
+    let state = builder.finish(GLYPHS, 1, 8.0, 16.0);
+    assert_eq!(
+        crate::display_row_finalizer::pointer_run_glyph_visits(),
+        GLYPHS,
+        "frame finish must consume finalized runs without rescanning glyphs"
+    );
+    assert_eq!(state.presented_pointer_source.regions().len(), 1);
+    assert_eq!(state.presented_pointer_source.appearances().len(), 1);
+    assert_eq!(
+        state.presented_pointer_source.appearances()[0]
+            .paint_spans()
+            .len(),
+        1
+    );
+    assert_eq!(
+        state.presented_pointer_source.appearances()[0].paint_spans()[0].len(),
+        GLYPHS as u32
+    );
+    let materialized = state.materialize();
+    assert_eq!(materialized.presented_pointer().appearances().len(), 1);
+    assert_eq!(
+        materialized.presented_pointer().appearances()[0].paint_spans()[0].len(),
+        GLYPHS as u32
+    );
 }

@@ -305,6 +305,9 @@ pub struct GlyphRow {
     /// Pointer appearances referenced by compact glyph-local tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pointer_appearances: Vec<GlyphPointerAppearance>,
+    /// Coalesced visual-order pointer runs derived once at row finalization.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pointer_runs: Vec<GlyphPointerRun>,
     /// Row hash for fast diff. 0 = not yet computed.
     pub hash: u64,
     /// Row is valid and should be displayed.
@@ -369,6 +372,7 @@ impl GlyphRow {
         Self {
             glyphs: [Vec::new(), Vec::new(), Vec::new()],
             pointer_appearances: Vec::new(),
+            pointer_runs: Vec::new(),
             hash: 0,
             enabled: true,
             role,
@@ -448,6 +452,9 @@ impl GlyphRow {
         if self.pointer_appearances != other.pointer_appearances {
             return false;
         }
+        if self.pointer_runs != other.pointer_runs {
+            return false;
+        }
         for i in 0..3 {
             if self.glyphs[i].len() != other.glyphs[i].len() {
                 return false;
@@ -496,6 +503,57 @@ impl GlyphRow {
         &self.pointer_appearances
     }
 
+    pub fn pointer_runs(&self) -> &[GlyphPointerRun] {
+        &self.pointer_runs
+    }
+
+    pub fn rebuild_pointer_runs(&mut self, char_width: f32, row_width: f32) {
+        self.pointer_runs.clear();
+        let used_width = self.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| glyph_pixel_width(glyph, char_width))
+            .sum::<f32>();
+        let mut x = if self.reversed_p {
+            (row_width - used_width).max(0.0)
+        } else {
+            0.0
+        };
+        let mut col = 0u32;
+        for glyph in &self.glyphs[GlyphArea::Text.index()] {
+            if glyph.padding {
+                continue;
+            }
+            let width = glyph_pixel_width(glyph, char_width);
+            let col_width = match &glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => u32::from(*width_cols),
+                _ if glyph.wide => 2,
+                _ => 1,
+            };
+            if let Some(appearance) = glyph.pointer_appearance {
+                if let Some(previous) = self.pointer_runs.last_mut()
+                    && previous.appearance == appearance
+                    && previous.first_col + previous.col_len == col
+                {
+                    previous.col_len = previous.col_len.saturating_add(col_width);
+                    previous.glyph_len = previous.glyph_len.saturating_add(1);
+                    previous.width += width;
+                } else {
+                    self.pointer_runs.push(GlyphPointerRun {
+                        appearance,
+                        first_col: col,
+                        col_len: col_width,
+                        glyph_len: 1,
+                        x,
+                        width,
+                    });
+                }
+            }
+            x += width;
+            col = col.saturating_add(col_width);
+        }
+    }
+
     pub fn truncate_pointer_appearances(&mut self, len: usize) {
         self.pointer_appearances.truncate(len);
     }
@@ -506,6 +564,7 @@ impl GlyphRow {
         }
         self.hash = 0;
         self.pointer_appearances.clear();
+        self.pointer_runs.clear();
         self.cursor_col = None;
         self.cursor_type = None;
         self.truncated_left = false;
@@ -519,6 +578,28 @@ impl GlyphRow {
         self.start_charpos = 0;
         self.end_charpos = 0;
     }
+}
+
+fn glyph_pixel_width(glyph: &Glyph, char_width: f32) -> f32 {
+    if glyph.pixel_width > 0.0 {
+        glyph.pixel_width
+    } else {
+        match &glyph.glyph_type {
+            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
+            _ if glyph.wide => char_width * 2.0,
+            _ => char_width,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GlyphPointerRun {
+    pub appearance: GlyphPointerAppearanceId,
+    pub first_col: u32,
+    pub col_len: u32,
+    pub glyph_len: u32,
+    pub x: f32,
+    pub width: f32,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

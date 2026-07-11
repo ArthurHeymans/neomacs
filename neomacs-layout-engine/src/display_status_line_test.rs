@@ -577,7 +577,8 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
         .presented_pointer()
         .appearance(body.appearance().unwrap())
         .unwrap();
-    assert_eq!(appearance.paint_spans().len(), 2);
+    assert_eq!(appearance.paint_spans().len(), 1);
+    assert_eq!(appearance.paint_spans()[0].len(), 2);
     assert!(
         appearance
             .paint_spans()

@@ -3,6 +3,21 @@ use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::Rect;
 
+#[cfg(test)]
+thread_local! {
+    static POINTER_RUN_GLYPH_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_pointer_run_glyph_visits() {
+    POINTER_RUN_GLYPH_VISITS.with(|visits| visits.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn pointer_run_glyph_visits() -> usize {
+    POINTER_RUN_GLYPH_VISITS.with(std::cell::Cell::get)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct GlyphRowFinalizationContext {
     pub(crate) window_id: u64,
@@ -61,6 +76,16 @@ impl<'cursor> GlyphRowFinalizer<'cursor> {
             .map(|cursor| cursor.col);
 
         let remapped_cursor_col = crate::glyph_row_writer::reorder_row_bidi(row, phys_cursor_col);
+        let char_width = if self.matrix_ncols > 0 {
+            self.context.window_pixel_bounds.width / self.matrix_ncols as f32
+        } else {
+            1.0
+        };
+        row.rebuild_pointer_runs(char_width, self.context.window_pixel_bounds.width);
+        #[cfg(test)]
+        POINTER_RUN_GLYPH_VISITS.with(|visits| {
+            visits.set(visits.get().saturating_add(row.total_glyphs()));
+        });
         self.apply_phys_cursor_remap(remapped_cursor_col);
     }
 
