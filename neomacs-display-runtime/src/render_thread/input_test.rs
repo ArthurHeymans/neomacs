@@ -3,7 +3,8 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
 use crate::render_thread::state::{
-    ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState, PresentedAppearanceKey,
+    ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState,
+    PresentedAppearanceKey, PresentedInteractionKey, TabBarPressCapture,
 };
 use neomacs_display_protocol::PointerAppearanceId;
 use neomacs_display_protocol::frame_chrome::InteractionId;
@@ -145,32 +146,60 @@ fn pressed_visual_stays_captured_while_hover_follows_pointer() {
         state.active().unwrap().phase(),
         PointerAppearancePhase::Hover
     );
+    assert!(
+        state.release(),
+        "clearing the captured visual is a state change even while another visual is active"
+    );
+    assert_eq!(state.active().unwrap().key(), other_visual);
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Hover
+    );
+    assert_eq!(state.pressed(), None);
+
+    state.hover(Some(pressed_visual));
+    state.press();
+    state.hover(Some(appearance_key(12, 4)));
+    assert!(
+        state.retire(PresentationId::new(11)),
+        "retiring a captured visual is a state change even if another presentation is hovered"
+    );
+    assert_eq!(
+        state.active().unwrap().presentation(),
+        PresentationId::new(12)
+    );
+    assert_eq!(state.pressed(), None);
 
     state.hover(Some(pressed_visual));
     assert_eq!(
         state.active().unwrap().phase(),
-        PointerAppearancePhase::Pressed
+        PointerAppearancePhase::Hover
     );
 }
 
 #[test]
 fn visual_transitions_do_not_mutate_evaluator_press_capture() {
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.tab_bar_press_captured = true;
+    let target = PresentedInteractionKey::new(PresentationId::new(11), InteractionId::new(99));
+    render.chrome.interaction.capture_tab_bar(Some(target));
 
     render.pointer_appearance.hover(Some(appearance_key(11, 3)));
     render.pointer_appearance.press();
     render.pointer_appearance.hover(Some(appearance_key(11, 4)));
     render.pointer_appearance.release();
 
-    assert!(render.chrome.interaction.tab_bar_press_captured);
+    assert_eq!(
+        render.chrome.interaction.tab_bar_capture(),
+        Some(TabBarPressCapture::new(Some(target)))
+    );
 }
 
 #[test]
 fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
     let pressed_visual = appearance_key(11, 3);
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.tab_bar_press_captured = true;
+    let target = PresentedInteractionKey::new(PresentationId::new(11), InteractionId::new(99));
+    render.chrome.interaction.capture_tab_bar(Some(target));
     render.pointer_appearance.hover(Some(pressed_visual));
     render.pointer_appearance.press();
     render.set_dirty(false);
@@ -179,8 +208,64 @@ fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
 
     assert_eq!(render.pointer_appearance.active(), None);
     assert_eq!(render.pointer_appearance.pressed(), Some(pressed_visual));
-    assert!(render.chrome.interaction.tab_bar_press_captured);
+    assert_eq!(
+        render.chrome.interaction.tab_bar_capture(),
+        Some(TabBarPressCapture::new(Some(target)))
+    );
     assert!(render.compositor.dirty);
+}
+
+#[test]
+fn tab_release_uses_the_original_capture_after_hover_moves_or_leaves() {
+    let captured = PresentedInteractionKey::new(PresentationId::new(21), InteractionId::new(7));
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.capture_tab_bar(Some(captured));
+    render.pointer_appearance.hover(Some(appearance_key(21, 1)));
+    render.pointer_appearance.press();
+    render.pointer_appearance.hover(Some(appearance_key(21, 2)));
+
+    let event = RenderApp::take_tab_bar_release_event(&mut render, 500.0, 700.0)
+        .expect("captured release event");
+
+    assert!(matches!(
+        event,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 21,
+            interaction: 7,
+            pressed: false,
+            x: 500.0,
+            y: 700.0,
+            ..
+        }
+    ));
+    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+}
+
+#[test]
+fn blank_tab_band_capture_suppresses_release_without_fake_interaction() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.capture_tab_bar(None);
+
+    assert_eq!(
+        render.chrome.interaction.tab_bar_capture(),
+        Some(TabBarPressCapture::new(None))
+    );
+    assert!(RenderApp::take_tab_bar_release_event(&mut render, 40.0, 10.0).is_none());
+    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+}
+
+#[test]
+fn tab_capture_survives_tab_bar_removal_until_release() {
+    let captured = PresentedInteractionKey::new(PresentationId::new(31), InteractionId::new(8));
+    let mut interaction = crate::render_thread::state::GuiChromeInteractionState::default();
+    interaction.capture_tab_bar(Some(captured));
+
+    interaction.clear_tab_bar();
+
+    assert_eq!(
+        interaction.tab_bar_capture(),
+        Some(TabBarPressCapture::new(Some(captured)))
+    );
 }
 
 fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState> {

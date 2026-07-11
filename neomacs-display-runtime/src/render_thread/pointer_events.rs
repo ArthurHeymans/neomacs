@@ -3,6 +3,7 @@
 use super::RenderApp;
 use super::frame_windows::{ChromePress, GuiFrameWindowState};
 use super::input::{MenuBarHit, frame_chrome_hit, frame_chrome_owns_pointer};
+use super::state::PresentedInteractionKey;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::thread_comm::InputEvent;
@@ -183,7 +184,7 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-    ) -> Option<(u64, u32)> {
+    ) -> Option<PresentedInteractionKey> {
         let frame = window_state.render.compositor.current_frame.as_ref()?;
         if let Some(hit) =
             window_state
@@ -191,14 +192,47 @@ impl RenderApp {
                 .presented_pointer_hit(window_state.render.emacs_frame_id, x, y)
             && let Some(interaction) = hit.interaction()
         {
-            return Some((hit.presentation().get(), interaction.get()));
+            return Some(PresentedInteractionKey::new(
+                hit.presentation(),
+                interaction,
+            ));
         }
         match frame_chrome_hit(frame, x, y)?.0 {
-            ChromeAction::Presented { interaction } => {
-                Some((frame.presentation_id.get(), interaction.get()))
-            }
+            ChromeAction::Presented { interaction } => Some(PresentedInteractionKey::new(
+                frame.presentation_id,
+                *interaction,
+            )),
             _ => None,
         }
+    }
+
+    fn presented_pointer_input_event(
+        render: &super::frame_windows::GuiFrameRenderState,
+        target: PresentedInteractionKey,
+        pressed: bool,
+        x: f32,
+        y: f32,
+    ) -> InputEvent {
+        InputEvent::PresentedPointer {
+            presentation: target.presentation().get(),
+            interaction: target.interaction().get(),
+            pressed,
+            button: 1,
+            x,
+            y,
+            emacs_frame_id: render.emacs_frame_id,
+        }
+    }
+
+    pub(super) fn take_tab_bar_release_event(
+        render: &mut super::frame_windows::GuiFrameRenderState,
+        x: f32,
+        y: f32,
+    ) -> Option<InputEvent> {
+        let target = render.chrome.interaction.take_tab_bar_capture()?.target()?;
+        Some(Self::presented_pointer_input_event(
+            render, target, false, x, y,
+        ))
     }
 
     fn frame_window_tool_hit_test(
@@ -407,27 +441,20 @@ impl RenderApp {
                                 .chrome
                                 .interaction
                                 .compact_bar_menu_active = None;
+                            let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
                             window_state
                                 .render
                                 .chrome
                                 .interaction
-                                .tab_bar_press_captured = true;
-                            if let Some((presentation, interaction)) =
-                                Self::frame_window_tab_bar_hit_test(window_state, x, y)
-                            {
-                                window_state
-                                    .render
-                                    .chrome
-                                    .press_with_popup(&ChromePress::TabBar);
-                                event = Some(InputEvent::PresentedPointer {
-                                    presentation,
-                                    interaction,
-                                    pressed: true,
-                                    button: 1,
+                                .capture_tab_bar(target);
+                            if let Some(target) = target {
+                                event = Some(Self::presented_pointer_input_event(
+                                    &window_state.render,
+                                    target,
+                                    true,
                                     x,
                                     y,
-                                    emacs_frame_id: window_state.render.emacs_frame_id,
-                                });
+                                ));
                             }
                             window_state.render.mark_dirty();
                             handled_chrome = true;
@@ -605,27 +632,20 @@ impl RenderApp {
                             y,
                         )
                     {
+                        let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
                         window_state
                             .render
                             .chrome
                             .interaction
-                            .tab_bar_press_captured = true;
-                        if let Some((presentation, interaction)) =
-                            Self::frame_window_tab_bar_hit_test(window_state, x, y)
-                        {
-                            window_state
-                                .render
-                                .chrome
-                                .press_with_popup(&ChromePress::TabBar);
-                            event = Some(InputEvent::PresentedPointer {
-                                presentation,
-                                interaction,
-                                pressed: true,
-                                button: 1,
+                            .capture_tab_bar(target);
+                        if let Some(target) = target {
+                            event = Some(Self::presented_pointer_input_event(
+                                &window_state.render,
+                                target,
+                                true,
                                 x,
                                 y,
-                                emacs_frame_id: window_state.render.emacs_frame_id,
-                            });
+                            ));
                             window_state.render.mark_dirty();
                         }
                         handled_chrome = true;
@@ -661,7 +681,8 @@ impl RenderApp {
                         .render
                         .chrome
                         .interaction
-                        .tab_bar_press_captured
+                        .tab_bar_capture()
+                        .is_some()
                         || window_state
                             .render
                             .chrome
@@ -684,19 +705,10 @@ impl RenderApp {
                         .render
                         .chrome
                         .interaction
-                        .tab_bar_press_captured
-                        && let Some((presentation, interaction)) =
-                            Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                        .tab_bar_capture()
+                        .is_some()
                     {
-                        event = Some(InputEvent::PresentedPointer {
-                            presentation,
-                            interaction,
-                            pressed: false,
-                            button: 1,
-                            x,
-                            y,
-                            emacs_frame_id: window_state.render.emacs_frame_id,
-                        });
+                        event = Self::take_tab_bar_release_event(&mut window_state.render, x, y);
                     }
                     window_state.render.clear_all_chrome_pressed();
                     handled_chrome = true;
@@ -751,7 +763,7 @@ impl RenderApp {
                             .render
                             .chrome
                             .interaction
-                            .tab_bar_press_captured = false;
+                            .clear_tab_bar_capture();
                         window_state
                             .render
                             .chrome

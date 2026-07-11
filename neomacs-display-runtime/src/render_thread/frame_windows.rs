@@ -216,9 +216,6 @@ impl ChromeState {
         match press {
             ChromePress::MenuBar(idx) => self.interaction.menu_bar_active = Some(*idx),
             ChromePress::ToolBar(idx) => self.interaction.toolbar_pressed = Some(*idx),
-            ChromePress::TabBar => {
-                self.interaction.tab_bar_press_captured = true;
-            }
         }
     }
 }
@@ -231,7 +228,6 @@ impl ChromeState {
 pub(crate) enum ChromePress {
     MenuBar(u32),
     ToolBar(u32),
-    TabBar,
 }
 
 /// Per-window state for a top-level GUI frame.
@@ -519,7 +515,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn clear_all_chrome_pressed(&mut self) {
-        self.chrome.interaction.tab_bar_press_captured = false;
+        self.chrome.interaction.clear_tab_bar_capture();
         self.chrome.interaction.compact_bar_tool_pressed = None;
         self.chrome.interaction.toolbar_pressed = None;
         self.chrome.interaction.toolbar_press_captured = false;

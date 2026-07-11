@@ -168,6 +168,7 @@ impl RenderApp {
     #[cfg(test)]
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<(u64, u32)> {
         Self::frame_window_tab_bar_hit_test(self.frame_windows.primary_window()?, x, y)
+            .map(|target| (target.presentation().get(), target.interaction().get()))
     }
 
     /// Hit-test menu bar items. Returns the item under (x, y), or None.
