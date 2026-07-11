@@ -99,6 +99,18 @@ impl BandRect {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FramePoint {
+    x: f32,
+    y: f32,
+}
+
+impl FramePoint {
+    pub fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+}
+
 fn valid_origin(value: f32) -> bool {
     value.is_finite() && value >= 0.0
 }
@@ -479,6 +491,38 @@ impl FrameChromeContent {
         }
         Ok(())
     }
+
+    fn semantic_hit_regions(&self) -> Vec<ChromeHitRegion> {
+        let positioned = |bounds: BandRect, action: Option<&ChromeAction>| {
+            action
+                .cloned()
+                .map(|action| ChromeHitRegion::new(bounds, action))
+        };
+        match self {
+            Self::DisplayRow(_) => Vec::new(),
+            Self::MenuBar(content) => content
+                .items()
+                .iter()
+                .filter_map(|item| positioned(item.local_bounds(), item.action()))
+                .collect(),
+            Self::ToolBar(content) => content
+                .items()
+                .iter()
+                .filter_map(|item| positioned(item.local_bounds(), item.action()))
+                .collect(),
+            Self::CompactBar(content) => content
+                .menu_items()
+                .iter()
+                .filter_map(|item| positioned(item.local_bounds(), item.action()))
+                .chain(
+                    content
+                        .tool_items()
+                        .iter()
+                        .filter_map(|item| positioned(item.local_bounds(), item.action())),
+                )
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -505,11 +549,12 @@ impl ChromeBandRequest {
     }
 
     pub fn new(kind: FrameChromeKind, height: f32, content: FrameChromeContent) -> Self {
+        let hit_regions = content.semantic_hit_regions();
         Self {
             kind,
             height,
             content,
-            hit_regions: Vec::new(),
+            hit_regions,
         }
     }
 
@@ -628,6 +673,19 @@ impl FrameChrome {
 
     pub fn band(&self, kind: FrameChromeKind) -> Option<&FrameChromeBand> {
         self.bands.iter().find(|band| band.kind == kind)
+    }
+
+    pub fn hit_test(&self, point: FramePoint) -> Option<(&ChromeAction, FrameRect)> {
+        self.bands.iter().find_map(|band| {
+            band.hit_regions().iter().find_map(|region| {
+                let bounds = band.bounds().place(region.local_bounds()).ok()?;
+                let inside = point.x >= bounds.x()
+                    && point.x < bounds.x() + bounds.width()
+                    && point.y >= bounds.y()
+                    && point.y < bounds.y() + bounds.height();
+                inside.then_some((region.action(), bounds))
+            })
+        })
     }
 }
 

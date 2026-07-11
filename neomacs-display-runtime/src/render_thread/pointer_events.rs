@@ -2,14 +2,12 @@
 
 use super::RenderApp;
 use super::frame_windows::{ChromePress, GuiFrameWindowState};
-use super::input::{
-    MenuBarHit, compact_bar_menu_width, menu_bar_hit_test_item, tab_bar_hit_test_items,
-    toolbar_hit_test_items,
-};
+use super::input::{MenuBarHit, frame_chrome_hit};
 use super::state::GuiChromeInteractionState;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::thread_comm::InputEvent;
+use neomacs_display_protocol::frame_chrome::{ChromeAction, FrameChromeKind};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use winit::window::WindowId;
@@ -112,28 +110,12 @@ impl RenderApp {
             .unwrap_or((0, 0, 0))
     }
 
-    fn frame_window_char_width(window_state: &GuiFrameWindowState) -> f32 {
-        window_state
-            .render
-            .compositor
-            .glyph_atlas
-            .as_ref()
-            .map_or(8.0, |atlas| atlas.default_char_width())
-    }
-
     fn frame_window_menu_bar_hit_test(
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> Option<MenuBarHit> {
-        let menu_bar = window_state.render.chrome.menu_bar.as_ref()?;
-        menu_bar_hit_test_item(
-            &menu_bar.items,
-            menu_bar.height,
-            Self::frame_window_char_width(window_state),
-            x,
-            y,
-        )
+        Self::frame_window_menu_hit_test(window_state, x, y)
     }
 
     fn frame_window_compact_bar_menu_hit_test(
@@ -141,14 +123,7 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<MenuBarHit> {
-        let compact_bar = window_state.render.chrome.compact_bar.as_ref()?;
-        menu_bar_hit_test_item(
-            &compact_bar.menu_items,
-            compact_bar.height,
-            Self::frame_window_char_width(window_state),
-            x,
-            y,
-        )
+        Self::frame_window_menu_hit_test(window_state, x, y)
     }
 
     fn menu_bar_click_event(hit: MenuBarHit, emacs_frame_id: u64) -> InputEvent {
@@ -196,68 +171,30 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-        toolbar_padding: u32,
-        toolbar_icon_size: u32,
+        _toolbar_padding: u32,
+        _toolbar_icon_size: u32,
     ) -> Option<u32> {
-        let compact_bar = window_state.render.chrome.compact_bar.as_ref()?;
-        let x = x - compact_bar_menu_width(
-            &compact_bar.menu_items,
-            Self::frame_window_char_width(window_state),
-        );
-        if x < 0.0 {
-            return None;
-        }
-        toolbar_hit_test_items(
-            &compact_bar.tool_items,
-            compact_bar.height,
-            toolbar_padding,
-            toolbar_icon_size,
-            x,
-            y,
-        )
+        Self::frame_window_tool_hit_test(window_state, x, y)
     }
 
     fn frame_window_toolbar_y_origin(window_state: &GuiFrameWindowState) -> f32 {
-        if let Some(frame) = window_state.render.compositor.current_frame.as_ref()
-            && let Some(tab_bar) = frame.tab_bar.as_ref()
-            && tab_bar.height > 0.0
-        {
-            return tab_bar.y + tab_bar.height;
-        }
         window_state
             .render
-            .chrome
-            .menu_bar
+            .compositor
+            .current_frame
             .as_ref()
-            .map_or(0.0, |menu_bar| menu_bar.height)
-            + window_state
-                .render
-                .chrome
-                .compact_bar
-                .as_ref()
-                .map_or(0.0, |compact_bar| compact_bar.height)
+            .and_then(|frame| frame.frame_chrome.band(FrameChromeKind::ToolBar))
+            .map_or(0.0, |band| band.bounds().y())
     }
 
     fn frame_window_toolbar_hit_test(
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-        toolbar_padding: u32,
-        toolbar_icon_size: u32,
+        _toolbar_padding: u32,
+        _toolbar_icon_size: u32,
     ) -> Option<u32> {
-        let tool_bar = window_state.render.chrome.tool_bar.as_ref()?;
-        let toolbar_y = Self::frame_window_toolbar_y_origin(window_state);
-        if y < toolbar_y || y >= toolbar_y + tool_bar.height {
-            return None;
-        }
-        toolbar_hit_test_items(
-            &tool_bar.items,
-            tool_bar.height,
-            toolbar_padding,
-            toolbar_icon_size,
-            x,
-            y - toolbar_y,
-        )
+        Self::frame_window_tool_hit_test(window_state, x, y)
     }
 
     fn frame_window_tab_bar_hit_test(
@@ -265,22 +202,45 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<u32> {
-        let tab_bar = window_state
-            .render
-            .compositor
-            .current_frame
-            .as_ref()
-            .and_then(|frame| frame.tab_bar.as_ref())?;
-        if y < tab_bar.y || y >= tab_bar.y + tab_bar.height {
-            return None;
+        let frame = window_state.render.compositor.current_frame.as_ref()?;
+        match frame_chrome_hit(frame, x, y)?.0 {
+            ChromeAction::SelectTab { index } => Some(*index),
+            _ => None,
         }
-        tab_bar_hit_test_items(
-            &tab_bar.items,
-            tab_bar.height,
-            Self::frame_window_char_width(window_state),
-            x,
-            y - tab_bar.y,
-        )
+    }
+
+    fn frame_window_tool_hit_test(
+        window_state: &GuiFrameWindowState,
+        x: f32,
+        y: f32,
+    ) -> Option<u32> {
+        let frame = window_state.render.compositor.current_frame.as_ref()?;
+        match frame_chrome_hit(frame, x, y)?.0 {
+            ChromeAction::InvokeToolBarItem { index } => Some(*index),
+            _ => None,
+        }
+    }
+
+    fn frame_window_menu_hit_test(
+        window_state: &GuiFrameWindowState,
+        x: f32,
+        y: f32,
+    ) -> Option<MenuBarHit> {
+        let frame = window_state.render.compositor.current_frame.as_ref()?;
+        let (ChromeAction::OpenMenu { index, key }, bounds) = frame_chrome_hit(frame, x, y)? else {
+            return None;
+        };
+        Some(MenuBarHit {
+            index: *index,
+            key: key.clone(),
+            menu_x: bounds.x(),
+            anchor: crate::thread_comm::PopupAnchorRect {
+                x: bounds.x(),
+                y: bounds.y(),
+                width: bounds.width(),
+                height: bounds.height(),
+            },
+        })
     }
 
     fn glyphs_for_pointer_target(&self, target_fid: u64) -> Option<&[FrameGlyph]> {
@@ -1028,8 +988,7 @@ impl RenderApp {
                         self.frame_windows
                             .primary_window()
                             .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
-                            .1
-                            - self.toolbar_y_origin(),
+                            .1,
                     );
                     self.comms
                         .send_input(InputEvent::MenuSelection { index: -1 });
@@ -1462,8 +1421,7 @@ impl RenderApp {
                 self.frame_windows
                     .primary_window()
                     .map_or((0.0, 0.0), |ws| ws.render.mouse_pos)
-                    .1
-                    - self.toolbar_y_origin(),
+                    .1,
             ) {
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
@@ -2069,7 +2027,7 @@ impl RenderApp {
         if self.tool_bar_height() > 0.0 {
             let toolbar_y = self.toolbar_y_origin();
             if ly < toolbar_y + self.tool_bar_height() && ly >= toolbar_y {
-                let new_hover = self.toolbar_hit_test(lx, ly - toolbar_y);
+                let new_hover = self.toolbar_hit_test(lx, ly);
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
                     ws.render.with_chrome_interaction_mut(|chrome| {
                         chrome.toolbar_hovered = new_hover;

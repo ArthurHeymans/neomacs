@@ -2,9 +2,6 @@ use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
-use crate::thread_comm::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
-use neomacs_display_protocol::frame_glyphs::FrameTabBarState;
-use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
 
@@ -88,22 +85,6 @@ fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState>
         .map(|ws| &mut ws.render)
 }
 
-fn toolbar_item(index: u32) -> ToolBarItem {
-    ToolBarItem {
-        index,
-        key: "open".to_string(),
-        image: Some(ToolBarImageSource::File {
-            path: "etc/images/open.xpm".to_string(),
-        }),
-        label: String::new(),
-        help: String::new(),
-        enabled: true,
-        selected: false,
-        item_type: ToolBarItemType::Button,
-        wrap: false,
-    }
-}
-
 #[test]
 fn frame_chrome_toolbar_origin_comes_from_authoritative_band_bounds() {
     use neomacs_display_protocol::frame_chrome::{
@@ -136,121 +117,105 @@ fn frame_chrome_toolbar_origin_comes_from_authoritative_band_bounds() {
 }
 
 #[test]
-fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
-    let mut app = make_test_app(800, 600, 1.0);
-    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
-        return;
+fn chrome_hit_uses_absolute_semantic_hit_regions() {
+    use neomacs_display_protocol::frame_chrome::{
+        BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion, FrameChrome,
+        FrameChromeContent, FrameChromeKind, FrameSize, MenuBarContent, PositionedChromeItem,
+        ToolBarContent,
     };
-    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
-        items: Vec::new(),
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
-        items: Vec::new(),
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
+    use neomacs_display_protocol::{MenuBarItem, ToolBarItem, ToolBarItemType};
 
-    assert_eq!(app.toolbar_y_origin(), 33.0);
-}
-
-#[test]
-fn toolbar_y_origin_stacks_below_tab_bar_when_present() {
-    let mut app = make_test_app(800, 600, 1.0);
-    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
-        return;
-    };
-    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
-        items: Vec::new(),
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
-    frame.tab_bar = Some(FrameTabBarState {
-        items: Vec::new(),
-        y: 33.0,
-        height: 33.0,
-    });
-    primary_frame.compositor.current_frame = Some(frame);
-    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
-        items: Vec::new(),
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-
-    assert_eq!(app.toolbar_y_origin(), 66.0);
-}
-
-#[test]
-fn toolbar_hit_test_uses_toolbar_local_y() {
-    let mut app = make_test_app(800, 600, 1.0);
-    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
-        return;
-    };
-    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
-        items: Vec::new(),
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-    primary_frame.chrome.tool_bar = Some(GuiToolBarState {
-        items: vec![toolbar_item(7)],
-        height: 33.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-
-    assert_eq!(app.toolbar_hit_test(7.0, 16.0), Some(7));
-    assert_eq!(
-        app.toolbar_hit_test(7.0, app.toolbar_y_origin() + 16.0),
-        None
+    let menu = MenuBarContent::new(
+        vec![PositionedChromeItem::new(
+            BandRect::new(8.0, 0.0, 48.0, 18.0).expect("menu bounds"),
+            MenuBarItem {
+                index: 0,
+                label: "File".into(),
+                key: "file".into(),
+            },
+            ChromeAction::OpenMenu {
+                index: 0,
+                key: "file".into(),
+            },
+        )],
+        Color::WHITE,
+        Color::BLACK,
     );
-}
+    let tool = ToolBarContent::new(
+        vec![PositionedChromeItem::new(
+            BandRect::new(5.0, 0.0, 24.0, 34.0).expect("tool bounds"),
+            ToolBarItem {
+                index: 0,
+                key: "open".into(),
+                image: None,
+                label: String::new(),
+                help: String::new(),
+                enabled: true,
+                selected: false,
+                item_type: ToolBarItemType::Button,
+                wrap: false,
+            },
+            ChromeAction::InvokeToolBarItem { index: 0 },
+        )],
+        Color::WHITE,
+        Color::BLACK,
+        24,
+        5,
+    );
+    let tab = ChromeBandRequest::new(
+        FrameChromeKind::TabBar,
+        18.0,
+        FrameChromeContent::DisplayRow(ChromeDisplayRow::empty_tab_bar()),
+    )
+    .with_hit_regions(vec![ChromeHitRegion::new(
+        BandRect::new(8.0, 0.0, 80.0, 18.0).expect("tab bounds"),
+        ChromeAction::SelectTab { index: 0 },
+    )]);
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.frame_chrome = FrameChrome::layout(
+        FrameSize::new(800.0, 600.0).expect("frame size"),
+        vec![
+            ChromeBandRequest::new(
+                FrameChromeKind::MenuBar,
+                18.0,
+                FrameChromeContent::MenuBar(menu),
+            ),
+            ChromeBandRequest::new(
+                FrameChromeKind::ToolBar,
+                34.0,
+                FrameChromeContent::ToolBar(tool),
+            ),
+            tab,
+        ],
+    )
+    .expect("frame chrome");
 
-#[test]
-fn menu_bar_hit_test_uses_shared_item_geometry() {
+    assert!(matches!(
+        frame_chrome_hit(&frame, 20.0, 30.0),
+        Some((ChromeAction::InvokeToolBarItem { index: 0 }, bounds))
+            if bounds.y() == 18.0
+    ));
+    assert!(matches!(
+        frame_chrome_hit(&frame, 20.0, 56.0),
+        Some((ChromeAction::SelectTab { index: 0 }, bounds))
+            if bounds.y() == 52.0
+    ));
     let mut app = make_test_app(800, 600, 1.0);
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
     };
-    primary_frame.chrome.menu_bar = Some(GuiMenuBarState {
-        items: vec![
-            MenuBarItem {
-                index: 11,
-                label: "File".to_string(),
-                key: "file".to_string(),
-            },
-            MenuBarItem {
-                index: 12,
-                label: "Tools".to_string(),
-                key: "tools".to_string(),
-            },
-        ],
-        height: 24.0,
-        fg: Color::rgb(0.0, 0.0, 0.0),
-        bg: Color::rgb(0.0, 0.0, 0.0),
-    });
-
-    let hit = app.menu_bar_hit_test(12.0, 12.0).expect("menu hit");
-    assert_eq!(hit.index, 11);
+    primary_frame.compositor.current_frame = Some(frame);
+    assert_eq!(app.toolbar_y_origin(), 18.0);
+    assert_eq!(app.toolbar_hit_test(20.0, 30.0), Some(0));
+    assert_eq!(app.tab_bar_hit_test(20.0, 56.0), Some(0));
+    let hit = app.menu_bar_hit_test(20.0, 10.0).expect("menu hit");
+    assert_eq!(hit.index, 0);
     assert_eq!(hit.key, "file");
-    assert_eq!(hit.menu_x, 0.0);
+    assert_eq!(hit.menu_x, 8.0);
     assert_eq!(hit.anchor.x, 8.0);
     assert_eq!(hit.anchor.y, 0.0);
-    assert_eq!(hit.anchor.height, 24.0);
-    assert!(hit.anchor.width > 0.0);
-
-    let tools = app.menu_bar_hit_test(58.0, 12.0).expect("tools menu hit");
-    assert_eq!(tools.index, 12);
-    assert_eq!(tools.key, "tools");
-    assert_eq!(tools.menu_x, 5.0);
-    assert!(tools.anchor.x > hit.anchor.x);
-    assert_eq!(app.menu_bar_hit_test(12.0, 30.0), None);
+    assert_eq!(hit.anchor.width, 48.0);
+    assert_eq!(hit.anchor.height, 18.0);
 }
 
 #[test]
@@ -272,32 +237,6 @@ fn menu_bar_release_is_consumed_before_generic_mouse_event() {
     assert_eq!(interaction.menu_bar_active, None);
     assert_eq!(interaction.compact_bar_menu_active, None);
     assert!(!app.consume_active_menu_bar_release());
-}
-
-#[test]
-fn compact_bar_tool_hit_test_offsets_after_menu_items() {
-    let mut app = make_test_app(800, 600, 1.0);
-    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
-        return;
-    };
-    primary_frame.chrome.compact_bar =
-        Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
-            menu_items: vec![MenuBarItem {
-                index: 1,
-                label: "File".to_string(),
-                key: "file".to_string(),
-            }],
-            tool_items: vec![toolbar_item(9)],
-            height: 30.0,
-            menu_fg: Color::rgb(0.0, 0.0, 0.0),
-            menu_bg: Color::rgb(0.0, 0.0, 0.0),
-            tool_fg: Color::rgb(0.0, 0.0, 0.0),
-            tool_bg: Color::rgb(0.0, 0.0, 0.0),
-        });
-    let x = app.compact_bar_menu_width() + app.toolbar.padding as f32 + 1.0;
-
-    assert_eq!(app.compact_bar_tool_hit_test(x, 12.0), Some(9));
-    assert_eq!(app.compact_bar_tool_hit_test(1.0, 12.0), None);
 }
 
 // ===================================================================
