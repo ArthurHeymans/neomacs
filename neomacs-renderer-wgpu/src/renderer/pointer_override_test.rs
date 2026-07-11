@@ -1,6 +1,6 @@
 use super::{
-    PointerOverrideResolver, PrimitivePaintPlan, clip_glyph_quad, clip_new_rect_vertices,
-    clip_new_rounded_vertices, relief_edges,
+    FacePaint, PointerOverrideResolver, PrimitivePaintPlan, append_clipped_relief_edge,
+    clip_glyph_quad, clip_new_rect_vertices, clip_new_rounded_vertices, relief_edges,
 };
 use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex};
 use neomacs_display_protocol::{
@@ -9,6 +9,7 @@ use neomacs_display_protocol::{
     PointerImageRelief, PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan,
     PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
 };
+use neomacs_display_protocol::{ColorStop, Gradient};
 
 fn relief(pressed: bool) -> PointerImageRelief {
     let light = Color::new(0.85, 0.85, 0.85, 1.0);
@@ -273,6 +274,10 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         .collect::<Vec<_>>();
     assert_eq!(edges.len(), 2);
     assert_eq!(edges[0].bounds(), (11.0, 22.0, 26.0, 2.0));
+    assert_eq!(
+        edges[0].corners(),
+        [[11.0, 22.0], [37.0, 22.0], [35.0, 24.0], [13.0, 24.0]]
+    );
     assert_eq!(edges[0].color(), top_left);
     assert_eq!(edges[1].bounds(), (35.0, 22.0, 2.0, 18.0));
     assert_eq!(edges[1].color(), bottom_right);
@@ -285,46 +290,47 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         PointerReliefEdges::new(false, true, false, true),
     );
     let mut vertices = Vec::new();
+    let subsection = neomacs_display_protocol::Rect::new(10.0, 0.0, 10.0, 10.0);
     for edge in relief_edges(0.0, 0.0, 30.0, 10.0, vertical_only).unwrap() {
-        let (x, y, width, height) = edge.bounds();
-        let color = edge.color();
-        let c = [color.r, color.g, color.b, color.a];
-        vertices.extend_from_slice(&[
-            RectVertex {
-                position: [x, y],
-                color: c,
-            },
-            RectVertex {
-                position: [x + width, y],
-                color: c,
-            },
-            RectVertex {
-                position: [x + width, y + height],
-                color: c,
-            },
-            RectVertex {
-                position: [x, y],
-                color: c,
-            },
-            RectVertex {
-                position: [x + width, y + height],
-                color: c,
-            },
-            RectVertex {
-                position: [x, y + height],
-                color: c,
-            },
-        ]);
+        append_clipped_relief_edge(&mut vertices, edge, Some(&subsection));
     }
-    clip_new_rect_vertices(
-        &mut vertices,
-        0,
-        Some(&neomacs_display_protocol::Rect::new(10.0, 0.0, 10.0, 10.0)),
-    );
     assert!(
         vertices.is_empty(),
         "subsection clip must not invent left/right edges"
     );
+}
+
+#[test]
+fn thick_image_relief_trapezoids_share_diagonals_and_clip_as_polygons() {
+    let spec = PointerImageRelief::new(
+        Color::WHITE,
+        Color::BLACK,
+        3.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+    );
+    let edges = relief_edges(0.0, 0.0, 20.0, 12.0, spec)
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let [top, left, bottom, right] = edges.as_slice() else {
+        panic!("four enabled relief edges")
+    };
+    assert_eq!(top.corners()[3], left.corners()[1]);
+    assert_eq!(top.corners()[2], right.corners()[3]);
+    assert_eq!(bottom.corners()[1], left.corners()[2]);
+    assert_eq!(bottom.corners()[2], right.corners()[2]);
+    assert_eq!(top.corners()[0..2], [[0.0, 0.0], [20.0, 0.0]]);
+    assert_eq!(bottom.corners()[0], [0.0, 12.0]);
+    assert_eq!(bottom.corners()[3], [20.0, 12.0]);
+
+    let clip = neomacs_display_protocol::Rect::new(5.0, 0.0, 10.0, 2.0);
+    let mut clipped = Vec::new();
+    append_clipped_relief_edge(&mut clipped, *top, Some(&clip));
+    assert!(!clipped.is_empty());
+    assert!(clipped.iter().all(|vertex| {
+        (5.0..=15.0).contains(&vertex.position[0]) && (0.0..=2.0).contains(&vertex.position[1])
+    }));
 }
 
 #[test]
@@ -493,4 +499,46 @@ fn complement_clips_do_not_reanchor_gradient_or_stipple_paint_coordinates() {
     assert!(paints.len() > 1);
     assert!(paints.iter().all(|paint| paint.domain() == domain));
     assert!(paints.iter().any(|paint| paint.clip() != paints[0].clip()));
+}
+
+#[test]
+fn subpixel_background_sampling_uses_immutable_paint_domain_not_output_clip() {
+    let mut face = Face::new(FaceId::new(3));
+    face.background_gradient = Some(Box::new(Gradient::Linear {
+        angle: 0.0,
+        stops: vec![
+            ColorStop::new(0.0, Color::RED),
+            ColorStop::new(1.0, Color::BLUE),
+        ],
+    }));
+    let domain = neomacs_display_protocol::Rect::new(0.0, 0.0, 100.0, 10.0);
+    let output_clip = neomacs_display_protocol::Rect::new(50.0, 0.0, 50.0, 10.0);
+    let paint = FacePaint {
+        face_id: face.id,
+        domain,
+        output_clip: Some(output_clip),
+    };
+
+    let sampled =
+        super::super::WgpuRenderer::sample_face_paint_background(Some(&face), None, paint);
+    let domain_sample = super::super::WgpuRenderer::sample_face_background(
+        Some(&face),
+        None,
+        domain.x,
+        domain.y,
+        domain.width,
+        domain.height,
+        None,
+    );
+    let reanchored = super::super::WgpuRenderer::sample_face_background(
+        Some(&face),
+        None,
+        domain.x,
+        domain.y,
+        domain.width,
+        domain.height,
+        Some(&output_clip),
+    );
+    assert_eq!(sampled, domain_sample);
+    assert_ne!(sampled, reanchored);
 }

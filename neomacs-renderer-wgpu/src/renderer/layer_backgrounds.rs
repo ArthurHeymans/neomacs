@@ -13,7 +13,7 @@ use neomacs_display_protocol::types::{Color, FaceId};
 use super::super::vertex::{RectVertex, RoundedRectVertex};
 use super::WgpuRenderer;
 use super::frame_pass::{
-    BoxPaintPolicy, BoxSpan, BoxSpanSet, FrameParams, FramePassCtx, push_box_span,
+    BoxPaintPolicy, BoxSpan, BoxSpanAccumulator, BoxSpanSet, FrameParams, FramePassCtx,
 };
 
 impl WgpuRenderer {
@@ -26,7 +26,7 @@ impl WgpuRenderer {
         // Only faces with corner_radius > 0 get the SDF rounded rect treatment
         // (background suppression + SDF fill + SDF border).
         // Standard boxes (corner_radius=0) get merged rect borders drawn after text.
-        let mut box_spans: Vec<BoxSpan> = Vec::new();
+        let mut box_spans = BoxSpanAccumulator::default();
 
         for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             // The box-decoration pass applies only to the cursor-cell kinds that
@@ -61,26 +61,27 @@ impl WgpuRenderer {
 
                 let policy = if faces[&gface_id].box_corner_radius > 0 {
                     BoxPaintPolicy::Rounded
+                } else if g_role.is_chrome() {
+                    BoxPaintPolicy::SharpContinuousChrome
                 } else {
-                    BoxPaintPolicy::Sharp
+                    BoxPaintPolicy::SharpSameFace
                 };
-                push_box_span(
-                    &mut box_spans,
-                    BoxSpan {
-                        x: gx,
-                        y: gy,
-                        width: gw,
-                        height: gh,
-                        face_id: gface_id,
-                        row_role: g_role,
-                        bg: g_bg,
-                        clip: effective_clip,
-                        policy,
-                    },
-                );
+                box_spans.push(BoxSpan {
+                    x: gx,
+                    y: gy,
+                    width: gw,
+                    height: gh,
+                    face_id: gface_id,
+                    row_role: g_role,
+                    bg: g_bg,
+                    clip: effective_clip,
+                    policy,
+                });
             }
         }
-        BoxSpanSet { spans: box_spans }
+        BoxSpanSet {
+            spans: box_spans.finish(),
+        }
     }
 
     /// Collect the non-overlay background layer: background gradient, window

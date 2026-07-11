@@ -14,7 +14,7 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
-use super::frame_pass::{BoxPaintPolicy, BoxSpan, push_box_span};
+use super::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
@@ -1627,11 +1627,6 @@ impl WgpuRenderer {
                             relief,
                         )
                     {
-                        let relief_start = relief_vertices.len();
-                        for edge in edges {
-                            let (x, y, width, height) = edge.bounds();
-                            self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
-                        }
                         let relief_clip = pointer_override
                             .image_clip(glyph_index, clip_rect.as_ref())
                             .map(|clip| Rect {
@@ -1640,11 +1635,13 @@ impl WgpuRenderer {
                                 width: clip.width,
                                 height: clip.height,
                             });
-                        super::pointer_override::clip_new_rect_vertices(
-                            &mut relief_vertices,
-                            relief_start,
-                            relief_clip.as_ref(),
-                        );
+                        for edge in edges {
+                            super::pointer_override::append_clipped_relief_edge(
+                                &mut relief_vertices,
+                                edge,
+                                relief_clip.as_ref(),
+                            );
+                        }
                     }
                 }
             }
@@ -1854,7 +1851,7 @@ impl WgpuRenderer {
         pointer_override: &super::pointer_override::PointerOverrideResolver,
     ) -> Vec<BoxSpan> {
         let faces = &frame.faces;
-        let mut box_spans: Vec<BoxSpan> = Vec::new();
+        let mut box_spans = BoxSpanAccumulator::default();
 
         for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
             let (gx, gy, gw, gh, base_face_id, row_role) = match glyph {
@@ -1899,27 +1896,26 @@ impl WgpuRenderer {
 
                 let policy = if faces[&gface_id].box_corner_radius > 0 {
                     BoxPaintPolicy::Rounded
+                } else if row_role.is_chrome() {
+                    BoxPaintPolicy::SharpContinuousChrome
                 } else {
-                    BoxPaintPolicy::Sharp
+                    BoxPaintPolicy::SharpSameFace
                 };
-                push_box_span(
-                    &mut box_spans,
-                    BoxSpan {
-                        x: gx,
-                        y: gy,
-                        width: gw,
-                        height: gh,
-                        face_id: gface_id,
-                        row_role,
-                        bg: g_bg,
-                        clip: effective_clip,
-                        policy,
-                    },
-                );
+                box_spans.push(BoxSpan {
+                    x: gx,
+                    y: gy,
+                    width: gw,
+                    height: gh,
+                    face_id: gface_id,
+                    row_role,
+                    bg: g_bg,
+                    clip: effective_clip,
+                    policy,
+                });
             }
         }
 
-        box_spans
+        box_spans.finish()
     }
 }
 

@@ -65,34 +65,77 @@ pub(super) struct BoxSpan {
     pub(super) policy: BoxPaintPolicy,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(super) enum BoxPaintPolicy {
-    Sharp,
     Rounded,
+    SharpSameFace,
+    SharpContinuousChrome,
 }
 
-/// Insert a semantic box contribution independent of primitive traversal
-/// order. Complement paints may appear between two alternate-face entries,
-/// so adjacency is searched within the full matching group rather than only
-/// against the last emitted entry.
-pub(super) fn push_box_span(spans: &mut Vec<BoxSpan>, mut candidate: BoxSpan) {
-    while let Some(index) = spans.iter().position(|span| {
-        let same_group = span.face_id == candidate.face_id
-            && span.row_role == candidate.row_role
-            && span.clip == candidate.clip
-            && span.policy == candidate.policy
-            && (span.y - candidate.y).abs() < 0.5
-            && (span.height - candidate.height).abs() < 0.5;
-        let span_right = span.x + span.width;
-        let candidate_right = candidate.x + candidate.width;
-        same_group && candidate.x <= span_right + 1.0 && span.x <= candidate_right + 1.0
-    }) {
-        let existing = spans.remove(index);
-        let right = (candidate.x + candidate.width).max(existing.x + existing.width);
-        candidate.x = candidate.x.min(existing.x);
-        candidate.width = right - candidate.x;
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct BoxGroupKey {
+    row_role: GlyphRowRole,
+    y: u32,
+    height: u32,
+    clip: Option<(u32, u32, u32, u32)>,
+    policy: BoxPaintPolicy,
+    face: Option<FaceId>,
+}
+
+impl BoxGroupKey {
+    fn new(span: &BoxSpan) -> Self {
+        let clip = span.clip.map(|clip| {
+            (
+                clip.x.to_bits(),
+                clip.y.to_bits(),
+                clip.width.to_bits(),
+                clip.height.to_bits(),
+            )
+        });
+        let face = (span.policy != BoxPaintPolicy::SharpContinuousChrome).then_some(span.face_id);
+        Self {
+            row_role: span.row_role,
+            y: span.y.to_bits(),
+            height: span.height.to_bits(),
+            clip,
+            policy: span.policy,
+            face,
+        }
     }
-    spans.push(candidate);
+}
+
+/// O(1)-average semantic grouping while retaining first-contribution output
+/// order. Continuous sharp chrome deliberately ignores face identity and
+/// keeps the first span's face as the selected border material.
+#[derive(Default)]
+pub(super) struct BoxSpanAccumulator {
+    spans: Vec<BoxSpan>,
+    open_group: HashMap<BoxGroupKey, usize>,
+}
+
+impl BoxSpanAccumulator {
+    pub(super) fn push(&mut self, candidate: BoxSpan) {
+        let key = BoxGroupKey::new(&candidate);
+        if let Some(&index) = self.open_group.get(&key) {
+            let existing = &mut self.spans[index];
+            if ((existing.x + existing.width) - candidate.x).abs() < 1.0 {
+                existing.width = candidate.x + candidate.width - existing.x;
+                return;
+            }
+        }
+        let index = self.spans.len();
+        self.spans.push(candidate);
+        self.open_group.insert(key, index);
+    }
+
+    pub(super) fn finish(self) -> Vec<BoxSpan> {
+        self.spans
+    }
+
+    #[cfg(test)]
+    pub(super) fn group_count(&self) -> usize {
+        self.open_group.len()
+    }
 }
 
 /// All merged box spans of a frame.

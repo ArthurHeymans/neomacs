@@ -162,6 +162,7 @@ fn offscreen_frame_renders_background_and_cursor() {
         (0.0, 0.0),
         None,
         None,
+        None,
     );
     let buf = read_back(&h);
     // A corner pixel is background (dark blue-ish), definitely not the red cursor.
@@ -199,6 +200,7 @@ fn cursor_visible_false_suppresses_cursor() {
         false,
         None,
         (0.0, 0.0),
+        None,
         None,
         None,
     );
@@ -314,6 +316,7 @@ fn composite_matches_full_render() {
         (0.0, 0.0),
         None,
         None,
+        None,
     );
     let full = read_tex(&h.renderer, &ta);
 
@@ -328,6 +331,7 @@ fn composite_matches_full_render() {
         false,
         None,
         (0.0, 0.0),
+        None,
         None,
         None,
     );
@@ -391,6 +395,7 @@ fn retained_static_reused_across_cursor_colors() {
         false,
         None,
         (0.0, 0.0),
+        None,
         None,
         None,
     );
@@ -507,6 +512,7 @@ fn filled_box_composite_matches_full_render() {
         (0.0, 0.0),
         None,
         None,
+        None,
     );
     let full = read_tex(&h.renderer, &ta);
 
@@ -521,6 +527,7 @@ fn filled_box_composite_matches_full_render() {
         false,
         None,
         (0.0, 0.0),
+        None,
         None,
         None,
     );

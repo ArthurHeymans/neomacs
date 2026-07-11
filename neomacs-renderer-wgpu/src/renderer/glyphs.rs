@@ -970,6 +970,23 @@ impl WgpuRenderer {
         fallback.or_else(|| face.map(|resolved| resolved.background))
     }
 
+    pub(super) fn sample_face_paint_background(
+        face: Option<&Face>,
+        fallback: Option<Color>,
+        paint: super::pointer_override::FacePaint,
+    ) -> Option<Color> {
+        let domain = paint.domain();
+        Self::sample_face_background(
+            face,
+            fallback,
+            domain.x,
+            domain.y,
+            domain.width,
+            domain.height,
+            None,
+        )
+    }
+
     fn add_gradient_quad(
         vertices: &mut Vec<RectVertex>,
         x0: f32,
@@ -1150,6 +1167,7 @@ impl WgpuRenderer {
             animated_cursor,
             mouse_pos,
             background_gradient,
+            pointer_selection,
             row_damage,
             false,
             None,
@@ -1185,6 +1203,7 @@ impl WgpuRenderer {
             mouse_pos,
             None,
             None,
+            None,
             true,
             Some(scissor),
         );
@@ -1202,6 +1221,7 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        pointer_selection: Option<PointerAppearanceSelection>,
         row_damage: Option<&super::row_reuse::FrameRowDamage>,
         load_existing: bool,
         scissor: Option<(u32, u32, u32, u32)>,
@@ -1460,6 +1480,10 @@ impl WgpuRenderer {
             self.prepare_frame_uniforms(frame_glyphs, surface_width, surface_height);
         let params = FrameParams {
             frame_glyphs,
+            pointer_override: super::pointer_override::PointerOverrideResolver::new(
+                frame_glyphs,
+                None,
+            ),
             faces: &frame_glyphs.faces,
             cursor_visible,
             animated_cursor: &animated_cursor,

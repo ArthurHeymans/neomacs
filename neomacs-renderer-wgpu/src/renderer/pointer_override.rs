@@ -602,10 +602,7 @@ pub(super) fn clip_subpixel_quad(
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct ReliefEdge {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
+    corners: [[f32; 2]; 4],
     color: Color,
 }
 
@@ -622,16 +619,43 @@ impl IntoIterator for ReliefEdgePlan {
 }
 
 impl ReliefEdge {
-    pub(super) const fn bounds(self) -> (f32, f32, f32, f32) {
-        (self.x, self.y, self.width, self.height)
+    #[cfg(test)]
+    pub(super) fn bounds(self) -> (f32, f32, f32, f32) {
+        let min_x = self
+            .corners
+            .iter()
+            .map(|point| point[0])
+            .fold(f32::INFINITY, f32::min);
+        let min_y = self
+            .corners
+            .iter()
+            .map(|point| point[1])
+            .fold(f32::INFINITY, f32::min);
+        let max_x = self
+            .corners
+            .iter()
+            .map(|point| point[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let max_y = self
+            .corners
+            .iter()
+            .map(|point| point[1])
+            .fold(f32::NEG_INFINITY, f32::max);
+        (min_x, min_y, max_x - min_x, max_y - min_y)
     }
 
     pub(super) const fn color(self) -> Color {
         self.color
     }
+
+    pub(super) const fn corners(self) -> [[f32; 2]; 4] {
+        self.corners
+    }
 }
 
-/// GNU-style one-pixel relief entirely inside the existing image rectangle.
+/// GNU-style relief inside the original image rectangle. Four trapezoids meet
+/// on their inner diagonals, so thick relief has no overlapping corner paint;
+/// edge flags independently retain or remove each outer line.
 pub(super) fn relief_edges(
     x: f32,
     y: f32,
@@ -649,38 +673,124 @@ pub(super) fn relief_edges(
     }
     let top_left = relief.top_left_color();
     let bottom_right = relief.bottom_right_color();
-    let edge = relief.thickness().min(width).min(height);
+    let edge = relief.thickness().min(width * 0.5).min(height * 0.5);
     let enabled = relief.edges();
+    let right = x + width;
+    let bottom = y + height;
     Some(ReliefEdgePlan([
         enabled.top().then_some(ReliefEdge {
-            x,
-            y,
-            width,
-            height: edge,
+            corners: [
+                [x, y],
+                [right, y],
+                [right - edge, y + edge],
+                [x + edge, y + edge],
+            ],
             color: top_left,
         }),
         enabled.left().then_some(ReliefEdge {
-            x,
-            y,
-            width: edge,
-            height,
+            corners: [
+                [x, y],
+                [x + edge, y + edge],
+                [x + edge, bottom - edge],
+                [x, bottom],
+            ],
             color: top_left,
         }),
         enabled.bottom().then_some(ReliefEdge {
-            x,
-            y: y + height - edge,
-            width,
-            height: edge,
+            corners: [
+                [x, bottom],
+                [x + edge, bottom - edge],
+                [right - edge, bottom - edge],
+                [right, bottom],
+            ],
             color: bottom_right,
         }),
         enabled.right().then_some(ReliefEdge {
-            x: x + width - edge,
-            y,
-            width: edge,
-            height,
+            corners: [
+                [right, y],
+                [right, bottom],
+                [right - edge, bottom - edge],
+                [right - edge, y + edge],
+            ],
             color: bottom_right,
         }),
     ]))
+}
+
+pub(super) fn append_clipped_relief_edge(
+    vertices: &mut Vec<RectVertex>,
+    edge: ReliefEdge,
+    clip: Option<&Rect>,
+) {
+    let mut polygon = [[0.0; 2]; 8];
+    polygon[..4].copy_from_slice(&edge.corners());
+    let mut len = 4;
+    if let Some(clip) = clip {
+        for (axis, boundary, keep_greater) in [
+            (0, clip.x, true),
+            (0, clip.x + clip.width, false),
+            (1, clip.y, true),
+            (1, clip.y + clip.height, false),
+        ] {
+            (polygon, len) = clip_convex_polygon(polygon, len, axis, boundary, keep_greater);
+            if len < 3 {
+                return;
+            }
+        }
+    }
+    let color = edge.color();
+    let color = [color.r, color.g, color.b, color.a];
+    for index in 1..len - 1 {
+        for position in [polygon[0], polygon[index], polygon[index + 1]] {
+            vertices.push(RectVertex { position, color });
+        }
+    }
+}
+
+fn clip_convex_polygon(
+    input: [[f32; 2]; 8],
+    len: usize,
+    axis: usize,
+    boundary: f32,
+    keep_greater: bool,
+) -> ([[f32; 2]; 8], usize) {
+    let mut output = [[0.0; 2]; 8];
+    let mut out_len = 0;
+    let inside = |point: [f32; 2]| {
+        if keep_greater {
+            point[axis] >= boundary
+        } else {
+            point[axis] <= boundary
+        }
+    };
+    let intersection = |from: [f32; 2], to: [f32; 2]| {
+        let delta = to[axis] - from[axis];
+        let t = if delta.abs() <= f32::EPSILON {
+            0.0
+        } else {
+            (boundary - from[axis]) / delta
+        };
+        [
+            from[0] + (to[0] - from[0]) * t,
+            from[1] + (to[1] - from[1]) * t,
+        ]
+    };
+    let mut previous = input[len - 1];
+    let mut previous_inside = inside(previous);
+    for &current in &input[..len] {
+        let current_inside = inside(current);
+        if current_inside != previous_inside {
+            output[out_len] = intersection(previous, current);
+            out_len += 1;
+        }
+        if current_inside {
+            output[out_len] = current;
+            out_len += 1;
+        }
+        previous = current;
+        previous_inside = current_inside;
+    }
+    (output, out_len)
 }
 
 #[cfg(test)]

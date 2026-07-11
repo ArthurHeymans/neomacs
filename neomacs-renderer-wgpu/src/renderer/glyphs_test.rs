@@ -9,7 +9,7 @@ use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
 #[test]
 fn adjacent_box_paints_merge_across_interleaved_complements() {
-    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, push_box_span};
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
     use neomacs_display_protocol::types::Rect;
 
     let face_id = FaceId::new(9);
@@ -25,16 +25,70 @@ fn adjacent_box_paints_merge_across_interleaved_complements() {
         clip,
         policy: BoxPaintPolicy::Rounded,
     };
-    let mut spans = Vec::new();
-    push_box_span(&mut spans, make(0.0, face_id, clip));
-    push_box_span(
-        &mut spans,
-        make(0.0, FaceId::new(1), Some(Rect::new(20.0, 0.0, 10.0, 10.0))),
-    );
-    push_box_span(&mut spans, make(10.0, face_id, clip));
+    let mut spans = BoxSpanAccumulator::default();
+    spans.push(make(0.0, face_id, clip));
+    spans.push(make(
+        0.0,
+        FaceId::new(1),
+        Some(Rect::new(20.0, 0.0, 10.0, 10.0)),
+    ));
+    spans.push(make(10.0, face_id, clip));
 
+    assert_eq!(
+        spans.group_count(),
+        2,
+        "one indexed entry per semantic group"
+    );
+    let spans = spans.finish();
     let alternate = spans.iter().find(|span| span.face_id == face_id).unwrap();
     assert_eq!((alternate.x, alternate.width), (0.0, 20.0));
+}
+
+#[test]
+fn sharp_chrome_continuity_crosses_faces_but_other_box_policies_do_not() {
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, BoxSpanAccumulator};
+
+    let make = |x, face_id, row_role, policy| BoxSpan {
+        x,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+        face_id,
+        row_role,
+        bg: Some(Color::BLACK),
+        clip: None,
+        policy,
+    };
+    let first = FaceId::new(1);
+    let second = FaceId::new(2);
+
+    let mut continuous = BoxSpanAccumulator::default();
+    continuous.push(make(
+        0.0,
+        first,
+        GlyphRowRole::ModeLine,
+        BoxPaintPolicy::SharpContinuousChrome,
+    ));
+    continuous.push(make(
+        10.0,
+        second,
+        GlyphRowRole::ModeLine,
+        BoxPaintPolicy::SharpContinuousChrome,
+    ));
+    let continuous = continuous.finish();
+    assert_eq!(continuous.len(), 1);
+    assert_eq!(continuous[0].width, 20.0);
+    assert_eq!(
+        continuous[0].face_id, first,
+        "first border material remains selected"
+    );
+
+    for policy in [BoxPaintPolicy::Rounded, BoxPaintPolicy::SharpSameFace] {
+        let mut separate = BoxSpanAccumulator::default();
+        separate.push(make(0.0, first, GlyphRowRole::ModeLine, policy));
+        separate.push(make(10.0, second, GlyphRowRole::ModeLine, policy));
+        assert_eq!(separate.finish().len(), 2);
+    }
 }
 
 #[test]

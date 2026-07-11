@@ -456,16 +456,9 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                         // For the character under a filled box cursor, swap to
                         // cursor_fg (inverse video) when cursor is visible.
                         let mut effective_fg = *fg;
-                        let mut effective_bg = WgpuRenderer::sample_face_background(
-                            face,
-                            bg,
-                            *x,
-                            *y,
-                            *width,
-                            *height,
-                            effective_clip.as_ref(),
-                        )
-                        .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
+                        let mut effective_bg =
+                            WgpuRenderer::sample_face_paint_background(face, bg, paint)
+                                .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                         if cursor_visible
                             && let Some(cursor) = frame_glyphs.active_cursor()
                             && matches!(cursor.style, CursorStyle::FilledBox)
@@ -625,17 +618,20 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                             None
                         };
 
-                        let subpixel_vertices = build_subpixel_vertices(
-                            glyph_x,
-                            glyph_y,
-                            glyph_w,
-                            glyph_h,
-                            tex_u_min,
-                            tex_u_max,
-                            tex_v_min,
-                            tex_v_max,
-                            subpixel_fg,
-                            subpixel_bg,
+                        let subpixel_vertices = super::pointer_override::clip_subpixel_quad(
+                            build_subpixel_vertices(
+                                glyph_x,
+                                glyph_y,
+                                glyph_w,
+                                glyph_h,
+                                tex_u_min,
+                                tex_u_max,
+                                tex_v_min,
+                                tex_v_max,
+                                subpixel_fg,
+                                subpixel_bg,
+                            ),
+                            effective_clip.as_ref(),
                         );
 
                         let overstrike_subpixel_vertices = if overstrike {
@@ -665,7 +661,9 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                                 out.color.push((entry, ov));
                             }
                         } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
-                            out.subpixel.push((entry, subpixel_vertices));
+                            if let Some(vertices) = subpixel_vertices {
+                                out.subpixel.push((entry, vertices));
+                            }
                             if let Some(ov) = overstrike_subpixel_vertices {
                                 out.subpixel.push((entry, ov));
                             }

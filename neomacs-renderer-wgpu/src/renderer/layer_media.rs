@@ -204,20 +204,17 @@ impl WgpuRenderer {
                         && let Some(edges) =
                             super::pointer_override::relief_edges(*x, *y, *width, *height, relief)
                     {
-                        let relief_start = relief_vertices.len();
-                        for edge in edges {
-                            let (x, y, width, height) = edge.bounds();
-                            self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
-                        }
                         let relief_clip = ctx
                             .params
                             .pointer_override
                             .image_clip(glyph_index, clip_rect.as_ref());
-                        super::pointer_override::clip_new_rect_vertices(
-                            &mut relief_vertices,
-                            relief_start,
-                            relief_clip.as_ref(),
-                        );
+                        for edge in edges {
+                            super::pointer_override::append_clipped_relief_edge(
+                                &mut relief_vertices,
+                                edge,
+                                relief_clip.as_ref(),
+                            );
+                        }
                     }
                 }
             }
