@@ -1060,6 +1060,63 @@ impl WgpuRenderer {
         }
     }
 
+    pub(super) fn add_face_paint_background(
+        &self,
+        vertices: &mut Vec<RectVertex>,
+        face: Option<&Face>,
+        fallback: &Color,
+        paint: super::pointer_override::FacePaint,
+        offset_x: f32,
+        offset_y: f32,
+    ) {
+        let domain = paint.domain();
+        let start = vertices.len();
+        self.add_face_background_rect(
+            vertices,
+            face,
+            fallback,
+            domain.x + offset_x,
+            domain.y + offset_y,
+            domain.width,
+            domain.height,
+            None,
+        );
+        let clip = paint.clip().map(|clip| Rect {
+            x: clip.x + offset_x,
+            y: clip.y + offset_y,
+            ..clip
+        });
+        super::pointer_override::clip_new_rect_vertices(vertices, start, clip.as_ref());
+    }
+
+    pub(super) fn add_stipple_paint(
+        &self,
+        vertices: &mut Vec<RectVertex>,
+        fg: &Color,
+        pattern: &neomacs_display_protocol::StipplePattern,
+        paint: super::pointer_override::FacePaint,
+        offset_x: f32,
+        offset_y: f32,
+    ) {
+        let domain = paint.domain();
+        let start = vertices.len();
+        self.render_stipple_pattern(
+            vertices,
+            domain.x + offset_x,
+            domain.y + offset_y,
+            domain.width,
+            domain.height,
+            fg,
+            pattern,
+        );
+        let clip = paint.clip().map(|clip| Rect {
+            x: clip.x + offset_x,
+            y: clip.y + offset_y,
+            ..clip
+        });
+        super::pointer_override::clip_new_rect_vertices(vertices, start, clip.as_ref());
+    }
+
     /// Render frame glyphs to a texture view
     ///
     /// `surface_width` and `surface_height` should be the actual surface dimensions

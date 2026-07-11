@@ -8,8 +8,38 @@ use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
 #[test]
+fn adjacent_box_paints_merge_across_interleaved_complements() {
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan, push_box_span};
+    use neomacs_display_protocol::types::Rect;
+
+    let face_id = FaceId::new(9);
+    let clip = Some(Rect::new(0.0, 0.0, 20.0, 10.0));
+    let make = |x, face_id, clip| BoxSpan {
+        x,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+        face_id,
+        row_role: GlyphRowRole::Text,
+        bg: Some(Color::BLACK),
+        clip,
+        policy: BoxPaintPolicy::Rounded,
+    };
+    let mut spans = Vec::new();
+    push_box_span(&mut spans, make(0.0, face_id, clip));
+    push_box_span(
+        &mut spans,
+        make(0.0, FaceId::new(1), Some(Rect::new(20.0, 0.0, 10.0, 10.0))),
+    );
+    push_box_span(&mut spans, make(10.0, face_id, clip));
+
+    let alternate = spans.iter().find(|span| span.face_id == face_id).unwrap();
+    assert_eq!((alternate.x, alternate.width), (0.0, 20.0));
+}
+
+#[test]
 fn rounded_box_background_suppression_matches_exact_face_paint() {
-    use crate::renderer::frame_pass::BoxSpan;
+    use crate::renderer::frame_pass::{BoxPaintPolicy, BoxSpan};
     use neomacs_display_protocol::face::{BoxType, Face};
     use neomacs_display_protocol::types::Rect;
     use std::collections::HashMap;
@@ -29,6 +59,7 @@ fn rounded_box_background_suppression_matches_exact_face_paint() {
         row_role: GlyphRowRole::Text,
         bg: Some(Color::BLACK),
         clip: Some(Rect::new(10.0, 0.0, 10.0, 10.0)),
+        policy: BoxPaintPolicy::Rounded,
     }];
 
     let alternate_clip = Rect::new(10.0, 0.0, 10.0, 10.0);

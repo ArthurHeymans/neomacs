@@ -12,7 +12,9 @@ use neomacs_display_protocol::types::{Color, FaceId};
 
 use super::super::vertex::{RectVertex, RoundedRectVertex};
 use super::WgpuRenderer;
-use super::frame_pass::{BoxSpan, BoxSpanSet, FrameParams, FramePassCtx};
+use super::frame_pass::{
+    BoxPaintPolicy, BoxSpan, BoxSpanSet, FrameParams, FramePassCtx, push_box_span,
+};
 
 impl WgpuRenderer {
     /// Merge adjacent boxed glyphs into spans.
@@ -41,6 +43,7 @@ impl WgpuRenderer {
             for paint in params.pointer_override.face_paints(
                 glyph_index,
                 base_face_id,
+                neomacs_display_protocol::Rect::new(gx, gy, gw, gh),
                 glyph.clip_rect().as_ref(),
             ) {
                 let gface_id = paint.face_id();
@@ -56,47 +59,14 @@ impl WgpuRenderer {
                     _ => continue,
                 };
 
-                // Check if this glyph's face has rounded corners
-                let is_rounded = faces
-                    .get(&gface_id)
-                    .map(|f| f.box_corner_radius > 0)
-                    .unwrap_or(false);
-
-                let merged = if let Some(last) = box_spans.last_mut() {
-                    let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
-                    let same_role = last.row_role == g_role;
-                    let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
-                    let same_face = last.face_id == gface_id;
-                    let same_clip = last.clip == effective_clip;
-
-                    // Merge rules:
-                    // - Rounded boxes: only merge same face_id (keep separate boxes)
-                    // - Sharp overlay boxes (mode-line): merge across face_ids (continuity)
-                    // - Sharp non-overlay boxes (content): only merge same face_id
-                    let last_is_rounded = faces
-                        .get(&last.face_id)
-                        .map(|f| f.box_corner_radius > 0)
-                        .unwrap_or(false);
-                    let face_ok = if is_rounded || last_is_rounded {
-                        same_face // rounded: strict same-face merge
-                    } else if g_role.is_chrome() {
-                        true // sharp overlay: merge across faces (mode-line)
-                    } else {
-                        same_face // sharp non-overlay: strict same-face merge
-                    };
-
-                    if same_row && same_role && adjacent && face_ok && same_clip {
-                        last.width = gx + gw - last.x;
-                        true
-                    } else {
-                        false
-                    }
+                let policy = if faces[&gface_id].box_corner_radius > 0 {
+                    BoxPaintPolicy::Rounded
                 } else {
-                    false
+                    BoxPaintPolicy::Sharp
                 };
-
-                if !merged {
-                    box_spans.push(BoxSpan {
+                push_box_span(
+                    &mut box_spans,
+                    BoxSpan {
                         x: gx,
                         y: gy,
                         width: gw,
@@ -105,8 +75,9 @@ impl WgpuRenderer {
                         row_role: g_role,
                         bg: g_bg,
                         clip: effective_clip,
-                    });
-                }
+                        policy,
+                    },
+                );
             }
         }
         BoxSpanSet { spans: box_spans }
@@ -195,28 +166,18 @@ impl WgpuRenderer {
             } = glyph
                 && !row_role.is_chrome()
             {
-                for paint in
-                    params
-                        .pointer_override
-                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
-                {
+                for paint in params.pointer_override.face_paints(
+                    glyph_index,
+                    *face_id,
+                    neomacs_display_protocol::Rect::new(*x, *y, *width, *height),
+                    clip_rect.as_ref(),
+                ) {
                     let face_id = paint.face_id();
                     let effective_clip = paint.clip();
-                    let ya = if has_line_anims {
-                        *y + self.line_y_offset(*x, *y)
+                    let paint_offset_y = if has_line_anims {
+                        self.line_y_offset(*x, *y)
                     } else {
-                        *y
-                    };
-                    let Some((draw_x, draw_y, draw_w, draw_h)) =
-                        super::pointer_override::clip_geometry(
-                            *x,
-                            ya,
-                            *width,
-                            *height,
-                            effective_clip.as_ref(),
-                        )
-                    else {
-                        continue;
+                        0.0
                     };
                     if Self::paint_has_rounded_box_span(
                         *x,
@@ -232,29 +193,26 @@ impl WgpuRenderer {
                         continue;
                     }
                     let face = faces.get(&face_id);
-                    self.add_face_background_rect(
+                    self.add_face_paint_background(
                         &mut non_overlay_rect_vertices,
                         face,
                         bg,
-                        draw_x,
-                        draw_y,
-                        draw_w,
-                        draw_h,
-                        effective_clip.as_ref(),
+                        paint,
+                        0.0,
+                        paint_offset_y,
                     );
                     // Overlay stipple pattern if present
                     if *stipple_id > 0
                         && let (Some(fg), Some(pat)) =
                             (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
                     {
-                        self.render_stipple_pattern(
+                        self.add_stipple_paint(
                             &mut non_overlay_rect_vertices,
-                            draw_x,
-                            draw_y,
-                            draw_w,
-                            draw_h,
                             fg,
                             pat,
+                            paint,
+                            0.0,
+                            paint_offset_y,
                         );
                     }
                 }
@@ -275,13 +233,19 @@ impl WgpuRenderer {
             } = glyph
                 && !row_role.is_chrome()
             {
-                for paint in
-                    params
-                        .pointer_override
-                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
-                {
+                for paint in params.pointer_override.face_paints(
+                    glyph_index,
+                    *face_id,
+                    neomacs_display_protocol::Rect::new(*x, *y, *width, *height),
+                    clip_rect.as_ref(),
+                ) {
                     let face_id = paint.face_id();
                     let effective_clip = paint.clip();
+                    let paint_offset_y = if has_line_anims {
+                        self.line_y_offset(*x, *y)
+                    } else {
+                        0.0
+                    };
                     // The per-glyph background used to be inlined as
                     // `Some(face.background)` by materialization, so resolving
                     // it from the face reproduces that value exactly.
@@ -300,22 +264,6 @@ impl WgpuRenderer {
                         .is_some();
                     let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
                     if bg.is_some() || has_gradient || has_solid_bg {
-                        let ya = if has_line_anims {
-                            *y + self.line_y_offset(*x, *y)
-                        } else {
-                            *y
-                        };
-                        let Some((draw_x, draw_y, draw_w, draw_h)) =
-                            super::pointer_override::clip_geometry(
-                                *x,
-                                ya,
-                                *width,
-                                *height,
-                                effective_clip.as_ref(),
-                            )
-                        else {
-                            continue;
-                        };
                         if Self::paint_has_rounded_box_span(
                             *x,
                             *y,
@@ -333,15 +281,13 @@ impl WgpuRenderer {
                             face.map(|resolved| resolved.background)
                                 .unwrap_or(Color::TRANSPARENT),
                         );
-                        self.add_face_background_rect(
+                        self.add_face_paint_background(
                             &mut non_overlay_rect_vertices,
                             face,
                             &fallback,
-                            draw_x,
-                            draw_y,
-                            draw_w,
-                            draw_h,
-                            effective_clip.as_ref(),
+                            paint,
+                            0.0,
+                            paint_offset_y,
                         );
                     }
                 }
@@ -597,24 +543,14 @@ impl WgpuRenderer {
             } = glyph
                 && row_role.is_chrome()
             {
-                for paint in
-                    params
-                        .pointer_override
-                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
-                {
+                for paint in params.pointer_override.face_paints(
+                    glyph_index,
+                    *face_id,
+                    neomacs_display_protocol::Rect::new(*x, *y, *width, *height),
+                    clip_rect.as_ref(),
+                ) {
                     let face_id = paint.face_id();
                     let effective_clip = paint.clip();
-                    let Some((draw_x, draw_y, draw_w, draw_h)) =
-                        super::pointer_override::clip_geometry(
-                            *x,
-                            *y,
-                            *width,
-                            *height,
-                            effective_clip.as_ref(),
-                        )
-                    else {
-                        continue;
-                    };
                     if Self::paint_has_rounded_box_span(
                         *x,
                         *y,
@@ -629,28 +565,25 @@ impl WgpuRenderer {
                         continue;
                     }
                     let face = faces.get(&face_id);
-                    self.add_face_background_rect(
+                    self.add_face_paint_background(
                         &mut overlay_rect_vertices,
                         face,
                         bg,
-                        draw_x,
-                        draw_y,
-                        draw_w,
-                        draw_h,
-                        effective_clip.as_ref(),
+                        paint,
+                        0.0,
+                        0.0,
                     );
                     if *stipple_id > 0
                         && let (Some(fg), Some(pat)) =
                             (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
                     {
-                        self.render_stipple_pattern(
+                        self.add_stipple_paint(
                             &mut overlay_rect_vertices,
-                            draw_x,
-                            draw_y,
-                            draw_w,
-                            draw_h,
                             fg,
                             pat,
+                            paint,
+                            0.0,
+                            0.0,
                         );
                     }
                 }
@@ -671,11 +604,12 @@ impl WgpuRenderer {
             } = glyph
                 && row_role.is_chrome()
             {
-                for paint in
-                    params
-                        .pointer_override
-                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
-                {
+                for paint in params.pointer_override.face_paints(
+                    glyph_index,
+                    *face_id,
+                    neomacs_display_protocol::Rect::new(*x, *y, *width, *height),
+                    clip_rect.as_ref(),
+                ) {
                     let face_id = paint.face_id();
                     let effective_clip = paint.clip();
                     // Background was inlined as `Some(face.background)`.
@@ -694,17 +628,6 @@ impl WgpuRenderer {
                         .is_some();
                     let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
                     if bg.is_some() || has_gradient || has_solid_bg {
-                        let Some((draw_x, draw_y, draw_w, draw_h)) =
-                            super::pointer_override::clip_geometry(
-                                *x,
-                                *y,
-                                *width,
-                                *height,
-                                effective_clip.as_ref(),
-                            )
-                        else {
-                            continue;
-                        };
                         if Self::paint_has_rounded_box_span(
                             *x,
                             *y,
@@ -722,15 +645,13 @@ impl WgpuRenderer {
                             face.map(|resolved| resolved.background)
                                 .unwrap_or(Color::TRANSPARENT),
                         );
-                        self.add_face_background_rect(
+                        self.add_face_paint_background(
                             &mut overlay_rect_vertices,
                             face,
                             &fallback,
-                            draw_x,
-                            draw_y,
-                            draw_w,
-                            draw_h,
-                            effective_clip.as_ref(),
+                            paint,
+                            0.0,
+                            0.0,
                         );
                     }
                 }

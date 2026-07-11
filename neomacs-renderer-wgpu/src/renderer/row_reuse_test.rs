@@ -10,7 +10,7 @@
 
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Px;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
 
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
@@ -378,6 +378,7 @@ fn base_ctx<'a>(
         atlas_generation: 1,
         cursor_row: None,
         global_effects_active: false,
+        invalidated_rows: None,
         window_origins: origins,
         allow_store: true,
     }
@@ -809,6 +810,28 @@ fn global_effects_disable_reuse_and_capture() {
     assert_eq!(ran.stats.reuse_bails, 4);
     // Effect-polluted vertices must never enter the cache.
     assert!(ran.captures.is_empty());
+}
+
+#[test]
+fn pointer_paint_invalidates_only_the_intersecting_row() {
+    let glyphs = two_window_glyphs(0.0);
+    let origins = origins();
+    let cache = warm_cache(&glyphs, &origins);
+    let damage = all_rows(|_, _| RowDamage::Reused);
+    let invalidated = HashSet::from([RowKey {
+        frame_id: FRAME,
+        window_id: 10,
+        row: 0,
+        overlay: false,
+    }]);
+    let mut ctx = base_ctx(Some(&damage), &origins);
+    ctx.invalidated_rows = Some(&invalidated);
+
+    let ran = run_pass(&glyphs, &ctx, &cache, false);
+    assert_eq!(ran.stats.rows_reused_verbatim, 3);
+    assert_eq!(ran.stats.rows_tessellated, 1);
+    assert_eq!(ran.stats.reuse_bails, 1);
+    assert_eq!(ran.captures.len(), 3, "pointer-painted row is not cached");
 }
 
 #[test]

@@ -1,13 +1,31 @@
 use super::{
-    PointerOverrideResolver, clip_glyph_quad, clip_new_rect_vertices, clip_new_rounded_vertices,
-    relief_edges,
+    PointerOverrideResolver, PrimitivePaintPlan, clip_glyph_quad, clip_new_rect_vertices,
+    clip_new_rounded_vertices, relief_edges,
 };
 use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex};
 use neomacs_display_protocol::{
     Color, DisplayWindowId, Face, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, GlyphRowRole,
     PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode,
-    PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+    PointerImageRelief, PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan,
+    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
 };
+
+fn relief(pressed: bool) -> PointerImageRelief {
+    let light = Color::new(0.85, 0.85, 0.85, 1.0);
+    let dark = Color::new(0.25, 0.25, 0.25, 1.0);
+    let (top_left, bottom_right) = if pressed {
+        (dark, light)
+    } else {
+        (light, dark)
+    };
+    PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        1.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+    )
+}
 
 fn frame_with_glyph_appearance(
     hover: PointerDrawMode,
@@ -79,6 +97,50 @@ fn pointer_override_selects_hover_and_pressed_draw_modes() {
 }
 
 #[test]
+fn inactive_primitive_paint_plan_is_fixed_capacity_and_keeps_paint_domain() {
+    let mut frame = FrameGlyphBuffer::with_size(40.0, 20.0);
+    frame.add_char('x', 4.0, 3.0, 12.0, 10.0, 8.0, false);
+    let resolver = PointerOverrideResolver::new(&frame, None);
+    let domain = neomacs_display_protocol::Rect::new(4.0, 3.0, 12.0, 10.0);
+    let plan = resolver.face_paints(0, FaceId::new(0), domain, None);
+
+    assert!(!std::mem::needs_drop::<PrimitivePaintPlan>());
+    let paints = plan.into_iter().collect::<Vec<_>>();
+    assert_eq!(paints.len(), 1);
+    assert_eq!(paints[0].domain(), domain);
+    assert_eq!(paints[0].clip(), None);
+}
+
+#[test]
+fn active_span_invalidates_only_glyph_ranges_intersecting_its_clip() {
+    let face_id = FaceId::new(2);
+    let mut frame = FrameGlyphBuffer::with_size(40.0, 30.0);
+    frame.faces.insert(face_id, Face::new(face_id));
+    frame.add_char('a', 0.0, 0.0, 10.0, 10.0, 8.0, false);
+    frame.add_char('b', 0.0, 15.0, 10.0, 10.0, 8.0, false);
+    frame
+        .install_presented_pointer(
+            vec![],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Glyph,
+                    0,
+                    2,
+                    FrameRect::new(0.0, 0.0, 10.0, 10.0).unwrap(),
+                )],
+                PointerDrawMode::Face(face_id),
+                PointerDrawMode::Face(face_id),
+            )],
+        )
+        .unwrap();
+    let resolver =
+        PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
+
+    assert!(resolver.affects_glyph_range(&frame.glyphs, 0..1));
+    assert!(!resolver.affects_glyph_range(&frame.glyphs, 1..2));
+}
+
+#[test]
 fn face_override_changes_materialized_face_without_changing_glyph_geometry() {
     let frame = frame_with_glyph_appearance(
         PointerDrawMode::Face(FaceId::new(2)),
@@ -144,8 +206,8 @@ fn image_override_selects_raised_and_sunken_relief() {
                     1,
                     FrameRect::new(3.0, 5.0, 20.0, 18.0).unwrap(),
                 )],
-                PointerDrawMode::ImageRaised,
-                PointerDrawMode::ImageSunken,
+                PointerDrawMode::ImageRelief(relief(false)),
+                PointerDrawMode::ImageRelief(relief(true)),
             )],
         )
         .unwrap();
@@ -156,20 +218,24 @@ fn image_override_selects_raised_and_sunken_relief() {
         PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Pressed)));
     assert_eq!(
         hover.image_override(0).unwrap().mode(),
-        PointerDrawMode::ImageRaised
+        PointerDrawMode::ImageRelief(relief(false))
     );
     assert_eq!(
         pressed.image_override(0).unwrap().mode(),
-        PointerDrawMode::ImageSunken
+        PointerDrawMode::ImageRelief(relief(true))
     );
 }
 
 #[test]
 fn image_relief_flips_light_and_dark_edges_inside_unchanged_quad() {
-    let raised =
-        relief_edges(3.0, 5.0, 20.0, 18.0, PointerDrawMode::ImageRaised).expect("raised relief");
-    let sunken =
-        relief_edges(3.0, 5.0, 20.0, 18.0, PointerDrawMode::ImageSunken).expect("sunken relief");
+    let raised = relief_edges(3.0, 5.0, 20.0, 18.0, relief(false))
+        .expect("raised relief")
+        .into_iter()
+        .collect::<Vec<_>>();
+    let sunken = relief_edges(3.0, 5.0, 20.0, 18.0, relief(true))
+        .expect("sunken relief")
+        .into_iter()
+        .collect::<Vec<_>>();
 
     assert_eq!(raised[0].bounds(), (3.0, 5.0, 20.0, 1.0)); // top
     assert_eq!(raised[1].bounds(), (3.0, 5.0, 1.0, 18.0)); // left
@@ -187,6 +253,77 @@ fn image_relief_flips_light_and_dark_edges_inside_unchanged_quad() {
         before.map(|vertex| (vertex.position, vertex.tex_coords)),
         after.map(|vertex| (vertex.position, vertex.tex_coords)),
         "relief never changes the image quad",
+    );
+}
+
+#[test]
+fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection() {
+    let top_left = Color::RED;
+    let bottom_right = Color::BLUE;
+    let spec = PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        2.0,
+        PointerReliefMargins::new(1.0, 2.0, 3.0, 4.0),
+        PointerReliefEdges::new(true, false, false, true),
+    );
+    let edges = relief_edges(10.0, 20.0, 30.0, 24.0, spec)
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<_>>();
+    assert_eq!(edges.len(), 2);
+    assert_eq!(edges[0].bounds(), (11.0, 22.0, 26.0, 2.0));
+    assert_eq!(edges[0].color(), top_left);
+    assert_eq!(edges[1].bounds(), (35.0, 22.0, 2.0, 18.0));
+    assert_eq!(edges[1].color(), bottom_right);
+
+    let vertical_only = PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        2.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(false, true, false, true),
+    );
+    let mut vertices = Vec::new();
+    for edge in relief_edges(0.0, 0.0, 30.0, 10.0, vertical_only).unwrap() {
+        let (x, y, width, height) = edge.bounds();
+        let color = edge.color();
+        let c = [color.r, color.g, color.b, color.a];
+        vertices.extend_from_slice(&[
+            RectVertex {
+                position: [x, y],
+                color: c,
+            },
+            RectVertex {
+                position: [x + width, y],
+                color: c,
+            },
+            RectVertex {
+                position: [x + width, y + height],
+                color: c,
+            },
+            RectVertex {
+                position: [x, y],
+                color: c,
+            },
+            RectVertex {
+                position: [x + width, y + height],
+                color: c,
+            },
+            RectVertex {
+                position: [x, y + height],
+                color: c,
+            },
+        ]);
+    }
+    clip_new_rect_vertices(
+        &mut vertices,
+        0,
+        Some(&neomacs_display_protocol::Rect::new(10.0, 0.0, 10.0, 10.0)),
+    );
+    assert!(
+        vertices.is_empty(),
+        "subsection clip must not invent left/right edges"
     );
 }
 
@@ -300,7 +437,16 @@ fn partial_face_override_replaces_inside_clip_and_keeps_base_only_in_complement(
     );
     let resolver =
         PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
-    let paints = resolver.face_paints(0, FaceId::new(0), frame.glyphs[0].clip_rect().as_ref());
+    let (x, y, width, height) = frame.glyphs[0].cell_rect().unwrap();
+    let plan = resolver.face_paints(
+        0,
+        FaceId::new(0),
+        neomacs_display_protocol::Rect::new(x, y, width, height),
+        frame.glyphs[0].clip_rect().as_ref(),
+    );
+    assert!(!std::mem::needs_drop::<PrimitivePaintPlan>());
+    assert!(std::mem::size_of::<PrimitivePaintPlan>() <= 5 * 40);
+    let paints = plan.into_iter().collect::<Vec<_>>();
 
     assert_eq!(paints.last().unwrap().face_id(), FaceId::new(2));
     assert_eq!(
@@ -320,4 +466,31 @@ fn partial_face_override_replaces_inside_clip_and_keeps_base_only_in_complement(
             || clip.y + clip.height <= override_clip.y
             || clip.y >= override_clip.y + override_clip.height
     }));
+    assert!(paints.iter().all(|paint| {
+        paint.domain() == neomacs_display_protocol::Rect::new(x, y, width, height)
+    }));
+}
+
+#[test]
+fn complement_clips_do_not_reanchor_gradient_or_stipple_paint_coordinates() {
+    let frame = frame_with_glyph_appearance(
+        PointerDrawMode::Face(FaceId::new(2)),
+        PointerDrawMode::Face(FaceId::new(2)),
+    );
+    let resolver =
+        PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
+    let domain = neomacs_display_protocol::Rect::new(12.0, 4.0, 17.0, 20.0);
+    let paints = resolver
+        .face_paints(
+            0,
+            FaceId::new(0),
+            domain,
+            frame.glyphs[0].clip_rect().as_ref(),
+        )
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    assert!(paints.len() > 1);
+    assert!(paints.iter().all(|paint| paint.domain() == domain));
+    assert!(paints.iter().any(|paint| paint.clip() != paints[0].clip()));
 }

@@ -5,7 +5,7 @@ use neomacs_display_protocol::Color;
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::{
     FaceId, FrameGlyphBuffer, FrameRect, PointerAppearancePhase, PointerAppearanceSelection,
-    PointerDrawMode, PresentedPrimitiveKind,
+    PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
 };
 #[cfg(test)]
 use neomacs_display_protocol::{FrameGlyph, MaterializedFaceData};
@@ -59,14 +59,13 @@ impl<'a> ResolvedGlyphPaint<'a> {
 /// glyph, its source slot, or any geometry used by layout.
 pub(super) struct PointerOverrideResolver {
     overrides: Vec<Option<(PresentedPrimitiveKind, PrimitivePointerOverride)>>,
-    active: bool,
-    frame_bounds: Rect,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct FacePaint {
     face_id: FaceId,
-    clip: Option<Rect>,
+    domain: Rect,
+    output_clip: Option<Rect>,
 }
 
 impl FacePaint {
@@ -75,7 +74,40 @@ impl FacePaint {
     }
 
     pub(super) const fn clip(self) -> Option<Rect> {
-        self.clip
+        self.output_clip
+    }
+
+    pub(super) const fn domain(self) -> Rect {
+        self.domain
+    }
+}
+
+/// Allocation-free replacement plan for one primitive. A rectangle minus one
+/// rectangle has at most four complement pieces plus the alternate paint.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct PrimitivePaintPlan {
+    paints: [Option<FacePaint>; 5],
+}
+
+impl PrimitivePaintPlan {
+    fn one(paint: FacePaint) -> Self {
+        let mut paints = [None; 5];
+        paints[0] = Some(paint);
+        Self { paints }
+    }
+
+    fn push(&mut self, paint: FacePaint) {
+        let slot = self.paints.iter_mut().find(|slot| slot.is_none());
+        *slot.expect("rectangle complement plan capacity") = Some(paint);
+    }
+}
+
+impl IntoIterator for PrimitivePaintPlan {
+    type Item = FacePaint;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<FacePaint>, 5>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.paints.into_iter().flatten()
     }
 }
 
@@ -85,11 +117,9 @@ impl PointerOverrideResolver {
         selection: Option<PointerAppearanceSelection>,
     ) -> Self {
         let mut overrides = Vec::new();
-        let mut active = false;
         if let Some(selection) = selection
             && let Some(appearance) = frame.presented_pointer().appearance(selection.appearance())
         {
-            active = true;
             overrides.resize(frame.glyphs.len(), None);
             let mode = match selection.phase() {
                 PointerAppearancePhase::Hover => appearance.hover(),
@@ -116,11 +146,7 @@ impl PointerOverrideResolver {
                 }
             }
         }
-        Self {
-            overrides,
-            active,
-            frame_bounds: Rect::new(0.0, 0.0, frame.width, frame.height),
-        }
+        Self { overrides }
     }
 
     pub(super) fn glyph_override(&self, index: usize) -> Option<PrimitivePointerOverride> {
@@ -149,41 +175,43 @@ impl PointerOverrideResolver {
         &self,
         index: usize,
         base_face: FaceId,
+        primitive_bounds: Rect,
         original_clip: Option<&Rect>,
-    ) -> Vec<FacePaint> {
+    ) -> PrimitivePaintPlan {
+        let base = FacePaint {
+            face_id: base_face,
+            domain: primitive_bounds,
+            output_clip: original_clip.copied(),
+        };
         let Some(override_paint) = self.glyph_override(index) else {
-            return vec![FacePaint {
-                face_id: base_face,
-                clip: original_clip.cloned(),
-            }];
+            return PrimitivePaintPlan::one(base);
         };
         let PointerDrawMode::Face(override_face) = override_paint.mode() else {
-            return vec![FacePaint {
-                face_id: base_face,
-                clip: original_clip.cloned(),
-            }];
+            return PrimitivePaintPlan::one(base);
         };
         let domain = original_clip
-            .cloned()
-            .unwrap_or_else(|| self.frame_bounds.clone());
+            .and_then(|clip| intersect_rect(&primitive_bounds, clip))
+            .unwrap_or(primitive_bounds);
         let raw = override_paint.clip();
         let raw = Rect::new(raw.x(), raw.y(), raw.width(), raw.height());
-        let Some(cut) = intersect_rect(&domain, &raw) else {
-            return vec![FacePaint {
-                face_id: base_face,
-                clip: original_clip.cloned(),
-            }];
+        let semantic_clip = original_clip
+            .and_then(|clip| intersect_rect(clip, &raw))
+            .unwrap_or(raw);
+        let Some(cut) = intersect_rect(&domain, &semantic_clip) else {
+            return PrimitivePaintPlan::one(base);
         };
-        let mut paints = rect_complement(&domain, &cut)
-            .into_iter()
-            .map(|clip| FacePaint {
+        let mut paints = PrimitivePaintPlan { paints: [None; 5] };
+        for clip in rect_complement(&domain, &cut).into_iter().flatten() {
+            paints.push(FacePaint {
                 face_id: base_face,
-                clip: Some(clip),
-            })
-            .collect::<Vec<_>>();
+                domain: primitive_bounds,
+                output_clip: Some(clip),
+            });
+        }
         paints.push(FacePaint {
             face_id: override_face,
-            clip: Some(cut),
+            domain: primitive_bounds,
+            output_clip: Some(semantic_clip),
         });
         paints
     }
@@ -213,8 +241,29 @@ impl PointerOverrideResolver {
         })
     }
 
-    pub(super) const fn is_active(&self) -> bool {
-        self.active
+    pub(super) fn affects_glyph_range(
+        &self,
+        glyphs: &[neomacs_display_protocol::FrameGlyph],
+        range: std::ops::Range<usize>,
+    ) -> bool {
+        let Some(entries) = self.overrides.get(range.clone()) else {
+            return false;
+        };
+        let Some(glyphs) = glyphs.get(range) else {
+            return false;
+        };
+        entries.iter().zip(glyphs).any(|(entry, glyph)| {
+            let Some((PresentedPrimitiveKind::Glyph, paint)) = entry else {
+                return false;
+            };
+            let Some((x, y, width, height)) = glyph.cell_rect() else {
+                return false;
+            };
+            let bounds = Rect::new(x, y, width, height);
+            let clip = paint.clip();
+            let clip = Rect::new(clip.x(), clip.y(), clip.width(), clip.height());
+            intersect_rect(&bounds, &clip).is_some()
+        })
     }
 
     #[cfg(test)]
@@ -272,33 +321,37 @@ fn intersect_rect(left: &Rect, right: &Rect) -> Option<Rect> {
     })
 }
 
-fn rect_complement(domain: &Rect, cut: &Rect) -> Vec<Rect> {
-    let mut out = Vec::with_capacity(4);
+fn rect_complement(domain: &Rect, cut: &Rect) -> [Option<Rect>; 4] {
+    let mut out = [None; 4];
+    let mut len = 0;
     let domain_right = domain.x + domain.width;
     let domain_bottom = domain.y + domain.height;
     let cut_right = cut.x + cut.width;
     let cut_bottom = cut.y + cut.height;
     if cut.y > domain.y {
-        out.push(Rect::new(
+        out[len] = Some(Rect::new(
             domain.x,
             domain.y,
             domain.width,
             cut.y - domain.y,
         ));
+        len += 1;
     }
     if cut_bottom < domain_bottom {
-        out.push(Rect::new(
+        out[len] = Some(Rect::new(
             domain.x,
             cut_bottom,
             domain.width,
             domain_bottom - cut_bottom,
         ));
+        len += 1;
     }
     if cut.x > domain.x {
-        out.push(Rect::new(domain.x, cut.y, cut.x - domain.x, cut.height));
+        out[len] = Some(Rect::new(domain.x, cut.y, cut.x - domain.x, cut.height));
+        len += 1;
     }
     if cut_right < domain_right {
-        out.push(Rect::new(
+        out[len] = Some(Rect::new(
             cut_right,
             cut.y,
             domain_right - cut_right,
@@ -333,12 +386,12 @@ pub(super) fn clip_new_rect_vertices(
     clip: Option<&Rect>,
 ) {
     let Some(clip) = clip else { return };
-    let generated: Vec<[RectVertex; 6]> = vertices[start..]
-        .chunks_exact(6)
-        .filter_map(|chunk| chunk.try_into().ok())
-        .collect();
-    vertices.truncate(start);
-    for rect in generated {
+    let original_len = vertices.len();
+    let mut write = start;
+    for read in (start..original_len).step_by(6) {
+        let Ok(rect) = <[RectVertex; 6]>::try_from(&vertices[read..read + 6]) else {
+            break;
+        };
         let min_x = rect
             .iter()
             .map(|v| v.position[0])
@@ -361,7 +414,7 @@ pub(super) fn clip_new_rect_vertices(
             continue;
         };
         let color = rect[0].color;
-        vertices.extend_from_slice(&[
+        let clipped = [
             RectVertex {
                 position: [x, y],
                 color,
@@ -386,8 +439,11 @@ pub(super) fn clip_new_rect_vertices(
                 position: [x, y + height],
                 color,
             },
-        ]);
+        ];
+        vertices[write..write + 6].copy_from_slice(&clipped);
+        write += 6;
     }
+    vertices.truncate(write);
 }
 
 pub(super) fn clip_new_rounded_vertices(
@@ -396,12 +452,12 @@ pub(super) fn clip_new_rounded_vertices(
     clip: Option<&Rect>,
 ) {
     let Some(clip) = clip else { return };
-    let generated: Vec<[RoundedRectVertex; 6]> = vertices[start..]
-        .chunks_exact(6)
-        .filter_map(|chunk| chunk.try_into().ok())
-        .collect();
-    vertices.truncate(start);
-    for quad in generated {
+    let original_len = vertices.len();
+    let mut write = start;
+    for read in (start..original_len).step_by(6) {
+        let Ok(quad) = <[RoundedRectVertex; 6]>::try_from(&vertices[read..read + 6]) else {
+            break;
+        };
         let min_x = quad
             .iter()
             .map(|v| v.position[0])
@@ -424,21 +480,22 @@ pub(super) fn clip_new_rounded_vertices(
             continue;
         };
         let template = quad[0];
-        vertices.extend_from_slice(
-            &[
-                [x, y],
-                [x + width, y],
-                [x + width, y + height],
-                [x, y],
-                [x + width, y + height],
-                [x, y + height],
-            ]
-            .map(|position| RoundedRectVertex {
-                position,
-                ..template
-            }),
-        );
+        let clipped = [
+            [x, y],
+            [x + width, y],
+            [x + width, y + height],
+            [x, y],
+            [x + width, y + height],
+            [x, y + height],
+        ]
+        .map(|position| RoundedRectVertex {
+            position,
+            ..template
+        });
+        vertices[write..write + 6].copy_from_slice(&clipped);
+        write += 6;
     }
+    vertices.truncate(write);
 }
 
 pub(super) fn clip_glyph_quad(
@@ -552,6 +609,18 @@ pub(super) struct ReliefEdge {
     color: Color,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ReliefEdgePlan([Option<ReliefEdge>; 4]);
+
+impl IntoIterator for ReliefEdgePlan {
+    type Item = ReliefEdge;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<ReliefEdge>, 4>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter().flatten()
+    }
+}
+
 impl ReliefEdge {
     pub(super) const fn bounds(self) -> (f32, f32, f32, f32) {
         (self.x, self.y, self.width, self.height)
@@ -568,49 +637,50 @@ pub(super) fn relief_edges(
     y: f32,
     width: f32,
     height: f32,
-    mode: PointerDrawMode,
-) -> Option<[ReliefEdge; 4]> {
+    relief: PointerImageRelief,
+) -> Option<ReliefEdgePlan> {
+    let margins = relief.margins();
+    let x = x + margins.left();
+    let y = y + margins.top();
+    let width = width - margins.left() - margins.right();
+    let height = height - margins.top() - margins.bottom();
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
-    let light = Color::new(0.85, 0.85, 0.85, 1.0);
-    let dark = Color::new(0.25, 0.25, 0.25, 1.0);
-    let (top_left, bottom_right) = match mode {
-        PointerDrawMode::ImageRaised => (light, dark),
-        PointerDrawMode::ImageSunken => (dark, light),
-        PointerDrawMode::Face(_) => return None,
-    };
-    let edge = 1.0_f32.min(width).min(height);
-    Some([
-        ReliefEdge {
+    let top_left = relief.top_left_color();
+    let bottom_right = relief.bottom_right_color();
+    let edge = relief.thickness().min(width).min(height);
+    let enabled = relief.edges();
+    Some(ReliefEdgePlan([
+        enabled.top().then_some(ReliefEdge {
             x,
             y,
             width,
             height: edge,
             color: top_left,
-        },
-        ReliefEdge {
+        }),
+        enabled.left().then_some(ReliefEdge {
             x,
             y,
             width: edge,
             height,
             color: top_left,
-        },
-        ReliefEdge {
+        }),
+        enabled.bottom().then_some(ReliefEdge {
             x,
             y: y + height - edge,
             width,
             height: edge,
             color: bottom_right,
-        },
-        ReliefEdge {
+        }),
+        enabled.right().then_some(ReliefEdge {
             x: x + width - edge,
             y,
             width: edge,
             height,
             color: bottom_right,
-        },
-    ])
+        }),
+    ]))
 }
 
 #[cfg(test)]

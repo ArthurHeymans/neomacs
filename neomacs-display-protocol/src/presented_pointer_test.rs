@@ -1,7 +1,8 @@
 use crate::{
-    FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
-    PointerAppearanceSelection, PointerDrawMode, PresentedPaintSpan, PresentedPointerAppearance,
-    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
+    Color, FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
+    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefEdges,
+    PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerMap,
+    PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
 };
 
 #[test]
@@ -15,6 +16,73 @@ fn pointer_appearance_selection_carries_only_renderer_safe_identity_and_phase() 
 
 fn rect(x: f32, y: f32, width: f32, height: f32) -> FrameRect {
     FrameRect::new(x, y, width, height).expect("valid test rectangle")
+}
+
+fn image_relief_mode(pressed: bool) -> PointerDrawMode {
+    let light = Color::new(0.85, 0.85, 0.85, 1.0);
+    let dark = Color::new(0.25, 0.25, 0.25, 1.0);
+    let (top_left, bottom_right) = if pressed {
+        (dark, light)
+    } else {
+        (light, dark)
+    };
+    PointerDrawMode::ImageRelief(PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        1.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+    ))
+}
+
+#[test]
+fn pointer_image_relief_carries_only_resolved_renderer_parameters() {
+    let top_left = Color::new(0.9, 0.8, 0.7, 1.0);
+    let bottom_right = Color::new(0.2, 0.3, 0.4, 1.0);
+    let margins = PointerReliefMargins::new(2.0, 3.0, 4.0, 5.0);
+    let edges = PointerReliefEdges::new(true, false, true, false);
+    let relief = PointerImageRelief::new(top_left, bottom_right, 2.5, margins, edges);
+
+    assert_eq!(relief.top_left_color(), top_left);
+    assert_eq!(relief.bottom_right_color(), bottom_right);
+    assert_eq!(relief.thickness(), 2.5);
+    assert_eq!(relief.margins(), margins);
+    assert_eq!(relief.edges(), edges);
+    assert!(edges.top());
+    assert!(!edges.left());
+    assert!(edges.bottom());
+    assert!(!edges.right());
+
+    let mode = PointerDrawMode::ImageRelief(relief);
+    let decoded: PointerDrawMode =
+        serde_json::from_str(&serde_json::to_string(&mode).unwrap()).unwrap();
+    assert_eq!(decoded, mode);
+}
+
+#[test]
+fn presented_pointer_map_rejects_non_renderer_safe_relief_geometry() {
+    let invalid = PointerDrawMode::ImageRelief(PointerImageRelief::new(
+        Color::WHITE,
+        Color::BLACK,
+        f32::NAN,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+    ));
+    let appearance = PresentedPointerAppearance::new(
+        vec![PresentedPaintSpan::new(
+            PresentedPrimitiveKind::Image,
+            8,
+            1,
+            rect(8.0, 0.0, 1.0, 10.0),
+        )],
+        invalid,
+        invalid,
+    );
+
+    assert_eq!(
+        try_map(&[], vec![], vec![appearance]),
+        Err(PresentedPointerMapError::InvalidImageRelief)
+    );
 }
 
 fn try_map(
@@ -56,6 +124,34 @@ fn appearance(face_id: FaceId) -> PresentedPointerAppearance {
         PointerDrawMode::Face(face_id),
         PointerDrawMode::Face(face_id),
     )
+}
+
+#[test]
+fn presented_pointer_map_rejects_overlapping_paint_spans() {
+    let face_id = FaceId::new(7);
+    let overlapping = PresentedPointerAppearance::new(
+        vec![
+            PresentedPaintSpan::new(
+                PresentedPrimitiveKind::Glyph,
+                1,
+                3,
+                rect(0.0, 0.0, 20.0, 10.0),
+            ),
+            PresentedPaintSpan::new(
+                PresentedPrimitiveKind::Glyph,
+                3,
+                2,
+                rect(20.0, 0.0, 20.0, 10.0),
+            ),
+        ],
+        PointerDrawMode::Face(face_id),
+        PointerDrawMode::Face(face_id),
+    );
+
+    assert_eq!(
+        try_map(&[face_id], vec![], vec![overlapping]),
+        Err(PresentedPointerMapError::OverlappingPaintSpans)
+    );
 }
 
 #[test]
@@ -244,8 +340,8 @@ fn presented_pointer_map_rejects_regions_and_clips_outside_the_frame() {
             1,
             rect(0.0, 45.0, 10.0, 6.0),
         )],
-        PointerDrawMode::ImageRaised,
-        PointerDrawMode::ImageSunken,
+        image_relief_mode(false),
+        image_relief_mode(true),
     );
     assert_eq!(
         try_map(&[], vec![], vec![outside_clip]),
@@ -341,8 +437,8 @@ fn presented_pointer_map_deserialization_rejects_intrinsically_invalid_data() {
         "regions":[],
         "appearances":[{
             "paint_spans":[],
-            "hover":"ImageRaised",
-            "pressed":"ImageSunken"
+            "hover":{"Face":7},
+            "pressed":{"Face":7}
         }]
     }"#;
     assert!(serde_json::from_str::<PresentedPointerMap>(empty_appearance).is_err());
@@ -356,8 +452,8 @@ fn presented_pointer_map_deserialization_rejects_intrinsically_invalid_data() {
                 "len":2,
                 "clip":{"x":0.0,"y":0.0,"width":10.0,"height":10.0}
             }],
-            "hover":"ImageRaised",
-            "pressed":"ImageSunken"
+            "hover":{"Face":7},
+            "pressed":{"Face":7}
         }]
     }"#;
     assert!(serde_json::from_str::<PresentedPointerMap>(overflowing_span).is_err());
@@ -497,8 +593,8 @@ fn frame_glyph_buffer_installs_pointer_parts_against_its_actual_snapshot() {
             1,
             rect(0.0, 0.0, 10.0, 10.0),
         )],
-        PointerDrawMode::ImageRaised,
-        PointerDrawMode::ImageSunken,
+        image_relief_mode(false),
+        image_relief_mode(true),
     );
     assert_eq!(
         buffer.install_presented_pointer(vec![], vec![out_of_range]),
@@ -527,8 +623,8 @@ fn frame_glyph_buffer_installs_pointer_parts_against_its_actual_snapshot() {
             1,
             rect(0.0, 0.0, 10.0, 10.0),
         )],
-        PointerDrawMode::ImageRaised,
-        PointerDrawMode::ImageSunken,
+        image_relief_mode(false),
+        image_relief_mode(true),
     );
     assert_eq!(
         buffer.install_presented_pointer(vec![], vec![wrong_kind]),
@@ -550,8 +646,8 @@ fn frame_glyph_buffer_installs_pointer_parts_against_its_actual_snapshot() {
                 rect(10.0, 0.0, 10.0, 10.0),
             ),
         ],
-        PointerDrawMode::ImageRaised,
-        PointerDrawMode::ImageSunken,
+        image_relief_mode(false),
+        image_relief_mode(true),
     );
     buffer
         .install_presented_pointer(vec![], vec![exact_boundary])
@@ -639,8 +735,8 @@ fn presented_pointer_glyph_spans_reject_non_text_frame_primitives() {
             1,
             rect(0.0, 0.0, 10.0, 10.0),
         )],
-        PointerDrawMode::ImageRaised,
-        PointerDrawMode::ImageSunken,
+        image_relief_mode(false),
+        image_relief_mode(true),
     );
 
     assert_eq!(

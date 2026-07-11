@@ -2,7 +2,7 @@
 //! building, batched text draws, text decorations, and box borders, run once
 //! for buffer text and once for overlay (mode-line/echo) text.
 
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{FaceId, Rect};
 use std::collections::HashSet;
 
 use cosmic_text::SubpixelBin;
@@ -125,8 +125,16 @@ impl WgpuRenderer {
         // would bake stale values in, so reuse and capture shut off entirely.
         let global_effects_active = params.has_line_anims
             || !self.fx.text_fade.active.is_empty()
-            || !self.fx.mode_line_fade.active.is_empty()
-            || params.pointer_override.is_active();
+            || !self.fx.mode_line_fade.active.is_empty();
+        let pointer_invalidated_rows = chunks
+            .iter()
+            .filter(|chunk| {
+                params
+                    .pointer_override
+                    .affects_glyph_range(&frame_glyphs.glyphs, chunk.glyphs.clone())
+            })
+            .map(|chunk| chunk.key)
+            .collect::<HashSet<_>>();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
         let ctx = row_reuse::ReusePassCtx {
             damage: params.row_damage,
@@ -136,6 +144,7 @@ impl WgpuRenderer {
             atlas_generation: glyph_atlas.eviction_generation(),
             cursor_row,
             global_effects_active,
+            invalidated_rows: Some(&pointer_invalidated_rows),
             window_origins: &window_origins,
             allow_store: !want_overlay && params.row_damage.is_some(),
         };
@@ -232,6 +241,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 for paint in self.params.pointer_override.face_paints(
                     glyph_index,
                     *face_id,
+                    Rect::new(*x, *y, *width, *height),
                     clip_rect.as_ref(),
                 ) {
                     let face_id = paint.face_id();
@@ -928,7 +938,7 @@ impl WgpuRenderer {
                     y,
                     baseline,
                     width,
-                    height: _,
+                    height,
                     ascent,
                     face_id,
                     row_role,
@@ -943,6 +953,7 @@ impl WgpuRenderer {
                     for paint in ctx.params.pointer_override.face_paints(
                         glyph_index,
                         *face_id,
+                        Rect::new(*x, *y, *width, *height),
                         clip_rect.as_ref(),
                     ) {
                         let face_id = paint.face_id();
@@ -1130,6 +1141,7 @@ impl WgpuRenderer {
                     x,
                     y,
                     width,
+                    height,
                     face_id,
                     row_role,
                     clip_rect,
@@ -1142,6 +1154,7 @@ impl WgpuRenderer {
                     for paint in ctx.params.pointer_override.face_paints(
                         glyph_index,
                         *face_id,
+                        Rect::new(*x, *y, *width, *height),
                         clip_rect.as_ref(),
                     ) {
                         let face_id = paint.face_id();

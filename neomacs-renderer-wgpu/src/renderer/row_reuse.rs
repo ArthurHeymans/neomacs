@@ -371,6 +371,9 @@ pub(super) struct ReusePassCtx<'a> {
     /// Frame-global vertex-mutating effects (text fade, mode-line fade, line
     /// animations) are active: all reuse and capture is disabled.
     pub(super) global_effects_active: bool,
+    /// Rows whose glyphs receive transient pointer paint. Other rows remain
+    /// eligible for ordinary reuse in the same frame.
+    pub(super) invalidated_rows: Option<&'a HashSet<RowKey>>,
     /// Window id → frame-absolute bounds origin bits, from `window_infos`.
     pub(super) window_origins: &'a HashMap<i64, (u32, u32)>,
     /// Capture rows for future reuse (false for the chrome/overlay pass —
@@ -421,7 +424,13 @@ fn classify(chunk: &RowChunk, ctx: &ReusePassCtx<'_>, cache: &RowReuseCache) -> 
 
     // From here on the layout says the row is reusable; every early return is
     // a counted bail.
-    if ctx.global_effects_active || !chunk.cacheable || info.row_hash == 0 {
+    if ctx.global_effects_active
+        || ctx
+            .invalidated_rows
+            .is_some_and(|rows| rows.contains(&chunk.key))
+        || !chunk.cacheable
+        || info.row_hash == 0
+    {
         return tess(true);
     }
     if ctx.cursor_row == Some((chunk.key.window_id, chunk.key.row)) {
@@ -552,7 +561,13 @@ fn capture_after_tessellation(
     out: &RowStreams,
     marks: (usize, usize, usize, usize),
 ) -> Option<(RowKey, CachedRow)> {
-    if !ctx.allow_store || ctx.global_effects_active || !chunk.cacheable {
+    if !ctx.allow_store
+        || ctx.global_effects_active
+        || ctx
+            .invalidated_rows
+            .is_some_and(|rows| rows.contains(&chunk.key))
+        || !chunk.cacheable
+    {
         return None;
     }
     if ctx.cursor_row == Some((chunk.key.window_id, chunk.key.row)) {

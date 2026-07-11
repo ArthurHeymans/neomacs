@@ -240,8 +240,8 @@ fn presented_pointer_map_rejects_conflicting_modes_for_one_appearance_range() {
                 1,
                 rect(0.0, 10.0, 10.0, 10.0),
             ),
-            PointerDrawMode::ImageRaised,
-            PointerDrawMode::ImageSunken,
+            PointerDrawMode::Face(FaceId::new(13)),
+            PointerDrawMode::Face(FaceId::new(14)),
         )),
     ));
 

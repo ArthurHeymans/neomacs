@@ -127,12 +127,136 @@ impl PresentedPaintSpan {
     }
 }
 
-/// Renderer operation selected for a hovered or pressed appearance.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PointerReliefMargins {
+    left: f32,
+    top: f32,
+    right: f32,
+    bottom: f32,
+}
+
+impl PointerReliefMargins {
+    #[must_use]
+    pub const fn new(left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    #[must_use]
+    pub const fn left(self) -> f32 {
+        self.left
+    }
+    #[must_use]
+    pub const fn top(self) -> f32 {
+        self.top
+    }
+    #[must_use]
+    pub const fn right(self) -> f32 {
+        self.right
+    }
+    #[must_use]
+    pub const fn bottom(self) -> f32 {
+        self.bottom
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PointerReliefEdges {
+    top: bool,
+    left: bool,
+    bottom: bool,
+    right: bool,
+}
+
+impl PointerReliefEdges {
+    #[must_use]
+    pub const fn new(top: bool, left: bool, bottom: bool, right: bool) -> Self {
+        Self {
+            top,
+            left,
+            bottom,
+            right,
+        }
+    }
+
+    #[must_use]
+    pub const fn top(self) -> bool {
+        self.top
+    }
+    #[must_use]
+    pub const fn left(self) -> bool {
+        self.left
+    }
+    #[must_use]
+    pub const fn bottom(self) -> bool {
+        self.bottom
+    }
+    #[must_use]
+    pub const fn right(self) -> bool {
+        self.right
+    }
+}
+
+/// Fully resolved image-relief geometry and colors. Semantic raised/sunken
+/// policy is resolved before this renderer-safe value enters the protocol.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PointerImageRelief {
+    top_left_color: crate::Color,
+    bottom_right_color: crate::Color,
+    thickness: f32,
+    margins: PointerReliefMargins,
+    edges: PointerReliefEdges,
+}
+
+impl PointerImageRelief {
+    #[must_use]
+    pub const fn new(
+        top_left_color: crate::Color,
+        bottom_right_color: crate::Color,
+        thickness: f32,
+        margins: PointerReliefMargins,
+        edges: PointerReliefEdges,
+    ) -> Self {
+        Self {
+            top_left_color,
+            bottom_right_color,
+            thickness,
+            margins,
+            edges,
+        }
+    }
+
+    #[must_use]
+    pub const fn top_left_color(self) -> crate::Color {
+        self.top_left_color
+    }
+    #[must_use]
+    pub const fn bottom_right_color(self) -> crate::Color {
+        self.bottom_right_color
+    }
+    #[must_use]
+    pub const fn thickness(self) -> f32 {
+        self.thickness
+    }
+    #[must_use]
+    pub const fn margins(self) -> PointerReliefMargins {
+        self.margins
+    }
+    #[must_use]
+    pub const fn edges(self) -> PointerReliefEdges {
+        self.edges
+    }
+}
+
+/// Renderer operation selected for a hovered or pressed appearance.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum PointerDrawMode {
     Face(FaceId),
-    ImageRaised,
-    ImageSunken,
+    ImageRelief(PointerImageRelief),
 }
 
 /// Paint behavior shared by one or more independent interaction regions.
@@ -238,6 +362,7 @@ pub enum PresentedPointerMapError {
     MissingRegionBehavior,
     EmptyAppearance,
     EmptyPaintSpan,
+    OverlappingPaintSpans,
     PaintSpanOutOfRange,
     InvalidRegionGeometry,
     InvalidClipGeometry,
@@ -246,6 +371,7 @@ pub enum PresentedPointerMapError {
     ClipOutsideFrame,
     PrimitiveKindMismatch,
     UnknownFace(FaceId),
+    InvalidImageRelief,
 }
 
 impl std::fmt::Display for PresentedPointerMapError {
@@ -381,6 +507,15 @@ impl PresentedPointerMap {
                 }
                 if span.first.checked_add(span.len).is_none() {
                     return Err(PresentedPointerMapError::PaintSpanOutOfRange);
+                }
+            }
+            for (index, span) in appearance.paint_spans.iter().enumerate() {
+                let span_end = span.first + span.len;
+                for other in &appearance.paint_spans[index + 1..] {
+                    let other_end = other.first + other.len;
+                    if span.first < other_end && other.first < span_end {
+                        return Err(PresentedPointerMapError::OverlappingPaintSpans);
+                    }
                 }
             }
         }
@@ -558,12 +693,35 @@ fn validate_mode(
     mode: PointerDrawMode,
     frame_buffer: &FrameGlyphBuffer,
 ) -> Result<(), PresentedPointerMapError> {
-    if let PointerDrawMode::Face(face_id) = mode
-        && !frame_buffer.faces.contains_key(&face_id)
-    {
-        return Err(PresentedPointerMapError::UnknownFace(face_id));
+    match mode {
+        PointerDrawMode::Face(face_id) if !frame_buffer.faces.contains_key(&face_id) => {
+            return Err(PresentedPointerMapError::UnknownFace(face_id));
+        }
+        PointerDrawMode::ImageRelief(relief) if !image_relief_is_valid(relief) => {
+            return Err(PresentedPointerMapError::InvalidImageRelief);
+        }
+        PointerDrawMode::Face(_) | PointerDrawMode::ImageRelief(_) => {}
     }
     Ok(())
+}
+
+fn image_relief_is_valid(relief: PointerImageRelief) -> bool {
+    let colors = [relief.top_left_color(), relief.bottom_right_color()];
+    let margins = relief.margins();
+    colors.into_iter().all(|color| {
+        [color.r, color.g, color.b, color.a]
+            .into_iter()
+            .all(f32::is_finite)
+    }) && relief.thickness().is_finite()
+        && relief.thickness() > 0.0
+        && [
+            margins.left(),
+            margins.top(),
+            margins.right(),
+            margins.bottom(),
+        ]
+        .into_iter()
+        .all(|margin| margin.is_finite() && margin >= 0.0)
 }
 
 fn rect_is_within_frame(rect: FrameRect, frame: FrameSize) -> bool {
