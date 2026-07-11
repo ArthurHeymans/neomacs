@@ -705,9 +705,9 @@ impl WgpuRenderer {
                         let tex_v_max = base_v_min + (base_v_max - base_v_min) * v1;
 
                         let mut effective_fg = *fg;
-                        let mut effective_bg = bg
-                            .or_else(|| face.map(|resolved| resolved.background))
-                            .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
+                        let mut effective_bg =
+                            WgpuRenderer::sample_face_paint_background(face, bg, paint)
+                                .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                         if cursor_visible
                             && let Some(cursor) = frame.active_cursor()
                             && matches!(cursor.style, CursorStyle::FilledBox)

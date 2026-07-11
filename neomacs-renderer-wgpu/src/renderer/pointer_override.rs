@@ -69,6 +69,15 @@ pub(super) struct FacePaint {
 }
 
 impl FacePaint {
+    #[cfg(test)]
+    pub(super) const fn new(face_id: FaceId, domain: Rect, output_clip: Option<Rect>) -> Self {
+        Self {
+            face_id,
+            domain,
+            output_clip,
+        }
+    }
+
     pub(super) const fn face_id(self) -> FaceId {
         self.face_id
     }
@@ -607,11 +616,11 @@ pub(super) struct ReliefEdge {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct ReliefEdgePlan([Option<ReliefEdge>; 4]);
+pub(super) struct ReliefEdgePlan([Option<ReliefEdge>; 6]);
 
 impl IntoIterator for ReliefEdgePlan {
     type Item = ReliefEdge;
-    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<ReliefEdge>, 4>>;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<ReliefEdge>, 6>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter().flatten()
@@ -653,9 +662,10 @@ impl ReliefEdge {
     }
 }
 
-/// GNU-style relief inside the original image rectangle. Four trapezoids meet
-/// on their inner diagonals, so thick relief has no overlapping corner paint;
-/// edge flags independently retain or remove each outer line.
+/// GNU pgtk relief inside the original image rectangle. Side rectangles draw
+/// first; horizontal edges then select the top-right and bottom-left corner
+/// pixels. Top tapers only into a right edge and bottom only out of a left
+/// edge. Thick relief finishes with the dark one-pixel top/left outer lines.
 pub(super) fn relief_edges(
     x: f32,
     y: f32,
@@ -677,43 +687,49 @@ pub(super) fn relief_edges(
     let enabled = relief.edges();
     let right = x + width;
     let bottom = y + height;
-    Some(ReliefEdgePlan([
-        enabled.top().then_some(ReliefEdge {
-            corners: [
-                [x, y],
-                [right, y],
-                [right - edge, y + edge],
-                [x + edge, y + edge],
-            ],
+    let rectangle = |left: f32, top: f32, right: f32, bottom: f32, color| ReliefEdge {
+        corners: [[left, top], [right, top], [right, bottom], [left, bottom]],
+        color,
+    };
+    let top = if enabled.right() {
+        ReliefEdge {
+            corners: [[x, y], [right, y], [right - edge, y + edge], [x, y + edge]],
             color: top_left,
-        }),
-        enabled.left().then_some(ReliefEdge {
+        }
+    } else {
+        rectangle(x, y, right, y + edge, top_left)
+    };
+    let bottom_edge = if enabled.left() {
+        ReliefEdge {
             corners: [
-                [x, y],
-                [x + edge, y + edge],
                 [x + edge, bottom - edge],
-                [x, bottom],
-            ],
-            color: top_left,
-        }),
-        enabled.bottom().then_some(ReliefEdge {
-            corners: [
-                [x, bottom],
-                [x + edge, bottom - edge],
-                [right - edge, bottom - edge],
+                [right, bottom - edge],
                 [right, bottom],
+                [x, bottom],
             ],
             color: bottom_right,
+        }
+    } else {
+        rectangle(x, bottom - edge, right, bottom, bottom_right)
+    };
+    Some(ReliefEdgePlan([
+        enabled.left().then_some(ReliefEdge {
+            corners: [[x, y], [x + edge, y], [x + edge, bottom], [x, bottom]],
+            color: top_left,
         }),
         enabled.right().then_some(ReliefEdge {
             corners: [
+                [right - edge, y],
                 [right, y],
                 [right, bottom],
-                [right - edge, bottom - edge],
-                [right - edge, y + edge],
+                [right - edge, bottom],
             ],
             color: bottom_right,
         }),
+        enabled.top().then_some(top),
+        enabled.bottom().then_some(bottom_edge),
+        (enabled.left() && edge > 1.0).then_some(rectangle(x, y, x + 1.0, bottom, bottom_right)),
+        (enabled.top() && edge > 1.0).then_some(rectangle(x, y, right, y + 1.0, bottom_right)),
     ]))
 }
 

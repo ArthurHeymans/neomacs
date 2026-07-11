@@ -29,6 +29,57 @@ fn color_rgb_tuple(color: neomacs_display_protocol::types::Color) -> (f32, f32, 
     (color.r, color.g, color.b)
 }
 
+#[cfg(test)]
+mod retained_static_pointer_tests {
+    use super::RenderApp;
+    use crate::core::frame_glyphs::{CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursor};
+    use crate::render_thread::state::{PointerAppearanceState, PresentedAppearanceKey};
+    use neomacs_display_protocol::frame_chrome::PresentationId;
+    use neomacs_display_protocol::{Color, DisplayWindowId, PointerAppearanceId};
+
+    #[test]
+    fn hover_and_pressed_pointer_appearance_force_full_render_and_disable_cursor_cells() {
+        let mut pointer = PointerAppearanceState::default();
+        let mut frame = FrameGlyphBuffer::with_size(20.0, 20.0);
+        frame.window_cursors.push(WindowCursor {
+            window_id: DisplayWindowId::new(1),
+            slot_id: DisplaySlotId::ZERO,
+            x: 1.0,
+            y: 2.0,
+            width: 3.0,
+            height: 4.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            ascent: 0.0,
+            active: true,
+        });
+        assert!(RenderApp::retained_static_pointer_appearance_allowed(
+            &pointer
+        ));
+        assert_eq!(
+            RenderApp::build_filled_box_cursor_cells(&frame, 1.0, &pointer).len(),
+            1
+        );
+
+        let key = PresentedAppearanceKey::new(
+            PresentationId::new(7),
+            PointerAppearanceId::try_from(0usize).unwrap(),
+        );
+        pointer.hover(Some(key));
+        assert!(!RenderApp::retained_static_pointer_appearance_allowed(
+            &pointer
+        ));
+        assert!(RenderApp::build_filled_box_cursor_cells(&frame, 1.0, &pointer).is_empty());
+
+        pointer.press();
+        assert!(!RenderApp::retained_static_pointer_appearance_allowed(
+            &pointer
+        ));
+        assert!(RenderApp::build_filled_box_cursor_cells(&frame, 1.0, &pointer).is_empty());
+    }
+}
+
 pub(super) fn frame_chrome_toolbar_bounds(
     frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
 ) -> Option<FrameRect> {
@@ -486,6 +537,7 @@ impl RenderApp {
         if cursor_only_hint
             && !render.compositor.transitions.has_active()
             && !Self::window_has_active_overlays(render)
+            && Self::retained_static_pointer_appearance_allowed(&render.pointer_appearance)
             && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
         {
             let mouse_pos = render.mouse_pos;
@@ -522,7 +574,11 @@ impl RenderApp {
                     scroll_indicators_enabled,
                     toolbar,
                 );
-                let cells = Self::build_filled_box_cursor_cells(&frame, native.scale_factor as f32);
+                let cells = Self::build_filled_box_cursor_cells(
+                    &frame,
+                    native.scale_factor as f32,
+                    &render.pointer_appearance,
+                );
                 if let Some(rs) = render.compositor.retained_static.as_mut() {
                     rs.generation = generation;
                     rs.cursor_cells = cells;
@@ -1036,8 +1092,12 @@ impl RenderApp {
     fn build_filled_box_cursor_cells(
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
         scale: f32,
+        pointer_appearance: &super::state::PointerAppearanceState,
     ) -> Vec<super::frame_windows::RetainedCursorCell> {
         use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer};
+        if !Self::retained_static_pointer_appearance_allowed(pointer_appearance) {
+            return Vec::new();
+        }
         let mut cells = Vec::new();
         for cursor in &frame.window_cursors {
             if !matches!(cursor.style, CursorStyle::FilledBox) {
@@ -1136,6 +1196,12 @@ impl RenderApp {
             // retained scene would freeze it, so a full render is required
             // while it is shown.
             || render.overlays.fps.enabled
+    }
+
+    fn retained_static_pointer_appearance_allowed(
+        pointer_appearance: &super::state::PointerAppearanceState,
+    ) -> bool {
+        pointer_appearance.active().is_none()
     }
 
     /// Ensure the window's retained-static texture exists at `width`x`height`

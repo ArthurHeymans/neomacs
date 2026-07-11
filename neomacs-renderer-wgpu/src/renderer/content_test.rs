@@ -6,7 +6,46 @@
 
 use super::stretch_decoration_rects;
 use neomacs_display_protocol::face::{Face, FaceAttributes, UnderlineStyle};
-use neomacs_display_protocol::{Color, FaceId};
+use neomacs_display_protocol::{Color, ColorStop, FaceId, Gradient, Rect};
+
+#[test]
+fn child_subpixel_gradient_sampling_uses_face_paint_domain() {
+    let mut face = Face::new(FaceId::new(3));
+    face.background_gradient = Some(Box::new(Gradient::Linear {
+        angle: 0.0,
+        stops: vec![
+            ColorStop::new(0.0, Color::RED),
+            ColorStop::new(1.0, Color::BLUE),
+        ],
+    }));
+    let domain = Rect::new(0.0, 0.0, 100.0, 10.0);
+    let output_clip = Rect::new(50.0, 0.0, 50.0, 10.0);
+    let paint = super::super::pointer_override::FacePaint::new(face.id, domain, Some(output_clip));
+
+    let sampled =
+        super::super::WgpuRenderer::sample_face_paint_background(Some(&face), None, paint);
+    let domain_sample = super::super::WgpuRenderer::sample_face_background(
+        Some(&face),
+        None,
+        domain.x,
+        domain.y,
+        domain.width,
+        domain.height,
+        None,
+    );
+    let reanchored = super::super::WgpuRenderer::sample_face_background(
+        Some(&face),
+        None,
+        domain.x,
+        domain.y,
+        domain.width,
+        domain.height,
+        Some(&output_clip),
+    );
+
+    assert_eq!(sampled, domain_sample);
+    assert_ne!(sampled, reanchored);
+}
 
 #[test]
 fn child_stretch_decorations_follow_the_effective_face() {

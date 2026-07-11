@@ -238,15 +238,15 @@ fn image_relief_flips_light_and_dark_edges_inside_unchanged_quad() {
         .into_iter()
         .collect::<Vec<_>>();
 
-    assert_eq!(raised[0].bounds(), (3.0, 5.0, 20.0, 1.0)); // top
-    assert_eq!(raised[1].bounds(), (3.0, 5.0, 1.0, 18.0)); // left
-    assert_eq!(raised[2].bounds(), (3.0, 22.0, 20.0, 1.0)); // bottom
-    assert_eq!(raised[3].bounds(), (22.0, 5.0, 1.0, 18.0)); // right
-    assert_eq!(raised[0].color(), raised[1].color());
-    assert_eq!(raised[2].color(), raised[3].color());
-    assert_ne!(raised[0].color(), raised[2].color());
-    assert_eq!(sunken[0].color(), raised[2].color());
-    assert_eq!(sunken[2].color(), raised[0].color());
+    assert_eq!(raised[0].bounds(), (3.0, 5.0, 1.0, 18.0)); // left
+    assert_eq!(raised[1].bounds(), (22.0, 5.0, 1.0, 18.0)); // right
+    assert_eq!(raised[2].bounds(), (3.0, 5.0, 20.0, 1.0)); // top
+    assert_eq!(raised[3].bounds(), (3.0, 22.0, 20.0, 1.0)); // bottom
+    assert_eq!(raised[0].color(), raised[2].color());
+    assert_eq!(raised[1].color(), raised[3].color());
+    assert_ne!(raised[0].color(), raised[1].color());
+    assert_eq!(sunken[0].color(), raised[1].color());
+    assert_eq!(sunken[1].color(), raised[0].color());
 
     let before = super::super::layer_media::textured_quad_vertices(3.0, 5.0, 20.0, 18.0, 0.0, 1.0);
     let after = super::super::layer_media::textured_quad_vertices(3.0, 5.0, 20.0, 18.0, 0.0, 1.0);
@@ -272,15 +272,17 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         .unwrap()
         .into_iter()
         .collect::<Vec<_>>();
-    assert_eq!(edges.len(), 2);
-    assert_eq!(edges[0].bounds(), (11.0, 22.0, 26.0, 2.0));
+    assert_eq!(edges.len(), 3);
+    assert_eq!(edges[0].bounds(), (35.0, 22.0, 2.0, 18.0));
+    assert_eq!(edges[0].color(), bottom_right);
+    assert_eq!(edges[1].bounds(), (11.0, 22.0, 26.0, 2.0));
     assert_eq!(
-        edges[0].corners(),
-        [[11.0, 22.0], [37.0, 22.0], [35.0, 24.0], [13.0, 24.0]]
+        edges[1].corners(),
+        [[11.0, 22.0], [37.0, 22.0], [35.0, 24.0], [11.0, 24.0]]
     );
-    assert_eq!(edges[0].color(), top_left);
-    assert_eq!(edges[1].bounds(), (35.0, 22.0, 2.0, 18.0));
-    assert_eq!(edges[1].color(), bottom_right);
+    assert_eq!(edges[1].color(), top_left);
+    assert_eq!(edges[2].bounds(), (11.0, 22.0, 26.0, 1.0));
+    assert_eq!(edges[2].color(), bottom_right);
 
     let vertical_only = PointerImageRelief::new(
         top_left,
@@ -301,7 +303,7 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
 }
 
 #[test]
-fn thick_image_relief_trapezoids_share_diagonals_and_clip_as_polygons() {
+fn thick_image_relief_matches_gnu_edge_order_and_corner_ownership() {
     let spec = PointerImageRelief::new(
         Color::WHITE,
         Color::BLACK,
@@ -313,16 +315,39 @@ fn thick_image_relief_trapezoids_share_diagonals_and_clip_as_polygons() {
         .unwrap()
         .into_iter()
         .collect::<Vec<_>>();
-    let [top, left, bottom, right] = edges.as_slice() else {
-        panic!("four enabled relief edges")
+    let [left, right, top, bottom, dark_left, dark_top] = edges.as_slice() else {
+        panic!("four enabled relief edges plus GNU dark top/left corrections")
     };
-    assert_eq!(top.corners()[3], left.corners()[1]);
-    assert_eq!(top.corners()[2], right.corners()[3]);
-    assert_eq!(bottom.corners()[1], left.corners()[2]);
-    assert_eq!(bottom.corners()[2], right.corners()[2]);
-    assert_eq!(top.corners()[0..2], [[0.0, 0.0], [20.0, 0.0]]);
-    assert_eq!(bottom.corners()[0], [0.0, 12.0]);
-    assert_eq!(bottom.corners()[3], [20.0, 12.0]);
+    assert_eq!(
+        left.corners(),
+        [[0.0, 0.0], [3.0, 0.0], [3.0, 12.0], [0.0, 12.0]]
+    );
+    assert_eq!(
+        right.corners(),
+        [[17.0, 0.0], [20.0, 0.0], [20.0, 12.0], [17.0, 12.0]]
+    );
+    assert_eq!(
+        top.corners(),
+        [[0.0, 0.0], [20.0, 0.0], [17.0, 3.0], [0.0, 3.0]]
+    );
+    assert_eq!(
+        bottom.corners(),
+        [[3.0, 9.0], [20.0, 9.0], [20.0, 12.0], [0.0, 12.0]]
+    );
+    assert_eq!(dark_left.bounds(), (0.0, 0.0, 1.0, 12.0));
+    assert_eq!(dark_top.bounds(), (0.0, 0.0, 20.0, 1.0));
+    assert_eq!(dark_left.color(), Color::BLACK);
+    assert_eq!(dark_top.color(), Color::BLACK);
+    assert_eq!(
+        top.color(),
+        Color::WHITE,
+        "top paints after right at top-right"
+    );
+    assert_eq!(
+        bottom.color(),
+        Color::BLACK,
+        "bottom paints after left at bottom-left"
+    );
 
     let clip = neomacs_display_protocol::Rect::new(5.0, 0.0, 10.0, 2.0);
     let mut clipped = Vec::new();
@@ -331,6 +356,44 @@ fn thick_image_relief_trapezoids_share_diagonals_and_clip_as_polygons() {
     assert!(clipped.iter().all(|vertex| {
         (5.0..=15.0).contains(&vertex.position[0]) && (0.0..=2.0).contains(&vertex.position[1])
     }));
+}
+
+#[test]
+fn gnu_relief_top_bottom_and_side_only_edges_remain_rectangles() {
+    let make = |edges| {
+        PointerImageRelief::new(
+            Color::WHITE,
+            Color::BLACK,
+            1.0,
+            PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+            edges,
+        )
+    };
+    let collect = |spec| {
+        relief_edges(2.0, 4.0, 10.0, 8.0, spec)
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>()
+    };
+
+    let top = collect(make(PointerReliefEdges::new(true, false, false, false)));
+    assert_eq!(top.len(), 1);
+    assert_eq!(
+        top[0].corners(),
+        [[2.0, 4.0], [12.0, 4.0], [12.0, 5.0], [2.0, 5.0]]
+    );
+
+    let bottom = collect(make(PointerReliefEdges::new(false, false, true, false)));
+    assert_eq!(bottom.len(), 1);
+    assert_eq!(
+        bottom[0].corners(),
+        [[2.0, 11.0], [12.0, 11.0], [12.0, 12.0], [2.0, 12.0]]
+    );
+
+    let sides = collect(make(PointerReliefEdges::new(false, true, false, true)));
+    assert_eq!(sides.len(), 2);
+    assert_eq!(sides[0].bounds(), (2.0, 4.0, 1.0, 8.0));
+    assert_eq!(sides[1].bounds(), (11.0, 4.0, 1.0, 8.0));
 }
 
 #[test]
