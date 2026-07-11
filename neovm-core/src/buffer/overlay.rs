@@ -7,7 +7,7 @@
 //! ids in each buffer's overlay index.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use std::ops::Bound::{Excluded, Unbounded};
 
 use crate::buffer::BufferId;
@@ -34,6 +34,20 @@ pub(crate) fn reset_overlays_at_node_visit_count() {
 #[cfg(test)]
 pub(crate) fn overlays_at_node_visit_count() -> usize {
     OVERLAYS_AT_NODE_VISITS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+static OVERLAY_PROPERTY_EXTENT_INSPECTIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_overlay_property_extent_inspection_count() {
+    OVERLAY_PROPERTY_EXTENT_INSPECTIONS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn overlay_property_extent_inspection_count() -> usize {
+    OVERLAY_PROPERTY_EXTENT_INSPECTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Augmented interval tree node for O(log n + k) overlay queries.
@@ -285,6 +299,97 @@ pub struct OverlayList {
     itree: Itree,
 }
 
+/// The effective contiguous range of an overlay-supplied property winner.
+///
+/// `overlay` and `value` are absent/nil when no live overlay supplies a
+/// non-nil value in `range`.  That negative extent is useful to callers which
+/// fall back to text properties without rescanning unrelated overlays.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayPropertyExtent {
+    overlay: Option<Value>,
+    value: Value,
+    range: EmacsByteRange,
+}
+
+impl OverlayPropertyExtent {
+    pub fn overlay(self) -> Option<Value> {
+        self.overlay
+    }
+
+    pub fn value(self) -> Value {
+        self.value
+    }
+
+    pub fn range(self) -> EmacsByteRange {
+        self.range
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct OverlayByPrecedence(Value);
+
+impl PartialEq for OverlayByPrecedence {
+    fn eq(&self, other: &Self) -> bool {
+        eq_value(&self.0, &other.0)
+    }
+}
+
+impl Eq for OverlayByPrecedence {}
+
+impl PartialOrd for OverlayByPrecedence {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OverlayByPrecedence {
+    fn cmp(&self, other: &Self) -> Ordering {
+        compare_overlay_precedence(self.0, other.0)
+    }
+}
+
+#[derive(Clone)]
+struct ActivePropertyOverlays {
+    property: Value,
+    active: BTreeSet<Value>,
+    by_precedence: BinaryHeap<OverlayByPrecedence>,
+}
+
+impl ActivePropertyOverlays {
+    fn new(property: Value) -> Self {
+        Self {
+            property,
+            active: BTreeSet::new(),
+            by_precedence: BinaryHeap::new(),
+        }
+    }
+
+    fn inspect_and_insert(&mut self, overlay: Value) {
+        #[cfg(test)]
+        OVERLAY_PROPERTY_EXTENT_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if overlay_property_named(overlay, self.property).is_some_and(|value| !value.is_nil())
+            && self.active.insert(overlay)
+        {
+            self.by_precedence.push(OverlayByPrecedence(overlay));
+        }
+    }
+
+    fn remove(&mut self, overlay: Value) {
+        self.active.remove(&overlay);
+    }
+
+    fn winner(&mut self) -> Option<Value> {
+        while self
+            .by_precedence
+            .peek()
+            .is_some_and(|candidate| !self.active.contains(&candidate.0))
+        {
+            self.by_precedence.pop();
+        }
+        self.by_precedence.peek().map(|candidate| candidate.0)
+    }
+}
+
 impl OverlayList {
     pub fn new() -> Self {
         Self {
@@ -457,6 +562,96 @@ impl OverlayList {
         property: Value,
     ) -> Option<Value> {
         self.best_overlay_for(property, |overlay| overlay_covers_pos(overlay, pos))
+    }
+
+    /// Resolve GNU overlay precedence once and return the maximal contiguous
+    /// extent for which the winning non-nil property overlay is unchanged.
+    ///
+    /// The interval tree initializes the overlays active at `pos`.  From there
+    /// the start/end indexes are swept outward, updating a precedence heap only
+    /// for overlays crossing each boundary.  Thus a sweep inspects an entering
+    /// overlay at most once instead of rescanning the complete overlay list at
+    /// every boundary.
+    pub fn highest_priority_overlay_property_extent_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property: Value,
+        bounds: EmacsByteRange,
+    ) -> Option<OverlayPropertyExtent> {
+        if bounds.is_empty() || pos < bounds.start() || pos >= bounds.end() {
+            return None;
+        }
+
+        let mut active = ActivePropertyOverlays::new(property);
+        for overlay in self.overlays_at_emacs_byte_pos(pos) {
+            active.inspect_and_insert(overlay);
+        }
+        let winner = active.winner();
+
+        let mut start = bounds.start();
+        let mut backward = active.clone();
+        let mut cursor = EmacsBytePos::new(pos.get().saturating_add(1));
+        while let Some(boundary) =
+            self.previous_boundary_before_since_emacs_byte_pos(cursor, bounds.start())
+        {
+            if boundary <= bounds.start() {
+                break;
+            }
+            if let Some(starts) = self.by_start.get(&boundary) {
+                for overlay in starts {
+                    backward.remove(*overlay);
+                }
+            }
+            if let Some(ends) = self.by_end.get(&boundary) {
+                for overlay in ends {
+                    if overlay_range(*overlay).is_some_and(|range| !range.is_empty()) {
+                        backward.inspect_and_insert(*overlay);
+                    }
+                }
+            }
+            if !same_overlay_identity(backward.winner(), winner) {
+                start = boundary;
+                break;
+            }
+            cursor = boundary;
+        }
+
+        let mut end = bounds.end();
+        let mut forward = active;
+        let mut cursor = pos;
+        while let Some(boundary) =
+            self.next_boundary_after_until_emacs_byte_pos(cursor, bounds.end())
+        {
+            if boundary >= bounds.end() {
+                break;
+            }
+            if let Some(ends) = self.by_end.get(&boundary) {
+                for overlay in ends {
+                    forward.remove(*overlay);
+                }
+            }
+            if let Some(starts) = self.by_start.get(&boundary) {
+                for overlay in starts {
+                    if overlay_range(*overlay).is_some_and(|range| !range.is_empty()) {
+                        forward.inspect_and_insert(*overlay);
+                    }
+                }
+            }
+            if !same_overlay_identity(forward.winner(), winner) {
+                end = boundary;
+                break;
+            }
+            cursor = boundary;
+        }
+
+        let value = winner
+            .and_then(|overlay| overlay_property_named(overlay, property))
+            .unwrap_or(Value::NIL);
+        Some(OverlayPropertyExtent {
+            overlay: winner,
+            value,
+            range: EmacsByteRange::new(start, end),
+        })
     }
 
     pub fn highest_priority_overlay_for_inserted_emacs_byte_pos(
@@ -801,6 +996,14 @@ fn overlay_covers_pos(overlay: Value, pos: EmacsBytePos) -> bool {
     }
     let range = overlay_data_range(data);
     range.start() <= pos && pos < range.end()
+}
+
+fn same_overlay_identity(left: Option<Value>, right: Option<Value>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => eq_value(&left, &right),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 fn overlay_overlaps_region(

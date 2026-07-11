@@ -328,3 +328,125 @@ fn priority_sort_uses_gnu_precedence_rules() {
     list.sort_overlay_ids_by_priority_desc(&mut ids);
     assert_eq!(ids, vec![high, low]);
 }
+
+#[test]
+fn property_extent_uses_gnu_winner_across_irrelevant_boundaries() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let outer = alloc_overlay(2, 18);
+    let nested_low = alloc_overlay(5, 8);
+    let nested_high = alloc_overlay(10, 14);
+    let nil_overlay = alloc_overlay(6, 12);
+    for overlay in [outer, nested_low, nested_high, nil_overlay] {
+        list.insert_overlay(overlay);
+    }
+    list.overlay_put(outer, property, Value::symbol("outer"))
+        .unwrap();
+    list.overlay_put(
+        outer,
+        Value::symbol("priority"),
+        Value::cons(Value::fixnum(4), Value::fixnum(1)),
+    )
+    .unwrap();
+    list.overlay_put(nested_low, property, Value::symbol("low"))
+        .unwrap();
+    list.overlay_put(nested_low, Value::symbol("priority"), Value::fixnum(3))
+        .unwrap();
+    list.overlay_put(nested_high, property, Value::symbol("high"))
+        .unwrap();
+    list.overlay_put(
+        nested_high,
+        Value::symbol("priority"),
+        Value::cons(Value::fixnum(4), Value::fixnum(2)),
+    )
+    .unwrap();
+    list.overlay_put(nil_overlay, property, Value::NIL).unwrap();
+    list.overlay_put(nil_overlay, Value::symbol("priority"), Value::fixnum(99))
+        .unwrap();
+
+    let bounds = emacs_byte_range(0, 20);
+    let outer_extent = list
+        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            emacs_byte_pos(7),
+            property,
+            bounds,
+        )
+        .unwrap();
+    assert_eq!(outer_extent.overlay(), Some(outer));
+    assert_eq!(outer_extent.value(), Value::symbol("outer"));
+    assert_eq!(outer_extent.range(), emacs_byte_range(2, 10));
+
+    let high_extent = list
+        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            emacs_byte_pos(11),
+            property,
+            bounds,
+        )
+        .unwrap();
+    assert_eq!(high_extent.overlay(), Some(nested_high));
+    assert_eq!(high_extent.value(), Value::symbol("high"));
+    assert_eq!(high_extent.range(), emacs_byte_range(10, 14));
+}
+
+#[test]
+fn absent_property_extent_stops_at_first_non_nil_overlay() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    let nil_overlay = alloc_overlay(2, 6);
+    let value_overlay = alloc_overlay(8, 12);
+    list.insert_overlay(nil_overlay);
+    list.insert_overlay(value_overlay);
+    list.overlay_put(nil_overlay, property, Value::NIL).unwrap();
+    list.overlay_put(value_overlay, property, Value::symbol("highlight"))
+        .unwrap();
+
+    let extent = list
+        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            emacs_byte_pos(4),
+            property,
+            emacs_byte_range(0, 20),
+        )
+        .unwrap();
+    assert_eq!(extent.overlay(), None);
+    assert_eq!(extent.value(), Value::NIL);
+    assert_eq!(extent.range(), emacs_byte_range(0, 8));
+}
+
+#[test]
+fn property_extent_inspects_each_unrelated_overlay_only_once_per_sweep() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let mouse_face = Value::symbol("mouse-face");
+    let winner = alloc_overlay(0, 4_100);
+    list.insert_overlay(winner);
+    list.overlay_put(winner, mouse_face, Value::symbol("highlight"))
+        .unwrap();
+    list.overlay_put(winner, Value::symbol("priority"), Value::fixnum(10))
+        .unwrap();
+
+    for index in 0..2_000 {
+        let start = 2 + index * 2;
+        let unrelated = alloc_overlay(start, start + 1);
+        list.insert_overlay(unrelated);
+        list.overlay_put(unrelated, Value::symbol("face"), Value::symbol("bold"))
+            .unwrap();
+    }
+
+    reset_overlay_property_extent_inspection_count();
+    let extent = list
+        .highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            emacs_byte_pos(2_001),
+            mouse_face,
+            emacs_byte_range(0, 4_100),
+        )
+        .unwrap();
+    assert_eq!(extent.overlay(), Some(winner));
+    assert_eq!(extent.range(), emacs_byte_range(0, 4_100));
+    let inspections = overlay_property_extent_inspection_count();
+    assert!(
+        inspections <= 2_001,
+        "one extent query should inspect each candidate at most once; inspected {inspections} overlays"
+    );
+}

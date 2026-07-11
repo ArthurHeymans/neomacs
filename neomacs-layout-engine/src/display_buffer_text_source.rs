@@ -50,6 +50,14 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     end: CharPos0,
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
+    mouse_face_extent: Option<CachedMouseFaceExtent>,
+}
+
+#[derive(Clone, Copy)]
+struct CachedMouseFaceExtent {
+    value: Option<Value>,
+    range: EmacsByteRange,
+    overlay: Option<Value>,
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
@@ -70,6 +78,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             end,
             base_face,
             replacement_strings: LispStringSourceStack::empty(1),
+            mouse_face_extent: None,
         }
     }
 
@@ -289,52 +298,52 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     /// the buffer text property.  Run production is already stopped at every
     /// overlay boundary, so the selected value is stable for this item.
     fn mouse_face_at(
-        &self,
+        &mut self,
         char_pos: CharPos0,
     ) -> Option<(Value, EmacsBytePos, EmacsBytePos, Option<Value>)> {
         let bytepos = self.byte_pos(char_pos);
-        let overlays = self.buffer.layout_overlays();
-        let property = Value::symbol("mouse-face");
-        let winner = overlays.highest_priority_overlay_at_emacs_byte_pos(bytepos, property);
-        let same_winner = |at: EmacsBytePos| {
-            overlays
-                .highest_priority_overlay_at_emacs_byte_pos(at, property)
-                .map(Value::bits)
-                == winner.map(Value::bits)
-        };
-        let mut overlay_start = self.buffer.layout_point_min_emacs_byte_pos();
-        let mut cursor = EmacsBytePos::new(bytepos.get().saturating_add(1));
-        while let Some(boundary) = overlays.previous_boundary_before_emacs_byte_pos(cursor) {
-            if boundary == EmacsBytePos::ZERO {
-                overlay_start = boundary;
-                break;
-            }
-            let before = EmacsBytePos::new(boundary.get() - 1);
-            if !same_winner(before) {
-                overlay_start = boundary;
-                break;
-            }
-            cursor = boundary;
-        }
-        let mut overlay_end = self.buffer.layout_point_max_emacs_byte_pos();
-        let mut cursor = bytepos;
-        while let Some(boundary) = overlays.next_boundary_after_emacs_byte_pos(cursor) {
-            if !same_winner(boundary) {
-                overlay_end = boundary;
-                break;
-            }
-            cursor = boundary;
+        if let Some(cached) = self
+            .mouse_face_extent
+            .filter(|cached| cached.range.start() <= bytepos && bytepos < cached.range.end())
+        {
+            return cached.value.map(|value| {
+                (
+                    value,
+                    cached.range.start(),
+                    cached.range.end(),
+                    cached.overlay,
+                )
+            });
         }
 
-        if let Some(overlay) = winner {
-            let value = overlays.overlay_get_named(overlay, property)?;
-            return (!value.is_nil()).then_some((value, overlay_start, overlay_end, Some(overlay)));
+        let overlays = self.buffer.layout_overlays();
+        let property = Value::symbol("mouse-face");
+        let bounds = EmacsByteRange::new(
+            self.buffer.layout_point_min_emacs_byte_pos(),
+            self.buffer.layout_point_max_emacs_byte_pos(),
+        );
+        let overlay_extent = overlays.highest_priority_overlay_property_extent_at_emacs_byte_pos(
+            bytepos, property, bounds,
+        )?;
+        if let Some(overlay) = overlay_extent.overlay() {
+            let cached = CachedMouseFaceExtent {
+                value: Some(overlay_extent.value()),
+                range: overlay_extent.range(),
+                overlay: Some(overlay),
+            };
+            self.mouse_face_extent = Some(cached);
+            return Some((
+                overlay_extent.value(),
+                cached.range.start(),
+                cached.range.end(),
+                Some(overlay),
+            ));
         }
 
         let value = self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, property)
-            .filter(|value| !value.is_nil())?;
+            .filter(|value| !value.is_nil());
         let text_start = self
             .buffer
             .layout_previous_single_text_prop_change_before_emacs_byte_pos(bytepos, property)
@@ -343,16 +352,20 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             .buffer
             .layout_next_single_text_prop_change_after_emacs_byte_pos(bytepos, property)
             .unwrap_or_else(|| self.buffer.layout_point_max_emacs_byte_pos());
-        Some((
+        let cached = CachedMouseFaceExtent {
             value,
-            text_start.max(overlay_start),
-            text_end.min(overlay_end),
-            None,
-        ))
+            range: EmacsByteRange::new(
+                text_start.max(overlay_extent.range().start()),
+                text_end.min(overlay_extent.range().end()),
+            ),
+            overlay: None,
+        };
+        self.mouse_face_extent = Some(cached);
+        value.map(|value| (value, cached.range.start(), cached.range.end(), None))
     }
 
     fn pointer_appearance_at(
-        &self,
+        &mut self,
         start: CharPos0,
         _property_end: CharPos0,
         face: RenderFaceRef,
