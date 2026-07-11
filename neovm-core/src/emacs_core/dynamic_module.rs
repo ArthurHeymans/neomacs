@@ -613,9 +613,17 @@ fn module_panic_flow(payload: Box<dyn std::any::Any + Send>) -> Flow {
 fn module_panic_recovery_blocked_via_ctx() -> bool {
     MODULE_CTX.with(|ctx_cell| {
         let ctx_ptr = ctx_cell.get();
+        if ctx_ptr.is_null() {
+            // No installed evaluator context (a primitive exercised outside
+            // an active env extent). `gc_driver_active` is unreachable
+            // without a Context, but GC lock poison is still observable via
+            // the thread heap — probe that half, exactly like the JIT's
+            // ctx-less shim arm (`contain_jit_shim_panic`).
+            return crate::tagged::gc::with_tagged_heap(|h| h.gc_locks_poisoned());
+        }
         // SAFETY: same shared-read-through-MODULE_CTX discipline as
         // `module_should_quit`; the probe only reads two flags.
-        !ctx_ptr.is_null() && unsafe { (*ctx_ptr).module_panic_recovery_blocked() }
+        unsafe { (*ctx_ptr).module_panic_recovery_blocked() }
     })
 }
 
@@ -2601,6 +2609,30 @@ mod tests {
         );
     }
 
+    /// With no MODULE_CTX installed, the guard's probe must still see GC
+    /// lock poison through the thread heap (the JIT ctx-less arm's probe)
+    /// and refuse to contain: re-raise, no pending exit recorded. Poison is
+    /// permanent for this process — fine under nextest's process-per-test.
+    #[test]
+    fn module_guard_re_raises_on_poisoned_gc_locks_without_ctx() {
+        crate::tagged::gc::with_tagged_heap(|h| h.poison_gc_locks_for_test());
+        let mut fixture = TestEnv::new();
+        let env = fixture.env_ptr();
+
+        let caught = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            module_guard(env, 17_i64, || panic!("guard-poison-flee"))
+        }));
+        let payload = caught.expect_err("poisoned GC locks must re-raise, not contain");
+        assert_eq!(panic_message(&*payload), "guard-poison-flee");
+
+        let priv_ = unsafe { &*fixture.priv_ptr() };
+        assert_eq!(
+            priv_.pending_non_local_exit,
+            emacs_funcall_exit::Return,
+            "no pending exit may be recorded on the re-raise path"
+        );
+    }
+
     /// `contain_lisp_panics` must restore every boundary-snapshot dimension
     /// the panicked extent dirtied and surface the panic as an `error` Flow.
     #[test]
@@ -2610,6 +2642,7 @@ mod tests {
         let cond0 = ev.condition_stack.len();
         let bc0 = ev.bc_buf.len();
         let depth0 = ev.depth;
+        let roots0 = crate::emacs_core::eval::save_scratch_gc_roots();
 
         let result: Result<Value, Flow> = contain_lisp_panics(&mut ev, |ctx| {
             ctx.specpdl.push(SpecBinding::Nop);
@@ -2618,6 +2651,11 @@ mod tests {
                 resume: ResumeTarget::InterpreterCatch,
             });
             ctx.bc_buf.push(Value::NIL);
+            // Skipped scratch-root pops of the panicked extent: the
+            // boundary restore must truncate them (they would pin their
+            // objects forever otherwise).
+            crate::emacs_core::eval::push_scratch_gc_root(Value::NIL);
+            crate::emacs_core::eval::push_scratch_gc_root(Value::T);
             ctx.depth += 3;
             panic!("boundary-dirt-probe");
         });
@@ -2635,6 +2673,11 @@ mod tests {
         assert_eq!(ev.condition_stack.len(), cond0);
         assert_eq!(ev.bc_buf.len(), bc0);
         assert_eq!(ev.depth, depth0);
+        assert_eq!(
+            crate::emacs_core::eval::save_scratch_gc_roots(),
+            roots0,
+            "scratch-root residue truncated by the boundary restore"
+        );
     }
 
     /// A panic that escaped the GC collection driver must NOT be contained:

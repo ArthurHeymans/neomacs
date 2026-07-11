@@ -6860,6 +6860,20 @@ impl TaggedHeap {
             || self.gc_wake.0.is_poisoned()
     }
 
+    /// Test-only: poison one of the collector's own locks by panicking while
+    /// holding it, so containment tests can exercise the refuse-to-contain
+    /// probe without unwinding real GC machinery. Poison is permanent for the
+    /// heap (that is the point) — callers run process-per-test under nextest.
+    #[cfg(test)]
+    pub(crate) fn poison_gc_locks_for_test(&self) {
+        let lock = self.satb_shared.clone();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _guard = lock.lock().unwrap();
+            panic!("poison a GC lock for the containment probe test");
+        }));
+        assert!(self.gc_locks_poisoned(), "test poison must be observable");
+    }
+
     /// Advance the deferred sweep by one bounded slice: reclaim up to `budget`
     /// cons blocks and up to `budget` pending non-cons objects. Returns true
     /// (and finalizes accounting) once the whole sweep is done. New conses

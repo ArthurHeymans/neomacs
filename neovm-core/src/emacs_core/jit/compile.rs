@@ -236,6 +236,12 @@ pub(crate) static CBSYM_SPEC_GENERIC_COUNT: AtomicU64 = AtomicU64::new(0);
 /// register.) The Lisp-heap allocation for the panic-message string happens
 /// HERE — the two consumers run at allocation-safe points (see
 /// [`PENDING_SHIM_PANIC`]) — never in a shim's catch handler.
+///
+/// Panic-wins drops ANY stashed flow, including a `Flow::ThreadBlocked`
+/// (the cooperative thread-yield handoff): the panicked extent can no
+/// longer complete the yield protocol its shim had begun, so the blocked
+/// thread's re-dispatch is abandoned along with the rest of that extent and
+/// the panic error is what propagates. Accepted, documented trade-off.
 pub fn take_pending_flow() -> Option<Flow> {
     let flow = PENDING_FLOW.with(|p| p.borrow_mut().take());
     match PENDING_SHIM_PANIC.with(|p| p.borrow_mut().take()) {
@@ -333,15 +339,23 @@ std::thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-/// Leaf-entry restoration bases: the boundary snapshot plus the scratch-GC-
-/// root depth (kept out of [`ModuleBoundarySnapshot`] — the module boundary
-/// has its own root lifecycle). Recorded once per native call by
+/// Leaf-entry restoration bases. Recorded once per native call by
 /// `invoke_native`; the unit of restoration for a contained shim panic is
-/// the whole leaf, so leaf entry is the one coherent base point.
+/// the whole leaf, so leaf entry is the one coherent base point. The
+/// scratch-GC-root depth rides inside the snapshot
+/// ([`ModuleBoundarySnapshot::scratch_gc_roots_len`]); here it is only the
+/// FLOOR for the deferred pending-root sweep — `restore_jit_shim_boundary`
+/// never truncates roots itself (the sweep owns that lifecycle).
 #[derive(Clone, Copy)]
 struct JitLeafBases {
     snap: ModuleBoundarySnapshot,
-    roots: usize,
+}
+
+impl JitLeafBases {
+    /// Leaf-entry scratch-root depth (the pending-sweep floor).
+    fn roots(&self) -> usize {
+        self.snap.scratch_gc_roots_len()
+    }
 }
 
 /// Whether a shim panic was contained and its residue not yet healed/taken.
@@ -390,7 +404,7 @@ fn contain_jit_shim_panic(
     // means no native extent — direct-call tests; nothing to sweep.)
     if let Some(bases) = CURRENT_LEAF_BASES.with(|b| b.get()) {
         PENDING_ROOT_SWEEP_FLOOR.with(|f| {
-            let floor = f.get().map_or(bases.roots, |cur| cur.min(bases.roots));
+            let floor = f.get().map_or(bases.roots(), |cur| cur.min(bases.roots()));
             f.set(Some(floor));
         });
     }
@@ -2913,7 +2927,6 @@ impl CompiledLeaf {
             // SAFETY: as above — length/scalar reads only.
             Some(JitLeafBases {
                 snap: unsafe { (*(vmctx as *const Context)).module_boundary_snapshot() },
-                roots: save_scratch_gc_roots(),
             })
         };
         let outer_bases = CURRENT_LEAF_BASES.with(|b| b.replace(bases));
@@ -2946,8 +2959,8 @@ impl CompiledLeaf {
         // outer leaf's residue: leave it set for that leaf's own exit.
         if let Some(b) = &bases {
             if let Some(floor) = PENDING_ROOT_SWEEP_FLOOR.with(|f| f.get()) {
-                if floor >= b.roots {
-                    restore_scratch_gc_roots(b.roots);
+                if floor >= b.roots() {
+                    restore_scratch_gc_roots(b.roots());
                     PENDING_ROOT_SWEEP_FLOOR.with(|f| f.set(None));
                 }
             }
@@ -3011,7 +3024,26 @@ impl CompiledLeaf {
         // depths). The condition floor is the entry length — the leaf is
         // dead, its own frames go too (subsuming the `cond_base` truncate
         // below for this path).
-        if status == STATUS_SIGNAL && shim_panic_pending() {
+        //
+        // The pending panic is PARKED (taken into a local) across those
+        // parity unwinds: the leaked unwind-protect cleanups they run are
+        // arbitrary lisp, possibly compiled — with the marker still set, an
+        // inner leaf's `take_pending_flow` would deliver THIS panic to an
+        // unrelated inner handler, discard that leaf's real flow, and leave
+        // the outer dispatcher's take empty (an `.expect` panic inside
+        // recovery). Any flow the panicked body stashed before panicking is
+        // dropped now — the panic-wins rule applied eagerly, so both slots
+        // are clean for the cleanups' own stash/take cycles. Re-stashed
+        // after the unwinds; a cleanup's own contained panic is overwritten
+        // then, like any second error raised while unwinding (the module
+        // restore documents the same policy for cleanup signals).
+        let parked_panic = if status == STATUS_SIGNAL {
+            PENDING_SHIM_PANIC.with(|p| p.borrow_mut().take())
+        } else {
+            None
+        };
+        if parked_panic.is_some() {
+            PENDING_FLOW.with(|p| p.borrow_mut().take());
             if let Some(b) = &bases {
                 // SAFETY: the native call has returned; truncations/scalar
                 // writes only.
@@ -3052,6 +3084,12 @@ impl CompiledLeaf {
             if let Some(saved) = saved_roots {
                 crate::emacs_core::eval::restore_scratch_gc_roots(saved);
             }
+        }
+        // Un-park the contained panic for the dispatcher's take, now that
+        // the parity unwinds (and any nested leaf dispatch they ran) are
+        // done with the pending slots.
+        if let Some(msg) = parked_panic {
+            PENDING_SHIM_PANIC.with(|p| *p.borrow_mut() = Some(msg));
         }
         match status {
             STATUS_OK => NativeRun::Ok(out as usize),
@@ -13135,5 +13173,280 @@ mod tests {
                 .contains("late-panic")
         );
         assert!(take_pending_flow().is_none(), "both slots consumed");
+    }
+
+    #[test]
+    fn parked_panic_survives_leaf_exit_cleanup_running_compiled_code() {
+        // A contained panic in a has_binds leaf whose LEAKED unwind-protect
+        // cleanup signals through COMPILED code: the leaf-exit parity unwind
+        // runs the cleanup while the panic is parked, so the inner leaf's
+        // stash/take cycle must see ITS arith-error (not the outer panic),
+        // and the outer dispatcher's take must still get the panic error
+        // afterwards (previously the inner take consumed it and the outer
+        // take found nothing — an `.expect` panic inside recovery).
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        ev.set_variable("jit-fx-witness", Value::NIL);
+        // Cleanup: compiled condition-case around (signal 'arith-error nil),
+        // recording the caught err object in the witness variable.
+        let mut cleanup = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        cleanup.lexical = true;
+        cleanup.ops = vec![
+            Op::PushConditionCase(7),
+            Op::Constant(0), // 'signal
+            Op::Constant(1), // 'arith-error
+            Op::Constant(2), // nil
+            Op::Call(2),
+            Op::PopHandler,
+            Op::Return,
+            Op::VarSet(3),   // 7: handler entry [err] -> jit-fx-witness
+            Op::Constant(2), // nil
+            Op::Return,
+        ];
+        cleanup.constants = vec![
+            Value::symbol("signal"),
+            Value::symbol("arith-error"),
+            Value::NIL,
+            Value::symbol("jit-fx-witness"),
+        ];
+        cleanup.max_stack = 16;
+        // Force the cleanup hot so its application inside the parity unwind
+        // dispatches through the JIT (engagement asserted below — an
+        // interpreted cleanup never touches the pending slots and would
+        // pass this test vacuously). The profitability gate would reject
+        // this call-only body (calls > arith); bypass it — the test needs
+        // THIS body native, profitability is orthogonal.
+        force_profit_gate_for_test(false);
+        let cleanup_id = cleanup.runtime.compiled_id_or_assign();
+        cleanup.runtime.set_hot_for_test();
+        let cleanup_val = Value::make_bytecode(cleanup);
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(0), // cleanup fn value
+                Op::UnwindProtectPop,
+                Op::Constant(1), // 'neovm--internal-panic
+                Op::Constant(2), // "park-boom"
+                Op::Call(1),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[
+                cleanup_val,
+                Value::symbol("neovm--internal-panic"),
+                Value::string("park-boom"),
+            ],
+        )
+        .expect("unwind-protect body compiles");
+        let spec0 = ev.specpdl.len();
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        // The outer dispatcher's take sees the PANIC error, not the
+        // cleanup's arith-error and not an empty slot.
+        let flow = take_pending_flow().expect("parked panic re-stashed for the dispatcher take");
+        let Flow::Signal(sig) = flow else {
+            panic!("expected Signal, got {flow:?}");
+        };
+        assert_eq!(sig.symbol_name(), "error");
+        let msg = sig.data[0].as_str_owned().expect("string payload");
+        assert!(
+            msg.contains("neomacs internal error") && msg.contains("park-boom"),
+            "unexpected message: {msg}"
+        );
+        // Engagement: the cleanup really tiered up and ran native.
+        assert!(
+            crate::emacs_core::jit::cache::is_compiled_for_test(cleanup_id),
+            "cleanup must have compiled — the contamination scenario needs \
+             its stash/take cycle to run through the JIT dispatcher"
+        );
+        // The inner handler saw ITS signal.
+        let witness = ev
+            .obarray
+            .symbol_value("jit-fx-witness")
+            .cloned()
+            .unwrap_or(Value::NIL);
+        assert_eq!(
+            witness.cons_car().as_symbol_name().as_deref(),
+            Some("arith-error"),
+            "inner handler must catch its own arith-error, not the parked panic"
+        );
+        assert_eq!(
+            ev.specpdl.len(),
+            spec0,
+            "parity unwind swept the leaf's entries"
+        );
+        assert!(take_pending_flow().is_none(), "slots clean after the take");
+    }
+
+    #[test]
+    fn wide_arg_call_panic_releases_backtrace_args_cleanly() {
+        // A >= 3-argument call stores its args as `BacktraceArgs::Evaluated`
+        // (an index into backtrace_args_stack). A contained panic truncates
+        // that stack at the boundary while the callee's Backtrace specpdl
+        // entry survives for the deferred parity unwind — whose
+        // release_backtrace_args must treat the healed residue as a no-op
+        // instead of tripping its LIFO debug_assert (debug builds would
+        // otherwise re-panic inside recovery).
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let var = Value::symbol("jit-fx-wide-dynvar");
+        let mid_sym = Value::symbol("jit-fx-wide-middle");
+        let crate::emacs_core::value::ValueKind::Symbol(mid_id) = mid_sym.kind() else {
+            panic!("symbol expected");
+        };
+        // Interpreted 3-arg middle that panics: its dispatch stores a wide
+        // Evaluated args entry, then the panic leaks it.
+        let mut mid = ByteCodeFunction::new(LambdaParams {
+            required: vec![intern("a"), intern("b"), intern("c")],
+            optional: Vec::new(),
+            rest: None,
+        });
+        mid.lexical = true;
+        mid.ops = vec![
+            Op::Constant(0), // 'neovm--internal-panic
+            Op::Constant(1), // "wide-boom"
+            Op::Call(1),
+            Op::Return,
+        ];
+        mid.constants = vec![
+            Value::symbol("neovm--internal-panic"),
+            Value::string("wide-boom"),
+        ];
+        mid.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(mid_id, Value::make_bytecode(mid));
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(1), // 5
+                Op::VarBind(0),  // has_binds: the exit parity unwind must run
+                Op::Constant(2), // 'jit-fx-wide-middle
+                Op::Constant(3), // 1
+                Op::Constant(4), // 2
+                Op::Constant(5), // 3
+                Op::Call(3),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[
+                var,
+                Value::make_int(5),
+                mid_sym,
+                Value::make_int(1),
+                Value::make_int(2),
+                Value::make_int(3),
+            ],
+        )
+        .expect("wide call body compiles");
+        let spec0 = ev.specpdl.len();
+        let args0 = ev.backtrace_args_stack_len_for_test();
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let flow = take_pending_flow().expect("panic flow stashed");
+        let Flow::Signal(sig) = flow else {
+            panic!("expected Signal, got {flow:?}");
+        };
+        let msg = sig.data[0].as_str_owned().expect("string payload");
+        assert!(msg.contains("wide-boom"), "unexpected message: {msg}");
+        assert_eq!(
+            ev.backtrace_args_stack_len_for_test(),
+            args0,
+            "backtrace args stack back at base"
+        );
+        assert_eq!(ev.specpdl.len(), spec0, "specpdl swept at leaf exit");
+        // The deferred unwind ran clean: a second containment round behaves
+        // identically (no cascading re-containment from the release path).
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let _ = take_pending_flow().expect("second round stashes too");
+        assert_eq!(ev.backtrace_args_stack_len_for_test(), args0);
+        assert_eq!(ev.specpdl.len(), spec0);
+    }
+
+    #[test]
+    fn ctxless_shim_panic_re_raised_when_gc_locks_poisoned() {
+        // The ctx-less wrapped shims probe the lock-poison half of the
+        // unrecoverable check through the thread heap: with a poisoned GC
+        // lock the panic must be re-raised (abort at the shim in
+        // production), stashing nothing. Poison is permanent for this
+        // process — fine under nextest's process-per-test.
+        crate::tagged::gc::with_tagged_heap(|h| h.poison_gc_locks_for_test());
+        let payload: Box<dyn std::any::Any + Send> = Box::new("poisoned-flee");
+        let back = contain_jit_shim_panic(core::ptr::null_mut(), payload)
+            .expect_err("poisoned GC locks must re-raise on the ctx-less path");
+        assert_eq!(back.downcast_ref::<&str>().unwrap(), &"poisoned-flee");
+        assert!(
+            !shim_panic_pending(),
+            "nothing stashed on the re-raise path"
+        );
+        assert!(take_pending_flow().is_none());
+    }
+
+    #[test]
+    fn contained_panic_in_load_unwinds_load_bookkeeping() {
+        // `load` bookkeeping rides the specpdl: a panic contained mid-load
+        // must leave `load-in-progress` nil and `loads_in_progress` empty
+        // once the deferred unwind runs, and repeated containment must not
+        // accumulate entries into a spurious "Recursive load".
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let fixture = dir.path().join("jit-fx-panic-load.el");
+        std::fs::write(&fixture, "(neovm--internal-panic \"load-boom\")\n")
+            .expect("write load fixture");
+        let path_str = fixture.to_string_lossy().into_owned();
+        let var = Value::symbol("jit-fx-load-dynvar");
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(1), // 5
+                Op::VarBind(0),  // has_binds: exit parity unwind sweeps the leak
+                Op::Constant(2), // 'load
+                Op::Constant(3), // absolute fixture path
+                Op::Call(1),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[
+                var,
+                Value::make_int(5),
+                Value::symbol("load"),
+                Value::string(&path_str),
+            ],
+        )
+        .expect("load call body compiles");
+        let spec0 = ev.specpdl.len();
+        // GNU signals "Recursive load" once the same file is in flight five
+        // times; five leaked entries would previously get there. Every round
+        // must instead report the contained panic with clean state.
+        for round in 0..5 {
+            assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal, "round {round}");
+            let flow = take_pending_flow().expect("panic flow stashed");
+            let Flow::Signal(sig) = flow else {
+                panic!("round {round}: expected Signal, got {flow:?}");
+            };
+            let msg = sig.data[0].as_str_owned().expect("string payload");
+            assert!(
+                msg.contains("load-boom") && !msg.contains("Recursive load"),
+                "round {round}: unexpected message: {msg}"
+            );
+            assert!(
+                ev.loads_in_progress.is_empty(),
+                "round {round}: loads_in_progress leaked"
+            );
+            assert_eq!(
+                ev.obarray
+                    .symbol_value("load-in-progress")
+                    .cloned()
+                    .unwrap_or(Value::NIL),
+                Value::NIL,
+                "round {round}: load-in-progress wedged"
+            );
+            assert_eq!(ev.specpdl.len(), spec0, "round {round}: specpdl swept");
+        }
+        // And a healthy load of a well-formed file still works afterwards.
+        let ok_file = dir.path().join("jit-fx-ok-load.el");
+        std::fs::write(&ok_file, "(setq jit-fx-load-ok t)\n").expect("write ok fixture");
+        ev.eval_str(&format!("(load {:?} nil t)", ok_file.to_string_lossy()))
+            .expect("normal load succeeds after repeated containment");
+        assert!(ev.loads_in_progress.is_empty());
     }
 }

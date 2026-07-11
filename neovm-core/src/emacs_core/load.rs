@@ -1495,12 +1495,28 @@ where
     // GNU eager load walks the current function cells directly and does not
     // keep a separate runtime macro-expansion cache. Disable the NeoVM cache
     // across file loads so exact GC does not retain or traverse stale
-    // load-local macroexpansion trees.
-    eval.macro_cache_disabled = true;
+    // load-local macroexpansion trees. Drop-guarded (house RAII pattern) so
+    // a panic contained at a module/JIT boundary inside the load restores
+    // the previous state too — an imperative restore would be skipped and
+    // latch the cache off for the rest of the session.
+    struct MacroCacheDisableGuard<'a> {
+        eval: &'a mut super::eval::Context,
+        old: bool,
+    }
+    impl Drop for MacroCacheDisableGuard<'_> {
+        fn drop(&mut self) {
+            self.eval.macro_cache_disabled = self.old;
+        }
+    }
+    let cache_guard = MacroCacheDisableGuard {
+        eval: &mut *eval,
+        old: old_macro_cache_disabled,
+    };
+    cache_guard.eval.macro_cache_disabled = true;
 
-    let result = body(eval);
+    let result = body(&mut *cache_guard.eval);
 
-    eval.macro_cache_disabled = old_macro_cache_disabled;
+    drop(cache_guard);
 
     // Restore lexenv via specpdl unbind_to, matching GNU's
     // readevalloop cleanup. This pops the LexicalEnv entry we
@@ -1868,23 +1884,27 @@ pub(crate) fn load_file_with_requested_and_found_flags(
             raw_data: None,
         });
     }
+    // Both pieces of load bookkeeping ride the specpdl, mirroring GNU
+    // lread.c Fload (`record_unwind_protect (record_load_unwind, ...)` +
+    // `specbind (Qload_in_progress, Qt)`), so every unwind restores them:
+    // the `unbind_to` below on both normal and `Err(Flow)` exits, and the
+    // panic-containment boundary unwinds when a contained panic skips this
+    // frame entirely. Imperative restore code here would be skipped by such
+    // a panic, wedging `load-in-progress` at t and leaking a spurious
+    // "Recursive load" entry.
+    let spec_entry = eval.specpdl.len();
+    eval.specpdl
+        .push(super::eval::SpecBinding::LoadsInProgress {
+            len: eval.loads_in_progress.len(),
+        });
     eval.loads_in_progress.push(found.clone());
-
-    // GNU Emacs lread.c: specbind(Qload_in_progress, Qt)
-    // Set load-in-progress to t during file loading, restore afterward.
-    let old_load_in_progress = eval
-        .obarray()
-        .symbol_value("load-in-progress")
-        .cloned()
-        .unwrap_or(Value::NIL);
-    eval.set_variable("load-in-progress", Value::T);
+    eval.specbind(intern("load-in-progress"), Value::T);
 
     let result = stacker::maybe_grow(128 * 1024, 2 * 1024 * 1024, || {
         load_file_body(eval, path, requested, found, noerror, nomessage)
     });
 
-    eval.set_variable("load-in-progress", old_load_in_progress);
-    eval.loads_in_progress.pop();
+    eval.unbind_to(spec_entry);
     result
 }
 

@@ -479,6 +479,19 @@ pub(crate) enum SpecBinding {
     SaveRestriction {
         state: crate::buffer::SavedRestrictionState,
     },
+    /// Truncate `Context::loads_in_progress` back to `len` on unbind — the
+    /// specpdl-carried form of GNU lread.c `Fload`'s
+    /// `record_unwind_protect (record_load_unwind, Vloads_in_progress)`.
+    /// Carried on the specpdl (not restored imperatively in `load_file_*`)
+    /// so EVERY unwind pops it: `Err(Flow)` propagation, condition-case
+    /// unwinds, and the panic-containment boundary restores. Truncate (not
+    /// pop) keeps it a no-op if a bootstrap reset cleared the stack first.
+    LoadsInProgress { len: usize },
+    /// Truncate `Context::require_stack` back to `len` on unbind — the
+    /// specpdl-carried form of GNU fns.c `Frequire`'s
+    /// `record_unwind_protect (require_unwind, require_nesting_list)`.
+    /// Same rationale as [`SpecBinding::LoadsInProgress`].
+    RequireStack { len: usize },
     /// Placeholder. Matches GNU SPECPDL_NOP.
     Nop,
 }
@@ -2802,6 +2815,7 @@ pub(crate) struct ModuleBoundarySnapshot {
     eval_temp_roots_len: usize,
     sequence_temp_root_frames_len: usize,
     vm_root_frames_len: usize,
+    scratch_gc_roots_len: usize,
     depth: usize,
     lexenv: Value,
     macro_expansion_scope_depth: usize,
@@ -2813,6 +2827,15 @@ impl ModuleBoundarySnapshot {
     /// match shim, `entry` at leaf exit).
     pub(crate) fn condition_len(&self) -> usize {
         self.condition_len
+    }
+
+    /// Scratch-GC-root depth at the boundary. The module restore truncates
+    /// to it directly; the JIT boundary reads it as the leaf-entry floor for
+    /// its deferred root sweep (`restore_jit_shim_boundary` itself must NOT
+    /// truncate roots — the pending-root-sweep floor in jit/compile.rs owns
+    /// that lifecycle).
+    pub(crate) fn scratch_gc_roots_len(&self) -> usize {
+        self.scratch_gc_roots_len
     }
 }
 
@@ -2827,6 +2850,7 @@ impl Context {
             eval_temp_roots_len: self.eval_temp_roots.len(),
             sequence_temp_root_frames_len: self.sequence_temp_root_frames.len(),
             vm_root_frames_len: self.vm_root_frames.len(),
+            scratch_gc_roots_len: save_scratch_gc_roots(),
             depth: self.depth,
             lexenv: self.lexenv,
             macro_expansion_scope_depth: self.macro_expansion_scope_depth,
@@ -2867,6 +2891,12 @@ impl Context {
         self.sequence_temp_root_frames
             .truncate(snap.sequence_temp_root_frames_len);
         self.vm_root_frames.truncate(snap.vm_root_frames_len);
+        // The panicked extent's skipped scratch-root pops: dead pushes above
+        // the boundary would pin their objects forever (and grow without
+        // bound over repeated contained panics). The cleanups above have
+        // finished — their own scratch usage is balanced — so the entry
+        // depth is exact. Safe direction: extra roots only ever pin.
+        restore_scratch_gc_roots(snap.scratch_gc_roots_len);
         self.depth = snap.depth;
         self.lexenv = snap.lexenv;
         self.macro_expansion_scope_depth = snap.macro_expansion_scope_depth;
@@ -7682,14 +7712,17 @@ impl Context {
     /// termination + sweep. The first cycle and non-incremental builds take the
     /// stop-the-world path.
     fn gc_collect_from_current_roots_impl(&mut self, force_complete: bool) {
-        // Inline set/clear, NOT a Drop guard (see the `gc_driver_active` field
-        // doc): the body is infallible, so the trailing clear runs on every
-        // normal exit (including the body's early `return`s), while a panic
-        // escaping the body leaves the flag set for the module-boundary
-        // containment probe to see.
+        // Inline set/restore, NOT a Drop guard (see the `gc_driver_active`
+        // field doc): the body is infallible, so the trailing restore runs on
+        // every normal exit (including the body's early `return`s), while a
+        // panic escaping the body leaves the flag set for the module-boundary
+        // containment probe to see. Save/restore (not set/clear) so a nested
+        // collection — e.g. `(garbage-collect)` reached from a finalizer —
+        // cannot clear the OUTER driver extent's flag on its way out.
+        let prev = self.gc_driver_active;
         self.gc_driver_active = true;
         self.gc_collect_from_current_roots_body(force_complete);
-        self.gc_driver_active = false;
+        self.gc_driver_active = prev;
     }
 
     fn gc_collect_from_current_roots_body(&mut self, force_complete: bool) {
@@ -11820,11 +11853,18 @@ impl Context {
     }
 
     fn sf_save_current_buffer_value(&mut self, tail: Value) -> EvalResult {
-        let saved_buf = self.buffers.current_buffer().map(|b| b.id);
-        let result = self.sf_progn_value(tail);
-        if let Some(saved_id) = saved_buf {
-            self.restore_current_buffer_if_live(saved_id);
+        // Specpdl-carried like the VM arm and GNU's
+        // record_unwind_current_buffer, so a panic contained at a module/JIT
+        // boundary inside the body restores the buffer via the boundary
+        // unwind (an imperative restore here would be skipped, leaving the
+        // wrong buffer current). PS fix-wave sweep hit.
+        let count = self.specpdl.len();
+        if let Some(buf) = self.buffers.current_buffer() {
+            self.specpdl
+                .push(SpecBinding::SaveCurrentBuffer { buffer_id: buf.id });
         }
+        let result = self.sf_progn_value(tail);
+        self.unbind_to(count);
         result
     }
 
@@ -12282,13 +12322,23 @@ impl Context {
                 match plan {
                     RequirePlan::Return(value) => Ok(value),
                     RequirePlan::Load { sym_id, name, path } => {
+                        // The nesting entry rides the specpdl (GNU fns.c
+                        // Frequire: record_unwind_protect (require_unwind,
+                        // ...)), so a panic contained at a module/JIT
+                        // boundary inside the load pops it via the boundary
+                        // unwind instead of leaking a spurious "Recursive
+                        // require" entry.
+                        let spec_entry = self.specpdl.len();
+                        self.specpdl.push(SpecBinding::RequireStack {
+                            len: self.require_stack.len(),
+                        });
                         self.require_stack.push(sym_id);
                         let result = (|| -> EvalResult {
                             self.load_file_internal(&path)?;
                             self.refresh_features_from_variable();
                             finish_require_in_state(&self.features, sym_id, &name, Some(&path))
                         })();
-                        let _ = self.require_stack.pop();
+                        self.unbind_to(spec_entry);
                         if let Err(ref e) = result
                             && !self.flow_has_active_handler(e)
                         {
@@ -12530,6 +12580,14 @@ impl Context {
         let BacktraceArgs::Evaluated(index) = *args else {
             return;
         };
+        if index >= self.backtrace_args_stack.len() {
+            // Healed residue: a panic contained at a JIT-shim/module boundary
+            // truncated `backtrace_args_stack` while the panicked extent's
+            // Backtrace specpdl entries survive for the deferred depth-based
+            // unwind (`restore_jit_shim_boundary` doc). Their slots are
+            // already gone; releasing degrades to a no-op by design.
+            return;
+        }
         debug_assert_eq!(
             index + 1,
             self.backtrace_args_stack.len(),
@@ -12537,9 +12595,16 @@ impl Context {
         );
         if index + 1 == self.backtrace_args_stack.len() {
             self.backtrace_args_stack.pop();
-        } else if index < self.backtrace_args_stack.len() {
+        } else {
             self.backtrace_args_stack[index].clear();
         }
+    }
+
+    /// Test-only: observed depth of the backtrace args stack (containment
+    /// regression tests assert healed residue leaves it at base).
+    #[cfg(test)]
+    pub(crate) fn backtrace_args_stack_len_for_test(&self) -> usize {
+        self.backtrace_args_stack.len()
     }
 
     fn release_backtrace_args_in_specpdl_suffix(&mut self, count: usize) {
@@ -12550,12 +12615,17 @@ impl Context {
                 ..
             } = binding
             {
+                if *index >= truncate_to {
+                    // Healed residue (see `release_backtrace_args`): the slot
+                    // was already truncated by a containment boundary restore.
+                    continue;
+                }
                 debug_assert_eq!(
                     *index + 1,
                     truncate_to,
                     "backtrace args stack should match the specpdl unwind suffix"
                 );
-                truncate_to = truncate_to.min(*index);
+                truncate_to = *index;
             }
         }
         self.backtrace_args_stack.truncate(truncate_to);
@@ -14778,7 +14848,9 @@ impl Context {
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
             | SpecBinding::SaveCurrentBuffer { .. }
-            | SpecBinding::SaveRestriction { .. } => false,
+            | SpecBinding::SaveRestriction { .. }
+            | SpecBinding::LoadsInProgress { .. }
+            | SpecBinding::RequireStack { .. } => false,
         })
     }
 
@@ -15180,6 +15252,12 @@ impl Context {
                 SpecBinding::SaveRestriction { state } => {
                     self.buffers.restore_saved_restriction_state(state);
                 }
+                SpecBinding::LoadsInProgress { len } => {
+                    self.loads_in_progress.truncate(len);
+                }
+                SpecBinding::RequireStack { len } => {
+                    self.require_stack.truncate(len);
+                }
             }
         }
         // If cleanup forms didn't set their own quit, reinstate the
@@ -15258,7 +15336,9 @@ pub(crate) fn unbind_to_in_state(
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
             | SpecBinding::SaveCurrentBuffer { .. }
-            | SpecBinding::SaveRestriction { .. } => {
+            | SpecBinding::SaveRestriction { .. }
+            | SpecBinding::LoadsInProgress { .. }
+            | SpecBinding::RequireStack { .. } => {
                 // These should not appear in standalone unbind_to_in_state.
                 // Once the VM is fully migrated, this function may be removed.
             }
@@ -15284,7 +15364,9 @@ fn default_toplevel_binding(specpdl: &[SpecBinding], sym_id: SymId) -> Option<&S
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }
         | SpecBinding::SaveCurrentBuffer { .. }
-        | SpecBinding::SaveRestriction { .. } => false,
+        | SpecBinding::SaveRestriction { .. }
+        | SpecBinding::LoadsInProgress { .. }
+        | SpecBinding::RequireStack { .. } => false,
     })
 }
 
@@ -15305,7 +15387,9 @@ pub(crate) fn default_toplevel_value_in_state(
         | Some(SpecBinding::UnwindProtect { .. })
         | Some(SpecBinding::SaveExcursion { .. })
         | Some(SpecBinding::SaveCurrentBuffer { .. })
-        | Some(SpecBinding::SaveRestriction { .. }) => {
+        | Some(SpecBinding::SaveRestriction { .. })
+        | Some(SpecBinding::LoadsInProgress { .. })
+        | Some(SpecBinding::RequireStack { .. }) => {
             unreachable!("non-variable bindings are excluded above")
         }
         None => {
@@ -15362,7 +15446,9 @@ pub(crate) fn set_default_toplevel_value_in_state(
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
             | SpecBinding::SaveCurrentBuffer { .. }
-            | SpecBinding::SaveRestriction { .. } => {}
+            | SpecBinding::SaveRestriction { .. }
+            | SpecBinding::LoadsInProgress { .. }
+            | SpecBinding::RequireStack { .. } => {}
         }
     }
     false
@@ -15412,7 +15498,9 @@ fn let_shadows_buffer_binding_p_in_state(
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }
         | SpecBinding::SaveCurrentBuffer { .. }
-        | SpecBinding::SaveRestriction { .. } => false,
+        | SpecBinding::SaveRestriction { .. }
+        | SpecBinding::LoadsInProgress { .. }
+        | SpecBinding::RequireStack { .. } => false,
     })
 }
 
