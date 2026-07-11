@@ -1591,8 +1591,64 @@ struct TabBarPointerAppearancePlan {
 struct TabBarPointerRunPlan {
     local_bounds: FrameRect,
     col: u16,
+    primitive_len: u32,
     interaction: InteractionId,
     appearance: Option<TabBarPointerAppearancePlan>,
+}
+
+fn push_coalesced_tab_pointer_run(
+    runs: &mut Vec<TabBarPointerRunPlan>,
+    next: TabBarPointerRunPlan,
+) {
+    if let Some(previous) = runs.last_mut()
+        && previous.interaction == next.interaction
+        && previous.appearance == next.appearance
+        && previous.local_bounds.y() == next.local_bounds.y()
+        && previous.local_bounds.height() == next.local_bounds.height()
+        && (previous.local_bounds.x() + previous.local_bounds.width() - next.local_bounds.x()).abs()
+            <= f32::EPSILON
+    {
+        previous.local_bounds = FrameRect::new(
+            previous.local_bounds.x(),
+            previous.local_bounds.y(),
+            previous.local_bounds.width() + next.local_bounds.width(),
+            previous.local_bounds.height(),
+        )
+        .expect("union of adjacent tab pointer runs is valid");
+        previous.primitive_len = previous
+            .primitive_len
+            .checked_add(next.primitive_len)
+            .expect("tab pointer run length fits u32");
+    } else {
+        runs.push(next);
+    }
+}
+
+fn push_coalesced_tab_hit_region(hit_regions: &mut Vec<ChromeHitRegion>, next: ChromeHitRegion) {
+    if let Some(previous) = hit_regions.last()
+        && previous.action() == next.action()
+    {
+        let previous_bounds = previous.local_bounds().raw();
+        let next_bounds = next.local_bounds().raw();
+        if previous_bounds.y == next_bounds.y
+            && previous_bounds.height == next_bounds.height
+            && (previous_bounds.x + previous_bounds.width - next_bounds.x).abs() <= f32::EPSILON
+        {
+            let action = previous.action().clone();
+            *hit_regions.last_mut().expect("last region still exists") = ChromeHitRegion::new(
+                BandRect::new(
+                    previous_bounds.x,
+                    previous_bounds.y,
+                    previous_bounds.width + next_bounds.width,
+                    previous_bounds.height,
+                )
+                .expect("union of adjacent tab hit regions is valid"),
+                action,
+            );
+            return;
+        }
+    }
+    hit_regions.push(next);
 }
 
 pub(crate) struct TabBarPresentedPointerPlan {
@@ -1655,9 +1711,8 @@ impl TabBarPresentedPointerPlan {
                     appearances.len() - 1
                 });
             if published_spans.insert((appearance.identity, appearance.kind, run.col)) {
-                appearances[index]
-                    .0
-                    .push(neomacs_display_protocol::PresentedSourcePaintSpan::new(
+                appearances[index].0.push(
+                    neomacs_display_protocol::PresentedSourcePaintSpan::new_run(
                         match appearance.kind {
                             TabBarPointerPaintKind::Face => PresentedPrimitiveKind::Glyph,
                             TabBarPointerPaintKind::Image => PresentedPrimitiveKind::Image,
@@ -1668,8 +1723,10 @@ impl TabBarPresentedPointerPlan {
                             row: canonical_row,
                             col: run.col,
                         },
+                        run.primitive_len,
                         appearance_bounds[&appearance.identity],
-                    ));
+                    ),
+                );
             }
         }
         let appearances = appearances
@@ -1770,19 +1827,25 @@ pub(crate) fn tab_bar_presented_pointer_plan(
                 mouse_faces.iter().find(|(value, _)| *value == mouse_face)
             else {
                 last_mouse_face = None;
-                runs.push(TabBarPointerRunPlan {
-                    local_bounds,
-                    col: slot.col,
-                    interaction: InteractionId::new(interaction),
-                    appearance: None,
-                });
-                hit_regions.push(ChromeHitRegion::new(
-                    BandRect::new(slot.x, 0.0, slot.width, height)
-                        .expect("rendered tab source slots have valid geometry"),
-                    ChromeAction::Presented {
-                        interaction: InteractionId::new(interaction),
+                let interaction = InteractionId::new(interaction);
+                push_coalesced_tab_pointer_run(
+                    &mut runs,
+                    TabBarPointerRunPlan {
+                        local_bounds,
+                        col: slot.col,
+                        primitive_len: 1,
+                        interaction,
+                        appearance: None,
                     },
-                ));
+                );
+                push_coalesced_tab_hit_region(
+                    &mut hit_regions,
+                    ChromeHitRegion::new(
+                        BandRect::new(slot.x, 0.0, slot.width, height)
+                            .expect("rendered tab source slots have valid geometry"),
+                        ChromeAction::Presented { interaction },
+                    ),
+                );
                 continue;
             };
             let identity = if let Some((previous_item, previous_char, previous_face, identity)) =
@@ -1826,85 +1889,27 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             None
         };
         let interaction = InteractionId::new(interaction);
-        runs.push(TabBarPointerRunPlan {
-            local_bounds,
-            col: slot.col,
-            interaction,
-            appearance,
-        });
-        hit_regions.push(ChromeHitRegion::new(
-            BandRect::new(slot.x, 0.0, slot.width, height)
-                .expect("rendered tab source slots have valid geometry"),
-            ChromeAction::Presented { interaction },
-        ));
+        push_coalesced_tab_pointer_run(
+            &mut runs,
+            TabBarPointerRunPlan {
+                local_bounds,
+                col: slot.col,
+                primitive_len: 1,
+                interaction,
+                appearance,
+            },
+        );
+        push_coalesced_tab_hit_region(
+            &mut hit_regions,
+            ChromeHitRegion::new(
+                BandRect::new(slot.x, 0.0, slot.width, height)
+                    .expect("rendered tab source slots have valid geometry"),
+                ChromeAction::Presented { interaction },
+            ),
+        );
     }
 
     TabBarPresentedPointerPlan { runs, hit_regions }
-}
-
-#[cfg(test)]
-pub(crate) fn tab_bar_presented_hit_regions(
-    evaluator: &mut Context,
-    presentation: u64,
-    rendered: &RenderedDisplayRow,
-    text: Value,
-    items: &[TabBarSourceItem],
-    height: f32,
-) -> Vec<ChromeHitRegion> {
-    let mut targets: HashMap<(usize, bool), u32> = HashMap::new();
-    let mut runs: Vec<(f32, f32, ChromeAction)> = Vec::new();
-
-    for slot in rendered.source_slots() {
-        let Some(char_index) = slot.source().lisp_string_char_index() else {
-            continue;
-        };
-        let Some((item_index, item)) = items
-            .iter()
-            .enumerate()
-            .find(|(_, item)| item.char_range.contains(&char_index))
-        else {
-            continue;
-        };
-        let close = tab_bar_close_at(evaluator, text, char_index);
-        let interaction = if let Some(interaction) = targets.get(&(item_index, close)).copied() {
-            interaction
-        } else {
-            let Some(posn_string) = tab_bar_posn_string(evaluator, item, close) else {
-                continue;
-            };
-            let interaction = evaluator.register_presented_mouse_target(
-                presentation,
-                PresentedMouseTarget {
-                    area: PresentedMouseArea::TabBar,
-                    posn_string,
-                },
-            );
-            targets.insert((item_index, close), interaction);
-            interaction
-        };
-        let action = ChromeAction::Presented {
-            interaction: InteractionId::new(interaction),
-        };
-        let left = slot.x_px();
-        let right = left + slot.width_px();
-        if let Some((_, run_right, run_action)) = runs.last_mut()
-            && *run_action == action
-            && (*run_right - left).abs() <= f32::EPSILON
-        {
-            *run_right = right;
-        } else {
-            runs.push((left, right, action));
-        }
-    }
-
-    runs.into_iter()
-        .filter_map(|(left, right, action)| {
-            Some(ChromeHitRegion::new(
-                BandRect::new(left, 0.0, right - left, height).ok()?,
-                action,
-            ))
-        })
-        .collect()
 }
 
 pub(crate) struct ScratchGcRootScope {

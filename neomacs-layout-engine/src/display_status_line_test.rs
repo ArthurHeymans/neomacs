@@ -267,8 +267,21 @@ fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
         },
     ];
 
-    let regions =
-        tab_bar_presented_hit_regions(&mut eval, presentation, &rendered, text, &items, 18.0);
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, text, &items);
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &slots,
+        &items,
+        18.0,
+        TabBarPointerAppearanceStyle::new(
+            test_tab_pointer_relief(false),
+            test_tab_pointer_relief(true),
+        ),
+        &[],
+        &[],
+    );
+    let regions = plan.hit_regions();
 
     assert_eq!(regions[0].local_bounds().raw().x, 0.0);
     assert_eq!(regions[0].local_bounds().raw().width, 4.0);
@@ -999,12 +1012,16 @@ fn tab_bar_mouse_face_coalesces_adjacent_wide_source_characters_not_display_colu
         &[],
         &[(Value::symbol("wide-hover"), FaceId::new(42))],
     );
+    assert_eq!(plan.hit_regions().len(), 1);
+    assert_eq!(plan.hit_regions()[0].local_bounds().raw().width, 32.0);
     let source = plan
         .into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap(), 0)
         .unwrap();
 
+    assert_eq!(source.regions().len(), 1);
     assert_eq!(source.appearances().len(), 1);
-    assert_eq!(source.appearances()[0].paint_spans().len(), 2);
+    assert_eq!(source.appearances()[0].paint_spans().len(), 1);
+    assert_eq!(source.appearances()[0].paint_spans()[0].len(), 2);
 }
 
 #[test]
