@@ -1005,11 +1005,24 @@ impl RenderApp {
 
     /// Whether any dynamic overlay is active. Overlays are not part of the
     /// retained static scene, so their presence forces the full render path.
+    ///
+    /// Idle dimming is included: it is a post-content overlay drawn *after* the
+    /// cursor (glyphs.rs draw_post_content_effects, after draw_cursor_layer), so
+    /// in a full render the cursor is dimmed too. The composite fast path draws
+    /// the cursor over the already-dimmed retained scene, which would leave the
+    /// cursor undimmed — and the retained scene's validity is not keyed on dim
+    /// alpha. Falling back to the full render whenever dimming is active keeps
+    /// both correct.
     fn window_has_active_overlays(render: &GuiFrameRenderState) -> bool {
         render.overlays.popup_menu.is_some()
             || render.overlays.tooltip.is_some()
             || render.overlays.visual_bell_start.is_some()
             || render.overlays.ime_preedit_active
+            || render.overlays.idle_dim.active
+            // The FPS counter is redrawn from a live timer every frame; the
+            // retained scene would freeze it, so a full render is required
+            // while it is shown.
+            || render.overlays.fps.enabled
     }
 
     /// Ensure the window's retained-static texture exists at `width`x`height`
