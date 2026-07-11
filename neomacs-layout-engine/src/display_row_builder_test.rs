@@ -13,7 +13,10 @@ use crate::display_text_run_measurement::{
     DisplayTextRunMeasurementPlan,
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphPointerAppearance, GlyphPointerOccurrenceIdentity,
+    GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphRow, GlyphType,
+};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::{Context, Value};
@@ -45,6 +48,60 @@ fn text_item(text: &str) -> DisplayItem {
         RenderFaceRef::FaceId(FaceId::new(2)),
         DisplayItemKind::TextRun(DisplayTextRun::new(text)),
     )
+}
+
+fn pointer_appearance(source_id: u64) -> GlyphPointerAppearance {
+    GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::LispString,
+            source_id,
+            range_start: 0,
+            range_end: 1,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    }
+}
+
+#[test]
+fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let first = row
+        .intern_pointer_appearance(pointer_appearance(1))
+        .expect("first pointer token");
+    row.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(first),
+        ..Glyph::char('a', FaceId::new(0), 0)
+    });
+    let before_run = DisplayRowGlyphCheckpoint::capture(&row);
+
+    let second = row
+        .intern_pointer_appearance(pointer_appearance(2))
+        .expect("second pointer token");
+    row.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(second),
+        ..Glyph::char('b', FaceId::new(0), 1)
+    });
+    let after_run = DisplayRowGlyphCheckpoint::capture(&row);
+
+    let mut keep_run_prefix = row.clone();
+    before_run
+        .with_added_text_glyphs(1, after_run)
+        .restore(&mut keep_run_prefix);
+    assert_eq!(keep_run_prefix.pointer_appearances().len(), 2);
+    let token = keep_run_prefix.glyphs[GlyphArea::Text.index()][1]
+        .pointer_appearance
+        .expect("retained prefix pointer token");
+    assert_eq!(
+        keep_run_prefix.pointer_appearance(token),
+        Some(&pointer_appearance(2))
+    );
+
+    before_run.restore(&mut row);
+    assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 1);
+    assert_eq!(row.pointer_appearances().len(), 1);
+    assert_eq!(row.pointer_appearance(first), Some(&pointer_appearance(1)));
 }
 
 fn glyphless_item(ch: char, method: GlyphlessMethod) -> DisplayItem {

@@ -661,7 +661,10 @@ fn buffer_pointer_source_map(
                         .min(row_clip.x + row_clip.width)
                         .min(row_bounds.x + row_bounds.width);
                     let visible_bottom = (y + row_height).min(row_clip.y + row_clip.height);
-                    if let Some(pointer) = glyph.pointer_appearance
+                    if let Some(pointer) = glyph
+                        .pointer_appearance
+                        .and_then(|id| row.pointer_appearance(id))
+                        .copied()
                         && visible_right > visible_left
                         && visible_bottom > visible_top
                         && let Ok(bounds) = neomacs_display_protocol::FrameRect::new(

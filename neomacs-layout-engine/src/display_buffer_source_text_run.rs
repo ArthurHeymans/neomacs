@@ -202,6 +202,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         ) else {
             return BufferSourceItemRenderOutcome::Stop;
         };
+        let row_glyph_checkpoint_after_append = source_render.capture_glyph_checkpoint();
         capture_whole_text_run_cursor_if_point(
             cursor_info,
             active_face_state,
@@ -221,6 +222,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
             output_display_point_start,
             output_row_positions_start,
             row_glyph_checkpoint_start,
+            row_glyph_checkpoint_after_append,
             &append_progress,
         );
         progress.apply_row_position(append_progress.end());
@@ -364,6 +366,7 @@ fn apply_whole_text_run_word_wrap_state(
     output_display_point_start: usize,
     output_row_positions_start: (Option<LispCharPos1>, Option<LispCharPos1>),
     row_glyph_checkpoint_start: DisplayRowGlyphCheckpoint,
+    row_glyph_checkpoint_after_append: DisplayRowGlyphCheckpoint,
     append_progress: &DisplayRowAppendProgress,
 ) {
     if !word_wrap.is_enabled() {
@@ -385,7 +388,8 @@ fn apply_whole_text_run_word_wrap_state(
                     // The candidate (word start) sits at `char_offset` text
                     // glyphs into this run, so the boundary's glyph checkpoint is
                     // the pre-run snapshot advanced by `char_offset`.
-                    row_glyph_checkpoint_start.with_added_text_glyphs(char_offset),
+                    row_glyph_checkpoint_start
+                        .with_added_text_glyphs(char_offset, row_glyph_checkpoint_after_append),
                 );
             }
             first_run_charpos = row_first;

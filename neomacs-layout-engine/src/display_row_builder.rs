@@ -432,6 +432,7 @@ impl DisplayRowWriteMetrics {
 pub(crate) struct DisplayRowGlyphCheckpoint {
     area_lengths: [usize; 3],
     displays_text: bool,
+    pointer_appearances_len: usize,
 }
 
 impl DisplayRowGlyphCheckpoint {
@@ -443,6 +444,7 @@ impl DisplayRowGlyphCheckpoint {
                 row.glyphs[GlyphArea::RightMargin.index()].len(),
             ],
             displays_text: row.displays_text,
+            pointer_appearances_len: row.pointer_appearances().len(),
         }
     }
 
@@ -451,6 +453,7 @@ impl DisplayRowGlyphCheckpoint {
         row.glyphs[GlyphArea::Text.index()].truncate(self.area_lengths[1]);
         row.glyphs[GlyphArea::RightMargin.index()].truncate(self.area_lengths[2]);
         row.displays_text = self.displays_text;
+        row.truncate_pointer_appearances(self.pointer_appearances_len);
     }
 
     /// Derive a checkpoint `added` text glyphs further along than `self`. Used by
@@ -459,12 +462,21 @@ impl DisplayRowGlyphCheckpoint {
     /// each candidate's boundary is `base + char_offset` text glyphs (natural
     /// text runs map one source char to one text glyph). Any added text glyph
     /// means the row now displays text.
-    pub(crate) fn with_added_text_glyphs(self, added: usize) -> Self {
+    pub(crate) fn with_added_text_glyphs(
+        self,
+        added: usize,
+        after_append: DisplayRowGlyphCheckpoint,
+    ) -> Self {
         let mut area_lengths = self.area_lengths;
         area_lengths[GlyphArea::Text.index()] += added;
         Self {
             area_lengths,
             displays_text: self.displays_text || added > 0,
+            pointer_appearances_len: if added > 0 {
+                after_append.pointer_appearances_len
+            } else {
+                self.pointer_appearances_len
+            },
         }
     }
 }
@@ -1137,6 +1149,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         let face_id = self.writer.face_id(face);
         let measurement = self.text_run_measurement(text, face_id);
         let start_char = source_span_start_char(span);
+        let glyph_pointer_appearance =
+            pointer_appearance.and_then(|appearance| appearance.glyph_metadata());
+        let mut pointer_metadata = None;
         let mut status = DisplayRowAppendStatus::Complete;
         let mut byte_offset = 0usize;
         for (char_offset, ch) in text.chars().enumerate() {
@@ -1162,8 +1177,12 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 advance_request,
             );
             self.writer.apply_item_layout_since(before_len, item_layout);
-            let pointer_metadata =
-                pointer_appearance.and_then(|appearance| appearance.glyph_metadata());
+            if self.area_len() > before_len
+                && pointer_metadata.is_none()
+                && let Some(appearance) = glyph_pointer_appearance
+            {
+                pointer_metadata = self.writer.row.intern_pointer_appearance(appearance);
+            }
             for glyph in &mut self.writer.row.glyphs[self.writer.area_index][before_len..] {
                 glyph.pointer_appearance = pointer_metadata;
             }
@@ -1288,6 +1307,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::RowBreak(_) => {}
         }
         self.apply_item_layout_since(before_len, item_layout);
+        let pointer_appearance = if self.row.glyphs[area_index].len() > before_len {
+            pointer_appearance.and_then(|appearance| self.row.intern_pointer_appearance(appearance))
+        } else {
+            None
+        };
         for glyph in &mut self.row.glyphs[area_index][before_len..] {
             glyph.pointer_appearance = pointer_appearance;
         }

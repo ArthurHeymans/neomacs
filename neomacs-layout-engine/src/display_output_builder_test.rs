@@ -1517,7 +1517,10 @@ fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
         }
         builder
             .edit_current_row_for_test(|row| {
-                row.glyphs[GlyphArea::Text.index()][col].pointer_appearance = Some(metadata);
+                let token = row
+                    .intern_pointer_appearance(metadata)
+                    .expect("pointer appearance token");
+                row.glyphs[GlyphArea::Text.index()][col].pointer_appearance = Some(token);
             })
             .expect("current row");
         builder.end_row();
@@ -1560,7 +1563,10 @@ fn buffer_mouse_face_is_derived_only_from_the_final_authoritative_row() {
         GlyphRowRole::Text,
         vec![Glyph::char('x', FaceId::new(0), 0)],
     );
-    stale.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+    let pointer_token = stale
+        .intern_pointer_appearance(pointer)
+        .expect("pointer appearance token");
+    stale.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer_token);
     let replacement = external_text_row(
         GlyphRowRole::Text,
         vec![Glyph::char('y', FaceId::new(0), 1)],
@@ -1601,7 +1607,10 @@ fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
     );
     retained.pixel_y = 11.0;
     retained.height_px = 18.0;
-    retained.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+    let pointer_token = retained
+        .intern_pointer_appearance(pointer)
+        .expect("pointer appearance token");
+    retained.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer_token);
 
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(3, 2, 10, Rect::new(2.0, 4.0, 80.0, 40.0), true);

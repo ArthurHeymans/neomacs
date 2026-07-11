@@ -3,6 +3,93 @@ use crate::face::Face;
 use crate::frame_chrome::PresentationId;
 use crate::frame_glyphs::{DisplaySlotId, PhysCursor};
 
+fn test_pointer_appearance() -> GlyphPointerAppearance {
+    GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 2,
+            range_end: 5,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    }
+}
+
+#[test]
+fn glyph_pointer_token_has_small_niche_sized_overhead() {
+    assert_eq!(std::mem::size_of::<Option<GlyphPointerAppearanceId>>(), 4);
+    assert!(std::mem::size_of::<Glyph>() <= 80);
+}
+
+#[test]
+fn ordinary_glyph_and_row_omit_empty_pointer_metadata_from_json() {
+    let glyph_json = serde_json::to_string(&Glyph::char('x', FaceId::new(0), 0)).unwrap();
+    assert!(!glyph_json.contains("pointer_appearance"));
+
+    let row_json = serde_json::to_string(&GlyphRow::new(GlyphRowRole::Text)).unwrap();
+    assert!(!row_json.contains("pointer_appearances"));
+    let round_trip: GlyphRow = serde_json::from_str(&row_json).unwrap();
+    assert!(round_trip.pointer_appearances().is_empty());
+}
+
+#[test]
+fn row_equality_resolves_token_identity_through_its_side_table() {
+    let mut first = GlyphRow::new(GlyphRowRole::Text);
+    let first_token = first
+        .intern_pointer_appearance(test_pointer_appearance())
+        .expect("first token");
+    first.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(first_token),
+        ..Glyph::char('x', FaceId::new(0), 0)
+    });
+
+    let mut changed_appearance = test_pointer_appearance();
+    changed_appearance.source.range_end = 6;
+    let mut second = GlyphRow::new(GlyphRowRole::Text);
+    let second_token = second
+        .intern_pointer_appearance(changed_appearance)
+        .expect("second token");
+    second.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(second_token),
+        ..Glyph::char('x', FaceId::new(0), 0)
+    });
+
+    assert_eq!(first_token, second_token, "both rows use local token one");
+    assert!(!first.row_equal(&second));
+}
+
+#[test]
+fn interactive_row_interns_deduplicates_and_round_trips_pointer_appearance() {
+    let appearance = test_pointer_appearance();
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let first = row
+        .intern_pointer_appearance(appearance)
+        .expect("appearance id");
+    let duplicate = row
+        .intern_pointer_appearance(appearance)
+        .expect("deduplicated appearance id");
+    assert_eq!(first, duplicate);
+    row.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(first),
+        ..Glyph::char('x', FaceId::new(0), 0)
+    });
+
+    let json = serde_json::to_string(&row).expect("serialize interactive row");
+    let round_trip: GlyphRow = serde_json::from_str(&json).expect("deserialize interactive row");
+    let token = round_trip.glyphs[GlyphArea::Text.index()][0]
+        .pointer_appearance
+        .expect("glyph pointer token");
+    assert_eq!(round_trip.pointer_appearance(token), Some(&appearance));
+    assert_eq!(round_trip.pointer_appearances().len(), 1);
+}
+
+#[test]
+fn pointer_appearance_id_rejects_unrepresentable_table_index() {
+    assert!(GlyphPointerAppearanceId::from_index(u32::MAX as usize).is_none());
+}
+
 #[test]
 fn frame_display_state_carries_the_interaction_presentation_that_matches_its_pixels() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);

@@ -147,8 +147,23 @@ pub struct Glyph {
     pub padding: bool,
     /// Layout-owned pointer appearance identity carried transactionally with
     /// the authoritative glyph through rollback, bidi reorder, and row reuse.
-    #[serde(default)]
-    pub pointer_appearance: Option<GlyphPointerAppearance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pointer_appearance: Option<GlyphPointerAppearanceId>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GlyphPointerAppearanceId(std::num::NonZeroU32);
+
+impl GlyphPointerAppearanceId {
+    pub fn from_index(index: usize) -> Option<Self> {
+        let value = u32::try_from(index.checked_add(1)?).ok()?;
+        std::num::NonZeroU32::new(value).map(Self)
+    }
+
+    pub fn index(self) -> usize {
+        self.0.get() as usize - 1
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -287,6 +302,9 @@ impl Glyph {
 pub struct GlyphRow {
     /// Glyphs per area: [left_margin, text, right_margin].
     pub glyphs: [Vec<Glyph>; 3],
+    /// Pointer appearances referenced by compact glyph-local tokens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pointer_appearances: Vec<GlyphPointerAppearance>,
     /// Row hash for fast diff. 0 = not yet computed.
     pub hash: u64,
     /// Row is valid and should be displayed.
@@ -350,6 +368,7 @@ impl GlyphRow {
     pub fn new(role: GlyphRowRole) -> Self {
         Self {
             glyphs: [Vec::new(), Vec::new(), Vec::new()],
+            pointer_appearances: Vec::new(),
             hash: 0,
             enabled: true,
             role,
@@ -426,6 +445,9 @@ impl GlyphRow {
         if self.reversed_p != other.reversed_p {
             return false;
         }
+        if self.pointer_appearances != other.pointer_appearances {
+            return false;
+        }
         for i in 0..3 {
             if self.glyphs[i].len() != other.glyphs[i].len() {
                 return false;
@@ -447,11 +469,43 @@ impl GlyphRow {
         self.glyphs[0].len() + self.glyphs[1].len() + self.glyphs[2].len()
     }
 
+    pub fn intern_pointer_appearance(
+        &mut self,
+        appearance: GlyphPointerAppearance,
+    ) -> Option<GlyphPointerAppearanceId> {
+        if let Some(index) = self
+            .pointer_appearances
+            .iter()
+            .position(|candidate| *candidate == appearance)
+        {
+            return GlyphPointerAppearanceId::from_index(index);
+        }
+        let id = GlyphPointerAppearanceId::from_index(self.pointer_appearances.len())?;
+        self.pointer_appearances.push(appearance);
+        Some(id)
+    }
+
+    pub fn pointer_appearance(
+        &self,
+        id: GlyphPointerAppearanceId,
+    ) -> Option<&GlyphPointerAppearance> {
+        self.pointer_appearances.get(id.index())
+    }
+
+    pub fn pointer_appearances(&self) -> &[GlyphPointerAppearance] {
+        &self.pointer_appearances
+    }
+
+    pub fn truncate_pointer_appearances(&mut self, len: usize) {
+        self.pointer_appearances.truncate(len);
+    }
+
     pub fn clear(&mut self) {
         for area in &mut self.glyphs {
             area.clear();
         }
         self.hash = 0;
+        self.pointer_appearances.clear();
         self.cursor_col = None;
         self.cursor_type = None;
         self.truncated_left = false;

@@ -66,7 +66,10 @@ fn bidi_reorder_carries_pointer_metadata_with_its_glyph() {
         },
         face_id: FaceId::new(9),
     };
-    row.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+    let pointer_token = row
+        .intern_pointer_appearance(pointer)
+        .expect("pointer appearance token");
+    row.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer_token);
 
     GlyphRowFinalizationContext::new(1, 0, Rect::new(0.0, 0.0, 80.0, 16.0))
         .finalize_row(&mut row, 10, None);
@@ -75,7 +78,7 @@ fn bidi_reorder_carries_pointer_metadata_with_its_glyph() {
     assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
     assert_eq!(glyphs[0].pointer_appearance, None);
     assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
-    assert_eq!(glyphs[1].pointer_appearance, Some(pointer));
+    assert_eq!(glyphs[1].pointer_appearance, Some(pointer_token));
 }
 
 /// A logical-order row that has only been normalized (NOT reordered) still
