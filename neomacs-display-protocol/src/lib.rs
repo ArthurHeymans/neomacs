@@ -26,6 +26,7 @@ pub mod cursor_effect_command;
 pub mod effect_config;
 pub mod face;
 pub mod font;
+pub mod frame_chrome;
 pub mod frame_glyphs;
 pub mod glyph_matrix;
 pub mod gradient;
@@ -41,6 +42,7 @@ pub mod tty_rif;
 pub use cursor_effect_command::*;
 pub use effect_config::*;
 pub use face::*;
+pub use frame_chrome::*;
 pub use frame_glyphs::*;
 pub use gradient::*;
 pub use scene::*;
@@ -48,3 +50,7 @@ pub use scroll_animation::*;
 pub use transition_policy::*;
 pub use types::*;
 pub use ui_types::*;
+
+#[cfg(test)]
+#[path = "frame_chrome_test.rs"]
+mod frame_chrome_test;
