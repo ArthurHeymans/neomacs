@@ -752,6 +752,11 @@ fn resolve_image_display_property(
         image_id: display_media_id(resolved.image_id),
         width,
         height,
+        ascent: spec.ascent.resolve(
+            height,
+            params.fallback_metrics.row_height(),
+            params.fallback_metrics.ascent(),
+        ),
     }))
 }
 
@@ -809,15 +814,31 @@ pub(crate) fn resolve_display_property_media(
     resolved_face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
 ) -> Option<DisplayMediaReplacement> {
+    let face_metrics = display_media_face_metrics(resolved_face, fallback_metrics);
     resolve_display_media_property(
         display_prop,
         DisplayMediaResolveParams {
             display_host: display_host?,
             default_fg: resolved_face.fg,
             default_bg: resolved_face.bg,
-            fallback_metrics,
+            fallback_metrics: face_metrics,
         },
     )
+}
+
+fn display_media_face_metrics(
+    resolved_face: &ResolvedFace,
+    fallback: DisplayRowFallbackMetrics,
+) -> DisplayRowFallbackMetrics {
+    let row_height = (resolved_face.font_line_height.is_finite()
+        && resolved_face.font_line_height > 0.0)
+        .then_some(resolved_face.font_line_height)
+        .unwrap_or_else(|| fallback.row_height());
+    let ascent = (resolved_face.font_ascent.is_finite() && resolved_face.font_ascent > 0.0)
+        .then_some(resolved_face.font_ascent)
+        .unwrap_or_else(|| fallback.ascent())
+        .min(row_height);
+    DisplayRowFallbackMetrics::from_default_face_extents(fallback.char_width(), row_height, ascent)
 }
 
 pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
@@ -1272,5 +1293,21 @@ mod tests {
             resolved,
             Some(ResolvedDisplayReplacement::Placeholder("[img]"))
         );
+    }
+
+    #[test]
+    fn display_media_face_metrics_prefer_active_face_extents() {
+        let table = FaceTable::new();
+        let resolver = test_face_resolver(&table);
+        let mut active_face = resolver.default_face().clone();
+        active_face.font_line_height = 24.0;
+        active_face.font_ascent = 20.0;
+        let fallback = DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 14.0);
+
+        let metrics = display_media_face_metrics(&active_face, fallback);
+
+        assert_eq!(metrics.row_height(), 24.0);
+        assert_eq!(metrics.ascent(), 20.0);
+        assert_eq!(metrics.char_width(), 8.0);
     }
 }

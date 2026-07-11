@@ -625,6 +625,7 @@ pub(crate) struct DisplayImageItem {
     pub(crate) image_id: i32,
     pub(crate) width: f32,
     pub(crate) height: f32,
+    pub(crate) ascent: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -648,6 +649,7 @@ pub(crate) struct DisplayMediaReplacement {
     pub(crate) kind: DisplayMediaReplacementKind,
     pub(crate) width: f32,
     pub(crate) height: f32,
+    pub(crate) ascent: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -675,7 +677,7 @@ impl DisplayMediaReplacement {
         DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
             height: Some(DisplayLength::Pixels(self.height)),
-            ascent: Some(DisplayLength::Pixels(self.height)),
+            ascent: Some(DisplayLength::Pixels(self.ascent)),
         }
     }
 
@@ -686,6 +688,7 @@ impl DisplayMediaReplacement {
             },
             width: display_replacement_dimension(image.width),
             height: display_replacement_dimension(image.height),
+            ascent: display_replacement_ascent(image.ascent),
         }
     }
 
@@ -698,6 +701,7 @@ impl DisplayMediaReplacement {
             },
             width: display_replacement_dimension(video.width),
             height: display_replacement_dimension(video.height),
+            ascent: display_replacement_ascent(video.height),
         }
     }
 
@@ -708,6 +712,7 @@ impl DisplayMediaReplacement {
             },
             width: display_replacement_dimension(xwidget.width),
             height: display_replacement_dimension(xwidget.height),
+            ascent: display_replacement_ascent(xwidget.height),
         }
     }
 }
@@ -717,6 +722,14 @@ fn display_replacement_dimension(value: f32) -> f32 {
         value.max(1.0)
     } else {
         1.0
+    }
+}
+
+fn display_replacement_ascent(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
     }
 }
 

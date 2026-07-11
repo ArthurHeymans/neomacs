@@ -65,9 +65,16 @@ impl DisplayRowVerticalMetrics {
         if self.height_px <= 0.0 {
             return;
         }
-        row.height_px = row.height_px.max(self.height_px).max(1.0);
-        row.ascent_px = row.ascent_px.max(self.ascent_px).min(row.height_px);
+        let row_descent = (row.height_px - row.ascent_px).max(0.0);
+        let glyph_ascent = self.ascent_px.max(0.0);
+        let glyph_descent = (self.height_px - glyph_ascent).max(0.0);
+        row.ascent_px = row.ascent_px.max(glyph_ascent);
+        row.height_px = (row.ascent_px + row_descent.max(glyph_descent)).max(1.0);
     }
+}
+
+fn display_row_glyph_count(row: &GlyphRow) -> usize {
+    row.glyphs.iter().map(Vec::len).sum()
 }
 
 impl DisplayRowLayout {
@@ -88,8 +95,14 @@ impl DisplayRowLayout {
         row.role = self.role;
         row.mode_line = matches!(self.role, GlyphRowRole::ModeLine);
         row.pixel_y = self.y_px;
-        row.height_px = self.row_height_px();
-        row.ascent_px = self.row_ascent_px();
+        let layout_metrics =
+            DisplayRowVerticalMetrics::new(self.row_height_px(), self.row_ascent_px());
+        if display_row_glyph_count(row) == 0 {
+            row.height_px = self.row_height_px();
+            row.ascent_px = self.row_ascent_px();
+        } else {
+            layout_metrics.include_in_row(row);
+        }
     }
 }
 
@@ -1487,7 +1500,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             return;
         };
         if let Some(metrics) = DisplayRowVerticalMetrics::from_glyph(glyph) {
-            metrics.include_in_row(self.row);
+            if display_row_glyph_count(self.row) == 1 {
+                self.row.height_px = metrics.height_px.max(1.0);
+                self.row.ascent_px = metrics.ascent_px.max(0.0);
+            } else {
+                metrics.include_in_row(self.row);
+            }
         }
     }
 

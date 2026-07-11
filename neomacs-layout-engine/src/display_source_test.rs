@@ -335,6 +335,7 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
                 image_id: 42,
                 width: 64.0,
                 height: 32.0,
+                ascent: 32.0,
             }))
         } else {
             None

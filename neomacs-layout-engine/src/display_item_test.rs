@@ -68,6 +68,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
             image_id: 42,
             width: 64.0,
             height: 32.0,
+            ascent: 32.0,
         })),
     );
     let video = DisplayItem::new(
@@ -97,6 +98,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
             image_id: 42,
             width: 64.0,
             height: 32.0,
+            ascent: 32.0,
         }))
     );
     assert_eq!(

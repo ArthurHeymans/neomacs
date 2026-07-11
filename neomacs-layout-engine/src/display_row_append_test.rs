@@ -10350,6 +10350,7 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
         image_id: 42,
         width: 64.0,
         height: 10.0,
+        ascent: 10.0,
     });
 
     let ordinary = DisplayReplacementMediaSourceItem::new(
@@ -10434,6 +10435,7 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
             image_id: 42,
             width: 64.0,
             height: 10.0,
+            ascent: 10.0,
         }),
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),
@@ -11052,6 +11054,7 @@ fn display_replacement_append_context_installs_image_replacements() {
             image_id: 42,
             width: 64.0,
             height: 32.0,
+            ascent: 32.0,
         }),
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),

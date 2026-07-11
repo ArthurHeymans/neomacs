@@ -3,18 +3,18 @@ use crate::display_item::{
     DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row_render_state::RenderedDisplayRowMedia;
+use crate::display_row_render_state::PendingDisplayRowMedia;
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 impl DisplayMediaReplacement {
-    fn rendered_media(self, start: DisplayRowPosition, y: f32) -> RenderedDisplayRowMedia {
-        RenderedDisplayRowMedia {
+    fn pending_media(self, start: DisplayRowPosition) -> PendingDisplayRowMedia {
+        PendingDisplayRowMedia {
             kind: self.kind.into(),
             x: start.x_px(),
-            y,
             col: start.col().min(usize::from(u16::MAX)) as u16,
             width: self.width,
             height: self.height,
+            ascent: self.ascent,
         }
     }
 }
@@ -57,15 +57,14 @@ impl DisplayRowRenderItem {
         self.row_item.clone()
     }
 
-    pub(crate) fn rendered_media_for_progress(
+    pub(crate) fn pending_media_for_progress(
         &self,
         progress: &DisplayRowAppendProgress,
-        y: f32,
-    ) -> Option<RenderedDisplayRowMedia> {
+    ) -> Option<PendingDisplayRowMedia> {
         let descriptor = self.media_descriptor?;
         progress
             .is_complete_with_positive_width()
-            .then(|| descriptor.rendered_media(progress.start(), y))
+            .then(|| descriptor.pending_media(progress.start()))
     }
 
     pub(crate) fn clipped_remainder(

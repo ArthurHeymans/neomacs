@@ -53,6 +53,31 @@ impl DisplayMediaKey {
 pub(crate) struct DisplayImageLayout {
     pub(crate) request: ImageResolveRequest,
     pub(crate) scale: f32,
+    pub(crate) ascent: DisplayImageAscentPolicy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayImageAscentPolicy {
+    Percent(f32),
+    Center,
+}
+
+impl Default for DisplayImageAscentPolicy {
+    fn default() -> Self {
+        Self::Percent(50.0)
+    }
+}
+
+impl DisplayImageAscentPolicy {
+    pub(crate) fn resolve(self, image_height: f32, text_height: f32, text_ascent: f32) -> f32 {
+        match self {
+            Self::Percent(percent) => image_height * (percent / 100.0),
+            Self::Center => {
+                let text_descent = (text_height - text_ascent).max(0.0);
+                ((image_height + text_ascent - text_descent + 1.0) / 2.0).floor()
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -131,6 +156,7 @@ pub(crate) fn parse_display_image_layout(
     let mut max_width = 0u32;
     let mut max_height = 0u32;
     let mut scale = 1.0f32;
+    let mut ascent = DisplayImageAscentPolicy::default();
     let mut fg_color = default_fg;
     let mut bg_color = default_bg;
 
@@ -158,6 +184,9 @@ pub(crate) fn parse_display_image_layout(
             Some(ImageSpecKey::Scale) => {
                 scale = parse_image_scale(value).unwrap_or(scale);
             }
+            Some(ImageSpecKey::Ascent) => {
+                ascent = parse_image_ascent(value).unwrap_or(ascent);
+            }
             Some(ImageSpecKey::Foreground) => {
                 fg_color = parse_image_color_pixel(value).unwrap_or(fg_color);
             }
@@ -178,6 +207,7 @@ pub(crate) fn parse_display_image_layout(
             bg_color,
         },
         scale,
+        ascent,
     })
 }
 
@@ -343,6 +373,18 @@ fn parse_image_scale(value: Value) -> Option<f32> {
     }
 }
 
+fn parse_image_ascent(value: Value) -> Option<DisplayImageAscentPolicy> {
+    if value.is_symbol_named("center") {
+        return Some(DisplayImageAscentPolicy::Center);
+    }
+    let percent = match value.kind() {
+        ValueKind::Fixnum(_) => value.as_int()? as f32,
+        _ => return None,
+    };
+    (percent.is_finite() && (0.0..=100.0).contains(&percent))
+        .then_some(DisplayImageAscentPolicy::Percent(percent))
+}
+
 fn parse_image_color_pixel(value: Value) -> Option<u32> {
     let color = value
         .as_lisp_string()
@@ -491,6 +533,57 @@ pub(crate) fn display_space_positive_number(value: Value) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn image_spec(ascent: Option<Value>) -> Value {
+        let mut items = vec![
+            Value::symbol("image"),
+            Value::keyword("type"),
+            Value::symbol("svg"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+        ];
+        if let Some(ascent) = ascent {
+            items.push(Value::keyword("ascent"));
+            items.push(ascent);
+        }
+        Value::list(items)
+    }
+
+    fn parsed_image_ascent(value: Option<Value>) -> DisplayImageAscentPolicy {
+        parse_display_image_layout(&image_spec(value), 0, 0)
+            .expect("valid image spec")
+            .ascent
+    }
+
+    #[test]
+    fn image_ascent_parses_gnu_domain_and_defaults_invalid_values() {
+        let _eval = neovm_core::emacs_core::Context::new();
+
+        assert_eq!(
+            parsed_image_ascent(None),
+            DisplayImageAscentPolicy::Percent(50.0)
+        );
+        assert_eq!(
+            parsed_image_ascent(Some(Value::symbol("center"))),
+            DisplayImageAscentPolicy::Center
+        );
+        assert_eq!(
+            parsed_image_ascent(Some(Value::fixnum(0))),
+            DisplayImageAscentPolicy::Percent(0.0)
+        );
+        assert_eq!(
+            parsed_image_ascent(Some(Value::fixnum(100))),
+            DisplayImageAscentPolicy::Percent(100.0)
+        );
+        assert_eq!(
+            parsed_image_ascent(Some(Value::fixnum(101))),
+            DisplayImageAscentPolicy::Percent(50.0)
+        );
+        assert_eq!(
+            parsed_image_ascent(Some(Value::make_float(75.0))),
+            DisplayImageAscentPolicy::Percent(50.0)
+        );
+    }
 
     #[test]
     fn parse_display_fringe_layout_left_with_face() {

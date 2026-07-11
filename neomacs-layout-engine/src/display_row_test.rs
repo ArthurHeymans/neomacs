@@ -111,11 +111,34 @@ fn render_lisp_string_row_with_display_host(
     render_lisp_string_row_with_context(renderer, request, value, &mut context)
 }
 
-#[derive(Default)]
 struct RecordingDisplayRowMediaHost {
     image_requests: Mutex<Vec<ImageResolveRequest>>,
     video_requests: Mutex<Vec<VideoResolveRequest>>,
     webkit_requests: Mutex<Vec<WebKitResolveRequest>>,
+    image_width: u32,
+    image_height: u32,
+}
+
+impl Default for RecordingDisplayRowMediaHost {
+    fn default() -> Self {
+        Self {
+            image_requests: Mutex::default(),
+            video_requests: Mutex::default(),
+            webkit_requests: Mutex::default(),
+            image_width: 64,
+            image_height: 32,
+        }
+    }
+}
+
+impl RecordingDisplayRowMediaHost {
+    fn with_image_size(width: u32, height: u32) -> Self {
+        Self {
+            image_width: width,
+            image_height: height,
+            ..Self::default()
+        }
+    }
 }
 
 impl DisplayHost for RecordingDisplayRowMediaHost {
@@ -141,8 +164,8 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
             .push(request);
         Ok(Some(ResolvedImage {
             image_id: 42,
-            width: 64,
-            height: 32,
+            width: self.image_width,
+            height: self.image_height,
             dimensions_known: true,
         }))
     }
@@ -214,16 +237,14 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
     );
 
     let rendered_media = render_item
-        .rendered_media_for_progress(
-            &DisplayRowAppendProgress::from_positions(
-                DisplayRowPosition::new(8.0, 1),
-                DisplayRowPosition::new(50.0, 2),
-                DisplayRowAppendStatus::Complete,
-                Vec::new(),
-            ),
-            6.0,
-        )
-        .expect("media should render after complete nonempty append");
+        .pending_media_for_progress(&DisplayRowAppendProgress::from_positions(
+            DisplayRowPosition::new(8.0, 1),
+            DisplayRowPosition::new(50.0, 2),
+            DisplayRowAppendStatus::Complete,
+            Vec::new(),
+        ))
+        .expect("media should render after complete nonempty append")
+        .place_on_baseline(17.0);
 
     assert_eq!(
         rendered_media.kind,
@@ -1545,23 +1566,35 @@ fn render_tab_line_with_media_host(
     default_fg: u32,
     default_bg: u32,
 ) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
-    let host = RecordingDisplayRowMediaHost::default();
+    render_tab_line_with_sized_media_host(rendered_text, default_fg, default_bg, 64, 32, 16.0, 12.0)
+}
+
+fn render_tab_line_with_sized_media_host(
+    rendered_text: Value,
+    default_fg: u32,
+    default_bg: u32,
+    image_width: u32,
+    image_height: u32,
+    row_height: f32,
+    row_ascent: f32,
+) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
+    let host = RecordingDisplayRowMediaHost::with_image_size(image_width, image_height);
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, default_fg, default_bg, 14.0, None);
     let mut base_face = resolver.default_face().clone();
     base_face.set_measured_char_width_px(8.0);
-    base_face.font_ascent = 12.0;
-    base_face.font_line_height = 16.0;
+    base_face.font_ascent = row_ascent;
+    base_face.font_line_height = row_height;
     let mut face_ids = FrameFaceIdAllocator::new(1);
     let spec = display_row_request_from_base_face(
         DisplayRowGeometry {
             y: 4.0,
             width: 240.0,
-            height: 16.0,
+            height: row_height,
             char_width: 8.0,
-            ascent: 12.0,
+            ascent: row_ascent,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
         &mut face_ids,
@@ -1579,6 +1612,49 @@ fn render_tab_line_with_media_host(
     )
     .expect("display source row");
     (rendered, host)
+}
+
+#[test]
+fn render_lisp_string_row_centers_image_on_text_centerline() {
+    let _eval = Context::new();
+    let rendered_text = Value::string_with_text_properties(
+        "AXB",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("svg"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/cross_16.svg"),
+                    Value::keyword("ascent"),
+                    Value::symbol("center"),
+                ]),
+            ]),
+        }],
+    );
+
+    let (rendered, _) =
+        render_tab_line_with_sized_media_host(rendered_text, 0, 0, 16, 16, 18.0, 14.0);
+    let stretch = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+
+    assert_eq!(stretch.pixel_height, 16.0);
+    assert_eq!(stretch.pixel_ascent, 13.0);
+    assert_eq!(rendered.row().pixel_y + rendered.row().ascent_px, 18.0);
+    assert_eq!(
+        rendered.media(),
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Image { image_id: 42 },
+            x: 8.0,
+            y: 5.0,
+            col: 1,
+            width: 16.0,
+            height: 16.0,
+        }]
+    );
 }
 
 #[test]

@@ -171,6 +171,29 @@ pub(crate) struct RenderedDisplayRowMedia {
     pub(crate) height: f32,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PendingDisplayRowMedia {
+    pub(crate) kind: RenderedDisplayRowMediaKind,
+    pub(crate) x: f32,
+    pub(crate) col: u16,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+    pub(crate) ascent: f32,
+}
+
+impl PendingDisplayRowMedia {
+    pub(crate) fn place_on_baseline(self, baseline_y: f32) -> RenderedDisplayRowMedia {
+        RenderedDisplayRowMedia {
+            kind: self.kind,
+            x: self.x,
+            y: baseline_y - self.ascent,
+            col: self.col,
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum RenderedDisplayRowMediaKind {
     Image {
