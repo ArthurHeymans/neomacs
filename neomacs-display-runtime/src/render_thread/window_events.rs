@@ -200,10 +200,30 @@ impl RenderApp {
 
             WindowEvent::Focused(focused) => {
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
+                if let Some(sched_id) = self.frame_windows.event_frame_for_winit(window_id) {
+                    self.frame_coordinator
+                        .set_focused(super::frame_sched::NativeWindowId(sched_id), focused);
+                }
                 self.comms.send_input(InputEvent::WindowFocus {
                     focused,
                     emacs_frame_id: emacs_fid,
                 });
+            }
+
+            WindowEvent::Occluded(occluded) => {
+                // Occlusion is scheduling input: an occluded window presents
+                // nothing; exposure issues exactly one recovery frame. On
+                // Wayland this event also stands in for hidden/minimized,
+                // where frame callbacks would otherwise stop delivering.
+                if let Some(sched_id) = self.frame_windows.event_frame_for_winit(window_id) {
+                    let id = super::frame_sched::NativeWindowId(sched_id);
+                    let action = self.frame_coordinator.set_occluded(id, occluded);
+                    if action == super::frame_sched::PacingAction::RequestRedraw
+                        && let Some(window_state) = self.frame_windows.get(sched_id)
+                    {
+                        window_state.request_redraw();
+                    }
+                }
             }
 
             WindowEvent::KeyboardInput {
@@ -410,6 +430,14 @@ impl RenderApp {
                     };
                     let plan = self.frame_coordinator.begin_frame(sched_id, tick);
                     super::frame_stats::count_plan(&plan.work);
+                    // Occluded/hidden windows present nothing. begin_frame
+                    // already returns no work while ineligible; skipping the
+                    // render here makes that concrete and avoids servicing an
+                    // OS-delivered RedrawRequested for a surface the
+                    // compositor is not showing.
+                    if !self.frame_coordinator.is_eligible(sched_id) {
+                        return;
+                    }
                     if let Some(renderer) = self.renderer.as_mut() {
                         renderer.set_frame_sample_time(plan.tick.target_presentation_time);
                     }

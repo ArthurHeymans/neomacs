@@ -596,20 +596,63 @@ impl FrameCoordinator {
         }
     }
 
-    /// Update visibility/focus/occlusion. Regaining eligibility with retained
-    /// demand issues exactly one recovery request.
-    // Wired when occlusion/visibility events land (plan Stage 7); the
-    // behavior is already covered by the scheduler tests.
+    /// Update visibility/focus/occlusion wholesale. Regaining eligibility with
+    /// retained demand issues exactly one recovery request.
+    // Full-replace form kept for initialization/tests; the runtime drives
+    // per-field transitions through set_occluded/set_focused/set_visible.
     #[allow(dead_code)]
     pub(crate) fn update_window_state(
         &mut self,
         id: NativeWindowId,
         state: WindowPresentationState,
     ) -> PacingAction {
+        self.mutate_presentation(id, |p| *p = state)
+    }
+
+    /// Mark a window occluded or exposed. Exposure with retained demand
+    /// issues one recovery request; occlusion suspends presentation.
+    pub(crate) fn set_occluded(&mut self, id: NativeWindowId, occluded: bool) -> PacingAction {
+        self.mutate_presentation(id, |p| p.occluded = occluded)
+    }
+
+    /// Mark a window minimized/hidden or shown. Same eligibility semantics as
+    /// occlusion.
+    // Wired when a minimize/hide event source lands (plan Stage 7 policy);
+    // Occluded already covers the Wayland/macOS not-showing case. Covered by
+    // the scheduler tests.
+    #[allow(dead_code)]
+    pub(crate) fn set_visible(&mut self, id: NativeWindowId, visible: bool) -> PacingAction {
+        self.mutate_presentation(id, |p| p.visible = visible)
+    }
+
+    /// Update focus. Focus does not gate presentation, but it is scheduling
+    /// input for ambient-effect policy (plan: visibility and power policy).
+    pub(crate) fn set_focused(&mut self, id: NativeWindowId, focused: bool) -> PacingAction {
+        self.mutate_presentation(id, |p| p.focused = focused)
+    }
+
+    /// Whether a window is eligible to present (visible and not occluded).
+    pub(crate) fn is_eligible(&self, id: NativeWindowId) -> bool {
+        self.windows.get(&id).map(|ws| ws.eligible()).unwrap_or(true)
+    }
+
+    fn mutate_presentation(
+        &mut self,
+        id: NativeWindowId,
+        f: impl FnOnce(&mut WindowPresentationState),
+    ) -> PacingAction {
         let ws = self.window(id);
         let was_eligible = ws.eligible();
-        ws.presentation = state;
-        if !was_eligible && ws.eligible() && ws.has_any_demand() {
+        f(&mut ws.presentation);
+        let now_eligible = ws.eligible();
+        if was_eligible && !now_eligible {
+            // Any outstanding redraw request is void once the surface is no
+            // longer presentable: platforms may drop a pending request when a
+            // window is occluded/hidden and never redeliver it on exposure.
+            // Clearing it lets the exposure transition issue a fresh one.
+            ws.request_pending = false;
+        }
+        if !was_eligible && now_eligible && ws.has_any_demand() {
             return Self::drive(ws);
         }
         PacingAction::Sleep

@@ -501,6 +501,60 @@ fn on_demand_folds_into_next_frame_without_driving_one() {
 }
 
 #[test]
+fn set_occluded_preserves_focus_and_issues_single_recovery() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    // Focus is set first, then occlusion toggles; occlusion must not clobber
+    // the recorded focus, and exposure with demand issues one recovery.
+    c.set_focused(win(1), false);
+    c.submit_demand(win(1), composite_cursor(), now);
+    assert_eq!(c.set_occluded(win(1), true), PacingAction::Sleep);
+    assert!(!c.is_eligible(win(1)));
+    // No wake deadline while occluded even with a scheduled demand.
+    c.submit_demand(
+        win(1),
+        FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::CURSOR_EFFECTS,
+            },
+            cadence: Cadence::At(now + ms(50)),
+            reason: DemandReason::FiniteEffect,
+        },
+        now,
+    );
+    assert_eq!(c.next_wake_deadline(), None);
+    // Exposure issues exactly one recovery request, then goes quiet.
+    assert_eq!(c.set_occluded(win(1), false), PacingAction::RequestRedraw);
+    assert!(c.is_eligible(win(1)));
+    assert_eq!(c.set_occluded(win(1), false), PacingAction::Sleep);
+}
+
+#[test]
+fn set_visible_gates_presentation_like_occlusion() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), composite_cursor(), now);
+    assert_eq!(c.set_visible(win(1), false), PacingAction::Sleep);
+    assert!(!c.is_eligible(win(1)));
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+    assert!(!plan.should_present);
+    assert_eq!(c.set_visible(win(1), true), PacingAction::RequestRedraw);
+}
+
+#[test]
+fn focus_change_does_not_gate_presentation() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), composite_cursor(), now);
+    // Losing focus keeps the window eligible; no spurious recovery on regain.
+    assert_eq!(c.set_focused(win(1), false), PacingAction::Sleep);
+    assert!(c.is_eligible(win(1)));
+    assert_eq!(c.set_focused(win(1), true), PacingAction::Sleep);
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+    assert!(plan.should_present);
+}
+
+#[test]
 fn removed_window_contributes_nothing() {
     let mut c = FrameCoordinator::new();
     let now = t0();
