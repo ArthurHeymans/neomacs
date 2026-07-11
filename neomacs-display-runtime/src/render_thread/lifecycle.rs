@@ -301,24 +301,106 @@ impl RenderApp {
             }
         }
 
+        // Stage 1 of the frame scheduling plan: the wake decision is
+        // expressed as typed frame demand and the coordinator chooses the
+        // deadline. Demands are declared afresh each pass from current state,
+        // so signal cessation needs no retraction bookkeeping. Stage 2 makes
+        // the coordinator persistent and requests one-shot.
         let now = std::time::Instant::now();
-        let top_level_active = self.frame_windows.any_redrawable_top_level_dirty()
-            || self.frame_windows.any_top_level_cursor_animating()
-            || self
-                .frame_windows
-                .any_top_level_renderer_effects_need_redraw()
-            || self.frame_windows.any_top_level_transitions_active();
-        let next_wake = if top_level_active || has_active_content {
-            now + std::time::Duration::from_millis(4)
-        } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
-            next_blink
-        } else if self.lifecycle_flags.poll_when_idle {
-            now + std::time::Duration::from_millis(16)
-        } else {
-            event_loop.set_control_flow(ControlFlow::Wait);
-            return;
+        match self.compat_frame_demand_deadline(now, has_active_content) {
+            Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
+            None => event_loop.set_control_flow(ControlFlow::Wait),
+        }
+    }
+
+    /// Stage 1 compatibility adapter: translate the legacy activity signals
+    /// into typed [`super::frame_sched::FrameDemand`] and let the frame
+    /// coordinator pick the earliest wake deadline. This is the only place
+    /// the legacy 4 ms active cadence and 16 ms idle-poll cadence are
+    /// selected.
+    fn compat_frame_demand_deadline(
+        &self,
+        now: std::time::Instant,
+        has_active_content: bool,
+    ) -> Option<std::time::Instant> {
+        use super::frame_sched::{
+            Cadence, Damage, DemandReason, FrameCoordinator, FrameDemand, Invalidation, LayerMask,
+            NativeWindowId,
         };
-        event_loop.set_control_flow(ControlFlow::WaitUntil(next_wake));
+        const LEGACY_ACTIVE_WAKE: std::time::Duration = std::time::Duration::from_millis(4);
+        const LEGACY_IDLE_POLL: std::time::Duration = std::time::Duration::from_millis(16);
+        /// Loop-global demands (media polling, idle poll) before/beyond any
+        /// specific frame window. Compat-only; deleted with this adapter.
+        const LOOP_WINDOW: NativeWindowId = NativeWindowId(u64::MAX);
+
+        let native_window_id = |key: &super::frame_windows::FrameKey| match key {
+            super::frame_windows::FrameKey::Pending => NativeWindowId(u64::MAX - 1),
+            super::frame_windows::FrameKey::Adopted(id) => NativeWindowId(*id),
+        };
+        let legacy_repaint = Invalidation::RepaintLayers {
+            layers: LayerMask::all(),
+            damage: Damage::FullLayer,
+        };
+
+        let mut sched = FrameCoordinator::new();
+        for (key, window_state) in &self.frame_windows.windows {
+            let id = native_window_id(key);
+            let legacy_active = window_state.has_presentable_dirty_content()
+                || window_state
+                    .render
+                    .compositor
+                    .renderer_effects
+                    .needs_redraw()
+                || window_state.render.cursor.is_animating()
+                || window_state.render.compositor.transitions.has_active();
+            if legacy_active {
+                sched.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: legacy_repaint,
+                        cadence: Cadence::At(now + LEGACY_ACTIVE_WAKE),
+                        reason: DemandReason::LegacyActivity,
+                    },
+                    now,
+                );
+            }
+            if let Some(blink) = window_state.render.cursor.next_blink_deadline() {
+                sched.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: Invalidation::CompositeOnly {
+                            layers: LayerMask::CURSOR_EFFECTS,
+                        },
+                        cadence: Cadence::At(blink),
+                        reason: DemandReason::CursorAnimation,
+                    },
+                    now,
+                );
+            }
+        }
+        if has_active_content {
+            sched.submit_demand(
+                LOOP_WINDOW,
+                FrameDemand {
+                    invalidation: legacy_repaint,
+                    cadence: Cadence::At(now + LEGACY_ACTIVE_WAKE),
+                    reason: DemandReason::Video,
+                },
+                now,
+            );
+        }
+        if self.lifecycle_flags.poll_when_idle {
+            sched.submit_demand(
+                LOOP_WINDOW,
+                FrameDemand {
+                    invalidation: legacy_repaint,
+                    cadence: Cadence::At(now + LEGACY_IDLE_POLL),
+                    reason: DemandReason::LegacyActivity,
+                },
+                now,
+            );
+        }
+        sched.next_wake_deadline()
     }
     pub(super) fn handle_exiting(&mut self) {
         // Explicitly drop wgpu resources while the Wayland connection is still alive.

@@ -1,0 +1,630 @@
+//! Pure frame scheduling: typed frame demand, per-window coalescing, and
+//! pacing decisions.
+//!
+//! Stage 1 of the frame scheduling plan
+//! (docs/plans/2026-07-11-cross-platform-frame-scheduling-and-animation-architecture.md).
+//!
+//! This module has no winit, wgpu, or wall-clock dependency. Every method
+//! takes `now` (or a [`FrameTick`]) explicitly, so scheduling decisions are
+//! deterministic under test: tests anchor one real `Instant` and derive all
+//! other times by `Duration` arithmetic.
+//!
+//! Semantics:
+//! - Demand is declared before drawing. Rendering consumes a [`FramePlan`];
+//!   it never latches "render me again" as a side effect.
+//! - At most one redraw request is outstanding per native window; duplicate
+//!   driving demands coalesce into that request.
+//! - Deadline demands ([`Cadence::At`], [`Cadence::MaxRate`]) are keyed by
+//!   [`DemandReason`]: resubmitting replaces the previous entry, so a caller
+//!   can declare its standing demand every pass without accumulation, and
+//!   [`FrameCoordinator::retract`] withdraws a reason that no longer applies.
+//! - [`Cadence::MaxRate`] keeps a per-reason phase anchor: consuming a tick
+//!   advances the anchor by whole periods, so an interleaved one-shot frame
+//!   (e.g. an editor commit) never re-anchors an ambient cadence.
+//! - Ineligible (occluded/hidden) windows retain demand but are never asked
+//!   to present; regaining eligibility issues exactly one recovery request.
+
+// Stage 1 wires deadline aggregation only; begin_frame/finish_frame and the
+// presentation-state surface are consumed when Stage 2 makes requests
+// one-shot. Remove this allow with that stage.
+#![allow(dead_code)]
+
+use std::collections::BTreeMap;
+use std::num::NonZeroU16;
+use std::time::{Duration, Instant};
+
+bitflags::bitflags! {
+    /// Broad retained composition groups. Deliberately coarse: one bit per
+    /// retained group, not one bit per effect.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) struct LayerMask: u32 {
+        const ROOT_CONTENT = 1 << 0;
+        const CHILD_FRAMES = 1 << 1;
+        const CURSOR_EFFECTS = 1 << 2;
+        const TRANSIENT_OVERLAYS = 1 << 3;
+        const CHROME = 1 << 4;
+        const MEDIA = 1 << 5;
+        const TRANSITIONS = 1 << 6;
+    }
+}
+
+/// Damage granularity within a repainted layer. Begins as full-layer only;
+/// rectangle lists arrive with retained-layer work. The interface carries
+/// damage now so that full-layer repaint never hardens into an implicit
+/// invariant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Damage {
+    FullLayer,
+}
+
+impl Damage {
+    fn combine(self, _other: Damage) -> Damage {
+        Damage::FullLayer
+    }
+}
+
+/// The least expensive category of work capable of producing correct pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Invalidation {
+    None,
+    /// Recompose existing layer content; sample dynamic state only.
+    CompositeOnly { layers: LayerMask },
+    /// Repaint the named layers, then compose.
+    RepaintLayers { layers: LayerMask, damage: Damage },
+    /// A new editor scene generation: rebuild static content.
+    RebuildScene,
+}
+
+impl Invalidation {
+    fn rank(self) -> u8 {
+        match self {
+            Invalidation::None => 0,
+            Invalidation::CompositeOnly { .. } => 1,
+            Invalidation::RepaintLayers { .. } => 2,
+            Invalidation::RebuildScene => 3,
+        }
+    }
+
+    /// Strongest-wins merge. Equal-strength classes union their layers; a
+    /// stronger class absorbs a weaker one because every presented frame
+    /// composes all layers anyway.
+    pub(crate) fn combine(self, other: Invalidation) -> Invalidation {
+        use Invalidation::*;
+        match (self, other) {
+            (None, x) | (x, None) => x,
+            (RebuildScene, _) | (_, RebuildScene) => RebuildScene,
+            (
+                RepaintLayers { layers: a, damage: da },
+                RepaintLayers { layers: b, damage: db },
+            ) => RepaintLayers {
+                layers: a | b,
+                damage: da.combine(db),
+            },
+            (r @ RepaintLayers { .. }, CompositeOnly { .. })
+            | (CompositeOnly { .. }, r @ RepaintLayers { .. }) => r,
+            (CompositeOnly { layers: a }, CompositeOnly { layers: b }) => {
+                CompositeOnly { layers: a | b }
+            }
+        }
+    }
+}
+
+/// When the demanded work should reach the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Cadence {
+    /// Fold into whatever frame happens next; never forces a frame.
+    OnDemand,
+    /// Present as soon as the presentation clock allows.
+    NextPresentation,
+    /// At most this many frames per second, phase-anchored per reason.
+    MaxRate(NonZeroU16),
+    /// At a specific deadline (blink timers, scheduled recovery).
+    At(Instant),
+}
+
+/// Why a frame is wanted. Diagnostic identity, not policy encoded as strings.
+/// Deadline demands are keyed by this, so each reason holds at most one
+/// scheduled deadline per window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum DemandReason {
+    EditorCommit,
+    CursorAnimation,
+    FiniteEffect,
+    Transition,
+    Video,
+    WebKit,
+    Terminal,
+    Expose,
+    DebugCapture,
+    /// Stage 1 compatibility adapter for legacy untyped dirty/effect state.
+    LegacyActivity,
+}
+
+/// A declaration that pixels need to change, with reason, scope, and cadence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FrameDemand {
+    pub invalidation: Invalidation,
+    pub cadence: Cadence,
+    pub reason: DemandReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClockSource {
+    Native,
+    Synthetic,
+}
+
+/// One opportunity to produce a frame: timing input, not an instruction to
+/// rebuild editor state.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FrameTick {
+    pub frame_time: Instant,
+    pub target_presentation_time: Instant,
+    pub estimated_interval: Duration,
+    pub source: ClockSource,
+}
+
+/// The scheduler's decision about what work one tick performs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RenderWork {
+    None,
+    CompositeOnly { layers: LayerMask },
+    RepaintLayers { layers: LayerMask, damage: Damage },
+    RebuildScene,
+}
+
+impl RenderWork {
+    fn from_invalidation(inv: Invalidation) -> RenderWork {
+        match inv {
+            Invalidation::None => RenderWork::None,
+            Invalidation::CompositeOnly { layers } => RenderWork::CompositeOnly { layers },
+            Invalidation::RepaintLayers { layers, damage } => {
+                RenderWork::RepaintLayers { layers, damage }
+            }
+            Invalidation::RebuildScene => RenderWork::RebuildScene,
+        }
+    }
+
+    fn to_invalidation(self) -> Invalidation {
+        match self {
+            RenderWork::None => Invalidation::None,
+            RenderWork::CompositeOnly { layers } => Invalidation::CompositeOnly { layers },
+            RenderWork::RepaintLayers { layers, damage } => {
+                Invalidation::RepaintLayers { layers, damage }
+            }
+            RenderWork::RebuildScene => Invalidation::RebuildScene,
+        }
+    }
+}
+
+/// Pure decision for one tick of one window.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FramePlan {
+    pub tick: FrameTick,
+    pub work: RenderWork,
+    pub should_present: bool,
+}
+
+/// What the caller should do next for this window. The event loop executes
+/// these through a narrow winit adapter; it never derives `ControlFlow` from
+/// individual effect fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PacingAction {
+    /// Nothing to schedule for this window.
+    Sleep,
+    /// Ask the platform for one redraw of this window.
+    RequestRedraw,
+    /// Arm a wake at this deadline (the loop aggregates the earliest).
+    WakeAt(Instant),
+}
+
+/// Presentation outcome, fed back as scheduling input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PresentResult {
+    Presented,
+    /// Nothing was rendered (no surface yet, warm-up, etc.); the plan's work
+    /// was not shown and is re-queued.
+    Skipped,
+    Occluded,
+    SurfaceLost,
+    Timeout,
+}
+
+/// Visibility/focus state relevant to presentation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WindowPresentationState {
+    pub visible: bool,
+    pub occluded: bool,
+    pub focused: bool,
+}
+
+impl Default for WindowPresentationState {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            occluded: false,
+            focused: true,
+        }
+    }
+}
+
+/// A native top-level window with its own surface and presentation
+/// lifecycle. Child Emacs frames composite into a parent and share its
+/// clock; callers map child demand to the parent id before submitting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct NativeWindowId(pub u64);
+
+/// Bounded backoff after a surface acquisition timeout (invariant: surface
+/// failure cannot produce an immediate retry storm).
+const TIMEOUT_BACKOFF: Duration = Duration::from_millis(50);
+
+#[derive(Debug)]
+struct ScheduledDemand {
+    reason: DemandReason,
+    at: Instant,
+    invalidation: Invalidation,
+    /// MaxRate period for phase-anchored rescheduling; None for At().
+    period: Option<Duration>,
+}
+
+#[derive(Debug, Default)]
+struct DueDemand {
+    invalidation: Invalidation,
+    /// Whether the due work by itself justifies requesting a frame.
+    /// OnDemand contributions record work without driving.
+    driving: bool,
+    reasons: Vec<DemandReason>,
+}
+
+impl Default for Invalidation {
+    fn default() -> Self {
+        Invalidation::None
+    }
+}
+
+impl DueDemand {
+    fn merge(&mut self, invalidation: Invalidation, driving: bool, reason: DemandReason) {
+        // A demand that requires no work is not demand; merging it must not
+        // set the driving flag or record a reason.
+        if invalidation == Invalidation::None {
+            return;
+        }
+        self.invalidation = self.invalidation.combine(invalidation);
+        self.driving |= driving;
+        if !self.reasons.contains(&reason) {
+            self.reasons.push(reason);
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.invalidation == Invalidation::None
+    }
+
+    fn take(&mut self) -> DueDemand {
+        std::mem::take(self)
+    }
+}
+
+#[derive(Debug, Default)]
+struct WindowSched {
+    presentation: WindowPresentationState,
+    /// One outstanding platform redraw request (coalescing token).
+    request_pending: bool,
+    /// Demand consumed by the next begin_frame.
+    due: DueDemand,
+    /// Future deadline demands, at most one per reason.
+    scheduled: Vec<ScheduledDemand>,
+    /// Phase anchors for MaxRate reasons: next allowed fire time.
+    max_rate_anchor: Vec<(DemandReason, Instant)>,
+    last_present_at: Option<Instant>,
+}
+
+impl WindowSched {
+    fn eligible(&self) -> bool {
+        self.presentation.visible && !self.presentation.occluded
+    }
+
+    fn earliest_deadline(&self) -> Option<Instant> {
+        self.scheduled.iter().map(|s| s.at).min()
+    }
+
+    fn has_any_demand(&self) -> bool {
+        !self.due.is_empty() || !self.scheduled.is_empty()
+    }
+
+    fn anchor_for(&mut self, reason: DemandReason) -> Option<Instant> {
+        self.max_rate_anchor
+            .iter()
+            .find(|(r, _)| *r == reason)
+            .map(|(_, at)| *at)
+    }
+
+    fn set_anchor(&mut self, reason: DemandReason, at: Instant) {
+        if let Some(entry) = self.max_rate_anchor.iter_mut().find(|(r, _)| *r == reason) {
+            entry.1 = at;
+        } else {
+            self.max_rate_anchor.push((reason, at));
+        }
+    }
+
+    fn schedule(&mut self, demand: ScheduledDemand) {
+        if let Some(existing) = self
+            .scheduled
+            .iter_mut()
+            .find(|s| s.reason == demand.reason)
+        {
+            *existing = demand;
+        } else {
+            self.scheduled.push(demand);
+        }
+    }
+}
+
+/// Owner of the policy connecting visual demand to presentation, per native
+/// window. Pure: no timers, no platform calls; the runtime executes the
+/// returned [`PacingAction`]s and feeds ticks and present results back.
+#[derive(Debug, Default)]
+pub(crate) struct FrameCoordinator {
+    windows: BTreeMap<NativeWindowId, WindowSched>,
+}
+
+impl FrameCoordinator {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    fn window(&mut self, id: NativeWindowId) -> &mut WindowSched {
+        self.windows.entry(id).or_default()
+    }
+
+    pub(crate) fn remove_window(&mut self, id: NativeWindowId) {
+        self.windows.remove(&id);
+    }
+
+    /// Declare demand. Returns the immediate action; duplicate driving
+    /// demands coalesce into one outstanding request per window.
+    pub(crate) fn submit_demand(
+        &mut self,
+        id: NativeWindowId,
+        demand: FrameDemand,
+        now: Instant,
+    ) -> PacingAction {
+        if demand.invalidation == Invalidation::None {
+            return PacingAction::Sleep;
+        }
+        let ws = self.window(id);
+        match demand.cadence {
+            Cadence::OnDemand => {
+                ws.due.merge(demand.invalidation, false, demand.reason);
+                PacingAction::Sleep
+            }
+            Cadence::NextPresentation => {
+                ws.due.merge(demand.invalidation, true, demand.reason);
+                Self::drive(ws)
+            }
+            Cadence::At(at) if at <= now => {
+                ws.due.merge(demand.invalidation, true, demand.reason);
+                Self::drive(ws)
+            }
+            Cadence::At(at) => {
+                ws.schedule(ScheduledDemand {
+                    reason: demand.reason,
+                    at,
+                    invalidation: demand.invalidation,
+                    period: None,
+                });
+                PacingAction::WakeAt(at)
+            }
+            Cadence::MaxRate(hz) => {
+                let period = Duration::from_secs_f64(1.0 / f64::from(hz.get()));
+                match ws.anchor_for(demand.reason) {
+                    // First submission (or anchor already reached): fire now
+                    // and anchor the phase grid at now + period.
+                    None => {
+                        ws.set_anchor(demand.reason, now + period);
+                        ws.due.merge(demand.invalidation, true, demand.reason);
+                        Self::drive(ws)
+                    }
+                    Some(anchor) if anchor <= now => {
+                        let mut next = anchor;
+                        while next <= now {
+                            next += period;
+                        }
+                        ws.set_anchor(demand.reason, next);
+                        ws.due.merge(demand.invalidation, true, demand.reason);
+                        Self::drive(ws)
+                    }
+                    // Anchor in the future: schedule on the existing phase
+                    // grid; resubmission is idempotent.
+                    Some(anchor) => {
+                        ws.schedule(ScheduledDemand {
+                            reason: demand.reason,
+                            at: anchor,
+                            invalidation: demand.invalidation,
+                            period: Some(period),
+                        });
+                        PacingAction::WakeAt(anchor)
+                    }
+                }
+            }
+        }
+    }
+
+    fn drive(ws: &mut WindowSched) -> PacingAction {
+        if !ws.eligible() {
+            return PacingAction::Sleep;
+        }
+        if ws.request_pending {
+            return PacingAction::Sleep;
+        }
+        ws.request_pending = true;
+        PacingAction::RequestRedraw
+    }
+
+    /// Withdraw a reason's demand (effect disabled, timer cancelled). Due
+    /// work already merged from that reason stays merged; only its standing
+    /// deadline and phase anchor are dropped.
+    pub(crate) fn retract(&mut self, id: NativeWindowId, reason: DemandReason) {
+        let ws = self.window(id);
+        ws.scheduled.retain(|s| s.reason != reason);
+        ws.max_rate_anchor.retain(|(r, _)| *r != reason);
+    }
+
+    /// Consume demand for one tick and decide the work.
+    pub(crate) fn begin_frame(&mut self, id: NativeWindowId, tick: FrameTick) -> FramePlan {
+        let ws = self.window(id);
+        // This tick satisfies the outstanding request, whether it came from
+        // our request or was platform-initiated (resize, expose).
+        ws.request_pending = false;
+
+        // Fold every ripe scheduled deadline into the due work. A very late
+        // tick consumes the whole backlog as one plan; MaxRate anchors
+        // advance by whole periods so the phase grid survives.
+        let frame_time = tick.frame_time;
+        let mut i = 0;
+        while i < ws.scheduled.len() {
+            if ws.scheduled[i].at <= frame_time {
+                let ScheduledDemand {
+                    reason,
+                    invalidation,
+                    period,
+                    ..
+                } = ws.scheduled.swap_remove(i);
+                ws.due.merge(invalidation, true, reason);
+                if let Some(period) = period {
+                    let mut next = ws.anchor_for(reason).unwrap_or(frame_time);
+                    while next <= frame_time {
+                        next += period;
+                    }
+                    ws.set_anchor(reason, next);
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        if !ws.eligible() {
+            // Retain demand; never present while ineligible.
+            return FramePlan {
+                tick,
+                work: RenderWork::None,
+                should_present: false,
+            };
+        }
+
+        let due = ws.due.take();
+        let work = RenderWork::from_invalidation(due.invalidation);
+        FramePlan {
+            tick,
+            work,
+            should_present: work != RenderWork::None,
+        }
+    }
+
+    /// Record the presentation outcome and decide the next action.
+    pub(crate) fn finish_frame(
+        &mut self,
+        id: NativeWindowId,
+        plan: &FramePlan,
+        result: PresentResult,
+        now: Instant,
+    ) -> PacingAction {
+        let ws = self.window(id);
+        match result {
+            PresentResult::Presented => {
+                ws.last_present_at = Some(now);
+            }
+            PresentResult::Skipped => {
+                // The plan's work never reached the screen; re-queue it.
+                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+            }
+            PresentResult::Occluded => {
+                ws.presentation.occluded = true;
+                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                return PacingAction::Sleep;
+            }
+            PresentResult::SurfaceLost => {
+                // Retained content is gone; a full repaint is required once
+                // the runtime reconfigures the surface.
+                ws.due.merge(
+                    Invalidation::RepaintLayers {
+                        layers: LayerMask::all(),
+                        damage: Damage::FullLayer,
+                    },
+                    true,
+                    DemandReason::Expose,
+                );
+                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                return Self::drive(ws);
+            }
+            PresentResult::Timeout => {
+                // Bounded retry; never an immediate spin.
+                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                return PacingAction::WakeAt(now + TIMEOUT_BACKOFF);
+            }
+        }
+        if ws.due.driving && !ws.due.is_empty() {
+            return Self::drive(ws);
+        }
+        match ws.earliest_deadline() {
+            Some(at) => PacingAction::WakeAt(at),
+            None => PacingAction::Sleep,
+        }
+    }
+
+    /// Update visibility/focus/occlusion. Regaining eligibility with retained
+    /// demand issues exactly one recovery request.
+    pub(crate) fn update_window_state(
+        &mut self,
+        id: NativeWindowId,
+        state: WindowPresentationState,
+    ) -> PacingAction {
+        let ws = self.window(id);
+        let was_eligible = ws.eligible();
+        ws.presentation = state;
+        if !was_eligible && ws.eligible() && ws.has_any_demand() {
+            return Self::drive(ws);
+        }
+        PacingAction::Sleep
+    }
+
+    /// Earliest scheduled deadline across eligible windows: the event loop's
+    /// WaitUntil aggregation input. None means the loop may Wait indefinitely
+    /// as far as frame demand is concerned.
+    pub(crate) fn next_wake_deadline(&self) -> Option<Instant> {
+        self.windows
+            .values()
+            .filter(|ws| ws.eligible())
+            .filter_map(|ws| ws.earliest_deadline())
+            .min()
+    }
+
+    /// Active demand reasons for diagnostics ("why is this window still
+    /// rendering?").
+    pub(crate) fn active_reasons(&self, id: NativeWindowId) -> Vec<DemandReason> {
+        let Some(ws) = self.windows.get(&id) else {
+            return Vec::new();
+        };
+        let mut reasons = ws.due.reasons.clone();
+        for s in &ws.scheduled {
+            if !reasons.contains(&s.reason) {
+                reasons.push(s.reason);
+            }
+        }
+        reasons.sort();
+        reasons
+    }
+
+    /// Whether a redraw request is outstanding for this window.
+    #[cfg(test)]
+    pub(crate) fn request_pending(&self, id: NativeWindowId) -> bool {
+        self.windows
+            .get(&id)
+            .map(|ws| ws.request_pending)
+            .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+#[path = "frame_sched_test.rs"]
+mod frame_sched_test;

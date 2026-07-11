@@ -92,15 +92,4 @@ impl RenderApp {
         let area = Self::ime_cursor_area_for_window_target(window_state, target);
         window_state.update_ime_cursor_area(area);
     }
-
-    pub(super) fn next_cursor_blink_deadline(&self) -> Option<std::time::Instant> {
-        let mut next: Option<std::time::Instant> = None;
-        self.frame_windows
-            .for_each_top_level_window(|window_state| {
-                if let Some(deadline) = window_state.render.cursor.next_blink_deadline() {
-                    next = Some(next.map_or(deadline, |current| current.min(deadline)));
-                }
-            });
-        next
-    }
 }
