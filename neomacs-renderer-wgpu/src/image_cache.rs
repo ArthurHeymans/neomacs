@@ -453,14 +453,14 @@ impl ImageCache {
         let background = most_frequent(corners, |pixel| {
             (u32::from(pixel[0]) << 16) | (u32::from(pixel[1]) << 8) | u32::from(pixel[2])
         });
-        let mask = most_frequent(corners, |pixel| u32::from(pixel[3] < u8::MAX));
+        let mask = most_frequent(corners, |pixel| u32::from(pixel[3] == 0));
         ImageMetadata {
             width,
             height,
             background: (u32::from(background[0]) << 16)
                 | (u32::from(background[1]) << 8)
                 | u32::from(background[2]),
-            background_transparent: mask[3] < u8::MAX,
+            background_transparent: mask[3] == 0,
         }
     }
 

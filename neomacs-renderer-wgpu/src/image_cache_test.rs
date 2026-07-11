@@ -31,8 +31,38 @@ fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
 }
 
 #[test]
+fn decoded_partial_alpha_png_corners_are_gnu_draw_not_transparent_mask() {
+    for alpha in [1, 254] {
+        let data = png_bytes([0x12, 0x34, 0x56, alpha].repeat(4), 2, 2);
+        let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).unwrap();
+
+        assert!(
+            !decoded.metadata.background_transparent,
+            "GNU mask DRAW includes nonzero alpha {alpha}"
+        );
+    }
+}
+
+#[test]
+fn decoded_corner_mask_tie_uses_gnu_first_corner_winner() {
+    let metadata = |alphas: [u8; 4]| {
+        let pixels = alphas
+            .into_iter()
+            .flat_map(|alpha| [0x12, 0x34, 0x56, alpha])
+            .collect();
+        let data = png_bytes(pixels, 2, 2);
+        ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0))
+            .unwrap()
+            .metadata
+    };
+
+    assert!(!metadata([1, 0, 0, 254]).background_transparent);
+    assert!(metadata([0, 1, 254, 0]).background_transparent);
+}
+
+#[test]
 fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
-    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><circle cx="1" cy="1" r="0.5" fill="#123456"/></svg>"##;
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect x="1" y="1" width="2" height="2" fill="#123456"/></svg>"##;
     let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0xff_aa_bb_cc)).unwrap();
 
     assert!(decoded.metadata.background_transparent);
