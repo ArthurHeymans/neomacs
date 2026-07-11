@@ -81,6 +81,13 @@ pub struct PresentedPointerRegion {
     appearance: Option<PointerAppearanceId>,
 }
 
+// Accepted vocabulary for future native-control adapters; the current wire
+// type stores only the evaluator arm above.
+pub enum InputTarget {
+    Evaluator(InteractionId),
+    NativeControl(NativeControlId),
+}
+
 pub struct PresentedPointerSourceMap {
     regions: Vec<PresentedPointerRegion>,
     appearances: Vec<PresentedPointerSourceAppearance>,
@@ -110,6 +117,10 @@ compose without knowing final primitive indices. `FrameGlyphBuffer` performs
 the only source-slot-to-primitive materialization, discards appearances whose
 sources did not survive final display, remaps their region IDs, and validates
 the resulting `PresentedPointerMap` atomically.
+
+The first implementation stores only evaluator-owned interactions directly in
+`PresentedPointerRegion`. `InputTarget` remains the accepted semantic boundary
+for a future native-control adapter; it is not yet a transported protocol type.
 
 ### Why interaction and appearance are separate
 
