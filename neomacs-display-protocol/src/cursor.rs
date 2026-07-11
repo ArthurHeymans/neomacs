@@ -206,6 +206,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn clean_top_layer_covers_bar_hbar_hollow_only() {
+        // The retained-static cursor fast path depends on this mapping: only
+        // the filled box (inverse video) forces the full render.
+        assert!(CursorStyle::Bar(2.0).is_clean_top_layer());
+        assert!(CursorStyle::Hbar(2.0).is_clean_top_layer());
+        assert!(CursorStyle::Hollow.is_clean_top_layer());
+        assert!(!CursorStyle::FilledBox.is_clean_top_layer());
+    }
+
+    #[test]
     fn cursor_kind_matches_gnu_text_cursor_codes() {
         let cases = [
             (-2, CursorKind::Default),
