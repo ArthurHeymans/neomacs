@@ -409,6 +409,9 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
+        if popup_menu.is_some() {
+            self.pointer_appearance.hover(None);
+        }
         self.overlays.popup_menu = popup_menu;
         self.compositor.dirty = true;
     }
@@ -566,15 +569,19 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn cancel_pointer_interaction(&mut self) -> (bool, Vec<u64>) {
+        let previous_chrome = self.chrome.interaction;
         let visual_changed = self.pointer_appearance.cancel();
+        self.pointer_inside = false;
+        self.chrome.interaction.clear_menu_bar();
         self.chrome.interaction.clear_tab_bar_capture();
+        self.chrome.interaction.clear_toolbar();
         self.chrome.interaction.toolbar_press_captured = false;
-        self.chrome.interaction.toolbar_pressed = None;
-        self.chrome.interaction.compact_bar_tool_pressed = None;
-        if visual_changed {
+        self.chrome.interaction.clear_compact_bar();
+        let changed = visual_changed || self.chrome.interaction != previous_chrome;
+        if changed {
             self.mark_dirty();
         }
-        (visual_changed, self.take_deferred_pointer_retirements())
+        (changed, self.take_deferred_pointer_retirements())
     }
 
     pub(super) fn set_current_frame(

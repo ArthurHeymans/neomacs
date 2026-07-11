@@ -298,6 +298,68 @@ fn cancellation_flushes_pinned_retirement_without_release() {
     assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
     assert!(!render.chrome.interaction.toolbar_press_captured);
     assert_eq!(render.chrome.interaction.toolbar_pressed, None);
+    assert!(!render.pointer_inside);
+}
+
+#[test]
+fn focus_cancellation_dirties_toolbar_and_compact_only_state() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.pointer_inside = true;
+    render.chrome.interaction.toolbar_hovered = Some(1);
+    render.chrome.interaction.toolbar_pressed = Some(1);
+    render.chrome.interaction.toolbar_press_captured = true;
+    render.chrome.interaction.compact_bar_tool_hovered = Some(2);
+    render.chrome.interaction.compact_bar_tool_pressed = Some(2);
+    render.set_dirty(false);
+
+    let (changed, retirements) = render.cancel_pointer_interaction();
+
+    assert!(changed);
+    assert!(retirements.is_empty());
+    assert!(render.compositor.dirty);
+    assert!(!render.pointer_inside);
+    assert_eq!(render.chrome.interaction.toolbar_hovered, None);
+    assert_eq!(render.chrome.interaction.toolbar_pressed, None);
+    assert_eq!(render.chrome.interaction.compact_bar_tool_hovered, None);
+    assert_eq!(render.chrome.interaction.compact_bar_tool_pressed, None);
+}
+
+#[test]
+fn programmatic_popup_open_suppresses_underlying_hover_immediately() {
+    let key = appearance_key(61, 1);
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.pointer_appearance.hover(Some(key));
+    render.pointer_appearance.press();
+    render.set_dirty(false);
+
+    render.set_popup_menu(Some(neomacs_renderer_wgpu::PopupMenuState::new(
+        0.0,
+        0.0,
+        vec![],
+        None,
+        13.0,
+        17.0,
+        8.0,
+    )));
+
+    assert_eq!(render.pointer_appearance.active(), None);
+    assert_eq!(render.pointer_appearance.pressed(), Some(key));
+    assert!(render.compositor.dirty);
+}
+
+#[test]
+fn non_root_owner_clears_stale_root_chrome_hover() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.menu_bar_hovered = Some(1);
+    render.chrome.interaction.compact_bar_menu_hovered = Some(2);
+    render.chrome.interaction.compact_bar_tool_hovered = Some(3);
+    render.chrome.interaction.toolbar_hovered = Some(4);
+
+    assert!(RenderApp::suppress_root_chrome_hover(&mut render));
+    assert_eq!(render.chrome.interaction.menu_bar_hovered, None);
+    assert_eq!(render.chrome.interaction.compact_bar_menu_hovered, None);
+    assert_eq!(render.chrome.interaction.compact_bar_tool_hovered, None);
+    assert_eq!(render.chrome.interaction.toolbar_hovered, None);
 }
 
 #[test]

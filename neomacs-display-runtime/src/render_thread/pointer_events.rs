@@ -34,6 +34,10 @@ impl PointerOwner {
     pub(super) fn permits_root_chrome(self) -> bool {
         !matches!(self, Self::Child { .. })
     }
+
+    pub(super) fn owns_root_hover(self) -> bool {
+        matches!(self, Self::Root { .. })
+    }
 }
 
 /// Search a glyph buffer for an inline xwidget at the given local coordinates.
@@ -60,6 +64,21 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
 }
 
 impl RenderApp {
+    pub(super) fn suppress_root_chrome_hover(
+        render: &mut super::frame_windows::GuiFrameRenderState,
+    ) -> bool {
+        let interaction = &mut render.chrome.interaction;
+        let changed = interaction.menu_bar_hovered.is_some()
+            || interaction.compact_bar_menu_hovered.is_some()
+            || interaction.compact_bar_tool_hovered.is_some()
+            || interaction.toolbar_hovered.is_some();
+        interaction.menu_bar_hovered = None;
+        interaction.compact_bar_menu_hovered = None;
+        interaction.compact_bar_tool_hovered = None;
+        interaction.toolbar_hovered = None;
+        changed
+    }
+
     pub(super) fn pointer_owner(
         window_state: &GuiFrameWindowState,
         x: f32,
@@ -616,6 +635,7 @@ impl RenderApp {
                     let x = window_state.render.mouse_pos.0;
                     let y = window_state.render.mouse_pos.1;
                     if !handled_chrome
+                        && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
                             FrameChromeKind::CompactBar,
@@ -869,6 +889,10 @@ impl RenderApp {
             let ly = (position.y / scale) as f32;
             window_state.render.set_mouse_pos((lx, ly));
             let mut dirty = false;
+            let pointer_owner = Self::pointer_owner(window_state, lx, ly);
+            if !pointer_owner.owns_root_hover() {
+                dirty |= Self::suppress_root_chrome_hover(&mut window_state.render);
+            }
 
             let edge = Self::detect_resize_edge_for_chrome(
                 window_state.chrome(),
@@ -891,7 +915,11 @@ impl RenderApp {
             }
 
             if !window_state.chrome().decorations_enabled {
-                let new_hover = Self::frame_window_titlebar_hit_test(window_state, lx, ly);
+                let new_hover = if pointer_owner.owns_root_hover() {
+                    Self::frame_window_titlebar_hit_test(window_state, lx, ly)
+                } else {
+                    0
+                };
                 if new_hover != window_state.chrome().titlebar_hover {
                     window_state.chrome_mut().titlebar_hover = new_hover;
                     dirty = true;
@@ -911,7 +939,10 @@ impl RenderApp {
                 Self::frame_window_band_bounds(window_state, FrameChromeKind::MenuBar)
             {
                 let old_hover = window_state.render.chrome.interaction.menu_bar_hovered;
-                if ly >= menu_bounds.y() && ly < menu_bounds.y() + menu_bounds.height() {
+                if pointer_owner.owns_root_hover()
+                    && ly >= menu_bounds.y()
+                    && ly < menu_bounds.y() + menu_bounds.height()
+                {
                     let new_hover = Self::frame_window_menu_bar_hit_test(window_state, lx, ly);
                     window_state.render.chrome.interaction.menu_bar_hovered =
                         new_hover.as_ref().map(|hit| hit.index);
@@ -945,7 +976,10 @@ impl RenderApp {
                     .chrome
                     .interaction
                     .compact_bar_tool_hovered;
-                if ly >= compact_bounds.y() && ly < compact_bounds.y() + compact_bounds.height() {
+                if pointer_owner.owns_root_hover()
+                    && ly >= compact_bounds.y()
+                    && ly < compact_bounds.y() + compact_bounds.height()
+                {
                     let new_menu_hover =
                         Self::frame_window_compact_bar_menu_hit_test(window_state, lx, ly);
                     window_state
@@ -1009,7 +1043,11 @@ impl RenderApp {
 
             let old_toolbar_hover = window_state.render.chrome.interaction.toolbar_hovered;
             window_state.render.chrome.interaction.toolbar_hovered =
-                Self::frame_window_toolbar_hit_test(window_state, lx, ly);
+                if pointer_owner.owns_root_hover() {
+                    Self::frame_window_toolbar_hit_test(window_state, lx, ly)
+                } else {
+                    None
+                };
             dirty |= window_state.render.chrome.interaction.toolbar_hovered != old_toolbar_hover;
 
             dirty |= window_state.render.update_popup_hover(lx, ly);
@@ -1018,15 +1056,12 @@ impl RenderApp {
 
             let (ev_x, ev_y, target_fid) =
                 Self::pointer_target_for_frame_window(window_state, lx, ly);
-            let appearance =
-                Self::pointer_owner(window_state, lx, ly)
-                    .target()
-                    .and_then(|(x, y, frame_id)| {
-                        window_state
-                            .render
-                            .presented_pointer_hit(frame_id, x, y)
-                            .and_then(|hit| hit.appearance_key())
-                    });
+            let appearance = pointer_owner.target().and_then(|(x, y, frame_id)| {
+                window_state
+                    .render
+                    .presented_pointer_hit(frame_id, x, y)
+                    .and_then(|hit| hit.appearance_key())
+            });
             dirty |= window_state.render.pointer_appearance.hover(appearance);
             if dirty {
                 window_state.render.mark_dirty();
