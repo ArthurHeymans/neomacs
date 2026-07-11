@@ -2060,13 +2060,15 @@ impl DisplayPropertyReplacementSourceItem {
 pub(crate) struct BufferDisplayReplacementStringSource<S> {
     replacement_source: BufferDisplayReplacementSource,
     source: S,
+    inherited_pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct BufferDisplayReplacementStringRequest {
     source_id: u64,
     value: Value,
     replacement_source: BufferDisplayReplacementSource,
+    inherited_pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 impl BufferDisplayReplacementStringRequest {
@@ -2079,7 +2081,16 @@ impl BufferDisplayReplacementStringRequest {
             source_id,
             value,
             replacement_source,
+            inherited_pointer_appearance: None,
         }
+    }
+
+    pub(crate) fn with_pointer_appearance(
+        mut self,
+        appearance: Option<DisplayPointerAppearance>,
+    ) -> Self {
+        self.inherited_pointer_appearance = appearance;
+        self
     }
 
     pub(crate) fn into_source(
@@ -2095,22 +2106,31 @@ impl BufferDisplayReplacementStringRequest {
         Some(BufferDisplayReplacementStringSource::new(
             self.replacement_source,
             string_source,
+            self.inherited_pointer_appearance,
         ))
     }
 }
 
 impl<S> BufferDisplayReplacementStringSource<S> {
-    pub(crate) const fn new(replacement_source: BufferDisplayReplacementSource, source: S) -> Self {
+    pub(crate) const fn new(
+        replacement_source: BufferDisplayReplacementSource,
+        source: S,
+        inherited_pointer_appearance: Option<DisplayPointerAppearance>,
+    ) -> Self {
         Self {
             replacement_source,
             source,
+            inherited_pointer_appearance,
         }
     }
 }
 
 impl<S: DisplayItemSource> DisplayItemSource for BufferDisplayReplacementStringSource<S> {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
-        let item = self.source.next_item(context)?;
+        let mut item = self.source.next_item(context)?;
+        if item.pointer_appearance.is_none() {
+            item.pointer_appearance = self.inherited_pointer_appearance.clone();
+        }
         Some(
             self.replacement_source
                 .item_from_replacement_string_item(item),

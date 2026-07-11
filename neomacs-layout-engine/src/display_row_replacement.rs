@@ -94,7 +94,7 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct DisplayReplacementStringSourceAppendRequest {
     position: DisplayRowPosition,
     source: BufferDisplayReplacementStringRequest,
@@ -105,7 +105,7 @@ impl DisplayReplacementStringSourceAppendRequest {
         Self { position, source }
     }
 
-    fn position(self) -> DisplayRowPosition {
+    fn position(&self) -> DisplayRowPosition {
         self.position
     }
 
@@ -245,6 +245,7 @@ impl DisplayReplacementStringAppendRequest {
         &self,
         replacement_source: BufferDisplayReplacementSource,
         position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayReplacementStringSourceAppendRequest {
         DisplayReplacementStringSourceAppendRequest::new(
             position,
@@ -252,7 +253,8 @@ impl DisplayReplacementStringAppendRequest {
                 self.item.source_id(),
                 self.item.value(),
                 replacement_source,
-            ),
+            )
+            .with_pointer_appearance(pointer_appearance),
         )
     }
 
@@ -262,6 +264,7 @@ impl DisplayReplacementStringAppendRequest {
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayRowPosition {
         if self.item.is_empty() {
             return position;
@@ -270,8 +273,11 @@ impl DisplayReplacementStringAppendRequest {
             debug_assert!(false, "display string replacement missing base face");
             return position;
         };
-        let source_request =
-            self.source_append_request(replacement_append_context.replacement_source, position);
+        let source_request = self.source_append_request(
+            replacement_append_context.replacement_source,
+            position,
+            pointer_appearance,
+        );
         let mut item_policy = self.string_item_measurer();
         let append_context = replacement_append_context.full_text_width_active_face(
             replacement_base_face.face_id(),
@@ -906,9 +912,13 @@ impl DisplayPropertyReplacementAppendPlanItem {
     ) -> DisplayRowPosition {
         match self {
             Self::Empty => position,
-            Self::String(request) => {
-                request.append_to_text_row(replacement_append_context, state, face_ids, position)
-            }
+            Self::String(request) => request.append_to_text_row(
+                replacement_append_context,
+                state,
+                face_ids,
+                position,
+                pointer_appearance,
+            ),
             Self::Item(item) => item.append_to_text_row(
                 replacement_append_context,
                 row_geometry,

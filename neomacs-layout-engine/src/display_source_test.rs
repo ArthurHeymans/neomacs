@@ -231,7 +231,8 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
         LispStringSourceOrigin::Normal,
     )
     .expect("string source");
-    let mut source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
+    let mut source =
+        BufferDisplayReplacementStringSource::new(replacement_source, string_source, None);
     let mut context = DisplaySourceContext::empty();
 
     let item = source.next_item(&mut context).expect("replacement item");
@@ -250,6 +251,41 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
         DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
     ));
     assert!(source.next_item(&mut context).is_none());
+}
+
+#[test]
+fn buffer_display_replacement_string_inherits_buffer_mouse_face() {
+    let _eval = Context::new();
+    let replacement_source =
+        BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
+    let pointer = crate::display_item::DisplayPointerAppearance::new(
+        crate::display_item::DisplayPointerSourceRange::ending_at(
+            DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::new(0)),
+            4,
+        ),
+        RenderFaceRef::FaceId(FaceId::new(11)),
+    );
+    let mut source = BufferDisplayReplacementStringRequest::new(
+        1,
+        Value::string("replacement"),
+        replacement_source,
+    )
+    .with_pointer_appearance(Some(pointer))
+    .into_source(FaceId::new(42))
+    .unwrap();
+
+    let item = source
+        .next_item(&mut DisplaySourceContext::empty())
+        .unwrap();
+
+    assert_eq!(
+        item.pointer_appearance().map(|pointer| pointer.face()),
+        Some(RenderFaceRef::FaceId(FaceId::new(11)))
+    );
+    assert!(matches!(
+        item.span.start,
+        DisplaySourcePosition::Buffer { .. }
+    ));
 }
 
 #[test]
