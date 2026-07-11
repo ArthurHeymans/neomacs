@@ -724,6 +724,9 @@ pub(super) fn relief_edges(
     height: f32,
     relief: PointerImageRelief,
 ) -> Option<ReliefEdgePlan> {
+    if relief.thickness() <= 0.0 {
+        return None;
+    }
     let margins = relief.margins();
     let x = x + margins.left();
     let y = y + margins.top();
@@ -793,6 +796,9 @@ pub(super) fn relief_corner_erases(
     height: f32,
     relief: PointerImageRelief,
 ) -> ReliefCornerErasePlan {
+    if relief.thickness() <= 0.0 {
+        return ReliefCornerErasePlan([None; 4]);
+    }
     let margins = relief.margins();
     let bounds = Rect {
         x: x + margins.left(),

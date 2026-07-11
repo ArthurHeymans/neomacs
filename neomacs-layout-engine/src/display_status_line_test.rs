@@ -5,8 +5,12 @@ use crate::display_row_builder::DisplayRowGlyphSlot;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
 use neomacs_display_protocol::frame_chrome::ChromeAction;
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::{
+    Color, FaceId, FrameGlyphBuffer, FrameRect, ImageId, PointerDrawMode, PointerImageRelief,
+    PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
+};
 use neovm_core::face::FaceTable;
 
 #[test]
@@ -288,6 +292,241 @@ fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
     );
     assert_eq!(
         presented_menu_item(&mut eval, add.posn_string),
+        "(add-tab tab-bar-new-tab nil)"
+    );
+}
+
+fn test_tab_pointer_relief(raised: bool) -> PointerImageRelief {
+    let light = Color::new(0.8, 0.8, 0.8, 1.0);
+    let dark = Color::new(0.2, 0.2, 0.2, 1.0);
+    PointerImageRelief::new(
+        if raised { light } else { dark },
+        if raised { dark } else { light },
+        1.0,
+        PointerReliefMargins::new(1.0, 1.0, 1.0, 1.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::BLACK, 6.0, 1.0),
+    )
+}
+
+#[test]
+fn tab_bar_pointer_appearance_resolves_gnu_pgtk_relief_parameters() {
+    let style = gnu_tab_bar_pointer_appearance_style(
+        FaceId::new(33),
+        0x00808080,
+        0x00112233,
+        3.0,
+        2.0,
+        4.0,
+    );
+    let raised = style.raised;
+    let sunken = style.sunken;
+
+    assert_eq!(raised.thickness(), 4.0);
+    assert_eq!(
+        raised.margins(),
+        PointerReliefMargins::new(3.0, 2.0, 3.0, 2.0)
+    );
+    assert_eq!(
+        raised.edges(),
+        PointerReliefEdges::new(true, true, true, true)
+    );
+    assert_eq!(raised.corner_erase().radius(), 6.0);
+    assert_eq!(raised.corner_erase().margin(), 1.0);
+    assert_eq!(raised.corner_erase().color(), Color::from_pixel(0x00112233));
+    assert_eq!(raised.top_left_color(), sunken.bottom_right_color());
+    assert_eq!(raised.bottom_right_color(), sunken.top_left_color());
+    assert_ne!(raised.top_left_color(), raised.bottom_right_color());
+}
+
+#[test]
+fn tab_bar_pointer_appearance_preserves_configured_zero_relief() {
+    let style = gnu_tab_bar_pointer_appearance_style(
+        FaceId::new(33),
+        0x00808080,
+        0x00112233,
+        1.0,
+        1.0,
+        0.0,
+    );
+
+    assert_eq!(style.raised.thickness(), 0.0);
+    assert_eq!(style.sunken.thickness(), 0.0);
+}
+
+fn tab_pointer_test_frame(highlight_face: FaceId) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(80.0, 18.0);
+    frame.set_face(
+        highlight_face,
+        Color::BLACK,
+        Some(Color::WHITE),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    frame.set_draw_context(
+        neomacs_display_protocol::DisplayWindowId::new(0),
+        GlyphRowRole::TabBar,
+        Some(neomacs_display_protocol::Rect::new(0.0, 0.0, 80.0, 18.0)),
+    );
+    frame.add_char('a', 0.0, 0.0, 8.0, 18.0, 14.0, false);
+    frame.add_char(' ', 8.0, 0.0, 8.0, 18.0, 14.0, false);
+    frame.glyphs.push(FrameGlyph::Image {
+        window_id: neomacs_display_protocol::DisplayWindowId::new(0),
+        row_role: GlyphRowRole::TabBar,
+        clip_rect: Some(neomacs_display_protocol::Rect::new(0.0, 0.0, 80.0, 18.0)),
+        slot_id: Some(DisplaySlotId {
+            window_id: neomacs_display_protocol::DisplayWindowId::new(0),
+            row: 0,
+            col: 1,
+        }),
+        image_id: ImageId::new(7),
+        x: 8.0,
+        y: 1.0,
+        width: 8.0,
+        height: 16.0,
+    });
+    frame
+}
+
+#[test]
+fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let presentation = eval.begin_interaction_presentation();
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(16.0, 2, 0.0, 18.0),
+        vec![
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 8.0, 1),
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 1, 1), 8.0, 1, 8.0, 1),
+        ],
+        Vec::new(),
+        Vec::new(),
+    );
+    let caption = Value::string_with_text_properties(
+        "a ",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 0,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("mouse-face"),
+                Value::symbol("tab-bar-tab-highlight"),
+            ]),
+        }],
+    );
+    eval.eval_form(Value::list(vec![
+        Value::symbol("put-text-property"),
+        Value::fixnum(1),
+        Value::fixnum(2),
+        quoted(Value::symbol("close-tab")),
+        Value::T,
+        quoted(caption),
+    ]))
+    .unwrap();
+    let text = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("copy-sequence"),
+            quoted(caption),
+        ]))
+        .unwrap();
+    let items = vec![TabBarSourceItem {
+        caption,
+        key: Value::symbol("tab-1"),
+        binding: Value::symbol("tab-bar-select-tab"),
+        char_range: 0..2,
+    }];
+    let highlight = FaceId::new(33);
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &rendered,
+        text,
+        &items,
+        18.0,
+        TabBarPointerAppearanceStyle::new(
+            highlight,
+            test_tab_pointer_relief(true),
+            test_tab_pointer_relief(false),
+        ),
+    );
+    let mut frame = tab_pointer_test_frame(highlight);
+    plan.install_into(&mut frame, FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+        .unwrap();
+
+    let body = frame.presented_pointer().hit_test(4.0, 9.0).unwrap();
+    let close = frame.presented_pointer().hit_test(12.0, 9.0).unwrap();
+    assert_ne!(body.interaction(), close.interaction());
+    assert_eq!(body.appearance(), close.appearance());
+    let appearance = frame
+        .presented_pointer()
+        .appearance(body.appearance().unwrap())
+        .unwrap();
+    assert_eq!(appearance.paint_spans().len(), 2);
+    assert_eq!(appearance.hover(), PointerDrawMode::Face(highlight));
+    assert_eq!(appearance.pressed(), PointerDrawMode::Face(highlight));
+}
+
+#[test]
+fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let presentation = eval.begin_interaction_presentation();
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(16.0, 2, 0.0, 18.0),
+        vec![DisplayRowGlyphSlot::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            8.0,
+            1,
+            8.0,
+            1,
+        )],
+        Vec::new(),
+        Vec::new(),
+    );
+    let caption = Value::string(" ");
+    let items = vec![TabBarSourceItem {
+        caption,
+        key: Value::symbol("add-tab"),
+        binding: Value::symbol("tab-bar-new-tab"),
+        char_range: 0..1,
+    }];
+    let raised = test_tab_pointer_relief(true);
+    let sunken = test_tab_pointer_relief(false);
+    let highlight = FaceId::new(33);
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &rendered,
+        caption,
+        &items,
+        18.0,
+        TabBarPointerAppearanceStyle::new(highlight, raised, sunken),
+    );
+    let mut frame = tab_pointer_test_frame(highlight);
+    plan.install_into(&mut frame, FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+        .unwrap();
+
+    let hit = frame.presented_pointer().hit_test(12.0, 9.0).unwrap();
+    let appearance = frame
+        .presented_pointer()
+        .appearance(hit.appearance().unwrap())
+        .unwrap();
+    assert_eq!(appearance.paint_spans().len(), 1);
+    assert_eq!(appearance.hover(), PointerDrawMode::ImageRelief(raised));
+    assert_eq!(appearance.pressed(), PointerDrawMode::ImageRelief(sunken));
+    let posn_string = eval
+        .resolve_presented_mouse_target(presentation, hit.interaction().unwrap().get())
+        .unwrap()
+        .posn_string;
+    assert_eq!(
+        presented_menu_item(&mut eval, posn_string),
         "(add-tab tab-bar-new-tab nil)"
     );
 }

@@ -116,6 +116,18 @@ impl FrameOutputOwner {
         self.presentation_id = PresentationId::new(presentation);
     }
 
+    pub(crate) fn install_pointer_face(
+        &mut self,
+        face_id: neomacs_display_protocol::types::FaceId,
+        face: neomacs_display_protocol::face::Face,
+    ) {
+        self.builder.install_output_frame_state(
+            crate::display_output_install_request::OutputFrameStateInstallRequest::face(
+                face_id, face,
+            ),
+        );
+    }
+
     pub(crate) fn render_frame_tab_bar_row(
         &mut self,
         request: FrameTabBarDisplayRowRequest<'_>,

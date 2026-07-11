@@ -969,6 +969,15 @@ impl FrameGlyphBuffer {
         Ok(())
     }
 
+    /// Resolve source slots against this canonical primitive table and install.
+    pub fn install_presented_pointer_source_map(
+        &mut self,
+        source: &crate::presented_pointer::PresentedPointerSourceMap,
+    ) -> Result<(), crate::presented_pointer::PresentedPointerMapError> {
+        let (regions, appearances) = source.resolve_against(self)?;
+        self.install_presented_pointer(regions, appearances)
+    }
+
     fn synthesize_face(
         &self,
         face_id: FaceId,

@@ -37,15 +37,20 @@ use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDis
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
+use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
 use crate::types::WindowParams;
+#[cfg(test)]
+use neomacs_display_protocol::FrameGlyphBuffer;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_chrome::{
     BandRect, ChromeAction, ChromeHitRegion, InteractionId,
 };
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
-use neomacs_display_protocol::types::FaceId;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{Color, FaceId, Rect};
+use neomacs_display_protocol::{
+    FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
+};
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
@@ -54,7 +59,7 @@ use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
 use neovm_core::window::{FrameId, WindowId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use strum::{EnumString, IntoStaticStr};
 
@@ -1297,6 +1302,17 @@ fn tab_bar_close_at(evaluator: &mut Context, text: Value, char_index: usize) -> 
         .is_ok_and(|value| !value.is_nil())
 }
 
+fn tab_bar_mouse_face_at(evaluator: &mut Context, text: Value, char_index: usize) -> Value {
+    evaluator
+        .eval_form(Value::list(vec![
+            Value::symbol("get-text-property"),
+            Value::fixnum(char_index as i64),
+            quoted(Value::symbol("mouse-face")),
+            quoted(text),
+        ]))
+        .unwrap_or(Value::NIL)
+}
+
 fn tab_bar_posn_string(
     evaluator: &mut Context,
     item: &TabBarSourceItem,
@@ -1318,6 +1334,338 @@ fn tab_bar_posn_string(
     Some(Value::cons(caption, Value::fixnum(0)))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TabBarPointerAppearanceStyle {
+    mouse_face: FaceId,
+    raised: PointerImageRelief,
+    sunken: PointerImageRelief,
+}
+
+impl TabBarPointerAppearanceStyle {
+    pub(crate) const fn new(
+        mouse_face: FaceId,
+        raised: PointerImageRelief,
+        sunken: PointerImageRelief,
+    ) -> Self {
+        Self {
+            mouse_face,
+            raised,
+            sunken,
+        }
+    }
+}
+
+fn gnu_relief_color(background: u32, factor: f64, delta: u16) -> Color {
+    const DARK_BOOST_LIMIT: f64 = 48_000.0;
+    let channels = [
+        ((background >> 16) & 0xff) as u16 * 257,
+        ((background >> 8) & 0xff) as u16 * 257,
+        (background & 0xff) as u16 * 257,
+    ];
+    let brightness =
+        (2 * u32::from(channels[0]) + 3 * u32::from(channels[1]) + u32::from(channels[2])) as f64
+            / 6.0;
+    let dimness = if brightness < DARK_BOOST_LIMIT {
+        1.0 - brightness / DARK_BOOST_LIMIT
+    } else {
+        0.0
+    };
+    let adjustment = f64::from(delta) * dimness * factor / 2.0;
+    let mut output = channels.map(|channel| {
+        let scaled = f64::from(channel) * factor;
+        if factor < 1.0 {
+            (scaled - adjustment).clamp(0.0, f64::from(u16::MAX)) as u16
+        } else {
+            (scaled + adjustment).clamp(0.0, f64::from(u16::MAX)) as u16
+        }
+    });
+    if output == channels {
+        output = channels.map(|channel| channel.saturating_add(delta));
+    }
+    let pixel = (u32::from(output[0] >> 8) << 16)
+        | (u32::from(output[1] >> 8) << 8)
+        | u32::from(output[2] >> 8);
+    Color::from_pixel(pixel)
+}
+
+pub(crate) fn gnu_tab_bar_pointer_appearance_style(
+    mouse_face: FaceId,
+    relief_background: u32,
+    frame_background: u32,
+    horizontal_margin: f32,
+    vertical_margin: f32,
+    thickness: f32,
+) -> TabBarPointerAppearanceStyle {
+    let light = gnu_relief_color(relief_background, 1.2, 0x8000);
+    let dark = gnu_relief_color(relief_background, 0.6, 0x4000);
+    let margins = neomacs_display_protocol::PointerReliefMargins::new(
+        horizontal_margin,
+        vertical_margin,
+        horizontal_margin,
+        vertical_margin,
+    );
+    let edges = neomacs_display_protocol::PointerReliefEdges::new(true, true, true, true);
+    let corner_erase = neomacs_display_protocol::PointerReliefCornerErase::new(
+        Color::from_pixel(frame_background),
+        6.0,
+        1.0,
+    );
+    TabBarPointerAppearanceStyle::new(
+        mouse_face,
+        PointerImageRelief::new(light, dark, thickness, margins, edges, corner_erase),
+        PointerImageRelief::new(dark, light, thickness, margins, edges, corner_erase),
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum TabBarPointerPaintKind {
+    Face,
+    Image,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TabBarPointerAppearancePlan {
+    identity: PointerAppearanceRangeId,
+    kind: TabBarPointerPaintKind,
+    hover: PointerDrawMode,
+    pressed: PointerDrawMode,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TabBarPointerRunPlan {
+    local_bounds: FrameRect,
+    col: u16,
+    interaction: InteractionId,
+    appearance: Option<TabBarPointerAppearancePlan>,
+}
+
+pub(crate) struct TabBarPresentedPointerPlan {
+    runs: Vec<TabBarPointerRunPlan>,
+    hit_regions: Vec<ChromeHitRegion>,
+}
+
+impl TabBarPresentedPointerPlan {
+    pub(crate) fn hit_regions(&self) -> &[ChromeHitRegion] {
+        &self.hit_regions
+    }
+
+    pub(crate) fn into_source_map(
+        self,
+        band: FrameRect,
+    ) -> Result<neomacs_display_protocol::PresentedPointerSourceMap, PresentedPointerMapBuildError>
+    {
+        let mut appearance_bounds: HashMap<PointerAppearanceRangeId, FrameRect> = HashMap::new();
+        for run in &self.runs {
+            let Some(appearance) = run.appearance else {
+                continue;
+            };
+            let bounds = FrameRect::new(
+                band.x() + run.local_bounds.x(),
+                band.y() + run.local_bounds.y(),
+                run.local_bounds.width(),
+                run.local_bounds.height(),
+            )
+            .expect("tab-bar band placement keeps finite positive geometry");
+            appearance_bounds
+                .entry(appearance.identity)
+                .and_modify(|aggregate| {
+                    let left = aggregate.x().min(bounds.x());
+                    let top = aggregate.y().min(bounds.y());
+                    let right =
+                        (aggregate.x() + aggregate.width()).max(bounds.x() + bounds.width());
+                    let bottom =
+                        (aggregate.y() + aggregate.height()).max(bounds.y() + bounds.height());
+                    *aggregate = FrameRect::new(left, top, right - left, bottom - top)
+                        .expect("union of valid tab-bar regions is valid");
+                })
+                .or_insert(bounds);
+        }
+        let mut appearance_positions = HashMap::new();
+        let mut appearances: Vec<(
+            Vec<neomacs_display_protocol::PresentedSourcePaintSpan>,
+            PointerDrawMode,
+            PointerDrawMode,
+        )> = Vec::new();
+        let mut published_spans = HashSet::new();
+        for run in &self.runs {
+            let Some(appearance) = run.appearance else {
+                continue;
+            };
+            let index = *appearance_positions
+                .entry(appearance.identity)
+                .or_insert_with(|| {
+                    appearances.push((Vec::new(), appearance.hover, appearance.pressed));
+                    appearances.len() - 1
+                });
+            if published_spans.insert((appearance.identity, appearance.kind, run.col)) {
+                appearances[index]
+                    .0
+                    .push(neomacs_display_protocol::PresentedSourcePaintSpan::new(
+                        match appearance.kind {
+                            TabBarPointerPaintKind::Face => PresentedPrimitiveKind::Glyph,
+                            TabBarPointerPaintKind::Image => PresentedPrimitiveKind::Image,
+                        },
+                        neomacs_display_protocol::GlyphRowRole::TabBar,
+                        neomacs_display_protocol::DisplaySlotId {
+                            window_id: neomacs_display_protocol::DisplayWindowId::new(0),
+                            row: 0,
+                            col: run.col,
+                        },
+                        appearance_bounds[&appearance.identity],
+                    ));
+            }
+        }
+        let appearances = appearances
+            .into_iter()
+            .map(|(spans, hover, pressed)| {
+                neomacs_display_protocol::PresentedPointerSourceAppearance::new(
+                    spans, hover, pressed,
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut regions = Vec::with_capacity(self.runs.len());
+        for run in self.runs {
+            let hit_bounds = FrameRect::new(
+                band.x() + run.local_bounds.x(),
+                band.y() + run.local_bounds.y(),
+                run.local_bounds.width(),
+                run.local_bounds.height(),
+            )
+            .expect("tab-bar band placement keeps finite positive geometry");
+            let appearance = run
+                .appearance
+                .map(|appearance| {
+                    PointerAppearanceId::try_from(appearance_positions[&appearance.identity])
+                        .map_err(|_| PresentedPointerMapBuildError::TooManyAppearances)
+                })
+                .transpose()?;
+            regions.push(neomacs_display_protocol::PresentedPointerRegion::new(
+                hit_bounds,
+                Some(run.interaction),
+                appearance,
+            ));
+        }
+        Ok(neomacs_display_protocol::PresentedPointerSourceMap::new(
+            regions,
+            appearances,
+        ))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_into(
+        self,
+        frame: &mut FrameGlyphBuffer,
+        band: FrameRect,
+    ) -> Result<(), PresentedPointerMapBuildError> {
+        let source = self.into_source_map(band)?;
+        frame
+            .install_presented_pointer_source_map(&source)
+            .map_err(Into::into)
+    }
+}
+
+pub(crate) fn tab_bar_presented_pointer_plan(
+    evaluator: &mut Context,
+    presentation: u64,
+    rendered: &RenderedDisplayRow,
+    text: Value,
+    items: &[TabBarSourceItem],
+    height: f32,
+    style: TabBarPointerAppearanceStyle,
+) -> TabBarPresentedPointerPlan {
+    let mut targets: HashMap<(usize, bool), u32> = HashMap::new();
+    let mut runs = Vec::new();
+    let mut hit_regions = Vec::new();
+    let mut next_appearance = 0_u64;
+    let mut last_mouse_face: Option<(usize, usize, Value, PointerAppearanceRangeId)> = None;
+    let mut relief_by_item: HashMap<usize, PointerAppearanceRangeId> = HashMap::new();
+
+    for slot in rendered.source_slots() {
+        let Some(char_index) = slot.source().lisp_string_char_index() else {
+            continue;
+        };
+        let Some((item_index, item)) = items
+            .iter()
+            .enumerate()
+            .find(|(_, item)| item.char_range.contains(&char_index))
+        else {
+            continue;
+        };
+        let close = tab_bar_close_at(evaluator, text, char_index);
+        let interaction = if let Some(interaction) = targets.get(&(item_index, close)).copied() {
+            interaction
+        } else {
+            let Some(posn_string) = tab_bar_posn_string(evaluator, item, close) else {
+                continue;
+            };
+            let interaction = evaluator.register_presented_mouse_target(
+                presentation,
+                PresentedMouseTarget {
+                    area: PresentedMouseArea::TabBar,
+                    posn_string,
+                },
+            );
+            targets.insert((item_index, close), interaction);
+            interaction
+        };
+        let local_bounds = FrameRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+            .expect("rendered tab source slots have valid geometry");
+        let mouse_face = tab_bar_mouse_face_at(evaluator, text, char_index);
+        let appearance = if !mouse_face.is_nil() {
+            let identity = if let Some((previous_item, previous_char, previous_face, identity)) =
+                last_mouse_face
+                && previous_item == item_index
+                && previous_char + 1 == char_index
+                && previous_face == mouse_face
+            {
+                identity
+            } else {
+                let identity = PointerAppearanceRangeId::new(next_appearance);
+                next_appearance += 1;
+                identity
+            };
+            last_mouse_face = Some((item_index, char_index, mouse_face, identity));
+            Some(TabBarPointerAppearancePlan {
+                identity,
+                kind: TabBarPointerPaintKind::Face,
+                hover: PointerDrawMode::Face(style.mouse_face),
+                pressed: PointerDrawMode::Face(style.mouse_face),
+            })
+        } else if item.key.as_symbol_name() == Some("add-tab") {
+            last_mouse_face = None;
+            let identity = *relief_by_item.entry(item_index).or_insert_with(|| {
+                let identity = PointerAppearanceRangeId::new(next_appearance);
+                next_appearance += 1;
+                identity
+            });
+            Some(TabBarPointerAppearancePlan {
+                identity,
+                kind: TabBarPointerPaintKind::Image,
+                hover: PointerDrawMode::ImageRelief(style.raised),
+                pressed: PointerDrawMode::ImageRelief(style.sunken),
+            })
+        } else {
+            last_mouse_face = None;
+            None
+        };
+        let interaction = InteractionId::new(interaction);
+        runs.push(TabBarPointerRunPlan {
+            local_bounds,
+            col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+            interaction,
+            appearance,
+        });
+        hit_regions.push(ChromeHitRegion::new(
+            BandRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+                .expect("rendered tab source slots have valid geometry"),
+            ChromeAction::Presented { interaction },
+        ));
+    }
+
+    TabBarPresentedPointerPlan { runs, hit_regions }
+}
+
+#[cfg(test)]
 pub(crate) fn tab_bar_presented_hit_regions(
     evaluator: &mut Context,
     presentation: u64,

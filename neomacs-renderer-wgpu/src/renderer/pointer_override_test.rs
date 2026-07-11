@@ -307,6 +307,29 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
 }
 
 #[test]
+fn zero_thickness_image_relief_emits_no_edges_or_corner_erases() {
+    let spec = PointerImageRelief::new(
+        Color::WHITE,
+        Color::BLACK,
+        0.0,
+        PointerReliefMargins::new(1.0, 1.0, 1.0, 1.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::GREEN, 6.0, 1.0),
+    );
+
+    assert!(relief_edges(0.0, 0.0, 20.0, 18.0, spec).is_none());
+    assert!(
+        relief_corner_erases(0.0, 0.0, 20.0, 18.0, spec)
+            .into_iter()
+            .next()
+            .is_none()
+    );
+    let mut vertices = Vec::new();
+    append_clipped_relief(&mut vertices, 0.0, 0.0, 20.0, 18.0, spec, None);
+    assert!(vertices.is_empty());
+}
+
+#[test]
 fn thick_image_relief_matches_gnu_edge_order_and_corner_ownership() {
     let spec = PointerImageRelief::new(
         Color::WHITE,

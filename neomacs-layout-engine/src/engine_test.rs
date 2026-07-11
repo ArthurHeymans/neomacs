@@ -13771,7 +13771,13 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     );
 
     let mut engine = LayoutEngine::new();
+    neomacs_display_protocol::glyph_matrix::reset_materialize_call_count_for_current_thread();
     engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        neomacs_display_protocol::glyph_matrix::materialize_call_count_for_current_thread(),
+        0,
+        "layout must publish source-addressed pointer metadata without pre-materializing"
+    );
 
     let state = engine
         .last_frame_display_state
@@ -13817,6 +13823,51 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
             && item.get(1).and_then(|value| value.as_symbol_name()) == Some("tab-bar-new-tab")
     }));
     assert!(semantics.iter().any(|item| item.get(2) == Some(&Value::T)));
+
+    let materialized_pointer = state.materialize();
+    assert_eq!(
+        neomacs_display_protocol::glyph_matrix::materialize_call_count_for_current_thread(),
+        1,
+        "the consumer performs exactly one canonical materialization"
+    );
+    assert!(
+        !materialized_pointer
+            .presented_pointer()
+            .appearances()
+            .is_empty(),
+        "tab-bar source mouse-face properties must publish renderer appearances"
+    );
+    let highlighted_face = materialized_pointer
+        .presented_pointer()
+        .appearances()
+        .iter()
+        .find_map(|appearance| match appearance.hover() {
+            neomacs_display_protocol::PointerDrawMode::Face(face_id) => Some(face_id),
+            neomacs_display_protocol::PointerDrawMode::ImageRelief(_) => None,
+        })
+        .expect("standard tab captions should publish a mouse-face override");
+    assert_eq!(
+        materialized_pointer
+            .render_face(highlighted_face)
+            .and_then(|face| face.lisp_name.as_deref()),
+        Some("tab-bar-tab-highlight")
+    );
+    assert!(
+        materialized_pointer
+            .presented_pointer()
+            .regions()
+            .iter()
+            .any(|left| materialized_pointer
+                .presented_pointer()
+                .regions()
+                .iter()
+                .any(|right| {
+                    left.interaction() != right.interaction()
+                        && left.appearance().is_some()
+                        && left.appearance() == right.appearance()
+                })),
+        "tab body and close source slots should keep distinct clicks while sharing mouse-face"
+    );
 
     let tab_bar_text = engine
         .last_frame_display_state

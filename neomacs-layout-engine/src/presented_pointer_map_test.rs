@@ -164,6 +164,48 @@ fn presented_pointer_map_deduplicates_appearance_shared_by_distinct_interactions
 }
 
 #[test]
+fn presented_pointer_map_can_reference_an_appearance_without_republishing_its_span() {
+    let face_id = FaceId::new(9);
+    let identity = PointerAppearanceRangeId::new(7);
+    let mut frame = frame_with_glyphs(face_id, 2);
+    let mut builder = PresentedPointerMapBuilder::new();
+    builder.observe_rendered_run(RenderedPointerRun::new(
+        rect(0.0, 0.0, 10.0, 10.0),
+        Some(InteractionId::new(1)),
+        Some(RenderedPointerAppearance::new(
+            identity,
+            PresentedPaintSpan::new(
+                PresentedPrimitiveKind::Glyph,
+                0,
+                1,
+                rect(0.0, 0.0, 20.0, 10.0),
+            ),
+            PointerDrawMode::Face(face_id),
+            PointerDrawMode::Face(face_id),
+        )),
+    ));
+    builder.observe_rendered_run(RenderedPointerRun::referencing_appearance(
+        rect(10.0, 0.0, 10.0, 10.0),
+        Some(InteractionId::new(2)),
+        identity,
+    ));
+
+    builder.finish_into(&mut frame).unwrap();
+
+    assert_eq!(frame.presented_pointer().appearances().len(), 1);
+    assert_eq!(
+        frame.presented_pointer().appearances()[0]
+            .paint_spans()
+            .len(),
+        1
+    );
+    assert_eq!(
+        frame.presented_pointer().regions()[0].appearance(),
+        frame.presented_pointer().regions()[1].appearance()
+    );
+}
+
+#[test]
 fn presented_pointer_map_keeps_wrapped_paint_spans_in_one_appearance() {
     let face_id = FaceId::new(12);
     let mut builder = PresentedPointerMapBuilder::new();

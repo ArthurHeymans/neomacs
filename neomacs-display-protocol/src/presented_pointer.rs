@@ -4,7 +4,9 @@
 //! primitive tables before it can be published. The validation context is not
 //! retained: render-time consumers only receive coherent immutable records.
 
-use crate::{FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, FrameSize, InteractionId};
+use crate::{
+    DisplaySlotId, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, FrameSize, InteractionId,
+};
 
 /// Presentation-local index of one transient pointer appearance.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -119,6 +121,52 @@ impl PresentedPaintSpan {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    #[must_use]
+    pub const fn clip(&self) -> FrameRect {
+        self.clip
+    }
+}
+
+/// Source-addressed primitive paint resolved during canonical materialization.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedSourcePaintSpan {
+    kind: PresentedPrimitiveKind,
+    row_role: crate::GlyphRowRole,
+    slot: DisplaySlotId,
+    clip: FrameRect,
+}
+
+impl PresentedSourcePaintSpan {
+    #[must_use]
+    pub const fn new(
+        kind: PresentedPrimitiveKind,
+        row_role: crate::GlyphRowRole,
+        slot: DisplaySlotId,
+        clip: FrameRect,
+    ) -> Self {
+        Self {
+            kind,
+            row_role,
+            slot,
+            clip,
+        }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> PresentedPrimitiveKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn slot(&self) -> DisplaySlotId {
+        self.slot
+    }
+
+    #[must_use]
+    pub const fn row_role(&self) -> crate::GlyphRowRole {
+        self.row_role
     }
 
     #[must_use]
@@ -311,6 +359,44 @@ pub struct PresentedPointerAppearance {
     pressed: PointerDrawMode,
 }
 
+/// One appearance before its source slots become canonical primitive indices.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedPointerSourceAppearance {
+    paint_spans: Vec<PresentedSourcePaintSpan>,
+    hover: PointerDrawMode,
+    pressed: PointerDrawMode,
+}
+
+impl PresentedPointerSourceAppearance {
+    #[must_use]
+    pub fn new(
+        paint_spans: Vec<PresentedSourcePaintSpan>,
+        hover: PointerDrawMode,
+        pressed: PointerDrawMode,
+    ) -> Self {
+        Self {
+            paint_spans,
+            hover,
+            pressed,
+        }
+    }
+
+    #[must_use]
+    pub fn paint_spans(&self) -> &[PresentedSourcePaintSpan] {
+        &self.paint_spans
+    }
+
+    #[must_use]
+    pub const fn hover(&self) -> PointerDrawMode {
+        self.hover
+    }
+
+    #[must_use]
+    pub const fn pressed(&self) -> PointerDrawMode {
+        self.pressed
+    }
+}
+
 impl PresentedPointerAppearance {
     #[must_use]
     pub fn new(
@@ -347,6 +433,127 @@ pub struct PresentedPointerRegion {
     bounds: FrameRect,
     interaction: Option<InteractionId>,
     appearance: Option<PointerAppearanceId>,
+}
+
+/// Protocol-safe pointer metadata awaiting the one canonical materialization pass.
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedPointerSourceMap {
+    regions: Vec<PresentedPointerRegion>,
+    appearances: Vec<PresentedPointerSourceAppearance>,
+}
+
+impl PresentedPointerSourceMap {
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            regions: Vec::new(),
+            appearances: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn new(
+        regions: Vec<PresentedPointerRegion>,
+        appearances: Vec<PresentedPointerSourceAppearance>,
+    ) -> Self {
+        Self {
+            regions,
+            appearances,
+        }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.regions.is_empty() && self.appearances.is_empty()
+    }
+
+    #[must_use]
+    pub fn regions(&self) -> &[PresentedPointerRegion] {
+        &self.regions
+    }
+
+    #[must_use]
+    pub fn appearances(&self) -> &[PresentedPointerSourceAppearance] {
+        &self.appearances
+    }
+
+    pub(crate) fn resolve_against(
+        &self,
+        frame: &FrameGlyphBuffer,
+    ) -> Result<
+        (Vec<PresentedPointerRegion>, Vec<PresentedPointerAppearance>),
+        PresentedPointerMapError,
+    > {
+        let mut resolved_appearances = Vec::new();
+        let mut appearance_remap = Vec::with_capacity(self.appearances.len());
+        for appearance in &self.appearances {
+            let mut seen = std::collections::HashSet::new();
+            let mut paint_spans = Vec::new();
+            for source_span in &appearance.paint_spans {
+                let primitive = frame.glyphs.iter().enumerate().find(|(_, primitive)| {
+                    primitive.slot_id() == Some(source_span.slot)
+                        && primitive.row_role() == Some(source_span.row_role)
+                        && match source_span.kind {
+                            PresentedPrimitiveKind::Glyph => matches!(
+                                primitive,
+                                FrameGlyph::Char { .. } | FrameGlyph::Stretch { .. }
+                            ),
+                            PresentedPrimitiveKind::Image => {
+                                matches!(primitive, FrameGlyph::Image { .. })
+                            }
+                        }
+                });
+                let Some((index, _)) = primitive else {
+                    continue;
+                };
+                if !seen.insert(index) {
+                    continue;
+                }
+                let first = u32::try_from(index)
+                    .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)?;
+                paint_spans.push(PresentedPaintSpan::new(
+                    source_span.kind,
+                    first,
+                    1,
+                    source_span.clip,
+                ));
+            }
+            if paint_spans.is_empty() {
+                appearance_remap.push(None);
+            } else {
+                let id = PointerAppearanceId::try_from(resolved_appearances.len())
+                    .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)?;
+                appearance_remap.push(Some(id));
+                resolved_appearances.push(PresentedPointerAppearance::new(
+                    paint_spans,
+                    appearance.hover,
+                    appearance.pressed,
+                ));
+            }
+        }
+
+        let mut regions = Vec::with_capacity(self.regions.len());
+        for region in &self.regions {
+            let appearance = if let Some(id) = region.appearance {
+                let index = usize::try_from(id.get())
+                    .map_err(|_| PresentedPointerMapError::UnknownAppearance(id))?;
+                *appearance_remap
+                    .get(index)
+                    .ok_or(PresentedPointerMapError::UnknownAppearance(id))?
+            } else {
+                None
+            };
+            if region.interaction.is_none() && appearance.is_none() {
+                continue;
+            }
+            regions.push(PresentedPointerRegion::new(
+                region.bounds,
+                region.interaction,
+                appearance,
+            ));
+        }
+        Ok((regions, resolved_appearances))
+    }
 }
 
 impl PresentedPointerRegion {
@@ -762,7 +969,7 @@ fn image_relief_is_valid(relief: PointerImageRelief) -> bool {
             .into_iter()
             .all(f32::is_finite)
     }) && relief.thickness().is_finite()
-        && relief.thickness() > 0.0
+        && relief.thickness() >= 0.0
         && corner_erase.radius().is_finite()
         && corner_erase.radius() > 0.0
         && corner_erase.margin().is_finite()

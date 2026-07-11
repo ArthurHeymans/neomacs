@@ -14,6 +14,58 @@ fn frame_display_state_carries_the_interaction_presentation_that_matches_its_pix
 }
 
 #[test]
+fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.faces.insert(FaceId::new(0), Face::default());
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::char('x', FaceId::new(0), 0).with_pixel_width(8.0));
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0] = row;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        selected: true,
+    });
+
+    let appearance = crate::PresentedPointerSourceAppearance::new(
+        vec![crate::PresentedSourcePaintSpan::new(
+            crate::PresentedPrimitiveKind::Glyph,
+            GlyphRowRole::Text,
+            DisplaySlotId {
+                window_id: DisplayWindowId::new(1),
+                row: 0,
+                col: 0,
+            },
+            crate::FrameRect::new(0.0, 0.0, 8.0, 16.0).unwrap(),
+        )],
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+    );
+    state.presented_pointer_source = crate::PresentedPointerSourceMap::new(
+        vec![crate::PresentedPointerRegion::new(
+            crate::FrameRect::new(0.0, 0.0, 8.0, 16.0).unwrap(),
+            Some(crate::InteractionId::new(7)),
+            Some(crate::PointerAppearanceId::try_from(0usize).unwrap()),
+        )],
+        vec![appearance],
+    );
+    let materialized = state.materialize();
+
+    let hit = materialized
+        .presented_pointer()
+        .hit_test(4.0, 8.0)
+        .expect("transported pointer region");
+    assert_eq!(hit.interaction(), Some(crate::InteractionId::new(7)));
+}
+
+#[test]
 fn glyph_type_kind_codes_match_gnu_glyph_type() {
     let cases = [
         (GlyphTypeKind::Char, 0),

@@ -666,6 +666,9 @@ pub struct ScrollBarItem {
 pub struct FrameDisplayState {
     /// Evaluator interaction snapshot paired with these exact pixels.
     pub presentation_id: PresentationId,
+    /// Pointer semantics and transient paints paired with this exact snapshot.
+    #[serde(default)]
+    pub presented_pointer_source: crate::PresentedPointerSourceMap,
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Authoritative frame-level chrome bands.
     pub frame_chrome: FrameChrome,
@@ -731,10 +734,26 @@ pub struct FrameDisplayState {
     pub fringe_bitmaps: HashMap<u16, FringeBitmapData>,
 }
 
+#[cfg(debug_assertions)]
+thread_local! {
+    static MATERIALIZE_CALL_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(debug_assertions)]
+pub fn reset_materialize_call_count_for_current_thread() {
+    MATERIALIZE_CALL_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(debug_assertions)]
+pub fn materialize_call_count_for_current_thread() -> u32 {
+    MATERIALIZE_CALL_COUNT.with(std::cell::Cell::get)
+}
+
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
             presentation_id: PresentationId::default(),
+            presented_pointer_source: crate::PresentedPointerSourceMap::empty(),
             window_matrices: Vec::new(),
             frame_chrome: FrameChrome::default(),
             frame_cols,
@@ -1005,6 +1024,8 @@ impl FrameDisplayState {
     /// `FrameGlyph` entries and appends all non-grid items (backgrounds,
     /// borders, cursors, etc.).
     pub fn materialize(&self) -> FrameGlyphBuffer {
+        #[cfg(debug_assertions)]
+        MATERIALIZE_CALL_COUNT.with(|count| count.set(count.get() + 1));
         let mut buf = FrameGlyphBuffer::with_size(self.frame_pixel_width, self.frame_pixel_height);
         buf.presentation_id = self.presentation_id;
         buf.char_width = self.char_width;
@@ -1082,6 +1103,11 @@ impl FrameDisplayState {
 
         if let Some(cursor) = self.phys_cursor.clone() {
             buf.set_phys_cursor(cursor);
+        }
+
+        if !self.presented_pointer_source.is_empty() {
+            buf.install_presented_pointer_source_map(&self.presented_pointer_source)
+                .expect("FrameDisplayState pointer map must match its materialized primitives");
         }
 
         buf

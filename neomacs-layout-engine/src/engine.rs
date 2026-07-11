@@ -8,8 +8,9 @@
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
-    ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
-    max_mini_window_lines_from_value, tab_bar_presented_hit_regions,
+    ResizeMiniWindowsMode, ScratchGcRootScope, TabBarPresentedPointerPlan, build_tab_bar_display,
+    gnu_tab_bar_pointer_appearance_style, max_mini_window_lines_from_value,
+    tab_bar_presented_pointer_plan,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
@@ -46,6 +47,7 @@ use crate::display_frame_output::{
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
 use crate::display_rendered_row_output_install::frame_chrome_display_row;
+use crate::display_row_face_state::DisplayRowFaceRealizer;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -155,6 +157,37 @@ fn max_mini_window_lines_for_window(
     max_mini_window_lines_from_value(raw, frame_rows)
 }
 
+fn tab_bar_button_relief_geometry(evaluator: &neovm_core::emacs_core::Context) -> (f32, f32, f32) {
+    let margin = evaluator
+        .obarray()
+        .symbol_value("tab-bar-button-margin")
+        .copied()
+        .unwrap_or_else(|| Value::fixnum(1));
+    let (horizontal_margin, vertical_margin) = if let Some(value) = margin.as_int() {
+        let value = value.max(0) as f32;
+        (value, value)
+    } else if margin.is_cons() {
+        (
+            margin.cons_car().as_int().unwrap_or(1).max(0) as f32,
+            margin.cons_cdr().as_int().unwrap_or(1).max(0) as f32,
+        )
+    } else {
+        (1.0, 1.0)
+    };
+    let configured_thickness = evaluator
+        .obarray()
+        .symbol_value("tab-bar-button-relief")
+        .copied()
+        .and_then(Value::as_int)
+        .unwrap_or(1);
+    let thickness = if configured_thickness < 0 {
+        1.0
+    } else {
+        configured_thickness.min(1_000_000) as f32
+    };
+    (horizontal_margin, vertical_margin, thickness)
+}
+
 /// The main Rust layout engine.
 ///
 /// Called on the Emacs thread during redisplay. Reads buffer/state from
@@ -186,6 +219,8 @@ pub struct LayoutEngine {
     prev_background: Option<(f32, f32, f32, f32)>,
     /// Authoritative frame output owner for the current frame layout pass.
     frame_output: FrameOutputOwner,
+    /// Source-addressed tab-bar pointer plan awaiting canonical glyph indices.
+    pending_tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
     /// The last completed `FrameDisplayState`, produced by `layout_frame_rust()`.
     /// Used by the TTY redisplay path to drive `TtyRif` on the evaluator thread.
     pub last_frame_display_state: Option<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
@@ -251,6 +286,7 @@ impl Default for LayoutEngine {
 impl LayoutEngine {
     fn reset_frame_output_state(&mut self) {
         self.frame_output.reset();
+        self.pending_tab_bar_pointer = None;
         self.frame_face_id_counter = BasicFaceId::SENTINEL;
     }
 
@@ -355,6 +391,7 @@ impl LayoutEngine {
             prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
+            pending_tab_bar_pointer: None,
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
             retained_window_matrices: std::collections::HashMap::new(),
@@ -383,6 +420,7 @@ impl LayoutEngine {
             prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
+            pending_tab_bar_pointer: None,
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
             retained_window_matrices: std::collections::HashMap::new(),
@@ -997,6 +1035,21 @@ impl LayoutEngine {
             }
         };
 
+        if let Some(pointer_plan) = self.pending_tab_bar_pointer.take()
+            && let Some(tab_bar) = frame_display_state
+                .frame_chrome
+                .band(ProtocolFrameChromeKind::TabBar)
+        {
+            match pointer_plan.into_source_map(tab_bar.bounds()) {
+                Ok(source) => frame_display_state.presented_pointer_source = source,
+                Err(error) => {
+                    tracing::error!(?error, "rejecting invalid tab-bar pointer snapshot");
+                    evaluator.retire_interaction_presentation(presentation_id);
+                    return;
+                }
+            }
+        }
+
         // Embed the user-defined fringe bitmaps once per frame so the renderer
         // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
         // heading fold arrows). GC-safe: copied out as plain `u16`/`u8` data.
@@ -1585,6 +1638,7 @@ impl LayoutEngine {
         let tab_bar_face =
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabBar);
         let tab_bar_ascent = frame_params.char_height * 0.8;
+        let metrics = DisplayRowFallbackMetrics::from_frame_defaults(frame_params, tab_bar_ascent);
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let rendered_tab_bar = self.frame_output.render_frame_tab_bar_row(
             FrameTabBarDisplayRowRequest {
@@ -1592,29 +1646,54 @@ impl LayoutEngine {
                 y: 0.0,
                 width,
                 height: tab_bar_height,
-                metrics: DisplayRowFallbackMetrics::from_frame_defaults(
-                    frame_params,
-                    tab_bar_ascent,
-                ),
+                metrics,
                 base_face: &tab_bar_face,
                 text: tab_bar.text,
             },
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),
         )?;
-        face_ids.finish_into(&mut self.frame_face_id_counter);
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
         };
+        let mut highlight_face = face_resolver.resolve_named_face("tab-bar-tab-highlight");
+        let highlight_face_id = if highlight_face.face_id == BasicFaceId::SENTINEL {
+            face_ids.allocate()
+        } else {
+            FaceId::new(highlight_face.face_id)
+        };
+        highlight_face.face_id = highlight_face_id.get();
+        let realized_highlight = DisplayRowFaceRealizer::new(&mut self.font_metrics).realize_face(
+            highlight_face_id,
+            &highlight_face,
+            metrics.char_width(),
+            metrics.ascent(),
+            metrics.row_height(),
+        );
+        self.frame_output
+            .install_pointer_face(highlight_face_id, realized_highlight.render_face());
+        face_ids.finish_into(&mut self.frame_face_id_counter);
         let actual_tab_bar_height = measured.bounds().height;
-        let hit_regions = tab_bar_presented_hit_regions(
+        let (horizontal_margin, vertical_margin, thickness) =
+            tab_bar_button_relief_geometry(evaluator);
+        let pointer_style = gnu_tab_bar_pointer_appearance_style(
+            highlight_face_id,
+            tab_bar_face.bg,
+            frame_params.background,
+            horizontal_margin,
+            vertical_margin,
+            thickness,
+        );
+        let pointer_plan = tab_bar_presented_pointer_plan(
             evaluator,
             presentation_id,
             measured.rendered(),
             tab_bar.text,
             &tab_bar.source_items,
             actual_tab_bar_height,
+            pointer_style,
         );
+        let hit_regions = pointer_plan.hit_regions().to_vec();
         self.frame_output.add_frame_chrome_band(
             ChromeBandRequest::new(
                 ProtocolFrameChromeKind::TabBar,
@@ -1623,6 +1702,7 @@ impl LayoutEngine {
             )
             .with_hit_regions(hit_regions),
         );
+        self.pending_tab_bar_pointer = Some(pointer_plan);
         Some(actual_tab_bar_height)
     }
 

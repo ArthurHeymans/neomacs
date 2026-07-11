@@ -2,7 +2,9 @@ use crate::{
     Color, FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
     PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
     PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
-    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
+    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion,
+    PresentedPointerSourceAppearance, PresentedPointerSourceMap, PresentedPrimitiveKind,
+    PresentedSourcePaintSpan,
 };
 
 #[test]
@@ -86,6 +88,96 @@ fn presented_pointer_map_rejects_non_renderer_safe_relief_geometry() {
     assert_eq!(
         try_map(&[], vec![], vec![appearance]),
         Err(PresentedPointerMapError::InvalidImageRelief)
+    );
+}
+
+#[test]
+fn presented_pointer_map_accepts_zero_thickness_image_relief() {
+    let zero = PointerDrawMode::ImageRelief(PointerImageRelief::new(
+        Color::WHITE,
+        Color::BLACK,
+        0.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::WHITE, 6.0, 1.0),
+    ));
+    let appearance = PresentedPointerAppearance::new(
+        vec![PresentedPaintSpan::new(
+            PresentedPrimitiveKind::Image,
+            8,
+            1,
+            rect(8.0, 0.0, 1.0, 10.0),
+        )],
+        zero,
+        zero,
+    );
+
+    assert!(try_map(&[], vec![], vec![appearance]).is_ok());
+}
+
+#[test]
+fn source_pointer_map_disambiguates_equal_chrome_slots_by_row_role() {
+    let face_id = FaceId::new(7);
+    let mut frame = crate::FrameGlyphBuffer::with_size(40.0, 20.0);
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let slot = crate::DisplaySlotId {
+        window_id: crate::DisplayWindowId::new(0),
+        row: 0,
+        col: 0,
+    };
+    let glyph = |row_role| crate::FrameGlyph::Char {
+        window_id: crate::DisplayWindowId::new(0),
+        row_role,
+        clip_rect: None,
+        slot_id: slot,
+        bidi_level: 0,
+        char: 'x',
+        composed: None,
+        x: 0.0,
+        y: 0.0,
+        baseline: 8.0,
+        width: 8.0,
+        height: 10.0,
+        ascent: 8.0,
+        face_id,
+    };
+    frame.glyphs.push(glyph(crate::GlyphRowRole::Text));
+    frame.glyphs.push(glyph(crate::GlyphRowRole::TabBar));
+    let source = PresentedPointerSourceMap::new(
+        vec![PresentedPointerRegion::new(
+            rect(0.0, 0.0, 8.0, 10.0),
+            Some(InteractionId::new(1)),
+            Some(PointerAppearanceId::try_from(0usize).unwrap()),
+        )],
+        vec![PresentedPointerSourceAppearance::new(
+            vec![PresentedSourcePaintSpan::new(
+                PresentedPrimitiveKind::Glyph,
+                crate::GlyphRowRole::TabBar,
+                slot,
+                rect(0.0, 0.0, 8.0, 10.0),
+            )],
+            PointerDrawMode::Face(face_id),
+            PointerDrawMode::Face(face_id),
+        )],
+    );
+
+    frame.install_presented_pointer_source_map(&source).unwrap();
+
+    assert_eq!(
+        frame.presented_pointer().appearances()[0].paint_spans()[0].first(),
+        1
     );
 }
 

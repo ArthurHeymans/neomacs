@@ -77,6 +77,7 @@ impl RenderedPointerAppearance {
 pub(crate) struct RenderedPointerRun {
     hit_bounds: FrameRect,
     interaction: Option<InteractionId>,
+    appearance_identity: Option<PointerAppearanceRangeId>,
     appearance: Option<RenderedPointerAppearance>,
 }
 
@@ -87,10 +88,25 @@ impl RenderedPointerRun {
         interaction: Option<InteractionId>,
         appearance: Option<RenderedPointerAppearance>,
     ) -> Self {
+        let appearance_identity = appearance.as_ref().map(|appearance| appearance.identity);
         Self {
             hit_bounds,
             interaction,
+            appearance_identity,
             appearance,
+        }
+    }
+
+    pub(crate) fn referencing_appearance(
+        hit_bounds: FrameRect,
+        interaction: Option<InteractionId>,
+        appearance_identity: PointerAppearanceRangeId,
+    ) -> Self {
+        Self {
+            hit_bounds,
+            interaction,
+            appearance_identity: Some(appearance_identity),
+            appearance: None,
         }
     }
 }
@@ -130,14 +146,11 @@ impl PresentedPointerMapBuilder {
     }
 
     pub(crate) fn observe_rendered_run(&mut self, run: RenderedPointerRun) {
-        if run.interaction.is_none() && run.appearance.is_none() {
+        if run.interaction.is_none() && run.appearance_identity.is_none() {
             return;
         }
 
-        let appearance_identity = run
-            .appearance
-            .as_ref()
-            .map(|appearance| appearance.identity);
+        let appearance_identity = run.appearance_identity;
         if let Some(appearance) = run.appearance {
             if let Some(&index) = self.appearance_positions.get(&appearance.identity) {
                 let aggregate = &mut self.appearances[index];
