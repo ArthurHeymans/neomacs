@@ -2,7 +2,7 @@ use super::*;
 use crate::display_buffer_source_consumption::{
     BufferSourceConsumedItem, BufferSourceConsumptionState,
 };
-use crate::display_buffer_text_source::BufferTextSourceCursor;
+use crate::display_buffer_text_source::{BufferTextCursorItem, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
     DisplayItemKind, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
@@ -983,6 +983,60 @@ fn buffer_mouse_face_is_resolved_over_the_effective_display_face() {
     assert_eq!(pointer.source().buffer_id(), Some(buffer_id));
     assert_eq!(pointer.source().end_char_index(), 2);
     assert!(items[2].pointer_appearance().is_none());
+}
+
+#[test]
+fn typed_display_replacement_keeps_underlying_buffer_mouse_face() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buffer_id).unwrap();
+        buffer.insert("x");
+        let range = EmacsByteRange::new(EmacsBytePos::new(0), EmacsBytePos::new(1));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            range,
+            Value::symbol("display"),
+            Value::list(vec![Value::symbol("image")]),
+        );
+        buffer.text_props_put_property_in_emacs_byte_range(
+            range,
+            Value::symbol("mouse-face"),
+            Value::symbol("highlight"),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).unwrap();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        buffer.total_char_end_pos(),
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let item = source
+        .next_cursor_item(
+            &mut context,
+            crate::display_buffer_text_source::BufferTextDisplayReplacementMode::TypedReplacementItem,
+        )
+        .unwrap();
+    let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = item else {
+        panic!("expected typed replacement");
+    };
+
+    assert_eq!(
+        replacement
+            .descriptor()
+            .pointer_appearance()
+            .map(|pointer| pointer.face()),
+        Some(RenderFaceRef::FaceId(FaceId::new(11)))
+    );
 }
 
 #[test]

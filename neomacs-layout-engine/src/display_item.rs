@@ -345,6 +345,7 @@ pub(crate) struct DisplayPropertyReplacementDescriptor {
     replacement_source: BufferDisplayReplacementSource,
     anchor_charpos: CharPos0,
     skip_to_charpos: CharPos0,
+    pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 impl DisplayPropertyReplacementDescriptor {
@@ -361,6 +362,7 @@ impl DisplayPropertyReplacementDescriptor {
             replacement_source,
             anchor_charpos,
             skip_to_charpos,
+            pointer_appearance: None,
         }
     }
 
@@ -382,6 +384,10 @@ impl DisplayPropertyReplacementDescriptor {
 
     pub(crate) fn skip_to_charpos(&self) -> i64 {
         self.skip_to_charpos.get() as i64
+    }
+
+    pub(crate) fn pointer_appearance(&self) -> Option<&DisplayPointerAppearance> {
+        self.pointer_appearance.as_ref()
     }
 }
 
@@ -435,6 +441,14 @@ impl BufferDisplayPropertyReplacementItem {
 
     pub(crate) fn descriptor(&self) -> &DisplayPropertyReplacementDescriptor {
         &self.descriptor
+    }
+
+    pub(crate) fn with_pointer_appearance(
+        mut self,
+        appearance: Option<DisplayPointerAppearance>,
+    ) -> Self {
+        self.descriptor.pointer_appearance = appearance;
+        self
     }
 
     pub(crate) fn start_byte_idx(&self, text_start_byte: usize) -> Option<usize> {
@@ -492,7 +506,8 @@ impl BufferDisplayPropertyReplacementItem {
             ),
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(source_text.to_owned())),
-        );
+        )
+        .with_pointer_appearance(self.descriptor.pointer_appearance().cloned());
         Some(BufferDisplayPropertyFallbackItem {
             item,
             start_byte_idx,

@@ -3,7 +3,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::{
-    BufferDisplayReplacementSource, DisplayItem, DisplayItemKind,
+    BufferDisplayReplacementSource, DisplayItem, DisplayItemKind, DisplayPointerAppearance,
     DisplayPropertyReplacementDescriptor,
 };
 #[cfg(test)]
@@ -322,6 +322,7 @@ struct DisplayReplacementItemAppendRequest {
     kind: DisplayItemKind,
     frame: DisplayReplacementItemAppendFrame,
     position: DisplayRowPosition,
+    pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 #[derive(Clone, Debug)]
@@ -358,6 +359,7 @@ impl DisplayReplacementItemAppendRequest {
             kind,
             frame: DisplayReplacementItemAppendFrame::ActiveFace,
             position,
+            pointer_appearance: None,
         }
     }
 
@@ -375,6 +377,7 @@ impl DisplayReplacementItemAppendRequest {
                 ascent_px,
             },
             position,
+            pointer_appearance: None,
         }
     }
 
@@ -384,7 +387,9 @@ impl DisplayReplacementItemAppendRequest {
         face_id: FaceId,
     ) -> DisplayReplacementItemAppendPlan {
         DisplayReplacementItemAppendPlan {
-            item: replacement_source.display_item(face_id, self.kind),
+            item: replacement_source
+                .display_item(face_id, self.kind)
+                .with_pointer_appearance(self.pointer_appearance),
             frame: self.frame,
             position: self.position,
         }
@@ -465,11 +470,16 @@ impl DisplayReplacementItemAppendTemplate {
         }
     }
 
-    fn into_request(self, position: DisplayRowPosition) -> DisplayReplacementItemAppendRequest {
+    fn into_request(
+        self,
+        position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
+    ) -> DisplayReplacementItemAppendRequest {
         DisplayReplacementItemAppendRequest {
             kind: self.kind,
             frame: self.frame,
             position,
+            pointer_appearance,
         }
     }
 
@@ -480,6 +490,7 @@ impl DisplayReplacementItemAppendTemplate {
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayRowPosition {
         let geometry_update = self.row_geometry_update;
         if let DisplayReplacementItemRowGeometryUpdate::BeforeAppendGlyphMetrics {
@@ -492,7 +503,7 @@ impl DisplayReplacementItemAppendTemplate {
         let Some(progress) = replacement_append_context.append_item_request_to_text_row_and_emit(
             state,
             face_ids,
-            self.into_request(position),
+            self.into_request(position, pointer_appearance),
         ) else {
             return position;
         };
@@ -515,6 +526,7 @@ struct DisplayPropertyReplacementAppendRequest {
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
+    pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 impl DisplayPropertyReplacementAppendRequest {
@@ -524,6 +536,7 @@ impl DisplayPropertyReplacementAppendRequest {
         glyph_y_offset: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
         start_position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> Self {
         Self {
             replacement_source,
@@ -531,6 +544,7 @@ impl DisplayPropertyReplacementAppendRequest {
             glyph_y_offset,
             fallback_metrics,
             start_position,
+            pointer_appearance,
         }
     }
 
@@ -571,6 +585,7 @@ impl DisplayPropertyReplacementAppendRequest {
             glyph_y_offset,
             fallback_metrics,
             start_position,
+            descriptor.pointer_appearance().cloned(),
         ))
     }
 
@@ -597,6 +612,7 @@ impl DisplayPropertyReplacementAppendRequest {
             glyph_y_offset: self.glyph_y_offset,
             fallback_metrics: self.fallback_metrics,
             start_position: self.start_position,
+            pointer_appearance: self.pointer_appearance,
         }
     }
 
@@ -644,6 +660,7 @@ impl DisplayPropertyReplacementRowRenderRequest {
                 glyph_y_offset,
                 fallback_metrics,
                 start_position,
+                None,
             ),
         }
     }
@@ -775,6 +792,7 @@ struct DisplayPropertyReplacementAppendPlan {
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
     start_position: DisplayRowPosition,
+    pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 impl DisplayPropertyReplacementAppendPlan {
@@ -811,6 +829,7 @@ impl DisplayPropertyReplacementAppendPlan {
             state,
             face_ids,
             position,
+            self.pointer_appearance,
         )
     }
 }
@@ -883,6 +902,7 @@ impl DisplayPropertyReplacementAppendPlanItem {
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
+        pointer_appearance: Option<DisplayPointerAppearance>,
     ) -> DisplayRowPosition {
         match self {
             Self::Empty => position,
@@ -895,6 +915,7 @@ impl DisplayPropertyReplacementAppendPlanItem {
                 state,
                 face_ids,
                 position,
+                pointer_appearance,
             ),
         }
     }
@@ -1062,7 +1083,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         position: DisplayRowPosition,
     ) -> Option<DisplayRowAppendProgress> {
         let request =
-            DisplayReplacementItemAppendTemplate::from_stretch(item)?.into_request(position);
+            DisplayReplacementItemAppendTemplate::from_stretch(item)?.into_request(position, None);
         self.append_item_request_to_text_row_and_emit(state, face_ids, request)
     }
 

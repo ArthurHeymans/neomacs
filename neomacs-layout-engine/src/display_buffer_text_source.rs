@@ -513,7 +513,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                             display_property.into_classification(),
                             start,
                             display_end,
-                        ),
+                        )
+                        .with_pointer_appearance(pointer_appearance),
                     ));
                 }
                 self.char_pos = property_end;
@@ -539,7 +540,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                                 display_property.into_classification(),
                                 start,
                                 property_end,
-                            ),
+                            )
+                            .with_pointer_appearance(pointer_appearance),
                         ));
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
