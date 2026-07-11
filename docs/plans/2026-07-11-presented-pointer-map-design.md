@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted on 2026-07-11.
+Accepted on 2026-07-11; implementation refinements recorded on 2026-07-12.
 
 ## Context
 
@@ -62,14 +62,13 @@ graph.
 
 ## Interface
 
-The protocol owns renderer-safe presentation types:
+The protocol owns renderer-safe presentation types. Adapters first publish
+source-addressed records; one installation pass resolves them against the final
+canonical primitive table:
 
 ```rust
 #[serde(transparent)]
 pub struct PointerAppearanceId(u32);
-
-#[serde(transparent)]
-pub struct PresentedPrimitiveId(u32);
 
 pub struct PresentedPointerMap {
     regions: Vec<PresentedPointerRegion>,
@@ -77,37 +76,40 @@ pub struct PresentedPointerMap {
 }
 
 pub struct PresentedPointerRegion {
-    hit_shape: HitShape,
-    input: InputTarget,
+    bounds: FrameRect,
+    interaction: Option<InteractionId>,
     appearance: Option<PointerAppearanceId>,
 }
 
-pub enum InputTarget {
-    Evaluator(InteractionId),
-    NativeControl(NativeControlId),
+pub struct PresentedPointerSourceMap {
+    regions: Vec<PresentedPointerRegion>,
+    appearances: Vec<PresentedPointerSourceAppearance>,
 }
 
 pub struct PresentedPointerAppearance {
-    paint_spans: SmallVec<[PresentedPaintSpan; 2]>,
+    paint_spans: Vec<PresentedPaintSpan>,
     hover: PointerDrawMode,
     pressed: PointerDrawMode,
 }
 
-pub struct PresentedPaintSpan {
-    first: PresentedPrimitiveId,
-    len: u32,
+pub struct PresentedSourcePaintSpan {
+    kind: PresentedPrimitiveKind,
+    row_role: GlyphRowRole,
+    slot: DisplaySlotId,
     clip: FrameRect,
 }
 
 pub enum PointerDrawMode {
-    Face(FrameFaceId),
-    ImageRaised,
-    ImageSunken,
+    Face(FaceId),
+    ImageRelief(PointerImageRelief),
 }
 ```
 
-Exact concrete collection types may change during implementation, but the
-interface must retain these concepts and separations.
+`PresentedPointerSourceMap::append` lets independent buffer and chrome adapters
+compose without knowing final primitive indices. `FrameGlyphBuffer` performs
+the only source-slot-to-primitive materialization, discards appearances whose
+sources did not survive final display, remaps their region IDs, and validates
+the resulting `PresentedPointerMap` atomically.
 
 ### Why interaction and appearance are separate
 
@@ -122,34 +124,27 @@ and pressed modes are raised and sunken image drawing.
 
 ## Layout-side deep module
 
-Construction complexity is hidden behind one layout-side builder:
-
-```rust
-pub struct PresentedPointerMapBuilder<'a> {
-    // presentation, source runs, realized faces, primitive mappings
-}
-
-impl PresentedPointerMapBuilder<'_> {
-    pub fn observe_rendered_row(&mut self, ...);
-    pub fn observe_native_control(&mut self, ...);
-    pub fn finish(self) -> PresentedPointerMap;
-}
-```
-
-The builder:
+Construction complexity is hidden behind layout-owned adapters and the single
+protocol materialization boundary. The pipeline:
 
 1. Observes final rendered rows whose source positions are already preserved.
-2. Walks source slots as contiguous runs rather than individual glyph records.
+2. Carries a small row-local `GlyphPointerAppearanceId` on each interactive
+   glyph. The ID indexes a row side table containing the full source identity
+   and realized face, avoiding repeated source records on every glyph while
+   preserving them through rollback, bidi reorder, and row reuse.
 3. Resolves effective `mouse-face`, including overlays, display strings, and
    property boundaries.
 4. Realizes the effective hover face into the frame face table.
-5. Maps the source property range back to one or more immutable paint spans.
+5. Emits source-addressed paint spans and resolves them to immutable primitive
+   spans only after all frame glyphs have been materialized.
 6. Registers evaluator-owned interactions independently from appearances.
 7. Coalesces adjacent equivalent hit regions and deduplicates appearances.
 8. Validates all references before publishing the map.
 
-The builder's interface is the test seam. Callers do not perform property
-walking or appearance deduplication themselves.
+Source identity includes the source kind and object, effective property range,
+property owner, and occurrence. Occurrence distinguishes ordinary source text,
+overlay before/after strings, and buffer display replacements, preventing
+unrelated visible instances of the same source range from coalescing.
 
 ## Runtime state and input routing
 
@@ -185,10 +180,10 @@ Replacing the frame clears non-current hover and press state.
 
 ## Renderer behavior
 
-Every drawable frame primitive receives a presentation-local
-`PresentedPrimitiveId` in final paint order. A paint span may cover text glyphs
-or replacement images. One appearance may contain multiple spans, for example
-when a main-buffer `mouse-face` range wraps across rows.
+Final paint spans use presentation-local indices into the immutable canonical
+glyph/image table. A span may cover text glyphs or replacement images. One
+appearance may contain multiple spans, for example when a main-buffer
+`mouse-face` range wraps across rows.
 
 While traversing normal frame primitives, the renderer selects drawing mode in
 this order:
@@ -199,13 +194,15 @@ hovered              -> hover override
 otherwise            -> normal primitive data
 ```
 
-`Face(FrameFaceId)` uses the alternate realized face while preserving the
+`Face(FaceId)` uses the alternate realized face while preserving the
 primitive's original x/y position, advance, clipping, and source geometry. A
 bold hover face must not move subsequent glyphs or trigger layout.
 
-`ImageRaised` and `ImageSunken` are generic primitive-renderer operations, not
-tab-bar policy. They reproduce GNU's image-button feedback and can later serve
-other visible controls.
+`ImageRelief` contains the already-resolved light/dark colors, thickness,
+margins, active edges, and rounded-corner erase metadata. It is a generic
+primitive-renderer operation, not tab-bar policy. Keeping these facts in the
+immutable appearance prevents the render thread from consulting Lisp, theme,
+or image-decoding state during pointer motion.
 
 ## Adapters
 
@@ -215,8 +212,8 @@ For an enabled tab-bar item:
 
 ```text
 mouse-face present -> Face(realized mouse-face)
-mouse-face absent  -> ImageRaised on hover
-pressed            -> ImageSunken
+mouse-face absent  -> resolved raised ImageRelief on hover
+pressed            -> resolved sunken ImageRelief
 ```
 
 The close icon and tab body retain distinct evaluator interactions. Appearance
@@ -239,23 +236,31 @@ one appearance.
 ### Future adapters
 
 Scroll bars, mode/header/tab lines, fringes, margins, toolbars, and native
-controls can publish through the same seam. Scroll bars use
-`InputTarget::NativeControl` and pointer capture. Embedded WebKit or video
-surfaces remain adapters because they own internal hit-testing.
+controls can publish through the same seam. Adding native controls requires a
+typed native interaction target beside the currently evaluator-owned
+`InteractionId`; it is not part of this implementation. Embedded WebKit or
+video surfaces remain adapters because they own internal hit-testing.
 
 The first implementation does not add gestures, drag-and-drop, help-echo
 function evaluation, or embedded-surface internal hit-testing.
 
 ## Performance
 
-Pointer regions are stored by row and sorted by x coordinate. The runtime hot
-path is a row lookup followed by an x-range lookup and an active-ID comparison.
-It performs no Lisp lookup and no layout.
+Pointer regions are indexed by row and x coordinate. The runtime hot path is a
+row lookup followed by an x-range lookup and an active-ID comparison. It
+performs no Lisp lookup and no layout.
 
 Layout publishes records only for interactive property runs or controls.
 Adjacent identical regions are coalesced, and equivalent appearances are
 deduplicated. Memory therefore scales with interactive runs rather than total
-glyph count.
+glyph count. Row-local appearance interning keeps ordinary glyph overhead to a
+niche-sized optional token plus one side-table entry per distinct row
+appearance.
+
+Main-buffer `mouse-face` resolution caches the maximal contiguous extent for
+which the effective property winner is unchanged. Overlay precedence is
+resolved by sweeping indexed start/end boundaries from the active set, so the
+display walk does not rescan every overlay at every character or boundary.
 
 ## Validation and failure behavior
 
@@ -271,9 +276,14 @@ Face realization follows GNU's fallback behavior through the evaluator/layout
 face resolver. If no valid face can be realized, the region remains clickable
 but has no visual override.
 
-Pending image metrics continue to invalidate layout and produce a new
-presentation. A transient override never paints final image content into stale
-geometry.
+Image relief colors depend on facts derived from the final decoded RGBA pixels,
+including GNU's four-corner background and partial-alpha mask heuristics.
+Pending image metadata therefore cannot be guessed from the source encoding;
+ready metadata invalidates layout and is captured in the next presentation.
+Async decode requests carry an `(image id, load generation)` token. Freeing or
+reloading an ID retires its active token, stale worker outcomes are rejected,
+and accepted terminal outcomes retire their generation. Thus an old decode can
+neither publish metadata for a reused ID nor resurrect stale relief geometry.
 
 ## Testing strategy
 
