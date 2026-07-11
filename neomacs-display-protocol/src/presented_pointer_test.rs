@@ -180,6 +180,9 @@ fn source_pointer_map_disambiguates_equal_chrome_slots_by_row_role() {
         1
     );
 
+    frame.glyphs.push(glyph(crate::GlyphRowRole::Text));
+    frame.install_presented_pointer_source_map(&source).unwrap();
+
     frame.glyphs.push(glyph(crate::GlyphRowRole::TabBar));
     assert_eq!(
         frame.install_presented_pointer_source_map(&source),

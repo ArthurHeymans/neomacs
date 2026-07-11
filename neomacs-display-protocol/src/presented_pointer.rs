@@ -484,7 +484,13 @@ impl PresentedPointerSourceMap {
         (Vec<PresentedPointerRegion>, Vec<PresentedPointerAppearance>),
         PresentedPointerMapError,
     > {
-        let mut primitive_index = std::collections::HashMap::with_capacity(frame.glyphs.len());
+        let referenced = self
+            .appearances
+            .iter()
+            .flat_map(|appearance| appearance.paint_spans.iter())
+            .map(|span| (span.kind, span.row_role, span.slot))
+            .collect::<std::collections::HashSet<_>>();
+        let mut primitive_index = std::collections::HashMap::with_capacity(referenced.len());
         for (index, primitive) in frame.glyphs.iter().enumerate() {
             let Some(slot) = primitive.slot_id() else {
                 continue;
@@ -499,6 +505,9 @@ impl PresentedPointerSourceMap {
                 FrameGlyph::Image { .. } => PresentedPrimitiveKind::Image,
                 _ => continue,
             };
+            if !referenced.contains(&(kind, row_role, slot)) {
+                continue;
+            }
             if primitive_index
                 .insert((kind, row_role, slot), index)
                 .is_some()

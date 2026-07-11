@@ -1348,6 +1348,7 @@ fn tab_bar_mouse_face_at(evaluator: &mut Context, text: Value, char_index: usize
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TabBarPointerSlotPlan {
     col: u16,
+    source_char_index: usize,
     x: f32,
     width: f32,
     item_index: usize,
@@ -1376,6 +1377,7 @@ pub(crate) fn tab_bar_pointer_slot_plan(
         };
         slots.push(TabBarPointerSlotPlan {
             col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+            source_char_index: char_index,
             x: slot.x_px(),
             width: slot.width_px(),
             item_index,
@@ -1769,7 +1771,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             let identity = if let Some((previous_item, previous_char, previous_face, identity)) =
                 last_mouse_face
                 && previous_item == item_index
-                && previous_char + 1 == usize::from(slot.col)
+                && previous_char + 1 == slot.source_char_index
                 && previous_face == mouse_face
             {
                 identity
@@ -1778,7 +1780,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
                 next_appearance += 1;
                 identity
             };
-            last_mouse_face = Some((item_index, usize::from(slot.col), mouse_face, identity));
+            last_mouse_face = Some((item_index, slot.source_char_index, mouse_face, identity));
             Some(TabBarPointerAppearancePlan {
                 identity,
                 kind: TabBarPointerPaintKind::Face,

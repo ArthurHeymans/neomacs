@@ -902,6 +902,67 @@ fn tab_bar_pointer_appearance_uses_each_effective_mouse_face_and_skips_invalid_f
 }
 
 #[test]
+fn tab_bar_mouse_face_coalesces_adjacent_wide_source_characters_not_display_columns() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let text = Value::string_with_text_properties(
+        "中👨",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 0,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("mouse-face"),
+                Value::symbol("wide-hover"),
+            ]),
+        }],
+    );
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(32.0, 4, 0.0, 18.0),
+        vec![
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 16.0, 2),
+            DisplayRowGlyphSlot::new(
+                DisplaySourcePosition::lisp_string(1, 1, 3),
+                16.0,
+                2,
+                16.0,
+                2,
+            ),
+        ],
+        Vec::new(),
+        Vec::new(),
+    );
+    let items = [TabBarSourceItem {
+        caption: text,
+        key: Value::symbol("tab-1"),
+        binding: Value::symbol("ignore"),
+        char_range: 0..2,
+        enabled: true,
+    }];
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, text, &items);
+    let presentation = eval.begin_interaction_presentation();
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &slots,
+        &items,
+        18.0,
+        TabBarPointerAppearanceStyle::new(
+            test_tab_pointer_relief(true),
+            test_tab_pointer_relief(false),
+        ),
+        &[],
+        &[(Value::symbol("wide-hover"), FaceId::new(42))],
+    );
+    let source = plan
+        .into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap(), 0)
+        .unwrap();
+
+    assert_eq!(source.appearances().len(), 1);
+    assert_eq!(source.appearances()[0].paint_spans().len(), 2);
+}
+
+#[test]
 fn disabled_tab_bar_item_publishes_no_pointer_behavior() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
