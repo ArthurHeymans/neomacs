@@ -157,6 +157,7 @@ mod keyboard_input_methods;
 mod keymap_input_deep;
 mod keymap_precedence;
 mod keymap_syntax_category;
+mod kill_buffer_interactive;
 mod kill_register_abbrev_runtime;
 mod kmacro_persistence;
 mod lambda_apply_dispatch;
