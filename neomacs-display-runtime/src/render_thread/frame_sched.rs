@@ -645,6 +645,16 @@ impl FrameCoordinator {
         self.windows.get(&id).map(|ws| ws.eligible()).unwrap_or(true)
     }
 
+    /// Whether a window is focused. Unknown windows default to focused (a
+    /// window that has never reported focus should not have ambient effects
+    /// suppressed).
+    pub(crate) fn is_focused(&self, id: NativeWindowId) -> bool {
+        self.windows
+            .get(&id)
+            .map(|ws| ws.presentation.focused)
+            .unwrap_or(true)
+    }
+
     fn mutate_presentation(
         &mut self,
         id: NativeWindowId,

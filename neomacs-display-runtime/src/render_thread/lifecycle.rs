@@ -277,9 +277,46 @@ impl RenderApp {
         // immediately on its first frame after idle.
         let now = std::time::Instant::now();
         self.declare_frame_demands(now);
-        match self.frame_coordinator.next_wake_deadline() {
+        let mut deadline = self.frame_coordinator.next_wake_deadline();
+
+        // GLib service wake (frame scheduling plan, invariant 1 carve-out):
+        // WPE WebKit needs its thread-default GMainContext pumped for IPC,
+        // networking, and JS timers even when no frame is needed. While any
+        // WebKit view is alive, cap the wake at a bounded service interval so
+        // pump_glib runs regularly; this is a wake, not frame demand — it
+        // renders nothing unless separate demand exists. With no WebKit view
+        // there is no service wake and the loop may Wait indefinitely.
+        if self.has_live_webkit_views() {
+            const WPE_SERVICE_INTERVAL: std::time::Duration =
+                std::time::Duration::from_millis(16);
+            let service = now + WPE_SERVICE_INTERVAL;
+            deadline = Some(deadline.map_or(service, |d| d.min(service)));
+        }
+
+        match deadline {
             Some(deadline) => event_loop.set_control_flow(ControlFlow::WaitUntil(deadline)),
             None => event_loop.set_control_flow(ControlFlow::Wait),
+        }
+    }
+
+    /// Whether any live WPE WebKit view exists, requiring its GMainContext to
+    /// be serviced. Always false in builds without the `wpe-webkit` feature,
+    /// where `pump_glib` is a no-op and the loop can Wait indefinitely.
+    fn has_live_webkit_views(&self) -> bool {
+        #[cfg(feature = "wpe-webkit")]
+        {
+            if !self.webkit_views.is_empty() {
+                return true;
+            }
+            let mut any = false;
+            self.frame_windows.for_each_top_level_window(|window_state| {
+                any |= !window_state.render.floating_webkits.is_empty();
+            });
+            any
+        }
+        #[cfg(not(feature = "wpe-webkit"))]
+        {
+            false
         }
     }
 
@@ -414,7 +451,11 @@ impl RenderApp {
             // Infinite ambient effect: cursor color cycle animates whenever a
             // cursor exists in a committed frame. Compositor-only demand at
             // display cadence; the draw path no longer latches continuation.
+            // Policy (Stage 7): an unfocused window pauses the ambient cycle —
+            // there is no reason to keep cycling the cursor color at display
+            // cadence on a window the user is not looking at.
             let cursor_cycle_active = cursor_cycle_enabled
+                && self.frame_coordinator.is_focused(id)
                 && window_state.render.cursor.target.is_some()
                 && window_state.render.compositor.current_frame.is_some();
             if cursor_cycle_active {

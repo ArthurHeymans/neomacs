@@ -555,6 +555,18 @@ fn focus_change_does_not_gate_presentation() {
 }
 
 #[test]
+fn is_focused_reflects_set_focused_and_defaults_true() {
+    let mut c = FrameCoordinator::new();
+    // Unknown window defaults to focused (ambient effects not suppressed
+    // before the first focus report).
+    assert!(c.is_focused(win(1)));
+    c.set_focused(win(1), false);
+    assert!(!c.is_focused(win(1)));
+    c.set_focused(win(1), true);
+    assert!(c.is_focused(win(1)));
+}
+
+#[test]
 fn removed_window_contributes_nothing() {
     let mut c = FrameCoordinator::new();
     let now = t0();
