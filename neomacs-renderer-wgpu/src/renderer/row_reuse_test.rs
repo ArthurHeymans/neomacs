@@ -317,22 +317,54 @@ fn hash_for(window: i64, row: u32) -> u64 {
 }
 
 #[test]
-fn pointer_rect_damage_marks_only_intersecting_reused_rows_new() {
-    let mut frame = neomacs_display_protocol::FrameGlyphBuffer::with_size(100.0, 40.0);
-    frame.glyphs = vec![ch(10, 0, 0, 'a', 0.0, 0.0), ch(10, 1, 0, 'b', 0.0, 20.0)];
+fn pointer_row_index_marks_only_listed_reused_rows_new() {
     let mut damage = damage_of(&[
         (10, 0, RowDamage::Reused, hash_for(10, 0)),
         (10, 1, RowDamage::Reused, hash_for(10, 1)),
     ]);
 
-    damage.invalidate_pointer_rects(
-        &frame,
-        &[neomacs_display_protocol::FrameRect::new(0.0, 0.0, 8.0, 14.0).unwrap()],
-    );
+    let inspected = damage.invalidate_pointer_rows(&[
+        neomacs_display_protocol::PresentedPointerDamageRow::new(
+            neomacs_display_protocol::DisplayWindowId::new(10),
+            0,
+        ),
+    ]);
 
+    assert_eq!(inspected, 1);
     assert!(matches!(damage.row(10, 0).unwrap().damage, RowDamage::New));
     assert!(matches!(
         damage.row(10, 1).unwrap().damage,
+        RowDamage::Reused
+    ));
+}
+
+#[test]
+fn pointer_row_invalidation_inspects_only_affected_rows_in_a_ten_thousand_row_frame() {
+    let rows = (0..10_000)
+        .map(|row| (10, row, RowDamage::Reused, hash_for(10, row)))
+        .collect::<Vec<_>>();
+    let mut damage = damage_of(&rows);
+    let affected = [
+        neomacs_display_protocol::PresentedPointerDamageRow::new(
+            neomacs_display_protocol::DisplayWindowId::new(10),
+            7,
+        ),
+        neomacs_display_protocol::PresentedPointerDamageRow::new(
+            neomacs_display_protocol::DisplayWindowId::new(10),
+            9_007,
+        ),
+    ];
+
+    let inspected = damage.invalidate_pointer_rows(&affected);
+
+    assert_eq!(inspected, 2);
+    assert!(matches!(damage.row(10, 7).unwrap().damage, RowDamage::New));
+    assert!(matches!(
+        damage.row(10, 9_007).unwrap().damage,
+        RowDamage::New
+    ));
+    assert!(matches!(
+        damage.row(10, 5_000).unwrap().damage,
         RowDamage::Reused
     ));
 }

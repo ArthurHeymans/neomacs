@@ -9,7 +9,7 @@ pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
 pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
-    EffectsConfig, FrameGlyphBuffer, InteractionId, PointerAppearanceId,
+    EffectsConfig, FrameGlyphBuffer, FrameRect, InteractionId, PointerAppearanceId,
     PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
@@ -224,12 +224,35 @@ pub(super) struct ImeCursorArea {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PresentedAppearanceKey {
+    frame_id: u64,
     presentation: PresentationId,
     appearance: PointerAppearanceId,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct PendingPointerDamage {
+    key: PresentedAppearanceKey,
+    rect: FrameRect,
+}
+
+impl PendingPointerDamage {
+    pub(super) const fn new(key: PresentedAppearanceKey, rect: FrameRect) -> Self {
+        Self { key, rect }
+    }
+
+    pub(super) const fn key(self) -> PresentedAppearanceKey {
+        self.key
+    }
+
+    #[cfg(test)]
+    pub(super) const fn rect(self) -> FrameRect {
+        self.rect
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PresentedPointerHit {
+    frame_id: u64,
     presentation: PresentationId,
     interaction: Option<InteractionId>,
     appearance: Option<PointerAppearanceId>,
@@ -278,28 +301,51 @@ impl PresentedInteractionKey {
 
 /// A left-button press owned by a presented interaction. A `None` target is
 /// reserved for blank chrome space whose release must not leak to the buffer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct PresentedPressCapture {
     target: Option<PresentedInteractionKey>,
+    surface_origin: (f32, f32),
 }
 
 impl PresentedPressCapture {
     pub(super) const fn new(target: Option<PresentedInteractionKey>) -> Self {
-        Self { target }
+        Self {
+            target,
+            surface_origin: (0.0, 0.0),
+        }
+    }
+
+    pub(super) const fn with_surface_origin(
+        target: PresentedInteractionKey,
+        surface_origin: (f32, f32),
+    ) -> Self {
+        Self {
+            target: Some(target),
+            surface_origin,
+        }
     }
 
     pub(super) const fn target(self) -> Option<PresentedInteractionKey> {
         self.target
     }
+
+    pub(super) fn local_coordinates(self, surface_x: f32, surface_y: f32) -> (f32, f32) {
+        (
+            surface_x - self.surface_origin.0,
+            surface_y - self.surface_origin.1,
+        )
+    }
 }
 
 impl PresentedPointerHit {
     pub(super) const fn new(
+        frame_id: u64,
         presentation: PresentationId,
         interaction: Option<InteractionId>,
         appearance: Option<PointerAppearanceId>,
     ) -> Self {
         Self {
+            frame_id,
             presentation,
             interaction,
             appearance,
@@ -315,17 +361,36 @@ impl PresentedPointerHit {
     }
 
     pub(super) fn appearance_key(self) -> Option<PresentedAppearanceKey> {
-        self.appearance
-            .map(|appearance| PresentedAppearanceKey::new(self.presentation, appearance))
+        self.appearance.map(|appearance| {
+            PresentedAppearanceKey::for_frame(self.frame_id, self.presentation, appearance)
+        })
     }
 }
 
 impl PresentedAppearanceKey {
+    #[cfg(test)]
     pub(super) const fn new(presentation: PresentationId, appearance: PointerAppearanceId) -> Self {
         Self {
+            frame_id: 0,
             presentation,
             appearance,
         }
+    }
+
+    pub(super) const fn for_frame(
+        frame_id: u64,
+        presentation: PresentationId,
+        appearance: PointerAppearanceId,
+    ) -> Self {
+        Self {
+            frame_id,
+            presentation,
+            appearance,
+        }
+    }
+
+    pub(super) const fn frame_id(self) -> u64 {
+        self.frame_id
     }
 
     pub(super) const fn presentation(self) -> PresentationId {
@@ -426,6 +491,26 @@ impl PointerAppearanceState {
         });
         self.active = next;
         *self != previous
+    }
+
+    pub(super) fn hover_would_change(self, key: Option<PresentedAppearanceKey>) -> bool {
+        let mut next = self;
+        next.hover(key)
+    }
+
+    pub(super) fn button_would_change(
+        self,
+        key: Option<PresentedAppearanceKey>,
+        pressed: bool,
+    ) -> bool {
+        let mut next = self;
+        let mut changed = next.hover(key);
+        changed |= if pressed {
+            next.press()
+        } else {
+            next.release()
+        };
+        changed
     }
 
     pub(super) fn press(&mut self) -> bool {

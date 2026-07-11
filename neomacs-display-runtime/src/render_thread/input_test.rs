@@ -443,37 +443,37 @@ fn presented_pointer_integration_damage_unions_old_and_new_paint_spans() {
     assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
     assert_eq!(
         render.pointer_paint_damage(),
-        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+        [Some(FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()), None]
     );
     render.finish_pointer_paint_render();
     assert!(render.update_presented_pointer_button(Some((0x42, 84.0, 10.0)), true));
     assert_eq!(
         render.pointer_paint_damage(),
-        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+        [Some(FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()), None]
     );
     render.finish_pointer_paint_render();
     assert!(render.update_presented_pointer_button(Some((0x42, 84.0, 10.0)), false));
     assert_eq!(
         render.pointer_paint_damage(),
-        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+        [Some(FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()), None]
     );
     render.finish_pointer_paint_render();
     assert!(!render.update_presented_pointer_motion(Some((0x42, 20.0, 10.0))));
-    assert!(render.pointer_paint_damage().is_empty());
+    assert_eq!(render.pointer_paint_damage(), [None, None]);
 
     assert!(render.update_presented_pointer_motion(Some((0x42, 110.0, 10.0))));
     assert_eq!(
         render.pointer_paint_damage(),
-        &[
-            FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap(),
-            FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap(),
+        [
+            Some(FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()),
+            Some(FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap()),
         ]
     );
     render.finish_pointer_paint_render();
     assert!(render.update_presented_pointer_motion(None));
     assert_eq!(
         render.pointer_paint_damage(),
-        &[FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap()]
+        [Some(FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap()), None]
     );
 
     render.finish_pointer_paint_render();
@@ -482,9 +482,52 @@ fn presented_pointer_integration_damage_unions_old_and_new_paint_spans() {
     render.set_current_frame(Some(presented_pointer_integration_frame(76)), None);
     assert_eq!(
         render.pointer_paint_damage(),
-        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()],
+        [Some(FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()), None],
         "new presentation invalidates the old active paint only"
     );
+}
+
+#[test]
+fn unchanged_pointer_appearance_skips_damage_inspection_in_a_ten_thousand_glyph_frame() {
+    let mut frame = FrameGlyphBuffer::with_size(10_000.0, 20.0);
+    frame.presentation_id = PresentationId::new(77);
+    frame
+        .faces
+        .insert(FaceId::new(9), Face::new(FaceId::new(9)));
+    for x in 0..10_000 {
+        frame.add_char('x', x as f32, 0.0, 1.0, 10.0, 8.0, false);
+    }
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(9_999.0, 0.0, 1.0, 10.0).unwrap(),
+                None,
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Glyph,
+                    9_999,
+                    1,
+                    FrameRect::new(9_999.0, 0.0, 1.0, 10.0).unwrap(),
+                )],
+                PointerDrawMode::Face(FaceId::new(9)),
+                PointerDrawMode::Face(FaceId::new(9)),
+            )],
+        )
+        .unwrap();
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(frame), None);
+    assert!(render.update_presented_pointer_motion(Some((0x42, 9_999.5, 5.0))));
+    render.finish_pointer_paint_render();
+    let lookups = render.pointer_damage_appearance_lookups();
+
+    for _ in 0..10_000 {
+        assert!(!render.update_presented_pointer_motion(Some((0x42, 9_999.5, 5.0))));
+    }
+
+    assert_eq!(render.pointer_damage_appearance_lookups(), lookups);
+    assert_eq!(render.pointer_paint_damage(), [None, None]);
 }
 
 fn presented_pointer_integration_offset_frame(
@@ -577,7 +620,7 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     assert!(window.render.update_presented_pointer_motion(child_target));
     assert_eq!(
         window.render.pointer_paint_damage(),
-        &[FrameRect::new(110.0, 85.0, 20.0, 10.0).unwrap()],
+        [Some(FrameRect::new(110.0, 85.0, 20.0, 10.0).unwrap()), None],
         "child paint clips are translated into parent surface coordinates"
     );
     window.render.finish_pointer_paint_render();
@@ -600,6 +643,8 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
             interaction: 1,
             pressed: true,
             emacs_frame_id: 0x99,
+            x: 15.0,
+            y: 8.0,
             ..
         }
     ));
@@ -607,11 +652,13 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     let mut replacement = presented_pointer_integration_frame(83);
     replacement.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
     replacement.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
-    replacement.parent_x = 100.0;
-    replacement.parent_y = 80.0;
+    replacement.parent_x = 140.0;
+    replacement.parent_y = 120.0;
     replacement.z_order = 10;
     window.render.update_child_frame(replacement);
     let child_release = RenderApp::take_presented_release_events(&mut window.render, 200.0, 160.0);
+    // Capture pins the press snapshot transform: replacement movement cannot
+    // reinterpret the release coordinates for the evaluator-owned gesture.
     assert!(matches!(
         child_release.as_slice(),
         [crate::thread_comm::InputEvent::PresentedPointer {
@@ -619,6 +666,8 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
             interaction: 1,
             pressed: false,
             emacs_frame_id: 0x99,
+            x: 100.0,
+            y: 80.0,
             ..
         }]
     ));
@@ -639,6 +688,17 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
             .presentation(),
         PresentationId::new(80)
     );
+    let root_press = RenderApp::capture_presented_pointer_press(window, root_owner, 15.0, 8.0)
+        .expect("root interaction");
+    assert!(matches!(
+        root_press,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            emacs_frame_id: 0x42,
+            x: 15.0,
+            y: 8.0,
+            ..
+        }
+    ));
 }
 
 #[test]

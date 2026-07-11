@@ -111,42 +111,21 @@ impl FrameRowDamage {
         self.windows.get(&window_id)?.rows.get(row as usize)
     }
 
-    /// Force rows intersecting transient pointer paint back through fresh
-    /// tessellation. The rectangles are surface-space for the root frame;
-    /// child frames render fully and therefore need no row-reuse mutation.
-    pub fn invalidate_pointer_rects(
+    /// Invalidate only the rows pre-indexed by pointer-map publication.
+    pub fn invalidate_pointer_rows(
         &mut self,
-        frame: &neomacs_display_protocol::FrameGlyphBuffer,
-        rects: &[neomacs_display_protocol::FrameRect],
-    ) {
-        for glyph in &frame.glyphs {
-            let neomacs_display_protocol::FrameGlyph::Char {
-                window_id,
-                slot_id,
-                x,
-                y,
-                width,
-                height,
-                ..
-            } = glyph
-            else {
-                continue;
-            };
-            let intersects = rects.iter().any(|rect| {
-                *x < rect.x() + rect.width()
-                    && *x + *width > rect.x()
-                    && *y < rect.y() + rect.height()
-                    && *y + *height > rect.y()
-            });
-            if intersects
-                && let Some(row) = self
-                    .windows
-                    .get_mut(&window_id.get())
-                    .and_then(|window| window.rows.get_mut(slot_id.row as usize))
+        rows: &[neomacs_display_protocol::PresentedPointerDamageRow],
+    ) -> usize {
+        for row in rows {
+            if let Some(info) = self
+                .windows
+                .get_mut(&row.window_id().get())
+                .and_then(|window| window.rows.get_mut(row.row() as usize))
             {
-                row.damage = RowDamage::New;
+                info.damage = RowDamage::New;
             }
         }
+        rows.len()
     }
 }
 

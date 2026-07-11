@@ -314,14 +314,17 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<InputEvent> {
+        let (local_x, local_y, _) = owner.target()?;
         let target = Self::presented_interaction_for_owner(window_state, owner)?;
-        window_state.render.capture_presented(Some(target));
+        window_state
+            .render
+            .capture_presented_at(target, (x - local_x, y - local_y));
         Some(Self::presented_pointer_input_event(
             &window_state.render,
             target,
             true,
-            x,
-            y,
+            local_x,
+            local_y,
         ))
     }
 
@@ -342,10 +345,13 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Vec<InputEvent> {
-        let release = render
-            .take_presented_capture()
-            .and_then(|capture| capture.target())
-            .map(|target| Self::presented_pointer_input_event(render, target, false, x, y));
+        let release = render.take_presented_capture().and_then(|capture| {
+            let target = capture.target()?;
+            let (local_x, local_y) = capture.local_coordinates(x, y);
+            Some(Self::presented_pointer_input_event(
+                render, target, false, local_x, local_y,
+            ))
+        });
         release
             .into_iter()
             .chain(
