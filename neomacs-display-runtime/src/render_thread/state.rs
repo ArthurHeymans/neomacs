@@ -237,6 +237,7 @@ pub(super) struct PresentedPointerHit {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct PresentedInteractionKey {
+    frame_id: u64,
     presentation: PresentationId,
     interaction: InteractionId,
 }
@@ -244,9 +245,26 @@ pub(super) struct PresentedInteractionKey {
 impl PresentedInteractionKey {
     pub(super) const fn new(presentation: PresentationId, interaction: InteractionId) -> Self {
         Self {
+            frame_id: 0,
             presentation,
             interaction,
         }
+    }
+
+    pub(super) const fn for_frame(
+        frame_id: u64,
+        presentation: PresentationId,
+        interaction: InteractionId,
+    ) -> Self {
+        Self {
+            frame_id,
+            presentation,
+            interaction,
+        }
+    }
+
+    pub(super) const fn frame_id(self) -> u64 {
+        self.frame_id
     }
 
     pub(super) const fn presentation(self) -> PresentationId {
@@ -258,14 +276,14 @@ impl PresentedInteractionKey {
     }
 }
 
-/// A left-button press owned by the tab band. Blank band space must remain
-/// captured so its eventual release cannot leak into the buffer.
+/// A left-button press owned by a presented interaction. A `None` target is
+/// reserved for blank chrome space whose release must not leak to the buffer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct TabBarPressCapture {
+pub(super) struct PresentedPressCapture {
     target: Option<PresentedInteractionKey>,
 }
 
-impl TabBarPressCapture {
+impl PresentedPressCapture {
     pub(super) const fn new(target: Option<PresentedInteractionKey>) -> Self {
         Self { target }
     }
@@ -456,7 +474,6 @@ impl PointerAppearanceState {
 pub(crate) struct GuiChromeInteractionState {
     pub(super) menu_bar_hovered: Option<u32>,
     pub(super) menu_bar_active: Option<u32>,
-    tab_bar_press: Option<TabBarPressCapture>,
     pub(super) toolbar_hovered: Option<u32>,
     pub(super) toolbar_pressed: Option<u32>,
     pub(super) toolbar_press_captured: bool,
@@ -467,22 +484,6 @@ pub(crate) struct GuiChromeInteractionState {
 }
 
 impl GuiChromeInteractionState {
-    pub(super) fn capture_tab_bar(&mut self, target: Option<PresentedInteractionKey>) {
-        self.tab_bar_press = Some(TabBarPressCapture::new(target));
-    }
-
-    pub(super) const fn tab_bar_capture(&self) -> Option<TabBarPressCapture> {
-        self.tab_bar_press
-    }
-
-    pub(super) fn take_tab_bar_capture(&mut self) -> Option<TabBarPressCapture> {
-        std::mem::take(&mut self.tab_bar_press)
-    }
-
-    pub(super) fn clear_tab_bar_capture(&mut self) {
-        self.tab_bar_press = None;
-    }
-
     pub(super) fn clear_menu_bar(&mut self) {
         self.menu_bar_hovered = None;
         self.menu_bar_active = None;

@@ -316,6 +316,27 @@ fn hash_for(window: i64, row: u32) -> u64 {
     0x1000 + window as u64 * 16 + row as u64
 }
 
+#[test]
+fn pointer_rect_damage_marks_only_intersecting_reused_rows_new() {
+    let mut frame = neomacs_display_protocol::FrameGlyphBuffer::with_size(100.0, 40.0);
+    frame.glyphs = vec![ch(10, 0, 0, 'a', 0.0, 0.0), ch(10, 1, 0, 'b', 0.0, 20.0)];
+    let mut damage = damage_of(&[
+        (10, 0, RowDamage::Reused, hash_for(10, 0)),
+        (10, 1, RowDamage::Reused, hash_for(10, 1)),
+    ]);
+
+    damage.invalidate_pointer_rects(
+        &frame,
+        &[neomacs_display_protocol::FrameRect::new(0.0, 0.0, 8.0, 14.0).unwrap()],
+    );
+
+    assert!(matches!(damage.row(10, 0).unwrap().damage, RowDamage::New));
+    assert!(matches!(
+        damage.row(10, 1).unwrap().damage,
+        RowDamage::Reused
+    ));
+}
+
 fn all_rows(damage_kind: impl Fn(i64, u32) -> RowDamage) -> FrameRowDamage {
     let mut rows = Vec::new();
     for window in [10i64, 20] {

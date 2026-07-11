@@ -287,35 +287,63 @@ impl RenderApp {
             button: 1,
             x,
             y,
-            emacs_frame_id: render.emacs_frame_id,
+            emacs_frame_id: if target.frame_id() == 0 {
+                render.emacs_frame_id
+            } else {
+                target.frame_id()
+            },
         }
     }
 
-    pub(super) fn capture_tab_bar_press(
+    fn presented_interaction_for_owner(
+        window_state: &GuiFrameWindowState,
+        owner: PointerOwner,
+    ) -> Option<PresentedInteractionKey> {
+        let (x, y, frame_id) = owner.target()?;
+        let hit = window_state.render.presented_pointer_hit(frame_id, x, y)?;
+        Some(PresentedInteractionKey::for_frame(
+            frame_id,
+            hit.presentation(),
+            hit.interaction()?,
+        ))
+    }
+
+    pub(super) fn capture_presented_pointer_press(
+        window_state: &mut GuiFrameWindowState,
+        owner: PointerOwner,
+        x: f32,
+        y: f32,
+    ) -> Option<InputEvent> {
+        let target = Self::presented_interaction_for_owner(window_state, owner)?;
+        window_state.render.capture_presented(Some(target));
+        Some(Self::presented_pointer_input_event(
+            &window_state.render,
+            target,
+            true,
+            x,
+            y,
+        ))
+    }
+
+    pub(super) fn capture_tab_band_press(
         window_state: &mut GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> Option<InputEvent> {
         let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
-        window_state
-            .render
-            .chrome
-            .interaction
-            .capture_tab_bar(target);
+        window_state.render.capture_presented(target);
         target.map(|target| {
             Self::presented_pointer_input_event(&window_state.render, target, true, x, y)
         })
     }
 
-    pub(super) fn take_tab_bar_release_events(
+    pub(super) fn take_presented_release_events(
         render: &mut super::frame_windows::GuiFrameRenderState,
         x: f32,
         y: f32,
     ) -> Vec<InputEvent> {
         let release = render
-            .chrome
-            .interaction
-            .take_tab_bar_capture()
+            .take_presented_capture()
             .and_then(|capture| capture.target())
             .map(|target| Self::presented_pointer_input_event(render, target, false, x, y));
         release
@@ -528,7 +556,7 @@ impl RenderApp {
                                 .chrome
                                 .interaction
                                 .compact_bar_menu_active = None;
-                            event = Self::capture_tab_bar_press(window_state, x, y);
+                            event = Self::capture_tab_band_press(window_state, x, y);
                             window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if Self::frame_window_point_in_band(
@@ -624,6 +652,12 @@ impl RenderApp {
                     let x = window_state.render.mouse_pos.0;
                     let y = window_state.render.mouse_pos.1;
                     if !handled_chrome
+                        && let Some(presented) =
+                            Self::capture_presented_pointer_press(window_state, pointer_owner, x, y)
+                    {
+                        event = Some(presented);
+                        handled_chrome = true;
+                    } else if !handled_chrome
                         && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
@@ -708,7 +742,7 @@ impl RenderApp {
                             y,
                         )
                     {
-                        event = Self::capture_tab_bar_press(window_state, x, y);
+                        event = Self::capture_tab_band_press(window_state, x, y);
                         if event.is_some() {
                             window_state.render.mark_dirty();
                         }
@@ -742,12 +776,7 @@ impl RenderApp {
                     }
                 } else if state == ElementState::Released
                     && button == MouseButton::Left
-                    && (window_state
-                        .render
-                        .chrome
-                        .interaction
-                        .tab_bar_capture()
-                        .is_some()
+                    && (window_state.render.presented_capture().is_some()
                         || window_state
                             .render
                             .chrome
@@ -766,15 +795,9 @@ impl RenderApp {
                             .toolbar_pressed
                             .is_some())
                 {
-                    if window_state
-                        .render
-                        .chrome
-                        .interaction
-                        .tab_bar_capture()
-                        .is_some()
-                    {
+                    if window_state.render.presented_capture().is_some() {
                         captured_events =
-                            Self::take_tab_bar_release_events(&mut window_state.render, x, y);
+                            Self::take_presented_release_events(&mut window_state.render, x, y);
                     }
                     window_state.render.clear_all_chrome_pressed();
                     handled_chrome = true;
@@ -826,11 +849,7 @@ impl RenderApp {
                         webkit_rel_y: wk_ry,
                     });
                     if state == ElementState::Pressed {
-                        window_state
-                            .render
-                            .chrome
-                            .interaction
-                            .clear_tab_bar_capture();
+                        window_state.render.clear_presented_capture();
                         window_state
                             .render
                             .chrome

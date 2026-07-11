@@ -538,6 +538,7 @@ impl RenderApp {
             && !render.compositor.transitions.has_active()
             && !Self::window_has_active_overlays(render)
             && Self::retained_static_pointer_appearance_allowed(&render.pointer_appearance)
+            && !render.has_pointer_paint_damage()
             && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
         {
             let mouse_pos = render.mouse_pos;
@@ -620,6 +621,7 @@ impl RenderApp {
                 );
             }
             super::frame_stats::count(&super::frame_stats::COMPOSITE_ONLY_FRAMES);
+            render.finish_pointer_paint_render();
             renderer.set_scale_factor(old_scale_factor);
             renderer.resize(old_width, old_height);
             return Some((output, frame));
@@ -760,6 +762,7 @@ impl RenderApp {
             render.mark_active_visuals_dirty();
         }
 
+        render.finish_pointer_paint_render();
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
         Some((output, frame))

@@ -18,14 +18,15 @@ use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
 use super::state::{
     FpsCounter, GuiChromeInteractionState, IdleDimState, ImeCursorArea, PointerAppearanceState,
-    PresentedPointerHit, TypingSpeedState, WindowChrome, effective_window_scale_factor,
-    window_size_from_emacs_pixels,
+    PresentedInteractionKey, PresentedPointerHit, PresentedPressCapture, TypingSpeedState,
+    WindowChrome, effective_window_scale_factor, window_size_from_emacs_pixels,
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neomacs_display_protocol::FrameRect;
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "wpe-webkit")]
@@ -93,6 +94,9 @@ pub(crate) struct GuiFrameRenderState {
     pub chrome: ChromeState,
     /// Snapshot-qualified visual state selected from displayed pointer maps.
     pub(super) pointer_appearance: PointerAppearanceState,
+    presented_press: Option<PresentedPressCapture>,
+    /// Surface-space paint clips invalidated by transient pointer transitions.
+    pending_pointer_damage: Vec<FrameRect>,
     /// Retirements pinned while a presented interaction still references them.
     deferred_pointer_retirements: Vec<u64>,
     /// Transient overlays (popup, tooltip, bell, fps, typing, idle, ime).
@@ -295,6 +299,8 @@ impl GuiFrameRenderState {
             },
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
+            presented_press: None,
+            pending_pointer_damage: Vec::new(),
             deferred_pointer_retirements: Vec::new(),
             overlays: OverlayState {
                 popup_menu: None,
@@ -336,6 +342,8 @@ impl GuiFrameRenderState {
             },
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
+            presented_press: None,
+            pending_pointer_damage: Vec::new(),
             deferred_pointer_retirements: Vec::new(),
             overlays: OverlayState {
                 popup_menu: None,
@@ -404,15 +412,100 @@ impl GuiFrameRenderState {
             .and_then(|hit| hit.appearance_key())
     }
 
+    fn active_pointer_paint_rects(&self) -> Vec<FrameRect> {
+        let Some(active) = self.pointer_appearance.active() else {
+            return Vec::new();
+        };
+        let frame_and_offset = self
+            .compositor
+            .current_frame
+            .as_ref()
+            .filter(|frame| frame.presentation_id == active.presentation())
+            .map(|frame| (frame, 0.0, 0.0))
+            .or_else(|| {
+                self.compositor
+                    .child_frames
+                    .frames
+                    .values()
+                    .find(|entry| entry.frame.presentation_id == active.presentation())
+                    .map(|entry| (&entry.frame, entry.abs_x, entry.abs_y))
+            });
+        let Some((frame, offset_x, offset_y)) = frame_and_offset else {
+            return Vec::new();
+        };
+        let Some(appearance) = frame.presented_pointer().appearance(active.appearance()) else {
+            return Vec::new();
+        };
+        appearance
+            .paint_spans()
+            .iter()
+            .filter_map(|span| {
+                let clip = span.clip();
+                FrameRect::new(
+                    clip.x() + offset_x,
+                    clip.y() + offset_y,
+                    clip.width(),
+                    clip.height(),
+                )
+                .ok()
+            })
+            .collect()
+    }
+
+    fn record_pointer_paint_transition(&mut self, before: Vec<FrameRect>) {
+        for rect in before.into_iter().chain(self.active_pointer_paint_rects()) {
+            if !self.pending_pointer_damage.contains(&rect) {
+                self.pending_pointer_damage.push(rect);
+            }
+        }
+        if let (Some(frame), Some(row_damage)) = (
+            self.compositor.current_frame.as_ref(),
+            self.compositor.current_row_damage.as_mut(),
+        ) {
+            row_damage.invalidate_pointer_rects(frame, &self.pending_pointer_damage);
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn pointer_paint_damage(&self) -> &[FrameRect] {
+        &self.pending_pointer_damage
+    }
+
+    pub(super) fn finish_pointer_paint_render(&mut self) {
+        self.pending_pointer_damage.clear();
+    }
+
+    pub(super) fn has_pointer_paint_damage(&self) -> bool {
+        !self.pending_pointer_damage.is_empty()
+    }
+
+    pub(super) fn capture_presented(&mut self, target: Option<PresentedInteractionKey>) {
+        self.presented_press = Some(PresentedPressCapture::new(target));
+    }
+
+    pub(super) const fn presented_capture(&self) -> Option<PresentedPressCapture> {
+        self.presented_press
+    }
+
+    pub(super) fn take_presented_capture(&mut self) -> Option<PresentedPressCapture> {
+        self.presented_press.take()
+    }
+
+    pub(super) fn clear_presented_capture(&mut self) {
+        self.presented_press = None;
+    }
+
     /// Apply pointer motion to the immutable root or child presentation that
     /// currently owns the hit. Returns whether the selected paint changed.
     pub(super) fn update_presented_pointer_motion(
         &mut self,
         target: Option<(u64, f32, f32)>,
     ) -> bool {
+        let before = self.active_pointer_paint_rects();
         let appearance = self.presented_pointer_appearance_at(target);
         let changed = self.pointer_appearance.hover(appearance);
         if changed {
+            self.record_pointer_paint_transition(before);
             self.mark_dirty();
         }
         changed
@@ -426,6 +519,7 @@ impl GuiFrameRenderState {
         target: Option<(u64, f32, f32)>,
         pressed: bool,
     ) -> bool {
+        let before = self.active_pointer_paint_rects();
         let appearance = self.presented_pointer_appearance_at(target);
         let mut changed = self.pointer_appearance.hover(appearance);
         changed |= if pressed {
@@ -434,6 +528,7 @@ impl GuiFrameRenderState {
             self.pointer_appearance.release()
         };
         if changed {
+            self.record_pointer_paint_transition(before);
             self.mark_dirty();
         }
         changed
@@ -464,7 +559,7 @@ impl GuiFrameRenderState {
 
     pub(super) fn set_popup_menu(&mut self, popup_menu: Option<PopupMenuState>) {
         if popup_menu.is_some() {
-            self.pointer_appearance.hover(None);
+            self.update_presented_pointer_motion(None);
         }
         self.overlays.popup_menu = popup_menu;
         self.compositor.dirty = true;
@@ -576,7 +671,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn clear_all_chrome_pressed(&mut self) {
-        self.chrome.interaction.clear_tab_bar_capture();
+        self.clear_presented_capture();
         self.chrome.interaction.compact_bar_tool_pressed = None;
         self.chrome.interaction.toolbar_pressed = None;
         self.chrome.interaction.toolbar_press_captured = false;
@@ -594,8 +689,10 @@ impl GuiFrameRenderState {
 
     pub(super) fn clear_pointer_hover(&mut self) -> bool {
         self.pointer_inside = false;
+        let before = self.active_pointer_paint_rects();
         let changed = self.pointer_appearance.hover(None);
         if changed {
+            self.record_pointer_paint_transition(before);
             self.mark_dirty();
         }
         changed
@@ -603,9 +700,7 @@ impl GuiFrameRenderState {
 
     pub(super) fn route_presentation_retirement(&mut self, presentation: u64) -> Option<u64> {
         let pinned = self
-            .chrome
-            .interaction
-            .tab_bar_capture()
+            .presented_capture()
             .and_then(|capture| capture.target())
             .is_some_and(|target| target.presentation().get() == presentation);
         if pinned {
@@ -624,15 +719,19 @@ impl GuiFrameRenderState {
 
     pub(super) fn cancel_pointer_interaction(&mut self) -> (bool, Vec<u64>) {
         let previous_chrome = self.chrome.interaction;
+        let before = self.active_pointer_paint_rects();
         let visual_changed = self.pointer_appearance.cancel();
         self.pointer_inside = false;
         self.chrome.interaction.clear_menu_bar();
-        self.chrome.interaction.clear_tab_bar_capture();
+        self.clear_presented_capture();
         self.chrome.interaction.clear_toolbar();
         self.chrome.interaction.toolbar_press_captured = false;
         self.chrome.interaction.clear_compact_bar();
         let changed = visual_changed || self.chrome.interaction != previous_chrome;
         if changed {
+            if visual_changed {
+                self.record_pointer_paint_transition(before);
+            }
             self.mark_dirty();
         }
         (changed, self.take_deferred_pointer_retirements())
@@ -643,6 +742,7 @@ impl GuiFrameRenderState {
         frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
         row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     ) {
+        let before = self.active_pointer_paint_rects();
         let previous_presentation = self
             .compositor
             .current_frame
@@ -650,14 +750,19 @@ impl GuiFrameRenderState {
             .map(|frame| frame.presentation_id);
         let next_presentation = frame.as_ref().map(|frame| frame.presentation_id);
         self.compositor.current_frame = frame;
-        if let Some(previous) = previous_presentation
+        let appearance_changed = if let Some(previous) = previous_presentation
             && Some(previous) != next_presentation
-            && self.pointer_appearance.retire(previous)
         {
-            self.compositor.dirty = true;
-        }
+            self.pointer_appearance.retire(previous)
+        } else {
+            false
+        };
         self.compositor.current_frame_ingest_seq = super::frame_state::next_faces_ingest_seq();
         self.compositor.current_row_damage = row_damage;
+        if appearance_changed {
+            self.record_pointer_paint_transition(before);
+            self.compositor.dirty = true;
+        }
     }
 
     pub(super) fn with_chrome_interaction_mut(
@@ -935,6 +1040,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
+        let before = self.active_pointer_paint_rects();
         let removed_presentation = self
             .compositor
             .child_frames
@@ -956,7 +1062,9 @@ impl GuiFrameRenderState {
         if removed {
             self.compositor.dirty = true;
             if let Some(presentation) = removed_presentation {
-                self.pointer_appearance.retire(presentation);
+                if self.pointer_appearance.retire(presentation) {
+                    self.record_pointer_paint_transition(before);
+                }
             }
         }
         if self
@@ -1011,6 +1119,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) -> bool {
+        let before = self.active_pointer_paint_rects();
         let frame_id = frame.frame_id.get();
         if self.compositor.hidden_child_frames.contains(&frame_id) {
             tracing::debug!(
@@ -1032,7 +1141,9 @@ impl GuiFrameRenderState {
             if let Some(previous) = previous_presentation
                 && previous != next_presentation
             {
-                self.pointer_appearance.retire(previous);
+                if self.pointer_appearance.retire(previous) {
+                    self.record_pointer_paint_transition(before);
+                }
             }
         }
         changed

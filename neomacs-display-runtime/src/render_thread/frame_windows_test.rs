@@ -402,7 +402,7 @@ fn presented_pointer_hit_selects_the_displayed_root_or_child_map_in_local_coordi
 #[test]
 fn replacing_a_frame_clears_pointer_appearance_from_the_retired_presentation() {
     use crate::render_thread::state::{
-        PresentedAppearanceKey, PresentedInteractionKey, TabBarPressCapture,
+        PresentedAppearanceKey, PresentedInteractionKey, PresentedPressCapture,
     };
     use neomacs_display_protocol::{
         InteractionId, PointerAppearanceId, frame_chrome::PresentationId,
@@ -420,7 +420,7 @@ fn replacing_a_frame_clears_pointer_appearance_from_the_retired_presentation() {
         )));
     render.pointer_appearance.press();
     let captured = PresentedInteractionKey::new(PresentationId::new(7), InteractionId::new(42));
-    render.chrome.interaction.capture_tab_bar(Some(captured));
+    render.capture_presented(Some(captured));
 
     let mut replacement = make_frame(0x42, 0);
     replacement.presentation_id = PresentationId::new(8);
@@ -429,8 +429,8 @@ fn replacing_a_frame_clears_pointer_appearance_from_the_retired_presentation() {
     assert_eq!(render.pointer_appearance.active(), None);
     assert_eq!(render.pointer_appearance.pressed(), None);
     assert_eq!(
-        render.chrome.interaction.tab_bar_capture(),
-        Some(TabBarPressCapture::new(Some(captured))),
+        render.presented_capture(),
+        Some(PresentedPressCapture::new(Some(captured))),
         "frame replacement retires visual state but keeps input capture until release"
     );
 }

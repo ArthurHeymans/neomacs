@@ -5,7 +5,7 @@ use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
 use crate::render_thread::pointer_events::PointerOwner;
 use crate::render_thread::state::{
     ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState,
-    PresentedAppearanceKey, PresentedInteractionKey, TabBarPressCapture,
+    PresentedAppearanceKey, PresentedInteractionKey, PresentedPressCapture,
 };
 use neomacs_display_protocol::frame_chrome::InteractionId;
 use neomacs_display_protocol::frame_chrome::PresentationId;
@@ -435,6 +435,58 @@ fn presented_pointer_integration_published_frame_drives_hover_press_leave_and_st
     );
 }
 
+#[test]
+fn presented_pointer_integration_damage_unions_old_and_new_paint_spans() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(presented_pointer_integration_frame(75)), None);
+
+    assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+    );
+    render.finish_pointer_paint_render();
+    assert!(render.update_presented_pointer_button(Some((0x42, 84.0, 10.0)), true));
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+    );
+    render.finish_pointer_paint_render();
+    assert!(render.update_presented_pointer_button(Some((0x42, 84.0, 10.0)), false));
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()]
+    );
+    render.finish_pointer_paint_render();
+    assert!(!render.update_presented_pointer_motion(Some((0x42, 20.0, 10.0))));
+    assert!(render.pointer_paint_damage().is_empty());
+
+    assert!(render.update_presented_pointer_motion(Some((0x42, 110.0, 10.0))));
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[
+            FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap(),
+            FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap(),
+        ]
+    );
+    render.finish_pointer_paint_render();
+    assert!(render.update_presented_pointer_motion(None));
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap()]
+    );
+
+    render.finish_pointer_paint_render();
+    assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
+    render.finish_pointer_paint_render();
+    render.set_current_frame(Some(presented_pointer_integration_frame(76)), None);
+    assert_eq!(
+        render.pointer_paint_damage(),
+        &[FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap()],
+        "new presentation invalidates the old active paint only"
+    );
+}
+
 fn presented_pointer_integration_offset_frame(
     presentation: u64,
     width: f32,
@@ -458,7 +510,7 @@ fn presented_pointer_integration_offset_frame(
                 .map(|&(x, y, width, height)| {
                     PresentedPointerRegion::new(
                         FrameRect::new(x, y, width, height).unwrap(),
-                        None,
+                        Some(InteractionId::new(1)),
                         Some(PointerAppearanceId::try_from(0usize).unwrap()),
                     )
                 })
@@ -524,6 +576,12 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
         .map(|(x, y, frame_id)| (frame_id, x, y));
     assert!(window.render.update_presented_pointer_motion(child_target));
     assert_eq!(
+        window.render.pointer_paint_damage(),
+        &[FrameRect::new(110.0, 85.0, 20.0, 10.0).unwrap()],
+        "child paint clips are translated into parent surface coordinates"
+    );
+    window.render.finish_pointer_paint_render();
+    assert_eq!(
         window
             .render
             .pointer_appearance
@@ -532,6 +590,38 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
             .presentation(),
         PresentationId::new(81)
     );
+
+    let child_press = RenderApp::capture_presented_pointer_press(window, child_owner, 115.0, 88.0)
+        .expect("topmost child interaction");
+    assert!(matches!(
+        child_press,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 81,
+            interaction: 1,
+            pressed: true,
+            emacs_frame_id: 0x99,
+            ..
+        }
+    ));
+    window.render.clear_pointer_hover();
+    let mut replacement = presented_pointer_integration_frame(83);
+    replacement.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
+    replacement.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
+    replacement.parent_x = 100.0;
+    replacement.parent_y = 80.0;
+    replacement.z_order = 10;
+    window.render.update_child_frame(replacement);
+    let child_release = RenderApp::take_presented_release_events(&mut window.render, 200.0, 160.0);
+    assert!(matches!(
+        child_release.as_slice(),
+        [crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 81,
+            interaction: 1,
+            pressed: false,
+            emacs_frame_id: 0x99,
+            ..
+        }]
+    ));
 
     let root_owner = RenderApp::pointer_owner(window, 15.0, 8.0);
     assert!(matches!(
@@ -561,12 +651,12 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     render.set_current_frame(Some(presented_pointer_integration_frame(90)), None);
     let window = app.frame_windows.primary_window_mut().unwrap();
 
-    let body = RenderApp::capture_tab_bar_press(window, 20.0, 10.0).unwrap();
-    let body_release = RenderApp::take_tab_bar_release_events(&mut window.render, 20.0, 10.0);
-    let close = RenderApp::capture_tab_bar_press(window, 84.0, 10.0).unwrap();
-    let close_release = RenderApp::take_tab_bar_release_events(&mut window.render, 84.0, 10.0);
-    let add = RenderApp::capture_tab_bar_press(window, 110.0, 10.0).unwrap();
-    let add_release = RenderApp::take_tab_bar_release_events(&mut window.render, 110.0, 10.0);
+    let body = RenderApp::capture_tab_band_press(window, 20.0, 10.0).unwrap();
+    let body_release = RenderApp::take_presented_release_events(&mut window.render, 20.0, 10.0);
+    let close = RenderApp::capture_tab_band_press(window, 84.0, 10.0).unwrap();
+    let close_release = RenderApp::take_presented_release_events(&mut window.render, 84.0, 10.0);
+    let add = RenderApp::capture_tab_band_press(window, 110.0, 10.0).unwrap();
+    let add_release = RenderApp::take_presented_release_events(&mut window.render, 110.0, 10.0);
 
     assert!(matches!(
         body,
@@ -772,7 +862,7 @@ fn pressed_visual_stays_captured_while_hover_follows_pointer() {
 fn visual_transitions_do_not_mutate_evaluator_press_capture() {
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
     let target = PresentedInteractionKey::new(PresentationId::new(11), InteractionId::new(99));
-    render.chrome.interaction.capture_tab_bar(Some(target));
+    render.capture_presented(Some(target));
 
     render.pointer_appearance.hover(Some(appearance_key(11, 3)));
     render.pointer_appearance.press();
@@ -780,8 +870,8 @@ fn visual_transitions_do_not_mutate_evaluator_press_capture() {
     render.pointer_appearance.release();
 
     assert_eq!(
-        render.chrome.interaction.tab_bar_capture(),
-        Some(TabBarPressCapture::new(Some(target)))
+        render.presented_capture(),
+        Some(PresentedPressCapture::new(Some(target)))
     );
 }
 
@@ -790,7 +880,7 @@ fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
     let pressed_visual = appearance_key(11, 3);
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
     let target = PresentedInteractionKey::new(PresentationId::new(11), InteractionId::new(99));
-    render.chrome.interaction.capture_tab_bar(Some(target));
+    render.capture_presented(Some(target));
     render.pointer_appearance.hover(Some(pressed_visual));
     render.pointer_appearance.press();
     render.set_dirty(false);
@@ -800,8 +890,8 @@ fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
     assert_eq!(render.pointer_appearance.active(), None);
     assert_eq!(render.pointer_appearance.pressed(), Some(pressed_visual));
     assert_eq!(
-        render.chrome.interaction.tab_bar_capture(),
-        Some(TabBarPressCapture::new(Some(target)))
+        render.presented_capture(),
+        Some(PresentedPressCapture::new(Some(target)))
     );
     assert!(render.compositor.dirty);
 }
@@ -810,12 +900,12 @@ fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
 fn tab_release_uses_the_original_capture_after_hover_moves_or_leaves() {
     let captured = PresentedInteractionKey::new(PresentationId::new(21), InteractionId::new(7));
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.capture_tab_bar(Some(captured));
+    render.capture_presented(Some(captured));
     render.pointer_appearance.hover(Some(appearance_key(21, 1)));
     render.pointer_appearance.press();
     render.pointer_appearance.hover(Some(appearance_key(21, 2)));
 
-    let event = RenderApp::take_tab_bar_release_events(&mut render, 500.0, 700.0)
+    let event = RenderApp::take_presented_release_events(&mut render, 500.0, 700.0)
         .into_iter()
         .next()
         .expect("captured release event");
@@ -831,30 +921,30 @@ fn tab_release_uses_the_original_capture_after_hover_moves_or_leaves() {
             ..
         }
     ));
-    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+    assert_eq!(render.presented_capture(), None);
 }
 
 #[test]
 fn blank_tab_band_capture_suppresses_release_without_fake_interaction() {
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.capture_tab_bar(None);
+    render.capture_presented(None);
 
     assert_eq!(
-        render.chrome.interaction.tab_bar_capture(),
-        Some(TabBarPressCapture::new(None))
+        render.presented_capture(),
+        Some(PresentedPressCapture::new(None))
     );
-    assert!(RenderApp::take_tab_bar_release_events(&mut render, 40.0, 10.0).is_empty());
-    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+    assert!(RenderApp::take_presented_release_events(&mut render, 40.0, 10.0).is_empty());
+    assert_eq!(render.presented_capture(), None);
 }
 
 #[test]
 fn captured_release_precedes_deferred_presentation_retirement() {
     let target = PresentedInteractionKey::new(PresentationId::new(41), InteractionId::new(9));
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.capture_tab_bar(Some(target));
+    render.capture_presented(Some(target));
     assert_eq!(render.route_presentation_retirement(41), None);
 
-    let events = RenderApp::take_tab_bar_release_events(&mut render, 1.0, 2.0);
+    let events = RenderApp::take_presented_release_events(&mut render, 1.0, 2.0);
     assert!(matches!(
         events.as_slice(),
         [
@@ -873,7 +963,7 @@ fn captured_release_precedes_deferred_presentation_retirement() {
 fn cancellation_flushes_pinned_retirement_without_release() {
     let target = PresentedInteractionKey::new(PresentationId::new(51), InteractionId::new(10));
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
-    render.chrome.interaction.capture_tab_bar(Some(target));
+    render.capture_presented(Some(target));
     render.chrome.interaction.toolbar_press_captured = true;
     render.chrome.interaction.toolbar_pressed = Some(3);
     render.pointer_appearance.hover(Some(appearance_key(51, 1)));
@@ -885,7 +975,7 @@ fn cancellation_flushes_pinned_retirement_without_release() {
     assert_eq!(retirements, vec![51]);
     assert_eq!(render.pointer_appearance.active(), None);
     assert_eq!(render.pointer_appearance.pressed(), None);
-    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+    assert_eq!(render.presented_capture(), None);
     assert!(!render.chrome.interaction.toolbar_press_captured);
     assert_eq!(render.chrome.interaction.toolbar_pressed, None);
     assert!(!render.pointer_inside);
@@ -955,14 +1045,14 @@ fn non_root_owner_clears_stale_root_chrome_hover() {
 #[test]
 fn tab_capture_survives_tab_bar_removal_until_release() {
     let captured = PresentedInteractionKey::new(PresentationId::new(31), InteractionId::new(8));
-    let mut interaction = crate::render_thread::state::GuiChromeInteractionState::default();
-    interaction.capture_tab_bar(Some(captured));
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.capture_presented(Some(captured));
 
-    interaction.clear_tab_bar();
+    render.chrome.interaction.clear_tab_bar();
 
     assert_eq!(
-        interaction.tab_bar_capture(),
-        Some(TabBarPressCapture::new(Some(captured)))
+        render.presented_capture(),
+        Some(PresentedPressCapture::new(Some(captured)))
     );
 }
 
