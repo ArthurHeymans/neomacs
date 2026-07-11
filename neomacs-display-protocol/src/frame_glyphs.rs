@@ -795,6 +795,9 @@ pub struct FrameGlyphBuffer {
     /// Authoritative frame-level chrome bands and interaction geometry.
     pub frame_chrome: crate::frame_chrome::FrameChrome,
 
+    /// Validated pointer hit regions and transient paint overrides.
+    presented_pointer: crate::presented_pointer::PresentedPointerMap,
+
     /// Per-window metadata for animation detection
     pub window_infos: Vec<WindowInfo>,
 
@@ -936,6 +939,36 @@ pub fn derive_window_transition_hint(
 }
 
 impl FrameGlyphBuffer {
+    /// Validated pointer metadata installed for this exact frame snapshot.
+    pub fn presented_pointer(&self) -> &crate::presented_pointer::PresentedPointerMap {
+        &self.presented_pointer
+    }
+
+    /// Validate and install pointer metadata after final glyph materialization.
+    pub fn install_presented_pointer(
+        &mut self,
+        regions: Vec<crate::presented_pointer::PresentedPointerRegion>,
+        appearances: Vec<crate::presented_pointer::PresentedPointerAppearance>,
+    ) -> Result<(), crate::presented_pointer::PresentedPointerMapError> {
+        let map = crate::presented_pointer::PresentedPointerMap::from_parts(regions, appearances)?;
+        self.install_presented_pointer_map(map)
+    }
+
+    /// Attach a transported pointer map after validating it against this frame.
+    ///
+    /// Deserialization establishes intrinsic map validity only; this operation
+    /// atomically establishes renderer-safe contextual validity before storing.
+    pub fn install_presented_pointer_map(
+        &mut self,
+        map: crate::presented_pointer::PresentedPointerMap,
+    ) -> Result<(), crate::presented_pointer::PresentedPointerMapError> {
+        let context =
+            crate::presented_pointer::PointerMapValidationContext::from_frame_buffer(self)?;
+        map.validate_against(context)?;
+        self.presented_pointer = map;
+        Ok(())
+    }
+
     fn synthesize_face(
         &self,
         face_id: FaceId,
@@ -1025,6 +1058,7 @@ impl FrameGlyphBuffer {
             no_accept_focus: false,
             glyphs: Vec::with_capacity(10000),
             frame_chrome: crate::frame_chrome::FrameChrome::default(),
+            presented_pointer: crate::presented_pointer::PresentedPointerMap::empty(),
             window_infos: Vec::with_capacity(16),
             transition_hints: Vec::with_capacity(16),
             effect_hints: Vec::with_capacity(16),
@@ -1062,6 +1096,7 @@ impl FrameGlyphBuffer {
     pub fn clear_all(&mut self) {
         self.glyphs.clear();
         self.frame_chrome = crate::frame_chrome::FrameChrome::default();
+        self.presented_pointer = crate::presented_pointer::PresentedPointerMap::empty();
         self.window_infos.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();

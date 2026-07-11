@@ -15,6 +15,7 @@ pub mod frame_chrome;
 pub mod frame_glyphs;
 pub mod glyph_matrix;
 pub mod gradient;
+pub mod presented_pointer;
 pub mod scene;
 pub mod scroll_animation;
 pub mod snapshot_text;
@@ -30,6 +31,7 @@ pub use face::*;
 pub use frame_chrome::*;
 pub use frame_glyphs::*;
 pub use gradient::*;
+pub use presented_pointer::*;
 pub use scene::*;
 pub use scroll_animation::*;
 pub use transition_policy::*;
@@ -39,3 +41,7 @@ pub use ui_types::*;
 #[cfg(test)]
 #[path = "frame_chrome_test.rs"]
 mod frame_chrome_test;
+
+#[cfg(test)]
+#[path = "presented_pointer_test.rs"]
+mod presented_pointer_test;
