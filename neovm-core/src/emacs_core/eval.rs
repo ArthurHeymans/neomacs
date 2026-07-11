@@ -2780,13 +2780,19 @@ impl Drop for UnwindCleanupGuard<'_> {
 /// would have restored frame-by-frame. The module ABI takes one before running
 /// Lisp (or module code) under `catch_unwind`; a caught panic skipped all of
 /// that per-frame restoration, so [`Context::restore_module_boundary`] replays
-/// it wholesale — the same recovery GNU performs in `unwind_to_catch`.
+/// it wholesale — the same recovery GNU performs in `unwind_to_catch`. The
+/// JIT dispatch seam (`CompiledLeaf::invoke_native` in jit/compile.rs) records
+/// the same snapshot once per native call, at LEAF entry; a panic contained at
+/// a shim boundary (`jit_shim_contain!`) is healed against it through
+/// [`Context::restore_jit_shim_boundary`], the truncation-only subset
+/// appropriate there.
 ///
 /// Deliberately NOT covered (see the PS-T4 design): `gc_inhibit_depth` /
 /// `unwind_cleanup_depth` (Drop-guarded, already rebalanced by the unwind),
 /// `MODULE_CTX` (Drop-guarded), and every piece of heap/GC protocol state —
 /// in particular `TAGGED_HEAP_CONCURRENT_ACTIVE`, whose recovery point is the
 /// `set_tagged_heap` resync, never a catch handler.
+#[derive(Clone, Copy)]
 pub(crate) struct ModuleBoundarySnapshot {
     spec_depth: usize,
     condition_len: usize,
@@ -2799,6 +2805,15 @@ pub(crate) struct ModuleBoundarySnapshot {
     depth: usize,
     lexenv: Value,
     macro_expansion_scope_depth: usize,
+}
+
+impl ModuleBoundarySnapshot {
+    /// Condition-stack length at the boundary — the base the JIT healing
+    /// points compute their truncation floor from (`entry + ours` at the
+    /// match shim, `entry` at leaf exit).
+    pub(crate) fn condition_len(&self) -> usize {
+        self.condition_len
+    }
 }
 
 impl Context {
@@ -2859,11 +2874,85 @@ impl Context {
         self.lexenv_special_cache.clear();
     }
 
+    /// Heal the evaluator after a panic was contained at a JIT-SHIM boundary
+    /// (`jit_shim_contain!` in jit/compile.rs): the TRUNCATION subset of
+    /// [`restore_module_boundary`] — condition frames, the bytecode and root
+    /// side stacks, the scalars, and the lexenv caches — with deliberately
+    /// NO specpdl unwind, run against the LEAF-ENTRY snapshot the dispatch
+    /// seam (`CompiledLeaf::invoke_native`) recorded once per native call.
+    /// Leaf-entry bases suffice because every field here is BALANCED across
+    /// each individual shim call the leaf makes (the leaf itself only touches
+    /// them through shims, and callee extents restore them on every non-panic
+    /// exit) — so its leaf-entry value IS its value at every shim entry.
+    ///
+    /// Called from the two points that see a contained panic, never from the
+    /// catch handler itself (which must stay free of per-call cost and of
+    /// lisp/allocation):
+    /// - `neovm_jit_match_handler` entry, with `cond_floor = entry + ours`:
+    ///   the match shim pops the leaf's own frames by COUNT, so the panicked
+    ///   extent's leaked frames above the leaf's own must go, while the
+    ///   leaf's own (the `ours` directly on the entry base) must stay.
+    /// - the leaf-exit path in `invoke_native`, with `cond_floor = entry`:
+    ///   the leaf is dead, everything above its entry goes.
+    ///
+    /// The panicked extent's specpdl entries — unwind-protect cleanups
+    /// included — are NOT unwound here; they are swept by the depth-based
+    /// unwind that runs immediately after, at rooted-or-discarded points:
+    /// the match shim's `unbind_to`, the leaf-exit parity unwind in
+    /// `invoke_native`, or the enclosing frame's cleanup. (Control never
+    /// returns to foreign code in the panicked extent — it goes straight
+    /// into the signal plumbing, so deferring the unwind is sound.)
+    ///
+    /// Why each truncation cannot wait for that later unwind:
+    /// - `condition_stack` FIRST: `neovm_jit_match_handler` pops the leaf's
+    ///   own frames by COUNT, and signal dispatch selects the innermost
+    ///   matching frame — leaked frames would desynchronize the count and
+    ///   could select a dead resume target.
+    /// - `bc_frames`: the interpreter releases its frame by `pop()`, so
+    ///   panic-skipped frames would permanently corrupt the stack (and their
+    ///   entries index into a `bc_buf` that enclosing cleanups truncate).
+    /// - `bc_buf` + the root side stacks: owned by Rust frames the panic
+    ///   destroyed; nothing else would ever pop them (safe-direction leak,
+    ///   but unbounded over repeated contained panics).
+    /// - `backtrace_args_stack`: safe to truncate WITHOUT the specpdl unwind
+    ///   because release is index-based — the later unwind of surviving
+    ///   Backtrace entries above the boundary degrades to a no-op.
+    /// - `depth` / `macro_expansion_scope_depth`: managed relatively
+    ///   (`+= 1` / `-= 1`); skipped decrements would drift them permanently.
+    /// - `lexenv` (+ cache clears): the boundary value is authoritative for
+    ///   the continuation, same argument as the module restore.
+    ///
+    /// Scratch GC roots are deliberately not handled here: on the match path
+    /// the generated code's own paired `gc_restore` already swept the
+    /// residue (and the dispatch block's live roots must survive), while the
+    /// leaf-exit path sweeps them against the recorded entry depth (see the
+    /// pending-root-sweep floor in jit/compile.rs).
+    pub(crate) fn restore_jit_shim_boundary(
+        &mut self,
+        snap: &ModuleBoundarySnapshot,
+        cond_floor: usize,
+    ) {
+        self.condition_stack.truncate(cond_floor);
+        self.bc_frames.truncate(snap.bc_frames_len);
+        self.bc_buf.truncate(snap.bc_buf_len);
+        self.backtrace_args_stack.truncate(snap.backtrace_args_len);
+        self.eval_temp_roots.truncate(snap.eval_temp_roots_len);
+        self.sequence_temp_root_frames
+            .truncate(snap.sequence_temp_root_frames_len);
+        self.vm_root_frames.truncate(snap.vm_root_frames_len);
+        self.depth = snap.depth;
+        self.lexenv = snap.lexenv;
+        self.macro_expansion_scope_depth = snap.macro_expansion_scope_depth;
+        self.lexenv_assq_cache.clear();
+        self.lexenv_special_cache.clear();
+    }
+
     /// True when a panic caught at a module boundary must NOT be contained:
     /// it escaped the collection driver, or poisoned a GC lock — either way
     /// heap invariants are unknown and converting the panic into a Lisp error
     /// would keep a possibly-torn heap mutating. Callers re-raise instead
     /// (aborting at the `extern "C"` shim, i.e. pre-containment behavior).
+    /// The JIT shim boundary reuses this probe unchanged.
     pub(crate) fn module_panic_recovery_blocked(&self) -> bool {
         self.gc_driver_active || self.tagged_heap.gc_locks_poisoned()
     }

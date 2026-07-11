@@ -63,10 +63,12 @@ use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::bytecode::vm::condition_frame_resume;
 use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+use crate::emacs_core::dynamic_module::panic_message;
 use crate::emacs_core::error::{Flow, make_signal_binding_value, signal};
 use crate::emacs_core::eval::{
-    ConditionFrame, Context, LispArgVec, ResumeTarget, lookup_global_subr_entry,
-    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots, subr_entry_from_value,
+    ConditionFrame, Context, LispArgVec, ModuleBoundarySnapshot, ResumeTarget,
+    lookup_global_subr_entry, push_scratch_gc_root, restore_scratch_gc_roots,
+    save_scratch_gc_roots, subr_entry_from_value,
 };
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 use crate::emacs_core::symbol::Obarray;
@@ -224,12 +226,237 @@ pub(crate) static CBSYM_SPEC_FAST_COUNT: AtomicU64 = AtomicU64::new(0);
 pub(crate) static CBSYM_SPEC_GENERIC_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
+///
+/// A panic contained at a shim boundary ([`jit_shim_contain!`]) wins over a
+/// flow the shim body had already stashed before panicking: the panic
+/// interrupted that flow's protocol midway, so reporting the panic is the
+/// honest outcome. (Contrast the module ABI's first-exit-wins, which follows
+/// GNU's pending-exit register semantics; `PENDING_FLOW` is a single-slot
+/// handoff consumed by the very next dispatch step, not a module-visible
+/// register.) The Lisp-heap allocation for the panic-message string happens
+/// HERE — the two consumers run at allocation-safe points (see
+/// [`PENDING_SHIM_PANIC`]) — never in a shim's catch handler.
 pub fn take_pending_flow() -> Option<Flow> {
-    PENDING_FLOW.with(|p| p.borrow_mut().take())
+    let flow = PENDING_FLOW.with(|p| p.borrow_mut().take());
+    match PENDING_SHIM_PANIC.with(|p| p.borrow_mut().take()) {
+        Some(message) => Some(signal("error", vec![Value::string(&message)])),
+        None => flow,
+    }
 }
 
 fn stash_pending_flow(flow: Flow) {
     PENDING_FLOW.with(|p| *p.borrow_mut() = Some(flow));
+}
+
+// ---------------------------------------------------------------------------
+// Panic containment at the JIT shim boundary.
+//
+// Every shim here is `extern "C"` and is called from Cranelift frames with no
+// landing pads: a panic that escapes a shim body aborts the process ("panic
+// in a function that cannot unwind"). The 21 shims whose return ABI has a
+// signal channel — a `STATUS_*` code, `neovm_jit_match_handler`'s `-1`
+// rethrow ordinal, `neovm_jit_switch`'s [`JIT_SWITCH_STALE`], or a body the
+// generated code follows with an unconditional signal-exit branch
+// (`neovm_jit_throw`, `neovm_jit_switch_stale`) — contain panics via
+// [`jit_shim_contain!`]: the panic becomes a pending
+// `Signal(error, "neomacs internal error: …")` and the shim returns its
+// signal sentinel, so the EXISTING plumbing takes over (generated code
+// branches to its signal exit or handler match, the leaf returns
+// STATUS_SIGNAL, the dispatcher takes the flow and propagates a normal Lisp
+// error — condition-case-able, editor keeps running).
+//
+// The wrapper itself is a bare `catch_unwind`: shims are the JIT's hot path
+// (the per-backedge quit poll runs once per 255 loop iterations, `varref` on
+// every dynamic read), so the happy path carries ZERO containment cost — no
+// snapshot, no root bookkeeping, nothing before the catch besides the body.
+// Restoration is instead anchored at LEAF ENTRY: `invoke_native` records the
+// evaluator bases once per native call ([`JitLeafBases`]), and a contained
+// panic is healed against them downstream, at the two points that see it —
+// `neovm_jit_match_handler` entry (leaf-local condition-case) and the
+// leaf-exit path in `invoke_native`. Leaf-entry bases are exact there
+// because every healed field is balanced across each shim call the leaf
+// makes; the residue a panic leaves is precisely "above the bases". See
+// `Context::restore_jit_shim_boundary` for the field-by-field story.
+//
+// The other 19 shims (`gc_save`/`gc_push`/`gc_restore`, `cons`, `list`, the
+// pure predicate slow paths, `varbind`/`unbind`, the specpdl/handler-frame
+// pushes and `pop_handler`) have NO signal channel: generated code consumes
+// their return value or assumes the state transition happened,
+// unconditionally. "Containing" a panic there would mean returning garbage
+// and letting native code keep executing against half-applied state — e.g. a
+// fabricated `gc_save` depth would make the paired `gc_restore` truncate
+// LIVE scratch roots (use-after-free under exact GC). Strictly worse than
+// the abort, so they stay unwrapped: a panic there keeps today's behavior
+// (abort at the `extern "C"` boundary).
+// ---------------------------------------------------------------------------
+
+std::thread_local! {
+    /// Message of a panic contained at a shim boundary, pending
+    /// materialization into a `Flow` by [`take_pending_flow`]. A Rust
+    /// `String`, never a Lisp value: several shims are called with the
+    /// generated code's residual operand stack UNROOTED
+    /// ([`neovm_jit_pred_spec`] & friends), so the catch handler must not
+    /// allocate on the Lisp heap — an allocation-triggered GC could sweep
+    /// values a leaf-local handler is about to resume with. The two pending-
+    /// flow consumers run at allocation-safe points instead:
+    /// [`neovm_jit_match_handler`]'s entry take (the generated code rooted
+    /// its live values before the call) and the dispatcher's
+    /// `finish_native_run` (the leaf has exited; its residual stack is
+    /// discarded).
+    ///
+    /// While set, it doubles as the "panicked-extent residue pending" marker
+    /// the two healing points test ([`shim_panic_pending`]): set at
+    /// containment, consumed by the take — which both healing points run
+    /// strictly before.
+    static PENDING_SHIM_PANIC: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+
+    /// Evaluator bases of the innermost native leaf currently executing,
+    /// recorded by `invoke_native` once per native call and stack-restored
+    /// around it (nested dispatch replaces and restores, so this always
+    /// names the innermost leaf). Read only by the contained-panic healing
+    /// points; `None` outside any native extent.
+    static CURRENT_LEAF_BASES: std::cell::Cell<Option<JitLeafBases>> =
+        const { std::cell::Cell::new(None) };
+
+    /// Scratch-GC-root depth a contained panic left dead pushes above (the
+    /// panicked extent's skipped pops — including the shim body's own).
+    /// Separate from [`PENDING_SHIM_PANIC`] because it must SURVIVE the
+    /// flow's consumption: when a leaf-local handler catches the contained
+    /// panic, the leaf resumes and only its eventual EXIT (possibly
+    /// `STATUS_OK`, much later) can sweep the residue — the match path may
+    /// not touch the root stack while the dispatch block's live roots sit
+    /// on top. A leaf exit sweeps and clears it only when the floor is at
+    /// or above its own entry depth (`floor >= bases.roots`); a floor below
+    /// belongs to an outer leaf's residue and is left for that leaf's exit.
+    static PENDING_ROOT_SWEEP_FLOOR: std::cell::Cell<Option<usize>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Leaf-entry restoration bases: the boundary snapshot plus the scratch-GC-
+/// root depth (kept out of [`ModuleBoundarySnapshot`] — the module boundary
+/// has its own root lifecycle). Recorded once per native call by
+/// `invoke_native`; the unit of restoration for a contained shim panic is
+/// the whole leaf, so leaf entry is the one coherent base point.
+#[derive(Clone, Copy)]
+struct JitLeafBases {
+    snap: ModuleBoundarySnapshot,
+    roots: usize,
+}
+
+/// Whether a shim panic was contained and its residue not yet healed/taken.
+fn shim_panic_pending() -> bool {
+    PENDING_SHIM_PANIC.with(|p| p.borrow().is_some())
+}
+
+/// Handle a panic caught inside a wrapped shim body: probe, arm, stash.
+/// Returns the payload back (`Err`) when the panic must NOT be contained —
+/// the caller `resume_unwind`s it, which aborts at the `extern "C"` shim,
+/// exactly the pre-containment behavior for that class.
+///
+/// The unrecoverable probe is the module boundary's
+/// (`Context::module_panic_recovery_blocked`: the `gc_driver_active` flag +
+/// GC lock poison). The ctx-less wrapped shims
+/// (`builtin_slice`/`throw`/`switch_stale`) have no Context to read the
+/// driver flag through; they probe the lock-poison half via the
+/// thread-local heap — same probe, partially applied.
+///
+/// Deliberately does NO state restoration (it runs off the recorded bases at
+/// the healing points instead — see the section comment): this keeps the
+/// wrapper's happy path free of per-call snapshot work. It never runs lisp
+/// and never allocates on the Lisp heap.
+#[cold]
+#[inline(never)]
+fn contain_jit_shim_panic(
+    ctx: *mut u8,
+    payload: Box<dyn std::any::Any + Send>,
+) -> Result<(), Box<dyn std::any::Any + Send>> {
+    let blocked = if ctx.is_null() {
+        crate::tagged::gc::with_tagged_heap(|h| h.gc_locks_poisoned())
+    } else {
+        // SAFETY: seam-provided dormant Context (the shim's own vmctx
+        // contract); the probe only reads two flags.
+        unsafe { (*(ctx as *const Context)).module_panic_recovery_blocked() }
+    };
+    if blocked {
+        eprintln!(
+            "neomacs: refusing to contain a JIT-shim panic (GC state suspect): {}",
+            panic_message(&*payload)
+        );
+        return Err(payload);
+    }
+    // Arm the root sweep for the leaf exit: the panicked extent's skipped
+    // pops all sit at or above the innermost leaf's entry depth. (No bases
+    // means no native extent — direct-call tests; nothing to sweep.)
+    if let Some(bases) = CURRENT_LEAF_BASES.with(|b| b.get()) {
+        PENDING_ROOT_SWEEP_FLOOR.with(|f| {
+            let floor = f.get().map_or(bases.roots, |cur| cur.min(bases.roots));
+            f.set(Some(floor));
+        });
+    }
+    PENDING_SHIM_PANIC.with(|p| {
+        *p.borrow_mut() = Some(format!(
+            "neomacs internal error: {}",
+            panic_message(&*payload)
+        ));
+    });
+    Ok(())
+}
+
+/// Heal the panicked extent's evaluator residue before the match shim
+/// matches: truncate against the leaf-entry bases, keeping the leaf's own
+/// `ours` condition frames (they sit directly on the entry base — callees
+/// pop their own frames on every non-panic exit, so only the panicked
+/// extent's leaked frames are above them). Must run BEFORE
+/// [`take_pending_flow`] materializes the panic: signal dispatch scans the
+/// condition stack for the innermost match, and a leaked dead frame could
+/// otherwise be selected. Scratch roots are deliberately untouched — the
+/// dispatch block's live roots are on top (see the floor doc).
+#[cold]
+fn heal_shim_panic_residue_before_match(ctx: &mut Context, ours: usize) {
+    let Some(bases) = CURRENT_LEAF_BASES.with(|b| b.get()) else {
+        return;
+    };
+    ctx.restore_jit_shim_boundary(&bases.snap, bases.snap.condition_len() + ours);
+}
+
+/// Wrap a signal-channel shim body: `catch_unwind` around `$body`; a caught
+/// panic is contained per [`contain_jit_shim_panic`] and the shim returns
+/// `$sentinel` (its ABI's signal-path value), or is re-raised (abort at the
+/// `extern "C"` boundary) when GC state is suspect. Mid-body `return`s keep
+/// their exact semantics — they return from the closure. The `no_ctx` arm is
+/// for the shims whose bodies cannot reach the Context.
+///
+/// The happy path is the bare catch: no snapshot, no root bookkeeping —
+/// shims are the JIT's hot path, and all restoration state lives in the
+/// per-native-call [`JitLeafBases`] instead.
+///
+/// `AssertUnwindSafe`: the downstream healing against the leaf-entry bases
+/// plus the deferred specpdl unwind are what make the crossing state
+/// coherent; a contained panic never resumes the broken computation (the
+/// sentinel routes generated code to its signal exit).
+macro_rules! jit_shim_contain {
+    // Literal-`no_ctx` arm FIRST: `no_ctx` would also parse as an `expr`, so
+    // ordering is what keeps it from being captured by the ctx arm below.
+    (no_ctx, $sentinel:expr, $body:expr) => {{
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $body)) {
+            Ok(v) => v,
+            Err(payload) => match contain_jit_shim_panic(core::ptr::null_mut(), payload) {
+                Ok(()) => $sentinel,
+                Err(payload) => std::panic::resume_unwind(payload),
+            },
+        }
+    }};
+    ($ctx:expr, $sentinel:expr, $body:expr) => {{
+        let ctx_raw: *mut u8 = $ctx;
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $body)) {
+            Ok(v) => v,
+            Err(payload) => match contain_jit_shim_panic(ctx_raw, payload) {
+                Ok(()) => $sentinel,
+                Err(payload) => std::panic::resume_unwind(payload),
+            },
+        }
+    }};
 }
 
 /// Call a function from JIT code with the interpreter's `Op::Call` semantics
@@ -258,51 +485,53 @@ pub extern "C" fn neovm_jit_call(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    let func_val = Value::from_bits(func_bits as usize);
-    let nargs = nargs as usize;
-    let saved = save_scratch_gc_roots();
-    // The callee is not on bc_buf, so it needs an explicit scratch root across
-    // the call (which may GC); the arguments go straight onto the GC-traced
-    // bc_buf below, so they are rooted there — no LispArgVec, no per-arg root.
-    push_scratch_gc_root(func_val);
-    // SAFETY: see the function-level contract — seam-provided, dormant, single
-    // mutator thread.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match ctx.maybe_quit() {
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-        Ok(()) => {
-            // Push the native call-args slot straight onto bc_buf (GC-traced,
-            // so the args are rooted across the call); the fast subr path reads
-            // them in place. Truncate back afterwards.
-            let args_start = ctx.bc_buf.len();
-            for i in 0..nargs {
-                // SAFETY: the generated code stored exactly `nargs` argument
-                // words at `args_ptr` (its call-args slot) immediately before
-                // this call.
-                let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-                ctx.bc_buf.push(v);
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let func_val = Value::from_bits(func_bits as usize);
+        let nargs = nargs as usize;
+        let saved = save_scratch_gc_roots();
+        // The callee is not on bc_buf, so it needs an explicit scratch root across
+        // the call (which may GC); the arguments go straight onto the GC-traced
+        // bc_buf below, so they are rooted there — no LispArgVec, no per-arg root.
+        push_scratch_gc_root(func_val);
+        // SAFETY: see the function-level contract — seam-provided, dormant, single
+        // mutator thread.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match ctx.maybe_quit() {
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
             }
-            let mut vm = Vm::from_context(ctx);
-            let res = vm.call_for_jit_stack(func_val, args_start, nargs);
-            vm.bc_buf_truncate(args_start);
-            match res {
-                Ok(value) => {
-                    // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = value.bits() as i64 };
-                    STATUS_OK
+            Ok(()) => {
+                // Push the native call-args slot straight onto bc_buf (GC-traced,
+                // so the args are rooted across the call); the fast subr path reads
+                // them in place. Truncate back afterwards.
+                let args_start = ctx.bc_buf.len();
+                for i in 0..nargs {
+                    // SAFETY: the generated code stored exactly `nargs` argument
+                    // words at `args_ptr` (its call-args slot) immediately before
+                    // this call.
+                    let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+                    ctx.bc_buf.push(v);
                 }
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    STATUS_SIGNAL
+                let mut vm = Vm::from_context(ctx);
+                let res = vm.call_for_jit_stack(func_val, args_start, nargs);
+                vm.bc_buf_truncate(args_start);
+                match res {
+                    Ok(value) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = value.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
+                    }
                 }
             }
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// `apply` a function from JIT code with the interpreter's `Op::Apply`
@@ -318,42 +547,44 @@ pub extern "C" fn neovm_jit_apply(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    let func_val = Value::from_bits(func_bits as usize);
-    let nargs = nargs as usize;
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(func_val);
-    let mut args = LispArgVec::new();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` argument words at
-        // `args_ptr` (its call-args stack slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        push_scratch_gc_root(v);
-        args.push(v);
-    }
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match ctx.maybe_quit() {
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let func_val = Value::from_bits(func_bits as usize);
+        let nargs = nargs as usize;
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(func_val);
+        let mut args = LispArgVec::new();
+        for i in 0..nargs {
+            // SAFETY: the generated code stored exactly `nargs` argument words at
+            // `args_ptr` (its call-args stack slot) immediately before this call.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            push_scratch_gc_root(v);
+            args.push(v);
         }
-        Ok(()) => {
-            let mut vm = Vm::from_context(ctx);
-            match vm.apply_for_jit(func_val, args) {
-                Ok(value) => {
-                    // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = value.bits() as i64 };
-                    STATUS_OK
-                }
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    STATUS_SIGNAL
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match ctx.maybe_quit() {
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+            Ok(()) => {
+                let mut vm = Vm::from_context(ctx);
+                match vm.apply_for_jit(func_val, args) {
+                    Ok(value) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = value.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
+                    }
                 }
             }
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// `#[used]` anchor for the AOT shim table (audit #3 / R1c call-bearing). The 6
@@ -468,21 +699,23 @@ pub extern "C" fn neovm_jit_symbolp_slow(ctx: *mut u8, v: i64) -> i64 {
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64 {
-    use crate::emacs_core::intern::SymId;
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let mut vm = Vm::from_context(ctx);
-    match vm.varref_for_jit(SymId(sym as u32)) {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        use crate::emacs_core::intern::SymId;
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let mut vm = Vm::from_context(ctx);
+        match vm.varref_for_jit(SymId(sym as u32)) {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
         }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    }
+    })
 }
 
 /// Assign a variable from JIT code (`Op::VarSet` semantics via
@@ -492,22 +725,24 @@ pub extern "C" fn neovm_jit_varref(ctx: *mut u8, sym: i64, out: *mut i64) -> i64
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_varset(ctx: *mut u8, sym: i64, val: i64) -> i64 {
-    use crate::emacs_core::intern::SymId;
-    let value = Value::from_bits(val as usize);
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(value);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let mut vm = Vm::from_context(ctx);
-    let status = match vm.varset_for_jit(SymId(sym as u32), value) {
-        Ok(()) => STATUS_OK,
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        use crate::emacs_core::intern::SymId;
+        let value = Value::from_bits(val as usize);
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(value);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let mut vm = Vm::from_context(ctx);
+        let status = match vm.varset_for_jit(SymId(sym as u32), value) {
+            Ok(()) => STATUS_OK,
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 std::thread_local! {
@@ -658,24 +893,26 @@ fn direct_builtin_spec(op: &Op) -> Option<(u8, usize)> {
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i64) -> i64 {
-    let a = Value::from_bits(a as usize);
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(a);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match JIT_BUILTIN1[idx as usize](ctx, a) {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
-        }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let a = Value::from_bits(a as usize);
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(a);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match JIT_BUILTIN1[idx as usize](ctx, a) {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Binary variant of [`neovm_jit_builtin1`].
@@ -683,26 +920,28 @@ pub extern "C" fn neovm_jit_builtin1(ctx: *mut u8, idx: i64, a: i64, out: *mut i
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_builtin2(ctx: *mut u8, idx: i64, a: i64, b: i64, out: *mut i64) -> i64 {
-    let a = Value::from_bits(a as usize);
-    let b = Value::from_bits(b as usize);
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(a);
-    push_scratch_gc_root(b);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match JIT_BUILTIN2[idx as usize](ctx, a, b) {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
-        }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let a = Value::from_bits(a as usize);
+        let b = Value::from_bits(b as usize);
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(a);
+        push_scratch_gc_root(b);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match JIT_BUILTIN2[idx as usize](ctx, a, b) {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Ternary variant of [`neovm_jit_builtin1`].
@@ -717,28 +956,30 @@ pub extern "C" fn neovm_jit_builtin3(
     c: i64,
     out: *mut i64,
 ) -> i64 {
-    let a = Value::from_bits(a as usize);
-    let b = Value::from_bits(b as usize);
-    let c = Value::from_bits(c as usize);
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(a);
-    push_scratch_gc_root(b);
-    push_scratch_gc_root(c);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match JIT_BUILTIN3[idx as usize](ctx, a, b, c) {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
-        }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let a = Value::from_bits(a as usize);
+        let b = Value::from_bits(b as usize);
+        let c = Value::from_bits(c as usize);
+        let saved = save_scratch_gc_roots();
+        push_scratch_gc_root(a);
+        push_scratch_gc_root(b);
+        push_scratch_gc_root(c);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match JIT_BUILTIN3[idx as usize](ctx, a, b, c) {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// `Op::List`: build a list from `n` operand words (the interpreter's
@@ -775,28 +1016,30 @@ pub extern "C" fn neovm_jit_builtin_slice(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    let nargs = nargs as usize;
-    let saved = save_scratch_gc_roots();
-    let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
-    for i in 0..nargs {
-        // SAFETY: see neovm_jit_list — the same spill-slot contract.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        push_scratch_gc_root(v);
-        args.push(v);
-    }
-    let status = match JIT_BUILTIN_SLICE[idx as usize](&args) {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
+    jit_shim_contain!(no_ctx, STATUS_SIGNAL, {
+        let nargs = nargs as usize;
+        let saved = save_scratch_gc_roots();
+        let mut args: SmallVec<[Value; 8]> = SmallVec::with_capacity(nargs);
+        for i in 0..nargs {
+            // SAFETY: see neovm_jit_list — the same spill-slot contract.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            push_scratch_gc_root(v);
+            args.push(v);
         }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        let status = match JIT_BUILTIN_SLICE[idx as usize](&args) {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Named-builtin dispatch for `Op::CallBuiltin`/`Op::CallBuiltinSym`/
@@ -816,37 +1059,39 @@ pub extern "C" fn neovm_jit_named_builtin(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    let nargs = nargs as usize;
-    let saved = save_scratch_gc_roots();
-    let mut args = LispArgVec::new();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` words at
-        // `args_ptr` (its call-args stack slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        push_scratch_gc_root(v);
-        args.push(v);
-    }
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let mut vm = Vm::from_context(ctx);
-    let result = match variant {
-        0 => vm.callbuiltin_for_jit(SymId(sym as u32), args),
-        1 => vm.callbuiltinsym_for_jit(SymId(sym as u32), args),
-        _ => vm.aset_for_jit(args[0], args[1], args[2]),
-    };
-    let status = match result {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        let nargs = nargs as usize;
+        let saved = save_scratch_gc_roots();
+        let mut args = LispArgVec::new();
+        for i in 0..nargs {
+            // SAFETY: the generated code stored exactly `nargs` words at
+            // `args_ptr` (its call-args stack slot) immediately before this call.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            push_scratch_gc_root(v);
+            args.push(v);
         }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let mut vm = Vm::from_context(ctx);
+        let result = match variant {
+            0 => vm.callbuiltin_for_jit(SymId(sym as u32), args),
+            1 => vm.callbuiltinsym_for_jit(SymId(sym as u32), args),
+            _ => vm.aset_for_jit(args[0], args[1], args[2]),
+        };
+        let status = match result {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// `Op::SaveWindowExcursion` (GNU bytecode.c Bsave_window_excursion): pop the
@@ -859,53 +1104,56 @@ pub extern "C" fn neovm_jit_named_builtin(
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
-    use crate::emacs_core::window_cmds;
-    let body = Value::from_bits(body as usize);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let root_scope = save_scratch_gc_roots();
-    push_scratch_gc_root(body);
-    let progn_form = Value::cons(Value::symbol("progn"), body);
-    push_scratch_gc_root(progn_form);
-    let status = (|| {
-        let saved = match window_cmds::builtin_current_window_configuration(ctx, vec![Value::NIL]) {
-            Ok(v) => v,
-            Err(flow) => {
-                stash_pending_flow(flow);
-                return STATUS_SIGNAL;
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        use crate::emacs_core::window_cmds;
+        let body = Value::from_bits(body as usize);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let root_scope = save_scratch_gc_roots();
+        push_scratch_gc_root(body);
+        let progn_form = Value::cons(Value::symbol("progn"), body);
+        push_scratch_gc_root(progn_form);
+        let status = (|| {
+            let saved =
+                match window_cmds::builtin_current_window_configuration(ctx, vec![Value::NIL]) {
+                    Ok(v) => v,
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        return STATUS_SIGNAL;
+                    }
+                };
+            push_scratch_gc_root(saved);
+            let body_result = ctx.eval_sub(progn_form);
+            if let Ok(v) = &body_result {
+                push_scratch_gc_root(*v);
             }
-        };
-        push_scratch_gc_root(saved);
-        let body_result = ctx.eval_sub(progn_form);
-        if let Ok(v) = &body_result {
-            push_scratch_gc_root(*v);
-        }
-        let restore_result = window_cmds::builtin_set_window_configuration(ctx, vec![saved]);
-        match body_result {
-            Ok(result) => match restore_result {
-                Ok(_) => {
-                    // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = result.bits() as i64 };
-                    STATUS_OK
-                }
+            let restore_result = window_cmds::builtin_set_window_configuration(ctx, vec![saved]);
+            match body_result {
+                Ok(result) => match restore_result {
+                    Ok(_) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = result.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
+                    }
+                },
                 Err(flow) => {
-                    stash_pending_flow(flow);
+                    // Interpreter parity: vm_try!(restore_result) runs first, so a
+                    // restore failure takes precedence over the body's flow.
+                    match restore_result {
+                        Err(restore_flow) => stash_pending_flow(restore_flow),
+                        Ok(_) => stash_pending_flow(flow),
+                    }
                     STATUS_SIGNAL
                 }
-            },
-            Err(flow) => {
-                // Interpreter parity: vm_try!(restore_result) runs first, so a
-                // restore failure takes precedence over the body's flow.
-                match restore_result {
-                    Err(restore_flow) => stash_pending_flow(restore_flow),
-                    Ok(_) => stash_pending_flow(flow),
-                }
-                STATUS_SIGNAL
             }
-        }
-    })();
-    restore_scratch_gc_roots(root_scope);
-    status
+        })();
+        restore_scratch_gc_roots(root_scope);
+        status
+    })
 }
 
 /// Sentinel `SpecSlot::epoch` value marking a site the AOT LOADER left DISARMED
@@ -945,97 +1193,99 @@ pub extern "C" fn neovm_jit_call_spec(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    // Debug-build evidence that speculation actually engages (tests assert on
-    // it; release builds carry no counter).
-    #[cfg(debug_assertions)]
-    SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
-    let nargs = nargs as usize;
-    let saved = save_scratch_gc_roots();
-    // Build a rooted LispArgVec from the caller's call-args slot — used only by
-    // the strict-call fallback paths (call_for_jit). The native-to-native fast
-    // path passes `args_ptr` straight through and never materializes this.
-    let read_rooted_args = || {
-        let mut args = LispArgVec::new();
-        for i in 0..nargs {
-            // SAFETY: the generated code stored exactly `nargs` argument words
-            // at `args_ptr` (its call-args slot) immediately before this call.
-            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-            push_scratch_gc_root(v);
-            args.push(v);
-        }
-        args
-    };
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let status = match ctx.maybe_quit() {
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-        Ok(()) => {
-            // SAFETY: slot points into the executing leaf's spec_slots.
-            let slot = unsafe { &*(slot as *const SpecSlot) };
-            let slot_epoch = slot.epoch.load(Ordering::Relaxed);
-            // A loader-DISARMED site (epoch == SPEC_EPOCH_DISARMED) is
-            // permanently not-armed: its baked callee/kind disagreed with the
-            // live obarray at load, so re-validating could re-arm the WRONG
-            // binding. Check it FIRST (before the epoch load / re-validate) and
-            // fall to the strict-symbol-call path. JIT never sets DISARMED, so
-            // this compare is perfectly-predicted never-taken there.
-            let armed = if slot_epoch == SPEC_EPOCH_DISARMED {
-                false
-            } else {
-                let epoch = ctx.obarray.function_epoch();
-                // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
-                // every call exercises the re-validate/re-arm branch.
-                (!jit_force_slow_spec() && slot_epoch == epoch) || {
-                    let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
-                    if cur.is_some_and(|v| v.bits() as i64 == expected) {
-                        slot.epoch.store(epoch, Ordering::Relaxed);
-                        true
-                    } else {
-                        // The binding changed: drop any cached callee leaf so
-                        // a later re-arm can't reuse a stale callee.
-                        slot.leaf.store(0, Ordering::Relaxed);
-                        false
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        // Debug-build evidence that speculation actually engages (tests assert on
+        // it; release builds carry no counter).
+        #[cfg(debug_assertions)]
+        SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
+        let nargs = nargs as usize;
+        let saved = save_scratch_gc_roots();
+        // Build a rooted LispArgVec from the caller's call-args slot — used only by
+        // the strict-call fallback paths (call_for_jit). The native-to-native fast
+        // path passes `args_ptr` straight through and never materializes this.
+        let read_rooted_args = || {
+            let mut args = LispArgVec::new();
+            for i in 0..nargs {
+                // SAFETY: the generated code stored exactly `nargs` argument words
+                // at `args_ptr` (its call-args slot) immediately before this call.
+                let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+                push_scratch_gc_root(v);
+                args.push(v);
+            }
+            args
+        };
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let status = match ctx.maybe_quit() {
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+            Ok(()) => {
+                // SAFETY: slot points into the executing leaf's spec_slots.
+                let slot = unsafe { &*(slot as *const SpecSlot) };
+                let slot_epoch = slot.epoch.load(Ordering::Relaxed);
+                // A loader-DISARMED site (epoch == SPEC_EPOCH_DISARMED) is
+                // permanently not-armed: its baked callee/kind disagreed with the
+                // live obarray at load, so re-validating could re-arm the WRONG
+                // binding. Check it FIRST (before the epoch load / re-validate) and
+                // fall to the strict-symbol-call path. JIT never sets DISARMED, so
+                // this compare is perfectly-predicted never-taken there.
+                let armed = if slot_epoch == SPEC_EPOCH_DISARMED {
+                    false
+                } else {
+                    let epoch = ctx.obarray.function_epoch();
+                    // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
+                    // every call exercises the re-validate/re-arm branch.
+                    (!jit_force_slow_spec() && slot_epoch == epoch) || {
+                        let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                        if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                            slot.epoch.store(epoch, Ordering::Relaxed);
+                            true
+                        } else {
+                            // The binding changed: drop any cached callee leaf so
+                            // a later re-arm can't reuse a stale callee.
+                            slot.leaf.store(0, Ordering::Relaxed);
+                            false
+                        }
+                    }
+                };
+                // Armed: the symbol still names the compile-time bytecode object.
+                // Try the fast path (cached leaf, native-to-native pass-through when
+                // the callee is a pure fixed-arity match — no arg marshaling at
+                // all). Fall back to the strict call on the VALUE if it can't be
+                // fast-pathed (arity / not compilable). Not armed: strict call on
+                // the SYMBOL (resolves the new binding — fset/advice take effect
+                // immediately).
+                let mut vm = Vm::from_context(ctx);
+                let outcome = if armed {
+                    let target = Value::from_bits(expected as usize);
+                    push_scratch_gc_root(target);
+                    match vm.call_armed_callee_native(target, &slot.leaf, args_ptr, nargs) {
+                        Some(res) => res,
+                        None => vm.call_for_jit(target, read_rooted_args()),
+                    }
+                } else {
+                    let target = Value::from_sym_id(SymId(sym as u32));
+                    push_scratch_gc_root(target);
+                    vm.call_for_jit(target, read_rooted_args())
+                };
+                match outcome {
+                    Ok(value) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = value.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
                     }
                 }
-            };
-            // Armed: the symbol still names the compile-time bytecode object.
-            // Try the fast path (cached leaf, native-to-native pass-through when
-            // the callee is a pure fixed-arity match — no arg marshaling at
-            // all). Fall back to the strict call on the VALUE if it can't be
-            // fast-pathed (arity / not compilable). Not armed: strict call on
-            // the SYMBOL (resolves the new binding — fset/advice take effect
-            // immediately).
-            let mut vm = Vm::from_context(ctx);
-            let outcome = if armed {
-                let target = Value::from_bits(expected as usize);
-                push_scratch_gc_root(target);
-                match vm.call_armed_callee_native(target, &slot.leaf, args_ptr, nargs) {
-                    Some(res) => res,
-                    None => vm.call_for_jit(target, read_rooted_args()),
-                }
-            } else {
-                let target = Value::from_sym_id(SymId(sym as u32));
-                push_scratch_gc_root(target);
-                vm.call_for_jit(target, read_rooted_args())
-            };
-            match outcome {
-                Ok(value) => {
-                    // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = value.bits() as i64 };
-                    STATUS_OK
-                }
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    STATUS_SIGNAL
-                }
             }
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Predicate discriminator for [`neovm_jit_pred_spec`] (baked as an iconst by
@@ -1128,52 +1378,54 @@ pub extern "C" fn neovm_jit_call_subr_spec(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
-    let nargs = nargs as usize;
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    if let Err(flow) = ctx.maybe_quit() {
-        stash_pending_flow(flow);
-        return STATUS_SIGNAL;
-    }
-    // SAFETY: slot points into the executing leaf's spec_slots.
-    let slot = unsafe { &*(slot as *const SpecSlot) };
-    if !subr_spec_armed(ctx, sym, expected, slot) {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
         #[cfg(debug_assertions)]
-        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-        return STATUS_NEED_GENERIC;
-    }
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-    let target = Value::from_bits(expected as usize);
-    let saved = save_scratch_gc_roots();
-    // Push the args straight onto bc_buf (GC-traced → rooted across the subr,
-    // and the stack-args dispatcher reads them in place — no LispArgVec). The
-    // callee needs no root: static subr objects are Box::leak'd, never freed.
-    let args_start = ctx.bc_buf.len();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` argument words at
-        // `args_ptr` (its call-args slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        ctx.bc_buf.push(v);
-    }
-    let mut vm = Vm::from_context(ctx);
-    let res = vm.call_spec_subr_stack(SymId(sym as u32), target, args_start, nargs);
-    vm.bc_buf_truncate(args_start);
-    let status = match res {
-        Ok(value) => {
-            // SAFETY: `out` is the generated code's result stack slot.
-            unsafe { *out = value.bits() as i64 };
-            STATUS_OK
-        }
-        Err(flow) => {
+        SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        let nargs = nargs as usize;
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        if let Err(flow) = ctx.maybe_quit() {
             stash_pending_flow(flow);
-            STATUS_SIGNAL
+            return STATUS_SIGNAL;
         }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+        // SAFETY: slot points into the executing leaf's spec_slots.
+        let slot = unsafe { &*(slot as *const SpecSlot) };
+        if !subr_spec_armed(ctx, sym, expected, slot) {
+            #[cfg(debug_assertions)]
+            SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+            return STATUS_NEED_GENERIC;
+        }
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+        let target = Value::from_bits(expected as usize);
+        let saved = save_scratch_gc_roots();
+        // Push the args straight onto bc_buf (GC-traced → rooted across the subr,
+        // and the stack-args dispatcher reads them in place — no LispArgVec). The
+        // callee needs no root: static subr objects are Box::leak'd, never freed.
+        let args_start = ctx.bc_buf.len();
+        for i in 0..nargs {
+            // SAFETY: the generated code stored exactly `nargs` argument words at
+            // `args_ptr` (its call-args slot) immediately before this call.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            ctx.bc_buf.push(v);
+        }
+        let mut vm = Vm::from_context(ctx);
+        let res = vm.call_spec_subr_stack(SymId(sym as u32), target, args_start, nargs);
+        vm.bc_buf_truncate(args_start);
+        let status = match res {
+            Ok(value) => {
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = value.bits() as i64 };
+                STATUS_OK
+            }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// Speculated PREDICATE call: `recordp` / `symbol-with-pos-p` sites collapse
@@ -1205,36 +1457,38 @@ pub extern "C" fn neovm_jit_pred_spec(
     a: i64,
     out: *mut i64,
 ) -> i64 {
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    if let Err(flow) = ctx.maybe_quit() {
-        stash_pending_flow(flow);
-        return STATUS_SIGNAL;
-    }
-    // SAFETY: slot points into the executing leaf's spec_slots.
-    let slot = unsafe { &*(slot as *const SpecSlot) };
-    if !subr_spec_armed(ctx, sym, expected, slot) {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
         #[cfg(debug_assertions)]
-        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-        return STATUS_NEED_GENERIC;
-    }
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-    let v = Value::from_bits(a as usize);
-    // `is_record`/`is_symbol_with_pos` = tag check BEFORE any header deref
-    // (`veclike_type` guards on `is_veclike` first) — safe on immediates.
-    let truth = if kind == PRED_KIND_RECORDP {
-        v.is_record()
-    } else {
-        debug_assert_eq!(kind, PRED_KIND_SYMBOL_WITH_POS_P);
-        v.is_symbol_with_pos()
-    };
-    let result = if truth { Value::T } else { Value::NIL };
-    // SAFETY: `out` is the generated code's result stack slot.
-    unsafe { *out = result.bits() as i64 };
-    STATUS_OK
+        SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        if let Err(flow) = ctx.maybe_quit() {
+            stash_pending_flow(flow);
+            return STATUS_SIGNAL;
+        }
+        // SAFETY: slot points into the executing leaf's spec_slots.
+        let slot = unsafe { &*(slot as *const SpecSlot) };
+        if !subr_spec_armed(ctx, sym, expected, slot) {
+            #[cfg(debug_assertions)]
+            SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+            return STATUS_NEED_GENERIC;
+        }
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+        let v = Value::from_bits(a as usize);
+        // `is_record`/`is_symbol_with_pos` = tag check BEFORE any header deref
+        // (`veclike_type` guards on `is_veclike` first) — safe on immediates.
+        let truth = if kind == PRED_KIND_RECORDP {
+            v.is_record()
+        } else {
+            debug_assert_eq!(kind, PRED_KIND_SYMBOL_WITH_POS_P);
+            v.is_symbol_with_pos()
+        };
+        let result = if truth { Value::T } else { Value::NIL };
+        // SAFETY: `out` is the generated code's result stack slot.
+        unsafe { *out = result.bits() as i64 };
+        STATUS_OK
+    })
 }
 
 /// Speculated `equal-including-properties` call (2 args): when armed and the
@@ -1265,26 +1519,28 @@ pub extern "C" fn neovm_jit_eq_incl_props_spec(
     b: i64,
     out: *mut i64,
 ) -> i64 {
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    if let Err(flow) = ctx.maybe_quit() {
-        stash_pending_flow(flow);
-        return STATUS_SIGNAL;
-    }
-    // SAFETY: slot points into the executing leaf's spec_slots.
-    let slot = unsafe { &*(slot as *const SpecSlot) };
-    if subr_spec_armed(ctx, sym, expected, slot) && a == b {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
         #[cfg(debug_assertions)]
-        SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-        // SAFETY: `out` is the generated code's result stack slot.
-        unsafe { *out = Value::T.bits() as i64 };
-        return STATUS_OK;
-    }
-    #[cfg(debug_assertions)]
-    SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-    STATUS_NEED_GENERIC
+        SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        if let Err(flow) = ctx.maybe_quit() {
+            stash_pending_flow(flow);
+            return STATUS_SIGNAL;
+        }
+        // SAFETY: slot points into the executing leaf's spec_slots.
+        let slot = unsafe { &*(slot as *const SpecSlot) };
+        if subr_spec_armed(ctx, sym, expected, slot) && a == b {
+            #[cfg(debug_assertions)]
+            SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = Value::T.bits() as i64 };
+            return STATUS_OK;
+        }
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        STATUS_NEED_GENERIC
+    })
 }
 
 /// R2 Tier-B CallBuiltinSym intrinsic (dispatch-skip): reproduce the
@@ -1342,69 +1598,71 @@ pub extern "C" fn neovm_jit_cbsym_spec(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    #[cfg(debug_assertions)]
-    CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
-    let nargs = nargs as usize;
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let sym_id = SymId(sym as u32);
-    // Advice/fset/override-immune: NO epoch guard. Re-read the live static entry
-    // (in-place-rewrite safe). Not a plain builtin now → bounce so the general
-    // shim reproduces void/invalid-function exactly. FORCE_CBSYM_GENERIC forces
-    // every classified site down this bounce (harness).
-    let armed = !force_cbsym_generic()
-        && lookup_global_subr_entry(sym_id)
-            .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
-    if !armed {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
         #[cfg(debug_assertions)]
-        CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-        return STATUS_NEED_GENERIC;
-    }
-    #[cfg(debug_assertions)]
-    CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-    // The name-canonical SUBR value the arm's funcall_general dispatches on.
-    let subr_value = Value::subr_from_sym_id(sym_id);
-    let saved = save_scratch_gc_roots();
-    // Root the args on the GC-traced bc_buf (like neovm_jit_call_subr_spec),
-    // then build the exact-length arg vector funcall_general copies into its
-    // backtrace frame.
-    let args_start = ctx.bc_buf.len();
-    for i in 0..nargs {
-        // SAFETY: the generated code stored exactly `nargs` argument words at
-        // `args_ptr` (its call-args slot) immediately before this call.
-        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
-        ctx.bc_buf.push(v);
-    }
-    let args: LispArgVec = ctx.bc_buf[args_start..args_start + nargs]
-        .iter()
-        .copied()
-        .collect();
-    let res = ctx.funcall_general(subr_value, args);
-    ctx.bc_buf.truncate(args_start);
-    let status = match res {
-        Ok(value) => {
-            // Quit poll AFTER the op (GNU Op::CallBuiltinSym order; the arm polls
-            // maybe_quit only once the result is computed, and never on the
-            // error path).
-            match ctx.maybe_quit() {
-                Ok(()) => {
-                    // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = value.bits() as i64 };
-                    STATUS_OK
-                }
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    STATUS_SIGNAL
+        CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        let nargs = nargs as usize;
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let sym_id = SymId(sym as u32);
+        // Advice/fset/override-immune: NO epoch guard. Re-read the live static entry
+        // (in-place-rewrite safe). Not a plain builtin now → bounce so the general
+        // shim reproduces void/invalid-function exactly. FORCE_CBSYM_GENERIC forces
+        // every classified site down this bounce (harness).
+        let armed = !force_cbsym_generic()
+            && lookup_global_subr_entry(sym_id)
+                .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+        if !armed {
+            #[cfg(debug_assertions)]
+            CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+            return STATUS_NEED_GENERIC;
+        }
+        #[cfg(debug_assertions)]
+        CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+        // The name-canonical SUBR value the arm's funcall_general dispatches on.
+        let subr_value = Value::subr_from_sym_id(sym_id);
+        let saved = save_scratch_gc_roots();
+        // Root the args on the GC-traced bc_buf (like neovm_jit_call_subr_spec),
+        // then build the exact-length arg vector funcall_general copies into its
+        // backtrace frame.
+        let args_start = ctx.bc_buf.len();
+        for i in 0..nargs {
+            // SAFETY: the generated code stored exactly `nargs` argument words at
+            // `args_ptr` (its call-args slot) immediately before this call.
+            let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+            ctx.bc_buf.push(v);
+        }
+        let args: LispArgVec = ctx.bc_buf[args_start..args_start + nargs]
+            .iter()
+            .copied()
+            .collect();
+        let res = ctx.funcall_general(subr_value, args);
+        ctx.bc_buf.truncate(args_start);
+        let status = match res {
+            Ok(value) => {
+                // Quit poll AFTER the op (GNU Op::CallBuiltinSym order; the arm polls
+                // maybe_quit only once the result is computed, and never on the
+                // error path).
+                match ctx.maybe_quit() {
+                    Ok(()) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = value.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
+                    }
                 }
             }
-        }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    };
-    restore_scratch_gc_roots(saved);
-    status
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
+        };
+        restore_scratch_gc_roots(saved);
+        status
+    })
 }
 
 /// The fixed arity of a Tier-A CallBuiltinSym read (all 0-arg except
@@ -1459,112 +1717,114 @@ pub extern "C" fn neovm_jit_cbsym_read(
     nargs: i64,
     out: *mut i64,
 ) -> i64 {
-    #[cfg(debug_assertions)]
-    CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
-    let which = which as u8;
-    let nargs = nargs as usize;
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let sym_id = SymId(sym as u32);
-    // Advice/fset/override-immune: NO epoch guard. Bounce (general path) when the
-    // static entry is no longer a plain builtin, the arity is unexpected, or the
-    // harness forces it.
-    let armed = !force_cbsym_generic()
-        && nargs == cbsym_read_expected_nargs(which)
-        && lookup_global_subr_entry(sym_id)
-            .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
-    if !armed {
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
         #[cfg(debug_assertions)]
-        CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-        return STATUS_NEED_GENERIC;
-    }
-    // current-buffer: NEVER allocate. Read the already-materialized buffer value;
-    // bounce when it was never made (general path -> make_buffer, rooted).
-    if which == CBSYM_A_CURRENT_BUFFER {
-        let Some(buf_id) = ctx.buffers.current_buffer().map(|b| b.id) else {
+        CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+        let which = which as u8;
+        let nargs = nargs as usize;
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let sym_id = SymId(sym as u32);
+        // Advice/fset/override-immune: NO epoch guard. Bounce (general path) when the
+        // static entry is no longer a plain builtin, the arity is unexpected, or the
+        // harness forces it.
+        let armed = !force_cbsym_generic()
+            && nargs == cbsym_read_expected_nargs(which)
+            && lookup_global_subr_entry(sym_id)
+                .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+        if !armed {
             #[cfg(debug_assertions)]
             CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
             return STATUS_NEED_GENERIC;
-        };
-        return match crate::tagged::gc::with_tagged_heap(|h| h.buffer_value(buf_id)) {
-            Some(v) => {
-                #[cfg(debug_assertions)]
-                CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-                // SAFETY: `out` is the generated code's result stack slot.
-                unsafe { *out = v.bits() as i64 };
-                STATUS_OK
-            }
-            None => {
+        }
+        // current-buffer: NEVER allocate. Read the already-materialized buffer value;
+        // bounce when it was never made (general path -> make_buffer, rooted).
+        if which == CBSYM_A_CURRENT_BUFFER {
+            let Some(buf_id) = ctx.buffers.current_buffer().map(|b| b.id) else {
                 #[cfg(debug_assertions)]
                 CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
-                STATUS_NEED_GENERIC
-            }
-        };
-    }
-    #[cfg(debug_assertions)]
-    CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
-    // DELEGATE to the builtin body (GC-free OK path). match-beginning/end read
-    // ctx.match_data + ctx.buffers and do the byte→char conversion, so a
-    // register-read reimplementation would return BYTE offsets = WRONG.
-    use crate::emacs_core::builtins::{buffers, search};
-    use crate::emacs_core::{editfns, navigation};
-    let res = match which {
-        CBSYM_A_POINT => buffers::builtin_point_0(ctx),
-        CBSYM_A_POINT_MIN => buffers::builtin_point_min_0(ctx),
-        CBSYM_A_POINT_MAX => buffers::builtin_point_max_0(ctx),
-        CBSYM_A_BOLP => navigation::builtin_bolp(ctx, Vec::new()),
-        CBSYM_A_EOLP => navigation::builtin_eolp(ctx, Vec::new()),
-        CBSYM_A_BOBP => navigation::builtin_bobp(ctx, Vec::new()),
-        CBSYM_A_EOBP => navigation::builtin_eobp(ctx, Vec::new()),
-        CBSYM_A_FOLLOWING_CHAR => editfns::builtin_following_char_0(ctx),
-        CBSYM_A_PRECEDING_CHAR => editfns::builtin_preceding_char(ctx, Vec::new()),
-        // Tier-A char-after is 0-arg (nargs gated above): reads at point.
-        CBSYM_A_CHAR_AFTER => buffers::builtin_char_after(ctx, Vec::new()),
-        CBSYM_A_MATCH_BEGINNING => {
-            // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
-            let group = Value::from_bits(unsafe { *args_ptr } as usize);
-            search::builtin_match_beginning_with_state(
-                Some(&ctx.buffers),
-                &ctx.match_data,
-                &[group],
-            )
-        }
-        CBSYM_A_MATCH_END => {
-            // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
-            let group = Value::from_bits(unsafe { *args_ptr } as usize);
-            search::builtin_match_end_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
-        }
-        // Unknown discriminant (unreachable for a classified site): bounce.
-        _ => return STATUS_NEED_GENERIC,
-    };
-    // Run the SAME signal post-processing the interpreter arm gets for free via
-    // funcall_general (`dispatch_signal_result_if_needed`): a no-op on Ok (stays
-    // GC-free), and on a signal it runs the debugger dispatch + sets
-    // `search_complete` — so the Err Flow is byte-identical to the interpreter's
-    // (which routes match-beginning/end through funcall_general). The residual
-    // stack is discarded on STATUS_SIGNAL, so any allocation here is UAF-safe.
-    let res = ctx.dispatch_signal_result_if_needed(res);
-    match res {
-        Ok(value) => {
-            // Quit poll AFTER (GNU CallBuiltinSym order). maybe_quit's Flow is
-            // Rust-heap, so this stays GC-free.
-            match ctx.maybe_quit() {
-                Ok(()) => {
+                return STATUS_NEED_GENERIC;
+            };
+            return match crate::tagged::gc::with_tagged_heap(|h| h.buffer_value(buf_id)) {
+                Some(v) => {
+                    #[cfg(debug_assertions)]
+                    CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
                     // SAFETY: `out` is the generated code's result stack slot.
-                    unsafe { *out = value.bits() as i64 };
+                    unsafe { *out = v.bits() as i64 };
                     STATUS_OK
                 }
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    STATUS_SIGNAL
+                None => {
+                    #[cfg(debug_assertions)]
+                    CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+                    STATUS_NEED_GENERIC
+                }
+            };
+        }
+        #[cfg(debug_assertions)]
+        CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+        // DELEGATE to the builtin body (GC-free OK path). match-beginning/end read
+        // ctx.match_data + ctx.buffers and do the byte→char conversion, so a
+        // register-read reimplementation would return BYTE offsets = WRONG.
+        use crate::emacs_core::builtins::{buffers, search};
+        use crate::emacs_core::{editfns, navigation};
+        let res = match which {
+            CBSYM_A_POINT => buffers::builtin_point_0(ctx),
+            CBSYM_A_POINT_MIN => buffers::builtin_point_min_0(ctx),
+            CBSYM_A_POINT_MAX => buffers::builtin_point_max_0(ctx),
+            CBSYM_A_BOLP => navigation::builtin_bolp(ctx, Vec::new()),
+            CBSYM_A_EOLP => navigation::builtin_eolp(ctx, Vec::new()),
+            CBSYM_A_BOBP => navigation::builtin_bobp(ctx, Vec::new()),
+            CBSYM_A_EOBP => navigation::builtin_eobp(ctx, Vec::new()),
+            CBSYM_A_FOLLOWING_CHAR => editfns::builtin_following_char_0(ctx),
+            CBSYM_A_PRECEDING_CHAR => editfns::builtin_preceding_char(ctx, Vec::new()),
+            // Tier-A char-after is 0-arg (nargs gated above): reads at point.
+            CBSYM_A_CHAR_AFTER => buffers::builtin_char_after(ctx, Vec::new()),
+            CBSYM_A_MATCH_BEGINNING => {
+                // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
+                let group = Value::from_bits(unsafe { *args_ptr } as usize);
+                search::builtin_match_beginning_with_state(
+                    Some(&ctx.buffers),
+                    &ctx.match_data,
+                    &[group],
+                )
+            }
+            CBSYM_A_MATCH_END => {
+                // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
+                let group = Value::from_bits(unsafe { *args_ptr } as usize);
+                search::builtin_match_end_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
+            }
+            // Unknown discriminant (unreachable for a classified site): bounce.
+            _ => return STATUS_NEED_GENERIC,
+        };
+        // Run the SAME signal post-processing the interpreter arm gets for free via
+        // funcall_general (`dispatch_signal_result_if_needed`): a no-op on Ok (stays
+        // GC-free), and on a signal it runs the debugger dispatch + sets
+        // `search_complete` — so the Err Flow is byte-identical to the interpreter's
+        // (which routes match-beginning/end through funcall_general). The residual
+        // stack is discarded on STATUS_SIGNAL, so any allocation here is UAF-safe.
+        let res = ctx.dispatch_signal_result_if_needed(res);
+        match res {
+            Ok(value) => {
+                // Quit poll AFTER (GNU CallBuiltinSym order). maybe_quit's Flow is
+                // Rust-heap, so this stays GC-free.
+                match ctx.maybe_quit() {
+                    Ok(()) => {
+                        // SAFETY: `out` is the generated code's result stack slot.
+                        unsafe { *out = value.bits() as i64 };
+                        STATUS_OK
+                    }
+                    Err(flow) => {
+                        stash_pending_flow(flow);
+                        STATUS_SIGNAL
+                    }
                 }
             }
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
         }
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
-        }
-    }
+    })
 }
 
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
@@ -1574,10 +1834,12 @@ pub extern "C" fn neovm_jit_cbsym_read(
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
-    stash_pending_flow(Flow::Throw {
-        tag: Value::from_bits(tag as usize),
-        value: Value::from_bits(value as usize),
-    });
+    jit_shim_contain!(no_ctx, (), {
+        stash_pending_flow(Flow::Throw {
+            tag: Value::from_bits(tag as usize),
+            value: Value::from_bits(value as usize),
+        });
+    })
 }
 
 /// Slow path for `integerp` when the value isn't a fixnum: bignums are
@@ -1792,133 +2054,142 @@ pub extern "C" fn neovm_jit_pop_handler(ctx: *mut u8) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64) -> i64 {
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let ours = ours as usize;
-    let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
-    loop {
-        match flow {
-            Flow::ThreadBlocked { .. } => {
-                stash_pending_flow(flow);
-                return -1;
-            }
-            Flow::Throw { tag, value } => {
-                let Some(selected) = ctx.matching_catch_resume(&tag) else {
-                    // No matching catch anywhere: unwind all our frames and
-                    // propagate `no-catch` (resume_nonlocal parity).
-                    for _ in 0..ours {
-                        ctx.pop_condition_frame();
-                    }
-                    stash_pending_flow(signal(LispCondition::NoCatch, vec![tag, value]));
+    jit_shim_contain!(ctx, -1, {
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let ours = ours as usize;
+        // A contained panic skipped the panicked extent's cleanup; heal its
+        // residue against the leaf-entry bases BEFORE taking/matching, so
+        // the count-based pops below and the innermost-match scan operate on
+        // exactly this leaf's own frames.
+        if shim_panic_pending() {
+            heal_shim_panic_residue_before_match(ctx, ours);
+        }
+        let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
+        loop {
+            match flow {
+                Flow::ThreadBlocked { .. } => {
+                    stash_pending_flow(flow);
                     return -1;
-                };
-                for m in 0..ours {
-                    let frame = ctx
-                        .pop_condition_frame()
-                        .expect("JIT handler frames missing from condition stack");
-                    let resume = condition_frame_resume(frame);
-                    if resume == selected {
-                        let ResumeTarget::VmCatch {
-                            spec_depth,
-                            bind_stack_len,
-                            ..
-                        } = resume
-                        else {
-                            unreachable!("JIT catch frame carries a VmCatch resume");
-                        };
-                        // unbind_to may run unwind-protect cleanups (lisp ->
-                        // GC); keep the carried values alive across it.
-                        let saved = save_scratch_gc_roots();
-                        push_scratch_gc_root(tag);
-                        push_scratch_gc_root(value);
-                        ctx.unbind_to(spec_depth);
-                        JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
-                        restore_scratch_gc_roots(saved);
-                        // SAFETY: `out` is the generated code's result slot.
-                        unsafe { *out = value.bits() as i64 };
-                        return m as i64;
-                    }
                 }
-                // The selected catch belongs to an outer frame: ours are all
-                // popped; rethrow for the frame unwind + outer handlers.
-                stash_pending_flow(Flow::Throw { tag, value });
-                return -1;
-            }
-            Flow::Signal(sig) => {
-                if sig.symbol == intern("kill-emacs") {
-                    // Interpreter parity: propagate immediately, frames left
-                    // to the frame-exit truncation.
+                Flow::Throw { tag, value } => {
+                    let Some(selected) = ctx.matching_catch_resume(&tag) else {
+                        // No matching catch anywhere: unwind all our frames and
+                        // propagate `no-catch` (resume_nonlocal parity).
+                        for _ in 0..ours {
+                            ctx.pop_condition_frame();
+                        }
+                        stash_pending_flow(signal(LispCondition::NoCatch, vec![tag, value]));
+                        return -1;
+                    };
+                    for m in 0..ours {
+                        let frame = ctx
+                            .pop_condition_frame()
+                            .expect("JIT handler frames missing from condition stack");
+                        let resume = condition_frame_resume(frame);
+                        if resume == selected {
+                            let ResumeTarget::VmCatch {
+                                spec_depth,
+                                bind_stack_len,
+                                ..
+                            } = resume
+                            else {
+                                unreachable!("JIT catch frame carries a VmCatch resume");
+                            };
+                            // unbind_to may run unwind-protect cleanups (lisp ->
+                            // GC); keep the carried values alive across it.
+                            let saved = save_scratch_gc_roots();
+                            push_scratch_gc_root(tag);
+                            push_scratch_gc_root(value);
+                            ctx.unbind_to(spec_depth);
+                            JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
+                            restore_scratch_gc_roots(saved);
+                            // SAFETY: `out` is the generated code's result slot.
+                            unsafe { *out = value.bits() as i64 };
+                            return m as i64;
+                        }
+                    }
+                    // The selected catch belongs to an outer frame: ours are all
+                    // popped; rethrow for the frame unwind + outer handlers.
+                    stash_pending_flow(Flow::Throw { tag, value });
+                    return -1;
+                }
+                Flow::Signal(sig) => {
+                    if sig.symbol == intern("kill-emacs") {
+                        // Interpreter parity: propagate immediately, frames left
+                        // to the frame-exit truncation.
+                        stash_pending_flow(Flow::Signal(sig));
+                        return -1;
+                    }
+                    // Signal hooks / handler-bind handlers may run lisp and GC;
+                    // root the signal payload across the dispatch.
+                    let saved = save_scratch_gc_roots();
+                    push_scratch_gc_root(Value::from_sym_id(sig.symbol));
+                    for v in sig.data.iter().copied() {
+                        push_scratch_gc_root(v);
+                    }
+                    if let Some(raw) = sig.raw_data {
+                        push_scratch_gc_root(raw);
+                    }
+                    let dispatched = ctx.dispatch_signal_if_needed(sig);
+                    restore_scratch_gc_roots(saved);
+                    let sig = match dispatched {
+                        Ok(sig) => sig,
+                        // A hook/handler raised: restart matching on the new flow
+                        // (resume_nonlocal recurses here).
+                        Err(next) => {
+                            flow = next;
+                            continue;
+                        }
+                    };
+                    let Some(selected) = sig.selected_resume.clone() else {
+                        for _ in 0..ours {
+                            ctx.pop_condition_frame();
+                        }
+                        stash_pending_flow(Flow::Signal(sig));
+                        return -1;
+                    };
+                    for m in 0..ours {
+                        let frame = ctx
+                            .pop_condition_frame()
+                            .expect("JIT handler frames missing from condition stack");
+                        let resume = condition_frame_resume(frame);
+                        if resume == selected {
+                            let ResumeTarget::VmConditionCase {
+                                spec_depth,
+                                bind_stack_len,
+                                ..
+                            } = resume
+                            else {
+                                unreachable!(
+                                    "JIT condition-case frame carries a VmConditionCase resume"
+                                );
+                            };
+                            // unbind_to runs cleanups and the error object below
+                            // allocates: root the signal payload throughout.
+                            let saved = save_scratch_gc_roots();
+                            push_scratch_gc_root(Value::from_sym_id(sig.symbol));
+                            for v in sig.data.iter().copied() {
+                                push_scratch_gc_root(v);
+                            }
+                            if let Some(raw) = sig.raw_data {
+                                push_scratch_gc_root(raw);
+                            }
+                            ctx.unbind_to(spec_depth);
+                            JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
+                            let binding = make_signal_binding_value(&sig);
+                            restore_scratch_gc_roots(saved);
+                            // SAFETY: `out` is the generated code's result slot.
+                            unsafe { *out = binding.bits() as i64 };
+                            return m as i64;
+                        }
+                    }
                     stash_pending_flow(Flow::Signal(sig));
                     return -1;
                 }
-                // Signal hooks / handler-bind handlers may run lisp and GC;
-                // root the signal payload across the dispatch.
-                let saved = save_scratch_gc_roots();
-                push_scratch_gc_root(Value::from_sym_id(sig.symbol));
-                for v in sig.data.iter().copied() {
-                    push_scratch_gc_root(v);
-                }
-                if let Some(raw) = sig.raw_data {
-                    push_scratch_gc_root(raw);
-                }
-                let dispatched = ctx.dispatch_signal_if_needed(sig);
-                restore_scratch_gc_roots(saved);
-                let sig = match dispatched {
-                    Ok(sig) => sig,
-                    // A hook/handler raised: restart matching on the new flow
-                    // (resume_nonlocal recurses here).
-                    Err(next) => {
-                        flow = next;
-                        continue;
-                    }
-                };
-                let Some(selected) = sig.selected_resume.clone() else {
-                    for _ in 0..ours {
-                        ctx.pop_condition_frame();
-                    }
-                    stash_pending_flow(Flow::Signal(sig));
-                    return -1;
-                };
-                for m in 0..ours {
-                    let frame = ctx
-                        .pop_condition_frame()
-                        .expect("JIT handler frames missing from condition stack");
-                    let resume = condition_frame_resume(frame);
-                    if resume == selected {
-                        let ResumeTarget::VmConditionCase {
-                            spec_depth,
-                            bind_stack_len,
-                            ..
-                        } = resume
-                        else {
-                            unreachable!(
-                                "JIT condition-case frame carries a VmConditionCase resume"
-                            );
-                        };
-                        // unbind_to runs cleanups and the error object below
-                        // allocates: root the signal payload throughout.
-                        let saved = save_scratch_gc_roots();
-                        push_scratch_gc_root(Value::from_sym_id(sig.symbol));
-                        for v in sig.data.iter().copied() {
-                            push_scratch_gc_root(v);
-                        }
-                        if let Some(raw) = sig.raw_data {
-                            push_scratch_gc_root(raw);
-                        }
-                        ctx.unbind_to(spec_depth);
-                        JIT_BIND_STACK.with(|s| s.borrow_mut().truncate(bind_stack_len));
-                        let binding = make_signal_binding_value(&sig);
-                        restore_scratch_gc_roots(saved);
-                        // SAFETY: `out` is the generated code's result slot.
-                        unsafe { *out = binding.bits() as i64 };
-                        return m as i64;
-                    }
-                }
-                stash_pending_flow(Flow::Signal(sig));
-                return -1;
             }
         }
-    }
+    })
 }
 
 /// `Op::Switch` lookup result: the dispatch value is not in the jump table —
@@ -1938,33 +2209,35 @@ const JIT_SWITCH_STALE: i64 = -2;
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i64 {
-    let table = Value::from_bits(table as usize);
-    let dispatch = Value::from_bits(dispatch as usize);
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    let Some(ht) = table.as_hash_table() else {
-        // Statically verified a hash table; only runtime mutation of the
-        // constant pool itself could change that.
-        stash_pending_flow(signal(
-            "error",
-            vec![Value::string("jit: switch jump table mutated at runtime")],
-        ));
-        return JIT_SWITCH_STALE;
-    };
-    let key = dispatch.to_hash_key_swp(&ht.test, ctx.symbols_with_pos_enabled);
-    match ht.data.get(&key).copied() {
-        Some(v) => match v.kind() {
-            ValueKind::Fixnum(addr) if addr >= 0 => addr,
-            _ => {
-                stash_pending_flow(signal(
-                    "error",
-                    vec![Value::string("jit: switch jump table mutated at runtime")],
-                ));
-                JIT_SWITCH_STALE
-            }
-        },
-        None => JIT_SWITCH_MISS,
-    }
+    jit_shim_contain!(ctx, JIT_SWITCH_STALE, {
+        let table = Value::from_bits(table as usize);
+        let dispatch = Value::from_bits(dispatch as usize);
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        let Some(ht) = table.as_hash_table() else {
+            // Statically verified a hash table; only runtime mutation of the
+            // constant pool itself could change that.
+            stash_pending_flow(signal(
+                "error",
+                vec![Value::string("jit: switch jump table mutated at runtime")],
+            ));
+            return JIT_SWITCH_STALE;
+        };
+        let key = dispatch.to_hash_key_swp(&ht.test, ctx.symbols_with_pos_enabled);
+        match ht.data.get(&key).copied() {
+            Some(v) => match v.kind() {
+                ValueKind::Fixnum(addr) if addr >= 0 => addr,
+                _ => {
+                    stash_pending_flow(signal(
+                        "error",
+                        vec![Value::string("jit: switch jump table mutated at runtime")],
+                    ));
+                    JIT_SWITCH_STALE
+                }
+            },
+            None => JIT_SWITCH_MISS,
+        }
+    })
 }
 
 /// Cold path for a switch hit whose raw address is not in the statically
@@ -1974,10 +2247,12 @@ pub extern "C" fn neovm_jit_switch(ctx: *mut u8, dispatch: i64, table: i64) -> i
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_switch_stale() {
-    stash_pending_flow(signal(
-        "error",
-        vec![Value::string("jit: switch jump table mutated at runtime")],
-    ));
+    jit_shim_contain!(no_ctx, (), {
+        stash_pending_flow(signal(
+            "error",
+            vec![Value::string("jit: switch jump table mutated at runtime")],
+        ));
+    })
 }
 
 /// Back-edge service poll: GC safepoint + `maybe_quit`, via the same shared
@@ -1989,15 +2264,17 @@ pub extern "C" fn neovm_jit_switch_stale() {
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_backedge(ctx: *mut u8) -> i64 {
-    // SAFETY: see neovm_jit_call's function-level contract.
-    let ctx = unsafe { &mut *(ctx as *mut Context) };
-    match ctx.bytecode_branch_maybe_gc_and_quit() {
-        Ok(()) => STATUS_OK,
-        Err(flow) => {
-            stash_pending_flow(flow);
-            STATUS_SIGNAL
+    jit_shim_contain!(ctx, STATUS_SIGNAL, {
+        // SAFETY: see neovm_jit_call's function-level contract.
+        let ctx = unsafe { &mut *(ctx as *mut Context) };
+        match ctx.bytecode_branch_maybe_gc_and_quit() {
+            Ok(()) => STATUS_OK,
+            Err(flow) => {
+                stash_pending_flow(flow);
+                STATUS_SIGNAL
+            }
         }
-    }
+    })
 }
 
 /// Why a bytecode body could not be compiled by this baseline tier.
@@ -2621,6 +2898,25 @@ impl CompiledLeaf {
         } else {
             None
         };
+        // Leaf-entry bases for contained-shim-panic healing: recorded once
+        // per native call (length/scalar reads) and published for the
+        // duration of the call, so the healing points — the match shim and
+        // the exit path below — restore against THIS leaf's entry. Nested
+        // dispatch (a callee leaf run from inside one of our shims) replaces
+        // and restores the slot, and a callee's contained panic never
+        // reaches us as a panic (its dispatcher materializes it into an
+        // ordinary `Err(Flow)`), so the innermost-leaf value is always the
+        // right one. Null vmctx (shim-free test bodies) records nothing.
+        let bases = if vmctx.is_null() {
+            None
+        } else {
+            // SAFETY: as above — length/scalar reads only.
+            Some(JitLeafBases {
+                snap: unsafe { (*(vmctx as *const Context)).module_boundary_snapshot() },
+                roots: save_scratch_gc_roots(),
+            })
+        };
+        let outer_bases = CURRENT_LEAF_BASES.with(|b| b.replace(bases));
         // R1c-sidecar: the unified 4-param entry ABI. AOT code reads its
         // per-thread bases from `sidecar`; JIT code declares the param but never
         // reads it (its bases are baked `iconst`s), so `null` is safe for JIT.
@@ -2636,6 +2932,26 @@ impl CompiledLeaf {
                 core::mem::transmute(self.entry);
             f(vmctx, args_ptr, &mut out as *mut i64, sidecar)
         };
+        CURRENT_LEAF_BASES.with(|b| b.set(outer_bases));
+        // Sentinel discipline: a contained panic always routes the generated
+        // code to its signal path, so the marker can only be live here on a
+        // STATUS_SIGNAL exit (on the match path the take already consumed it).
+        debug_assert!(
+            status == STATUS_SIGNAL || !shim_panic_pending(),
+            "contained shim panic must exit its leaf via STATUS_SIGNAL"
+        );
+        // Sweep the scratch-root residue of a contained panic once the leaf
+        // whose extent held it exits (any exit — a leaf-locally caught panic
+        // leaves via STATUS_OK much later). A floor below our entry is an
+        // outer leaf's residue: leave it set for that leaf's own exit.
+        if let Some(b) = &bases {
+            if let Some(floor) = PENDING_ROOT_SWEEP_FLOOR.with(|f| f.get()) {
+                if floor >= b.roots {
+                    restore_scratch_gc_roots(b.roots);
+                    PENDING_ROOT_SWEEP_FLOOR.with(|f| f.set(None));
+                }
+            }
+        }
         if status == STATUS_DEOPT_AT {
             // Precise deopt: NO frame unwind — the resumed interpreter frame
             // takes ownership of the registered binds/handlers and unwinds to
@@ -2687,6 +3003,23 @@ impl CompiledLeaf {
                 spec_base,
                 cond_base,
             };
+        }
+        // A contained shim panic exiting this leaf (no leaf-local handler
+        // matched it): heal the panicked extent's evaluator residue against
+        // the leaf-entry bases BEFORE the parity unwinds below run lisp
+        // (unwind-protect cleanups must not see leaked frames/drifted
+        // depths). The condition floor is the entry length — the leaf is
+        // dead, its own frames go too (subsuming the `cond_base` truncate
+        // below for this path).
+        if status == STATUS_SIGNAL && shim_panic_pending() {
+            if let Some(b) = &bases {
+                // SAFETY: the native call has returned; truncations/scalar
+                // writes only.
+                unsafe {
+                    (*(vmctx as *mut Context))
+                        .restore_jit_shim_boundary(&b.snap, b.snap.condition_len());
+                }
+            }
         }
         // cleanup_bytecode_frame parity, same order: condition frames first
         // (the specpdl unwind below can run unwind-protect cleanups — lisp
@@ -12435,5 +12768,372 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ---- Panic containment at the shim boundary ----
+
+    /// A leaf whose `Op::Call` invokes the always-registered internal panic
+    /// subr: the panic originates in host code reached through
+    /// `neovm_jit_call`, the same class a buggy builtin would raise.
+    fn panicking_call_leaf(msg: &str) -> CompiledLeaf {
+        lower_nullary_leaf(
+            &[Op::Constant(0), Op::Constant(1), Op::Call(1), Op::Return],
+            &[Value::symbol("neovm--internal-panic"), Value::string(msg)],
+        )
+        .expect("call body compiles")
+    }
+
+    #[test]
+    fn contained_shim_panic_surfaces_as_error_flow_and_vm_survives() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let leaf = panicking_call_leaf("shim-boom");
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let flow = take_pending_flow().expect("contained panic stashes a flow");
+        let Flow::Signal(sig) = flow else {
+            panic!("expected Signal, got {flow:?}");
+        };
+        assert_eq!(sig.symbol_name(), "error");
+        let msg = sig.data[0].as_str_owned().expect("string payload");
+        assert!(
+            msg.contains("neomacs internal error") && msg.contains("shim-boom"),
+            "unexpected message: {msg}"
+        );
+        // No one-shot state: containment works again.
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let _ = take_pending_flow().expect("second containment works");
+        // The evaluator survives: a normal compiled call and a full GC run.
+        let ok = lower_nullary_leaf(&[Op::Constant(0), Op::Return], &[Value::make_int(7)])
+            .expect("trivial body compiles");
+        assert_eq!(
+            ok.call(ctx_ptr, &[]),
+            NativeRun::Ok(Value::make_int(7).bits())
+        );
+        ev.funcall_general_untraced(Value::symbol("garbage-collect"), vec![])
+            .expect("garbage-collect succeeds after containment");
+    }
+
+    #[test]
+    fn contained_shim_panic_restores_boundary_state() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        // Interpreted middle function: dynamically binds, then calls the
+        // panicking subr — the panic unwinds through its LIVE interpreter
+        // frame, skipping cleanup_bytecode_frame (the bc_frames pop + depth
+        // decrement) and its Unbind. Exactly the residue the leaf-exit
+        // healing must truncate / the leaf-exit unwind must sweep.
+        let var = Value::symbol("jit-t5-dynvar");
+        let mid_sym = Value::symbol("jit-t5-middle");
+        let crate::emacs_core::value::ValueKind::Symbol(mid_id) = mid_sym.kind() else {
+            panic!("symbol expected");
+        };
+        let mut mid = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        mid.lexical = true;
+        mid.ops = vec![
+            Op::Constant(1), // 5
+            Op::VarBind(0),  // bind jit-t5-dynvar := 5 (leaked by the panic)
+            Op::Constant(2), // 'neovm--internal-panic
+            Op::Constant(3), // "mid-boom"
+            Op::Call(1),
+            Op::Unbind(1),
+            Op::Return,
+        ];
+        mid.constants = vec![
+            var,
+            Value::make_int(5),
+            Value::symbol("neovm--internal-panic"),
+            Value::string("mid-boom"),
+        ];
+        mid.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(mid_id, Value::make_bytecode(mid));
+        // The leaf binds too, so it carries has_binds: its exit parity unwind
+        // is the depth-based sweep that must also collect the middle's leaked
+        // binding (the deferred-specpdl half of the recovery contract).
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(1), // 5
+                Op::VarBind(0),  // leaf's own binding
+                Op::Constant(2), // 'jit-t5-middle
+                Op::Call(0),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[var, Value::make_int(5), mid_sym],
+        )
+        .expect("binding call body compiles");
+        let depth0 = ev.depth;
+        let frames0 = ev.bc_frames.len();
+        let buf0 = ev.bc_buf.len();
+        let cond0 = ev.condition_stack.len();
+        let spec0 = ev.specpdl.len();
+        let roots0 = crate::emacs_core::eval::save_scratch_gc_roots();
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let _ = take_pending_flow().expect("panic flow stashed");
+        assert_eq!(ev.depth, depth0, "lisp depth restored");
+        assert_eq!(ev.bc_frames.len(), frames0, "bc_frames truncated");
+        assert_eq!(ev.bc_buf.len(), buf0, "bc_buf truncated");
+        assert_eq!(
+            ev.condition_stack.len(),
+            cond0,
+            "condition frames truncated"
+        );
+        assert_eq!(
+            ev.specpdl.len(),
+            spec0,
+            "specpdl unwound (leaf bind + leaked middle bind) at leaf exit"
+        );
+        assert_eq!(
+            crate::emacs_core::eval::save_scratch_gc_roots(),
+            roots0,
+            "scratch roots restored"
+        );
+    }
+
+    #[test]
+    fn contained_shim_panic_is_caught_by_leaf_local_condition_case() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        let cond0 = ev.condition_stack.len();
+        // (condition-case around the panicking call, in the SAME compiled
+        // function): the contained panic must flow through the match shim and
+        // resume at this leaf's own handler, like any Lisp error.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::PushConditionCase(6),
+                Op::Constant(0), // 'neovm--internal-panic
+                Op::Constant(1), // "caught-locally"
+                Op::Call(1),
+                Op::PopHandler,
+                Op::Return,
+                Op::Return, // 6: handler entry [err]
+            ],
+            &[
+                Value::symbol("neovm--internal-panic"),
+                Value::string("caught-locally"),
+            ],
+        )
+        .expect("handler body compiles");
+        let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+            panic!("expected the leaf-local handler to catch the contained panic");
+        };
+        let err = Value::from_bits(bits);
+        assert_eq!(
+            err.cons_car().as_symbol_name().as_deref(),
+            Some("error"),
+            "binding is (error ...)"
+        );
+        let msg = err
+            .cons_cdr()
+            .cons_car()
+            .as_str_owned()
+            .expect("message string");
+        assert!(
+            msg.contains("neomacs internal error") && msg.contains("caught-locally"),
+            "unexpected message: {msg}"
+        );
+        assert_eq!(ev.condition_stack.len(), cond0, "handler frame consumed");
+    }
+
+    #[test]
+    fn contained_shim_panic_with_leaked_callee_handler_still_matches_leaf_handler() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        // Interpreted middle function whose OWN condition-case protects the
+        // panicking call: the Rust panic (not a Lisp signal) unwinds straight
+        // through the interpreter, so the middle's handler never runs and its
+        // condition frame is LEAKED above the leaf's — exactly the residue
+        // that would desynchronize the match shim's count-based pops and let
+        // the innermost-match scan select the dead frame. The match-entry
+        // healing must truncate it so the LEAF's handler catches.
+        let mid_sym = Value::symbol("jit-t5-shielded-middle");
+        let crate::emacs_core::value::ValueKind::Symbol(mid_id) = mid_sym.kind() else {
+            panic!("symbol expected");
+        };
+        let mut mid = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        mid.lexical = true;
+        mid.ops = vec![
+            Op::PushConditionCase(6),
+            Op::Constant(0), // 'neovm--internal-panic
+            Op::Constant(1), // "resid-boom"
+            Op::Call(1),
+            Op::PopHandler,
+            Op::Return,
+            Op::Return, // 6: mid's handler (unreachable — panics skip it)
+        ];
+        mid.constants = vec![
+            Value::symbol("neovm--internal-panic"),
+            Value::string("resid-boom"),
+        ];
+        mid.max_stack = 16;
+        ev.obarray
+            .set_symbol_function_id(mid_id, Value::make_bytecode(mid));
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::PushConditionCase(5),
+                Op::Constant(0), // 'jit-t5-shielded-middle
+                Op::Call(0),
+                Op::PopHandler,
+                Op::Return,
+                Op::Return, // 5: leaf's handler entry [err]
+            ],
+            &[mid_sym],
+        )
+        .expect("handler body compiles");
+        // Warm one round (interning, lazies) before taking the bases.
+        let NativeRun::Ok(_) = leaf.call(ctx_ptr, &[]) else {
+            panic!("leaf handler must catch the contained panic");
+        };
+        let cond0 = ev.condition_stack.len();
+        let depth0 = ev.depth;
+        let frames0 = ev.bc_frames.len();
+        let roots0 = crate::emacs_core::eval::save_scratch_gc_roots();
+        for _ in 0..2 {
+            let NativeRun::Ok(bits) = leaf.call(ctx_ptr, &[]) else {
+                panic!("leaf handler must catch the contained panic");
+            };
+            let err = Value::from_bits(bits);
+            assert_eq!(
+                err.cons_car().as_symbol_name().as_deref(),
+                Some("error"),
+                "binding is (error ...)"
+            );
+            let msg = err
+                .cons_cdr()
+                .cons_car()
+                .as_str_owned()
+                .expect("message string");
+            assert!(
+                msg.contains("neomacs internal error") && msg.contains("resid-boom"),
+                "unexpected message: {msg}"
+            );
+        }
+        assert_eq!(
+            ev.condition_stack.len(),
+            cond0,
+            "leaked callee frame truncated + leaf frame consumed, every round"
+        );
+        assert_eq!(ev.depth, depth0, "lisp depth healed at the match shim");
+        assert_eq!(
+            ev.bc_frames.len(),
+            frames0,
+            "bc_frames healed at the match shim"
+        );
+        assert_eq!(
+            crate::emacs_core::eval::save_scratch_gc_roots(),
+            roots0,
+            "root residue of locally-caught panics swept at leaf exit"
+        );
+    }
+
+    #[test]
+    fn contained_shim_panics_leave_no_residue_over_repeats() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        // A BINDING leaf: containment defers specpdl to the next depth-based
+        // unwind, which for a `has_binds` leaf is its own exit parity unwind
+        // (in production a bind-less leaf is always under an enclosing frame
+        // whose `cleanup_bytecode_frame`/handler unwind does the same sweep;
+        // this raw `leaf.call` harness has no enclosing frame, so the leaf
+        // supplies the sweep itself — the production shape, minus the middle
+        // man). The callee-dispatch backtrace entry the panic leaks each
+        // round must be collected by that unwind.
+        let leaf = lower_nullary_leaf(
+            &[
+                Op::Constant(2), // 5
+                Op::VarBind(1),  // bind jit-t5-loopvar
+                Op::Constant(0), // 'neovm--internal-panic
+                Op::Constant(3), // "looped"
+                Op::Call(1),
+                Op::Unbind(1),
+                Op::Return,
+            ],
+            &[
+                Value::symbol("neovm--internal-panic"),
+                Value::symbol("jit-t5-loopvar"),
+                Value::make_int(5),
+                Value::string("looped"),
+            ],
+        )
+        .expect("binding call body compiles");
+        // Warm one containment (interning, lazies) before taking the bases.
+        assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+        let _ = take_pending_flow();
+        let roots0 = crate::emacs_core::eval::save_scratch_gc_roots();
+        let base = (
+            ev.depth,
+            ev.bc_frames.len(),
+            ev.bc_buf.len(),
+            ev.condition_stack.len(),
+            ev.specpdl.len(),
+        );
+        for _ in 0..16 {
+            assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
+            let _ = take_pending_flow().expect("flow each iteration");
+        }
+        assert_eq!(
+            crate::emacs_core::eval::save_scratch_gc_roots(),
+            roots0,
+            "scratch-root depth stable over repeated containments"
+        );
+        assert_eq!(
+            (
+                ev.depth,
+                ev.bc_frames.len(),
+                ev.bc_buf.len(),
+                ev.condition_stack.len(),
+                ev.specpdl.len(),
+            ),
+            base,
+            "no per-containment residue"
+        );
+    }
+
+    #[test]
+    fn gc_suspect_shim_panic_is_re_raised_not_contained() {
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        ev.gc_driver_active = true;
+        let payload: Box<dyn std::any::Any + Send> = Box::new("must-flee".to_string());
+        let back = contain_jit_shim_panic(ctx_ptr, payload)
+            .expect_err("GC-suspect panic must be re-raised, not contained");
+        assert_eq!(back.downcast_ref::<String>().unwrap(), "must-flee");
+        ev.gc_driver_active = false;
+        assert!(
+            take_pending_flow().is_none(),
+            "nothing stashed on the re-raise path"
+        );
+    }
+
+    #[test]
+    fn contained_panic_wins_over_stale_pending_flow() {
+        // A shim body that stashed a real flow and THEN panicked before
+        // completing its protocol: the panic must win at take time, and both
+        // slots must be consumed.
+        let mut ev = crate::emacs_core::eval::Context::new();
+        let ctx_ptr = &mut ev as *mut crate::emacs_core::eval::Context as *mut u8;
+        stash_pending_flow(signal("arith-error", vec![]));
+        let payload: Box<dyn std::any::Any + Send> = Box::new("late-panic");
+        contain_jit_shim_panic(ctx_ptr, payload).expect("containable");
+        let flow = take_pending_flow().expect("panic flow present");
+        let Flow::Signal(sig) = flow else {
+            panic!("expected Signal");
+        };
+        assert_eq!(sig.symbol_name(), "error");
+        assert!(
+            sig.data[0]
+                .as_str_owned()
+                .expect("string payload")
+                .contains("late-panic")
+        );
+        assert!(take_pending_flow().is_none(), "both slots consumed");
     }
 }

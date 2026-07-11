@@ -582,8 +582,9 @@ fn module_signal_or_throw(priv_: &emacs_env_private) -> Result<(), Flow> {
 // modules cannot panic at all. That matches GNU, where a module crashing
 // internally crashes the editor.
 
-/// Best-effort text from a caught panic payload.
-fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+/// Best-effort text from a caught panic payload. Shared with the JIT shim
+/// boundary (`jit_shim_contain!` in jit/compile.rs).
+pub(crate) fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
     if let Some(s) = payload.downcast_ref::<&'static str>() {
         (*s).to_string()
     } else if let Some(s) = payload.downcast_ref::<String>() {
