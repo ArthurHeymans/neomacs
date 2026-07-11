@@ -201,7 +201,6 @@ impl<'a> PointerMapValidationContext<'a> {
 pub enum PresentedPointerMapError {
     UnknownAppearance(PointerAppearanceId),
     MissingRegionBehavior,
-    TooManyAppearances,
     EmptyAppearance,
     EmptyPaintSpan,
     PaintSpanOutOfRange,
