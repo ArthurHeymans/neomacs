@@ -236,10 +236,9 @@ one appearance.
 ### Future adapters
 
 Scroll bars, mode/header/tab lines, fringes, margins, toolbars, and native
-controls can publish through the same seam. Adding native controls requires a
-typed native interaction target beside the currently evaluator-owned
-`InteractionId`; it is not part of this implementation. Embedded WebKit or
-video surfaces remain adapters because they own internal hit-testing.
+controls can publish through the same seam. Scroll bars use
+`InputTarget::NativeControl` and pointer capture. Embedded WebKit or video
+surfaces remain adapters because they own internal hit-testing.
 
 The first implementation does not add gestures, drag-and-drop, help-echo
 function evaluation, or embedded-surface internal hit-testing.
