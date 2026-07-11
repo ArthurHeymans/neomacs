@@ -522,10 +522,7 @@ impl RenderApp {
                     scroll_indicators_enabled,
                     toolbar,
                 );
-                let cells = Self::build_filled_box_cursor_cells(
-                    &frame,
-                    native.scale_factor as f32,
-                );
+                let cells = Self::build_filled_box_cursor_cells(&frame, native.scale_factor as f32);
                 if let Some(rs) = render.compositor.retained_static.as_mut() {
                     rs.generation = generation;
                     rs.cursor_cells = cells;

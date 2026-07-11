@@ -231,7 +231,10 @@ fn occluded_window_retains_demand_and_does_not_present() {
     assert!(!plan.should_present);
     assert_eq!(plan.work, RenderWork::None);
     // Demand survives occlusion.
-    assert_eq!(c.active_reasons(win(1)), vec![DemandReason::CursorAnimation]);
+    assert_eq!(
+        c.active_reasons(win(1)),
+        vec![DemandReason::CursorAnimation]
+    );
     // Occluded windows contribute no wake deadline.
     c.submit_demand(
         win(1),
@@ -297,7 +300,10 @@ fn max_rate_phase_survives_interleaved_commits() {
     let _ = c.begin_frame(win(1), tick_at(now + ms(1)));
 
     // Standing resubmission lands on the anchor.
-    assert_eq!(ambient(&mut c, now + ms(2)), PacingAction::WakeAt(now + ms(100)));
+    assert_eq!(
+        ambient(&mut c, now + ms(2)),
+        PacingAction::WakeAt(now + ms(100))
+    );
 
     // An editor commit interleaves at t+30ms and renders its own frame.
     c.submit_demand(win(1), editor_commit(), now + ms(30));
@@ -315,7 +321,10 @@ fn max_rate_phase_survives_interleaved_commits() {
             layers: LayerMask::CURSOR_EFFECTS,
         }
     );
-    assert_eq!(ambient(&mut c, now + ms(102)), PacingAction::WakeAt(now + ms(200)));
+    assert_eq!(
+        ambient(&mut c, now + ms(102)),
+        PacingAction::WakeAt(now + ms(200))
+    );
 }
 
 #[test]

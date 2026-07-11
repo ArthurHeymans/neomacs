@@ -287,8 +287,7 @@ impl RenderApp {
         // renders nothing unless separate demand exists. With no WebKit view
         // there is no service wake and the loop may Wait indefinitely.
         if self.has_live_webkit_views() {
-            const WPE_SERVICE_INTERVAL: std::time::Duration =
-                std::time::Duration::from_millis(16);
+            const WPE_SERVICE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
             let service = now + WPE_SERVICE_INTERVAL;
             deadline = Some(deadline.map_or(service, |d| d.min(service)));
         }
@@ -309,9 +308,10 @@ impl RenderApp {
                 return true;
             }
             let mut any = false;
-            self.frame_windows.for_each_top_level_window(|window_state| {
-                any |= !window_state.render.floating_webkits.is_empty();
-            });
+            self.frame_windows
+                .for_each_top_level_window(|window_state| {
+                    any |= !window_state.render.floating_webkits.is_empty();
+                });
             any
         }
         #[cfg(not(feature = "wpe-webkit"))]

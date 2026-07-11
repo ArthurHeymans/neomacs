@@ -12,14 +12,19 @@
 
 #[test]
 fn offscreen_clear_readback() {
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let instance =
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
     let Ok(adapter) =
         pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
     else {
         eprintln!("SKIP: no wgpu adapter available in this environment");
         return;
     };
-    eprintln!("ADAPTER: {:?} / {:?}", adapter.get_info().name, adapter.get_info().backend);
+    eprintln!(
+        "ADAPTER: {:?} / {:?}",
+        adapter.get_info().name,
+        adapter.get_info().backend
+    );
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("probe"),
         required_features: wgpu::Features::empty(),
@@ -30,7 +35,11 @@ fn offscreen_clear_readback() {
     }))
     .expect("device");
 
-    let size = wgpu::Extent3d { width: 4, height: 4, depth_or_array_layers: 1 };
+    let size = wgpu::Extent3d {
+        width: 4,
+        height: 4,
+        depth_or_array_layers: 1,
+    };
     let tex = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("probe-tex"),
         size,
@@ -50,7 +59,12 @@ fn offscreen_clear_readback() {
                 view: &view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 }),
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 1.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
                 depth_slice: None,
@@ -68,14 +82,31 @@ fn offscreen_clear_readback() {
         mapped_at_creation: false,
     });
     enc.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-        wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(4) } },
+        wgpu::TexelCopyTextureInfo {
+            texture: &tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(256),
+                rows_per_image: Some(4),
+            },
+        },
         size,
     );
     queue.submit(std::iter::once(enc.finish()));
     let slice = buf.slice(..);
     slice.map_async(wgpu::MapMode::Read, |_| {});
-    device.poll(wgpu::PollType::Wait { submission_index: None, timeout: Some(std::time::Duration::from_secs(3)) }).expect("poll");
+    device
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(3)),
+        })
+        .expect("poll");
     let data = slice.get_mapped_range();
     let px = [data[0], data[1], data[2], data[3]];
     eprintln!("PIXEL: {:?}", px);

@@ -63,9 +63,14 @@ impl Damage {
 pub(crate) enum Invalidation {
     None,
     /// Recompose existing layer content; sample dynamic state only.
-    CompositeOnly { layers: LayerMask },
+    CompositeOnly {
+        layers: LayerMask,
+    },
     /// Repaint the named layers, then compose.
-    RepaintLayers { layers: LayerMask, damage: Damage },
+    RepaintLayers {
+        layers: LayerMask,
+        damage: Damage,
+    },
     /// A new editor scene generation: rebuild static content.
     RebuildScene,
 }
@@ -80,8 +85,14 @@ impl Invalidation {
             (None, x) | (x, None) => x,
             (RebuildScene, _) | (_, RebuildScene) => RebuildScene,
             (
-                RepaintLayers { layers: a, damage: da },
-                RepaintLayers { layers: b, damage: db },
+                RepaintLayers {
+                    layers: a,
+                    damage: da,
+                },
+                RepaintLayers {
+                    layers: b,
+                    damage: db,
+                },
             ) => RepaintLayers {
                 layers: a | b,
                 damage: da.combine(db),
@@ -559,11 +570,13 @@ impl FrameCoordinator {
             }
             PresentResult::Skipped => {
                 // The plan's work never reached the screen; re-queue it.
-                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                ws.due
+                    .merge(plan.work.to_invalidation(), true, DemandReason::Expose);
             }
             PresentResult::Occluded => {
                 ws.presentation.occluded = true;
-                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                ws.due
+                    .merge(plan.work.to_invalidation(), true, DemandReason::Expose);
                 return PacingAction::Sleep;
             }
             PresentResult::SurfaceLost => {
@@ -577,7 +590,8 @@ impl FrameCoordinator {
                     true,
                     DemandReason::Expose,
                 );
-                ws.due.merge(plan.work.to_invalidation(), true, DemandReason::Expose);
+                ws.due
+                    .merge(plan.work.to_invalidation(), true, DemandReason::Expose);
                 return Self::drive(ws);
             }
             PresentResult::Timeout => {
@@ -642,7 +656,10 @@ impl FrameCoordinator {
 
     /// Whether a window is eligible to present (visible and not occluded).
     pub(crate) fn is_eligible(&self, id: NativeWindowId) -> bool {
-        self.windows.get(&id).map(|ws| ws.eligible()).unwrap_or(true)
+        self.windows
+            .get(&id)
+            .map(|ws| ws.eligible())
+            .unwrap_or(true)
     }
 
     /// Whether a window is focused. Unknown windows default to focused (a

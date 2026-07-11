@@ -212,8 +212,7 @@ fn pending_dirty_primary_window_is_not_redrawable_active_work() {
             .dirty
     );
     assert!(
-        !app
-            .frame_windows
+        !app.frame_windows
             .windows
             .values()
             .any(|window_state| window_state.has_presentable_dirty_content()),

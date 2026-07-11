@@ -133,8 +133,7 @@ fn read_back(h: &Harness) -> Vec<u8> {
     for row in 0..H {
         let src = (row * padded) as usize;
         let dst = (row * unpadded) as usize;
-        out[dst..dst + unpadded as usize]
-            .copy_from_slice(&data[src..src + unpadded as usize]);
+        out[dst..dst + unpadded as usize].copy_from_slice(&data[src..src + unpadded as usize]);
     }
     out
 }
@@ -187,15 +186,32 @@ fn offscreen_frame_renders_background_and_cursor() {
 
 #[test]
 fn cursor_visible_false_suppresses_cursor() {
-    let Some(mut h) = try_harness() else { return; };
+    let Some(mut h) = try_harness() else {
+        return;
+    };
     let frame = frame_with_cursor(Color::rgb(1.0, 0.0, 0.0));
-    h.renderer.render_frame_glyphs(&h.view, &frame, &mut h.atlas, W, H, false, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let buf = read_back(&h);
     let mut red = 0;
-    for y in 0..H { for x in 0..W {
-        let p = px(&buf, x, y);
-        if p[0] > 180 && p[0] > p[1] + 60 && p[0] > p[2] + 60 { red += 1; }
-    }}
+    for y in 0..H {
+        for x in 0..W {
+            let p = px(&buf, x, y);
+            if p[0] > 180 && p[0] > p[1] + 60 && p[0] > p[2] + 60 {
+                red += 1;
+            }
+        }
+    }
     eprintln!("cursor_visible=false red pixels: {}", red);
     assert_eq!(red, 0, "cursor_visible=false must draw no cursor");
 }
@@ -206,11 +222,18 @@ fn cursor_visible_false_suppresses_cursor() {
 fn make_tex(r: &WgpuRenderer, label: &str) -> (wgpu::Texture, wgpu::TextureView) {
     let t = r.device().create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
-        size: wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 },
-        mip_level_count: 1, sample_count: 1,
+        size: wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Bgra8UnormSrgb,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
     let v = t.create_view(&wgpu::TextureViewDescriptor::default());
@@ -218,50 +241,129 @@ fn make_tex(r: &WgpuRenderer, label: &str) -> (wgpu::Texture, wgpu::TextureView)
 }
 fn read_tex(r: &WgpuRenderer, t: &wgpu::Texture) -> Vec<u8> {
     let unpadded = W * 4;
-    let padded = unpadded.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let buf = r.device().create_buffer(&wgpu::BufferDescriptor { label: None, size: (padded*H) as u64, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
+    let padded =
+        unpadded.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let buf = r.device().create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: (padded * H) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
     let mut enc = r.device().create_command_encoder(&Default::default());
     enc.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo { texture: t, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-        wgpu::TexelCopyBufferInfo { buffer: &buf, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded), rows_per_image: Some(H) } },
-        wgpu::Extent3d { width: W, height: H, depth_or_array_layers: 1 });
+        wgpu::TexelCopyTextureInfo {
+            texture: t,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(H),
+            },
+        },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
+    );
     r.queue().submit(std::iter::once(enc.finish()));
-    let slice = buf.slice(..); slice.map_async(wgpu::MapMode::Read, |_| {});
-    r.device().poll(wgpu::PollType::Wait { submission_index: None, timeout: Some(std::time::Duration::from_secs(3)) }).expect("poll");
+    let slice = buf.slice(..);
+    slice.map_async(wgpu::MapMode::Read, |_| {});
+    r.device()
+        .poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(3)),
+        })
+        .expect("poll");
     let data = slice.get_mapped_range();
-    let mut out = vec![0u8; (unpadded*H) as usize];
-    for row in 0..H { let s=(row*padded) as usize; let d=(row*unpadded) as usize; out[d..d+unpadded as usize].copy_from_slice(&data[s..s+unpadded as usize]); }
+    let mut out = vec![0u8; (unpadded * H) as usize];
+    for row in 0..H {
+        let s = (row * padded) as usize;
+        let d = (row * unpadded) as usize;
+        out[d..d + unpadded as usize].copy_from_slice(&data[s..s + unpadded as usize]);
+    }
     out
 }
-fn pxb(buf: &[u8], x: u32, y: u32) -> [u8;4] { let i=((y*W+x)*4) as usize; [buf[i+2],buf[i+1],buf[i],buf[i+3]] }
+fn pxb(buf: &[u8], x: u32, y: u32) -> [u8; 4] {
+    let i = ((y * W + x) * 4) as usize;
+    [buf[i + 2], buf[i + 1], buf[i], buf[i + 3]]
+}
 
 #[test]
 fn composite_matches_full_render() {
-    let Some(mut h) = try_harness() else { return; };
+    let Some(mut h) = try_harness() else {
+        return;
+    };
     let frame = frame_with_cursor(Color::rgb(1.0, 0.0, 0.0));
 
     // A: full render (cursor inline).
     let (ta, va) = make_tex(&h.renderer, "full");
-    h.renderer.render_frame_glyphs(&va, &frame, &mut h.atlas, W, H, true, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &va,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        true,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let full = read_tex(&h.renderer, &ta);
 
     // B: static (no cursor) -> retained tex; blit -> composite tex; cursor-only.
     let (_ts, vs) = make_tex(&h.renderer, "static");
-    h.renderer.render_frame_glyphs(&vs, &frame, &mut h.atlas, W, H, false, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &vs,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let (tc, vc) = make_tex(&h.renderer, "composite");
     let bg = h.renderer.create_texture_bind_group(&vs);
     h.renderer.blit_texture_to_view(&bg, &vc, W, H);
-    h.renderer.render_cursor_only(&vc, &frame, W, H, true, None, (0.0,0.0));
+    h.renderer
+        .render_cursor_only(&vc, &frame, W, H, true, None, (0.0, 0.0));
     let comp = read_tex(&h.renderer, &tc);
 
     // Compare: allow tiny per-channel tolerance for the sRGB blit round-trip.
-    let mut max_diff = 0i32; let mut ndiff = 0;
-    for y in 0..H { for x in 0..W {
-        let a = pxb(&full,x,y); let b = pxb(&comp,x,y);
-        for c in 0..4 { let d=(a[c] as i32 - b[c] as i32).abs(); if d>max_diff {max_diff=d;} if d>2 {ndiff+=1;} }
-    }}
-    eprintln!("composite vs full: max_diff={} pixels_over_tol={}", max_diff, ndiff);
-    assert!(max_diff <= 2, "composite must match full render within sRGB round-trip tolerance, max_diff={max_diff}");
+    let mut max_diff = 0i32;
+    let mut ndiff = 0;
+    for y in 0..H {
+        for x in 0..W {
+            let a = pxb(&full, x, y);
+            let b = pxb(&comp, x, y);
+            for c in 0..4 {
+                let d = (a[c] as i32 - b[c] as i32).abs();
+                if d > max_diff {
+                    max_diff = d;
+                }
+                if d > 2 {
+                    ndiff += 1;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "composite vs full: max_diff={} pixels_over_tol={}",
+        max_diff, ndiff
+    );
+    assert!(
+        max_diff <= 2,
+        "composite must match full render within sRGB round-trip tolerance, max_diff={max_diff}"
+    );
 }
 
 // Stage 4 reuse invariant: a retained static scene built once is reused
@@ -269,7 +371,9 @@ fn composite_matches_full_render() {
 // only the cursor color updates — the actual cursor-cycling win.
 #[test]
 fn retained_static_reused_across_cursor_colors() {
-    let Some(mut h) = try_harness() else { return; };
+    let Some(mut h) = try_harness() else {
+        return;
+    };
     // The default config cycles cursor color from time; disable it so the
     // frame's explicit cursor colors drive the pixels for this test.
     h.renderer.effects.cursor_color_cycle.enabled = false;
@@ -278,34 +382,62 @@ fn retained_static_reused_across_cursor_colors() {
 
     // Build the retained (cursorless) static scene ONCE.
     let (_ts, vs) = make_tex(&h.renderer, "static");
-    h.renderer.render_frame_glyphs(&vs, &frame_a, &mut h.atlas, W, H, false, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &vs,
+        &frame_a,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let bg = h.renderer.create_texture_bind_group(&vs);
 
     // Composite the SAME retained scene with the red then blue cursor.
     let (tr, vr) = make_tex(&h.renderer, "comp-red");
     h.renderer.blit_texture_to_view(&bg, &vr, W, H);
-    h.renderer.render_cursor_only(&vr, &frame_a, W, H, true, None, (0.0,0.0));
+    h.renderer
+        .render_cursor_only(&vr, &frame_a, W, H, true, None, (0.0, 0.0));
     let red = read_tex(&h.renderer, &tr);
 
     let (tb, vb) = make_tex(&h.renderer, "comp-blue");
     h.renderer.blit_texture_to_view(&bg, &vb, W, H);
-    h.renderer.render_cursor_only(&vb, &frame_b, W, H, true, None, (0.0,0.0));
+    h.renderer
+        .render_cursor_only(&vb, &frame_b, W, H, true, None, (0.0, 0.0));
     let blue = read_tex(&h.renderer, &tb);
 
     // Outside the cursor slot (x>=16), the two composites are bit-identical.
     let mut static_diffs = 0;
-    for y in 0..H { for x in 16..W {
-        if pxb(&red,x,y) != pxb(&blue,x,y) { static_diffs += 1; }
-    }}
-    assert_eq!(static_diffs, 0, "static scene must be identical across cursor colors");
+    for y in 0..H {
+        for x in 16..W {
+            if pxb(&red, x, y) != pxb(&blue, x, y) {
+                static_diffs += 1;
+            }
+        }
+    }
+    assert_eq!(
+        static_diffs, 0,
+        "static scene must be identical across cursor colors"
+    );
 
     // The cursor slot itself differs (red vs blue).
     let mut cursor_changed = false;
-    for y in 8..31 { for x in 8..12 {
-        let r = pxb(&red,x,y); let b = pxb(&blue,x,y);
-        if r[0] > b[0] + 40 && b[2] > r[2] + 40 { cursor_changed = true; }
-    }}
-    assert!(cursor_changed, "cursor color must change between composites");
+    for y in 8..31 {
+        for x in 8..12 {
+            let r = pxb(&red, x, y);
+            let b = pxb(&blue, x, y);
+            if r[0] > b[0] + 40 && b[2] > r[2] + 40 {
+                cursor_changed = true;
+            }
+        }
+    }
+    assert!(
+        cursor_changed,
+        "cursor color must change between composites"
+    );
 }
 
 // Filled-box cursor over a glyph: the composite (static cursorless scene +
@@ -316,48 +448,119 @@ fn filled_box_frame() -> FrameGlyphBuffer {
     use neomacs_display_protocol::types::FaceId;
     let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
     frame.background = Color::rgb(0.10, 0.12, 0.16);
-    frame.set_face(FaceId::default(), Color::rgb(0.9,0.9,0.9), None, 400, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::default(),
+        Color::rgb(0.9, 0.9, 0.9),
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_char('A', 20.0, 16.0, 10.0, 18.0, 14.0, false);
     frame.set_phys_cursor(PhysCursor {
-        window_id: DisplayWindowId::new(1), charpos: 0, row: 0, col: 0,
-        slot_id: DisplaySlotId { window_id: DisplayWindowId::new(1), row: 0, col: 0 },
-        x: 20.0, y: 16.0, width: 10.0, height: 18.0, ascent: 14.0,
+        window_id: DisplayWindowId::new(1),
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: DisplaySlotId {
+            window_id: DisplayWindowId::new(1),
+            row: 0,
+            col: 0,
+        },
+        x: 20.0,
+        y: 16.0,
+        width: 10.0,
+        height: 18.0,
+        ascent: 14.0,
         style: CursorStyle::FilledBox,
-        color: Color::rgb(1.0, 0.5, 0.0), cursor_fg: Color::rgb(0.05,0.05,0.05),
+        color: Color::rgb(1.0, 0.5, 0.0),
+        cursor_fg: Color::rgb(0.05, 0.05, 0.05),
     });
     frame
 }
 
 #[test]
 fn filled_box_composite_matches_full_render() {
-    let Some(mut h) = try_harness() else { return; };
+    let Some(mut h) = try_harness() else {
+        return;
+    };
     h.renderer.effects.cursor_color_cycle.enabled = false;
     let frame = filled_box_frame();
-    h.atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+    h.atlas
+        .set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
 
     // A: full render with the filled-box cursor inline.
     let (ta, va) = make_tex(&h.renderer, "fb-full");
-    h.renderer.render_frame_glyphs(&va, &frame, &mut h.atlas, W, H, true, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &va,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        true,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let full = read_tex(&h.renderer, &ta);
 
     // B: cursorless static -> blit -> scissored cell redraw (box + char).
     let (_ts, vs) = make_tex(&h.renderer, "fb-static");
-    h.renderer.render_frame_glyphs(&vs, &frame, &mut h.atlas, W, H, false, None, (0.0,0.0), None, None);
+    h.renderer.render_frame_glyphs(
+        &vs,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+    );
     let (tc, vc) = make_tex(&h.renderer, "fb-composite");
     let bg = h.renderer.create_texture_bind_group(&vs);
     h.renderer.blit_texture_to_view(&bg, &vc, W, H);
     // Match the runtime sequence exactly: render_cursor_only draws the box
     // (cursor_bg) unscissored, then the scissored cell redraw adds box + char.
-    h.renderer.render_cursor_only(&vc, &frame, W, H, true, None, (0.0,0.0));
+    h.renderer
+        .render_cursor_only(&vc, &frame, W, H, true, None, (0.0, 0.0));
     // cursor cell = the glyph cell (20,16,10,18)
-    h.renderer.render_frame_cell_loaded(&vc, &frame, &mut h.atlas, W, H, true, None, (0.0,0.0), (20,16,10,18));
+    h.renderer.render_frame_cell_loaded(
+        &vc,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        true,
+        None,
+        (0.0, 0.0),
+        (20, 16, 10, 18),
+    );
     let comp = read_tex(&h.renderer, &tc);
 
     let mut max_diff = 0i32;
-    for y in 0..H { for x in 0..W {
-        let a = pxb(&full,x,y); let b = pxb(&comp,x,y);
-        for c in 0..4 { let d=(a[c] as i32-b[c] as i32).abs(); if d>max_diff {max_diff=d;} }
-    }}
+    for y in 0..H {
+        for x in 0..W {
+            let a = pxb(&full, x, y);
+            let b = pxb(&comp, x, y);
+            for c in 0..4 {
+                let d = (a[c] as i32 - b[c] as i32).abs();
+                if d > max_diff {
+                    max_diff = d;
+                }
+            }
+        }
+    }
     eprintln!("filled-box composite vs full: max_diff={}", max_diff);
-    assert!(max_diff <= 2, "filled-box composite must match full render, max_diff={max_diff}");
+    assert!(
+        max_diff <= 2,
+        "filled-box composite must match full render, max_diff={max_diff}"
+    );
 }
