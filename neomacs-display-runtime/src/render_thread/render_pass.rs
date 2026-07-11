@@ -515,8 +515,13 @@ impl RenderApp {
                     scroll_indicators_enabled,
                     toolbar,
                 );
+                let cells = Self::build_filled_box_cursor_cells(
+                    &frame,
+                    native.scale_factor as f32,
+                );
                 if let Some(rs) = render.compositor.retained_static.as_mut() {
                     rs.generation = generation;
+                    rs.cursor_cells = cells;
                 }
                 super::frame_stats::count(&super::frame_stats::RETAINED_STATIC_BUILDS);
             }
@@ -547,11 +552,9 @@ impl RenderApp {
                 Self::composite_filled_box_cursor_cells(
                     renderer,
                     render,
-                    &frame,
                     &surface_view,
                     native.width,
                     native.height,
-                    native.scale_factor as f32,
                     animated_cursor,
                     mouse_pos,
                 );
@@ -1010,41 +1013,22 @@ impl RenderApp {
         }
     }
 
-    /// Redraw each filled-box cursor's inverse-video cell over the composited
-    /// scene. The retained static scene was rendered cursorless (character in
-    /// its normal color); a filled-box cursor covers that cell with a box in
-    /// the cursor color and redraws the character in `cursor_fg`. This builds a
-    /// single-glyph mini-frame per filled-box cursor (only the glyphs in that
-    /// cursor's slot) and renders it scissored to the cell with `LoadOp::Load`,
-    /// so no full-frame glyph work runs and the rest of the composite is
-    /// preserved. The glyph is already warm in the atlas from the retained
-    /// build, so this is a cache hit.
-    #[allow(clippy::too_many_arguments)]
-    fn composite_filled_box_cursor_cells(
-        renderer: &mut WgpuRenderer,
-        render: &mut GuiFrameRenderState,
+    /// Build a single-glyph mini-frame for each filled-box cursor in the frame
+    /// (only the glyphs in that cursor's slot, with the frame's font tables),
+    /// paired with the physical-pixel scissor rect for its cell. Called once
+    /// per scene generation when the retained static scene is rebuilt; the
+    /// results are reused across cursor-only frames so the font tables are not
+    /// cloned every frame.
+    fn build_filled_box_cursor_cells(
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
-        surface_view: &wgpu::TextureView,
-        width: u32,
-        height: u32,
         scale: f32,
-        animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        mouse_pos: (f32, f32),
-    ) {
+    ) -> Vec<super::frame_windows::RetainedCursorCell> {
         use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer};
-        let filled: Vec<_> = frame
-            .window_cursors
-            .iter()
-            .filter(|c| matches!(c.style, CursorStyle::FilledBox))
-            .cloned()
-            .collect();
-        if filled.is_empty() {
-            return;
-        }
-        let Some(atlas) = render.compositor.glyph_atlas.as_mut() else {
-            return;
-        };
-        for cursor in filled {
+        let mut cells = Vec::new();
+        for cursor in &frame.window_cursors {
+            if !matches!(cursor.style, CursorStyle::FilledBox) {
+                continue;
+            }
             let mut mini = FrameGlyphBuffer::with_size(frame.width, frame.height);
             mini.fonts = frame.fonts.clone();
             mini.char_fonts = frame.char_fonts.clone();
@@ -1060,28 +1044,60 @@ impl RenderApp {
             let mut only_cursor = cursor.clone();
             only_cursor.active = true;
             mini.window_cursors = vec![only_cursor];
-            atlas.set_current_frame_fonts(
-                &mini.fonts,
-                &mini.char_fonts,
-                &mini.shaped_clusters,
-            );
             // The box covers the cell = the cursor rect; scissor to it in
             // physical pixels (glyph positions are logical, scaled by the
             // uniform, so the scissor rect is logical * scale).
-            let sx = (cursor.x * scale).floor().max(0.0) as u32;
-            let sy = (cursor.y * scale).floor().max(0.0) as u32;
-            let sw = (cursor.width * scale).ceil().max(1.0) as u32;
-            let sh = (cursor.height * scale).ceil().max(1.0) as u32;
+            let scissor = (
+                (cursor.x * scale).floor().max(0.0) as u32,
+                (cursor.y * scale).floor().max(0.0) as u32,
+                (cursor.width * scale).ceil().max(1.0) as u32,
+                (cursor.height * scale).ceil().max(1.0) as u32,
+            );
+            cells.push(super::frame_windows::RetainedCursorCell { mini, scissor });
+        }
+        cells
+    }
+
+    /// Redraw each filled-box cursor's inverse-video cell over the composited
+    /// scene, from the mini-frames retained for this generation. The retained
+    /// static scene has the character in its normal color; a filled-box cursor
+    /// covers that cell with a box in the cursor color and redraws the
+    /// character in `cursor_fg`. Each cell renders scissored with
+    /// `LoadOp::Load`, so no full-frame glyph work runs and the rest of the
+    /// composite is preserved. The glyph is warm in the atlas from the retained
+    /// build, so it is a cache hit; the box color is recomputed from the frame
+    /// sample time, so it still cycles.
+    fn composite_filled_box_cursor_cells(
+        renderer: &mut WgpuRenderer,
+        render: &mut GuiFrameRenderState,
+        surface_view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        mouse_pos: (f32, f32),
+    ) {
+        let Some(atlas) = render.compositor.glyph_atlas.as_mut() else {
+            return;
+        };
+        let Some(retained) = render.compositor.retained_static.as_ref() else {
+            return;
+        };
+        for cell in &retained.cursor_cells {
+            atlas.set_current_frame_fonts(
+                &cell.mini.fonts,
+                &cell.mini.char_fonts,
+                &cell.mini.shaped_clusters,
+            );
             renderer.render_frame_cell_loaded(
                 surface_view,
-                &mini,
+                &cell.mini,
                 atlas,
                 width,
                 height,
                 true,
                 animated_cursor,
                 mouse_pos,
-                (sx, sy, sw, sh),
+                cell.scissor,
             );
         }
     }

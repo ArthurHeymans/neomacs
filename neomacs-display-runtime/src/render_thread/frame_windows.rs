@@ -158,6 +158,19 @@ pub(crate) struct RetainedStatic {
     pub(super) generation: u64,
     pub(super) width: u32,
     pub(super) height: u32,
+    /// Per-filled-box-cursor single-glyph mini-frames, built once per
+    /// generation so the composite path re-renders each cursor cell (box plus
+    /// inverse-video character) without cloning the frame's font tables every
+    /// frame. The box color still cycles: it is recomputed from the frame
+    /// sample time inside `emit_cursor_visual`, not baked here.
+    pub(super) cursor_cells: Vec<RetainedCursorCell>,
+}
+
+/// A retained single-glyph mini-frame for one filled-box cursor cell, plus the
+/// physical-pixel scissor rect it is drawn within.
+pub(crate) struct RetainedCursorCell {
+    pub(super) mini: crate::core::frame_glyphs::FrameGlyphBuffer,
+    pub(super) scissor: (u32, u32, u32, u32),
 }
 
 impl RetainedStatic {
@@ -177,6 +190,7 @@ impl RetainedStatic {
             generation: u64::MAX,
             width,
             height,
+            cursor_cells: Vec::new(),
         }
     }
 }
