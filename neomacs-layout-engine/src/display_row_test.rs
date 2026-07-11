@@ -19,8 +19,8 @@ use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
-    ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
+    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedImageMetadata,
+    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
@@ -117,6 +117,7 @@ struct RecordingDisplayRowMediaHost {
     webkit_requests: Mutex<Vec<WebKitResolveRequest>>,
     image_width: u32,
     image_height: u32,
+    image_metadata: Option<ResolvedImageMetadata>,
 }
 
 impl Default for RecordingDisplayRowMediaHost {
@@ -127,6 +128,7 @@ impl Default for RecordingDisplayRowMediaHost {
             webkit_requests: Mutex::default(),
             image_width: 64,
             image_height: 32,
+            image_metadata: None,
         }
     }
 }
@@ -166,7 +168,7 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
             image_id: 42,
             width: self.image_width,
             height: self.image_height,
-            dimensions_known: true,
+            metadata: self.image_metadata.clone(),
         }))
     }
 
@@ -1578,7 +1580,31 @@ fn render_tab_line_with_sized_media_host(
     row_height: f32,
     row_ascent: f32,
 ) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
-    let host = RecordingDisplayRowMediaHost::with_image_size(image_width, image_height);
+    render_tab_line_with_sized_media_metadata_host(
+        rendered_text,
+        default_fg,
+        default_bg,
+        image_width,
+        image_height,
+        row_height,
+        row_ascent,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_tab_line_with_sized_media_metadata_host(
+    rendered_text: Value,
+    default_fg: u32,
+    default_bg: u32,
+    image_width: u32,
+    image_height: u32,
+    row_height: f32,
+    row_ascent: f32,
+    image_metadata: Option<ResolvedImageMetadata>,
+) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
+    let mut host = RecordingDisplayRowMediaHost::with_image_size(image_width, image_height);
+    host.image_metadata = image_metadata;
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
@@ -1705,6 +1731,64 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].fg_color, 0x00112233);
     assert_eq!(requests[0].bg_color, 0x00445566);
+}
+
+#[test]
+fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let image_text = |explicit_background: bool| {
+        let mut spec = vec![
+            Value::symbol("image"),
+            Value::keyword("type"),
+            Value::symbol("png"),
+            Value::keyword("file"),
+            Value::string("/tmp/chrome.png"),
+        ];
+        if explicit_background {
+            spec.extend([Value::keyword("background"), Value::string("#aabbcc")]);
+        }
+        Value::string_with_text_properties(
+            "X",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("display"), Value::list(spec)]),
+            }],
+        )
+    };
+    let render = |text, metadata| {
+        render_tab_line_with_sized_media_metadata_host(text, 0, 0, 16, 16, 18.0, 14.0, metadata).0
+    };
+    let opaque = render(
+        image_text(false),
+        Some(ResolvedImageMetadata {
+            width: 16,
+            height: 16,
+            background: 0x12_34_56,
+            background_transparent: false,
+        }),
+    );
+    let transparent = render(
+        image_text(true),
+        Some(ResolvedImageMetadata {
+            width: 16,
+            height: 16,
+            background: 0,
+            background_transparent: true,
+        }),
+    );
+    let not_ready = render(image_text(true), None);
+    let background = |rendered: &RenderedDisplayRow| match rendered.media()[0].kind {
+        RenderedDisplayRowMediaKind::Image {
+            opaque_background, ..
+        } => opaque_background,
+        _ => panic!("expected image replacement"),
+    };
+
+    assert_eq!(background(&opaque), Some(0x12_34_56));
+    assert_eq!(background(&transparent), None);
+    assert_eq!(background(&not_ready), None);
 }
 
 #[test]

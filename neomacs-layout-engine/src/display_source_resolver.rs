@@ -742,6 +742,11 @@ fn resolve_image_display_property(
         .request_image(spec.request)
         .ok()
         .flatten()?;
+    let opaque_background = resolved
+        .metadata
+        .as_ref()
+        .filter(|metadata| !metadata.background_transparent)
+        .map(|metadata| metadata.background);
     let mut width = resolved.width.max(1) as f32;
     let mut height = resolved.height.max(1) as f32;
     if (scale - 1.0).abs() > f32::EPSILON && scale.is_finite() && scale > 0.0 {
@@ -759,7 +764,7 @@ fn resolve_image_display_property(
         ),
         horizontal_margin: spec.margin.horizontal,
         vertical_margin: spec.margin.vertical,
-        opaque_background: spec.opaque_background,
+        opaque_background,
     }))
 }
 

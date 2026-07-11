@@ -1,6 +1,4 @@
-use super::{
-    RenderApp, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo, surface_readback,
-};
+use super::{RenderApp, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo, surface_readback};
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
@@ -330,7 +328,7 @@ pub(crate) fn run_render_loop_with_event_loop(
     width: u32,
     height: u32,
     title: String,
-    image_dimensions: SharedImageDimensions,
+    image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
     poll_when_idle: bool,
     #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
@@ -366,7 +364,7 @@ pub(crate) fn run_render_loop_with_event_loop(
         width,
         height,
         title,
-        image_dimensions,
+        image_metadata,
         shared_monitors,
         poll_when_idle,
         #[cfg(feature = "neo-term")]
@@ -398,7 +396,7 @@ pub fn run_render_loop_current_thread(
     width: u32,
     height: u32,
     title: String,
-    image_dimensions: SharedImageDimensions,
+    image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]
@@ -410,7 +408,7 @@ pub fn run_render_loop_current_thread(
         width,
         height,
         title,
-        image_dimensions,
+        image_metadata,
         shared_monitors,
         false,
         #[cfg(feature = "neo-term")]
@@ -424,7 +422,7 @@ pub fn run_render_loop(
     width: u32,
     height: u32,
     title: String,
-    image_dimensions: SharedImageDimensions,
+    image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]
@@ -437,7 +435,7 @@ pub fn run_render_loop(
         width,
         height,
         title,
-        image_dimensions,
+        image_metadata,
         shared_monitors,
         false,
         #[cfg(feature = "neo-term")]

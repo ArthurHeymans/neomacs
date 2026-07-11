@@ -1,4 +1,66 @@
 use super::*;
+use std::io::Cursor;
+
+fn png_bytes(pixels: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
+    let image = image::RgbaImage::from_raw(width, height, pixels).unwrap();
+    let mut bytes = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner()
+}
+
+#[test]
+fn decoded_opaque_png_reports_gnu_corner_background_without_lisp_background() {
+    let data = png_bytes([0x12, 0x34, 0x56, 0xff].repeat(4), 2, 2);
+    let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).unwrap();
+
+    assert_eq!(decoded.metadata.width, 2);
+    assert_eq!(decoded.metadata.height, 2);
+    assert!(!decoded.metadata.background_transparent);
+    assert_eq!(decoded.metadata.background, 0x12_34_56);
+}
+
+#[test]
+fn decoded_transparent_png_stays_transparent_with_explicit_lisp_background() {
+    let data = png_bytes([0x12, 0x34, 0x56, 0x00].repeat(4), 2, 2);
+    let decoded = ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0xff_aa_bb_cc)).unwrap();
+
+    assert!(decoded.metadata.background_transparent);
+    assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
+}
+
+#[test]
+fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><circle cx="1" cy="1" r="0.5" fill="#123456"/></svg>"##;
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0xff_aa_bb_cc)).unwrap();
+
+    assert!(decoded.metadata.background_transparent);
+    assert_ne!(decoded.metadata.background, 0xaa_bb_cc);
+}
+
+#[test]
+fn decoded_xpm_distinguishes_transparent_and_opaque_corner_backgrounds() {
+    let transparent = br#"/* XPM */
+static char *icon[] = {
+"2 2 2 1",
+". c None",
+"x c #123456",
+"..",
+".x"};"#;
+    let opaque = br#"/* XPM */
+static char *icon[] = {
+"2 2 1 1",
+"x c #123456",
+"xx",
+"xx"};"#;
+
+    let transparent = ImageCache::decode_data_with_metadata(transparent, 0, 0, (0, 0)).unwrap();
+    let opaque = ImageCache::decode_data_with_metadata(opaque, 0, 0, (0, 0)).unwrap();
+    assert!(transparent.metadata.background_transparent);
+    assert!(!opaque.metadata.background_transparent);
+    assert_eq!(opaque.metadata.background, 0x12_34_56);
+}
 
 #[test]
 fn test_convert_argb32_to_rgba_basic() {

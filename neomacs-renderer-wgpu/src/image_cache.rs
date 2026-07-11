@@ -82,6 +82,7 @@ pub struct CachedImage {
     pub bind_group: wgpu::BindGroup,
     pub width: u32,
     pub height: u32,
+    pub metadata: Option<ImageMetadata>,
     /// Memory size in bytes
     pub memory_size: usize,
     /// Monotonic access stamp for LRU eviction; refreshed by `get` (a `Cell`
@@ -95,6 +96,12 @@ struct DecodedImage {
     width: u32,
     height: u32,
     data: Vec<u8>, // RGBA
+    metadata: ImageMetadata,
+}
+
+enum DecodeOutcome {
+    Ready(DecodedImage),
+    Failed(u32),
 }
 
 /// Image dimensions (from header)
@@ -102,6 +109,17 @@ struct DecodedImage {
 pub struct ImageDimensions {
     pub width: u32,
     pub height: u32,
+}
+
+/// Facts derived from the final decoded RGBA pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImageMetadata {
+    pub width: u32,
+    pub height: u32,
+    /// GNU's four-corner background guess, encoded as 0x00RRGGBB.
+    pub background: u32,
+    /// Whether GNU's four-corner mask heuristic classifies the background as transparent.
+    pub background_transparent: bool,
 }
 
 /// Async image cache
@@ -115,7 +133,7 @@ pub struct ImageCache {
     /// Pending dimensions (before texture is ready)
     pending_dimensions: HashMap<u32, ImageDimensions>,
     /// Channel to receive decoded images
-    decoded_rx: mpsc::Receiver<DecodedImage>,
+    decoded_rx: mpsc::Receiver<DecodeOutcome>,
     /// Channel to send decode requests
     decode_tx: mpsc::Sender<DecodeRequest>,
     /// Bind group layout for image textures
@@ -208,7 +226,7 @@ impl ImageCache {
 
         // Create channels for async decoding
         let (decode_tx, decode_rx) = mpsc::channel::<DecodeRequest>();
-        let (decoded_tx, decoded_rx) = mpsc::channel::<DecodedImage>();
+        let (decoded_tx, decoded_rx) = mpsc::channel::<DecodeOutcome>();
 
         // Wrap receiver in Arc<Mutex> for sharing across threads
         let decode_rx = Arc::new(Mutex::new(decode_rx));
@@ -249,7 +267,7 @@ impl ImageCache {
     fn decoder_thread_pooled(
         thread_id: usize,
         rx: Arc<Mutex<mpsc::Receiver<DecodeRequest>>>,
-        tx: mpsc::Sender<DecodedImage>,
+        tx: mpsc::Sender<DecodeOutcome>,
     ) {
         tracing::debug!("Decoder thread {} started", thread_id);
         loop {
@@ -299,12 +317,11 @@ impl ImageCache {
                     };
 
                     if let Some((width, height, data)) = result {
-                        let _ = tx.send(DecodedImage {
-                            id: request.id,
-                            width,
-                            height,
-                            data,
-                        });
+                        let _ = tx.send(DecodeOutcome::Ready(Self::decoded_image(
+                            request.id, width, height, data,
+                        )));
+                    } else {
+                        let _ = tx.send(DecodeOutcome::Failed(request.id));
                     }
                 }
                 Err(_) => {
@@ -378,6 +395,73 @@ impl ImageCache {
         }
         // Fallback: try SVG via resvg
         Self::decode_svg_data(data, max_width, max_height)
+    }
+
+    #[cfg(test)]
+    fn decode_data_with_metadata(
+        data: &[u8],
+        max_width: u32,
+        max_height: u32,
+        fg_bg: (u32, u32),
+    ) -> Option<DecodedImage> {
+        let (width, height, data) = Self::decode_data(data, max_width, max_height, fg_bg)?;
+        Some(Self::decoded_image(0, width, height, data))
+    }
+
+    fn decoded_image(id: u32, width: u32, height: u32, data: Vec<u8>) -> DecodedImage {
+        let metadata = Self::metadata_from_rgba(width, height, &data);
+        DecodedImage {
+            id,
+            width,
+            height,
+            data,
+            metadata,
+        }
+    }
+
+    fn metadata_from_rgba(width: u32, height: u32, rgba: &[u8]) -> ImageMetadata {
+        let pixel = |x: u32, y: u32| {
+            let offset = ((y * width + x) * 4) as usize;
+            [
+                rgba[offset],
+                rgba[offset + 1],
+                rgba[offset + 2],
+                rgba[offset + 3],
+            ]
+        };
+        let corners = [
+            pixel(0, 0),
+            pixel(width - 1, 0),
+            pixel(width - 1, height - 1),
+            pixel(0, height - 1),
+        ];
+        let most_frequent = |values: [[u8; 4]; 4], key: fn([u8; 4]) -> u32| {
+            let mut best = values[0];
+            let mut best_count = 0;
+            for candidate in values {
+                let count = values
+                    .iter()
+                    .filter(|value| key(**value) == key(candidate))
+                    .count();
+                if count > best_count {
+                    best = candidate;
+                    best_count = count;
+                }
+            }
+            best
+        };
+        let background = most_frequent(corners, |pixel| {
+            (u32::from(pixel[0]) << 16) | (u32::from(pixel[1]) << 8) | u32::from(pixel[2])
+        });
+        let mask = most_frequent(corners, |pixel| u32::from(pixel[3] < u8::MAX));
+        ImageMetadata {
+            width,
+            height,
+            background: (u32::from(background[0]) << 16)
+                | (u32::from(background[1]) << 8)
+                | u32::from(background[2]),
+            background_transparent: mask[3] < u8::MAX,
+        }
     }
 
     /// Decode SVG data via resvg, returning RGBA pixels
@@ -990,6 +1074,7 @@ impl ImageCache {
                     bind_group,
                     width,
                     height,
+                    metadata: None,
                     memory_size,
                     last_access: Cell::new(self.next_access_stamp()),
                 },
@@ -1045,14 +1130,30 @@ impl ImageCache {
     }
 
     /// Process pending decoded images (call each frame)
-    pub fn process_pending(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn process_pending(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Vec<(u32, ImageMetadata)> {
+        let mut ready = Vec::new();
         // Drain decoded images from channel
-        while let Ok(decoded) = self.decoded_rx.try_recv() {
-            self.upload_texture(device, queue, decoded);
+        while let Ok(outcome) = self.decoded_rx.try_recv() {
+            match outcome {
+                DecodeOutcome::Ready(decoded) => {
+                    ready.push((decoded.id, decoded.metadata));
+                    self.upload_texture(device, queue, decoded);
+                }
+                DecodeOutcome::Failed(id) => {
+                    self.states
+                        .insert(id, ImageState::Failed("image decode failed".to_owned()));
+                    self.pending_dimensions.remove(&id);
+                }
+            }
         }
 
         // Evict if over memory limit
         self.evict_if_needed();
+        ready
     }
 
     /// Upload decoded image to GPU texture
@@ -1125,6 +1226,7 @@ impl ImageCache {
                 bind_group,
                 width: decoded.width,
                 height: decoded.height,
+                metadata: Some(decoded.metadata),
                 memory_size,
                 last_access: Cell::new(self.next_access_stamp()),
             },
@@ -1192,6 +1294,13 @@ impl ImageCache {
     /// Check if image is ready
     pub fn is_ready(&self, id: u32) -> bool {
         matches!(self.states.get(&id), Some(ImageState::Ready))
+    }
+
+    /// Whether async decode work still needs the render thread to poll its result channel.
+    pub fn has_pending(&self) -> bool {
+        self.states
+            .values()
+            .any(|state| matches!(state, ImageState::Pending | ImageState::Decoding))
     }
 
     /// Free an image from cache

@@ -28,8 +28,9 @@ use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
-    ImageResolveRequest, ImageResolveSource, PopupMenuEntry, PopupMenuRequest, VideoResolveRequest,
-    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+    ImageResolveRequest, ImageResolveSource, PopupMenuEntry, PopupMenuRequest,
+    ResolvedImageMetadata, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -617,7 +618,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -690,7 +691,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -744,7 +745,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         ])),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -789,7 +790,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -842,7 +843,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
 #[test]
 fn primary_display_host_request_image_queues_without_waiting_for_render_thread() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
-    let image_dimensions = Arc::new((
+    let image_metadata = Arc::new((
         Mutex::new(std::collections::HashMap::new()),
         std::sync::Condvar::new(),
     ));
@@ -855,7 +856,7 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::clone(&image_dimensions),
+        image_metadata: Arc::clone(&image_metadata),
         resolved_images: Mutex::new(std::collections::HashMap::new()),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
@@ -885,7 +886,7 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     );
     assert_eq!(image.width, 50);
     assert_eq!(image.height, 50);
-    assert!(!image.dimensions_known);
+    assert!(image.metadata.is_none());
     assert!(matches!(
         cmd_rx.try_recv().expect("queued image load"),
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
@@ -895,10 +896,16 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
         })
     ));
 
-    let (lock, cvar) = &*image_dimensions;
-    lock.lock()
-        .expect("image dimensions lock")
-        .insert(image.image_id, (25, 50));
+    let (lock, cvar) = &*image_metadata;
+    lock.lock().expect("image dimensions lock").insert(
+        image.image_id,
+        ResolvedImageMetadata {
+            width: 25,
+            height: 50,
+            background: 0x12_34_56,
+            background_transparent: false,
+        },
+    );
     cvar.notify_all();
 
     let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request)
@@ -906,7 +913,15 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
         .expect("image handle");
     assert_eq!(image.width, 25);
     assert_eq!(image.height, 50);
-    assert!(image.dimensions_known);
+    assert_eq!(
+        image.metadata,
+        Some(ResolvedImageMetadata {
+            width: 25,
+            height: 50,
+            background: 0x12_34_56,
+            background_transparent: false,
+        })
+    );
 }
 
 #[test]
@@ -921,7 +936,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -971,7 +986,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1017,7 +1032,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1070,7 +1085,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1139,7 +1154,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1202,7 +1217,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&shared),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1264,7 +1279,7 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),
@@ -1303,7 +1318,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_dimensions: Arc::new((
+        image_metadata: Arc::new((
             Mutex::new(std::collections::HashMap::new()),
             std::sync::Condvar::new(),
         )),

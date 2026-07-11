@@ -1455,7 +1455,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             image_id: 77,
             width: 32,
             height: 24,
-            dimensions_known: true,
+            metadata: None,
         }))
     }
 

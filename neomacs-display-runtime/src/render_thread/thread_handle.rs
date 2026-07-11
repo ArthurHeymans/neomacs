@@ -8,7 +8,7 @@ use std::{
 };
 
 use super::bootstrap::{build_render_event_loop_any_thread, run_render_loop_with_event_loop};
-use super::{SharedImageDimensions, SharedMonitorInfo};
+use super::{SharedImageMetadata, SharedMonitorInfo};
 use crate::thread_comm::RenderComms;
 
 /// Render thread state.
@@ -84,7 +84,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_dimensions: SharedImageDimensions,
+        image_metadata: SharedImageMetadata,
         shared_monitors: SharedMonitorInfo,
     ) -> Result<Self, String> {
         #[cfg(feature = "neo-term")]
@@ -94,7 +94,7 @@ impl RenderThread {
             width,
             height,
             title,
-            image_dimensions,
+            image_metadata,
             shared_monitors,
             #[cfg(feature = "neo-term")]
             shared_terminals,
@@ -107,7 +107,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_dimensions: SharedImageDimensions,
+        image_metadata: SharedImageMetadata,
         shared_monitors: SharedMonitorInfo,
         shared_terminals: crate::terminal::SharedTerminals,
     ) -> Result<Self, String> {
@@ -116,7 +116,7 @@ impl RenderThread {
             width,
             height,
             title,
-            image_dimensions,
+            image_metadata,
             shared_monitors,
             shared_terminals,
         )
@@ -127,7 +127,7 @@ impl RenderThread {
         width: u32,
         height: u32,
         title: String,
-        image_dimensions: SharedImageDimensions,
+        image_metadata: SharedImageMetadata,
         shared_monitors: SharedMonitorInfo,
         #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
     ) -> Result<Self, String> {
@@ -141,7 +141,7 @@ impl RenderThread {
                     width,
                     height,
                     title,
-                    image_dimensions,
+                    image_metadata,
                     shared_monitors,
                     true,
                     #[cfg(feature = "neo-term")]

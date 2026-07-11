@@ -42,7 +42,7 @@ use arboard::Clipboard;
 use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
 use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
-    RenderEventLoopProxy, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo,
+    RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
     build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
@@ -63,8 +63,8 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ImageResolveRequest,
     ImageResolveSource, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedImage,
-    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
-    WebKitResolveSource,
+    ResolvedImageMetadata, ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::load::{
     LoadupDumpMode, LoadupStartupSurface, RuntimeImageRole, find_file_in_load_path, get_load_path,
@@ -837,7 +837,7 @@ struct PrimaryWindowDisplayHost {
     last_window_titles: Mutex<HashMap<neovm_core::window::FrameId, LispString>>,
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
-    image_dimensions: SharedImageDimensions,
+    image_metadata: SharedImageMetadata,
     resolved_images: Mutex<HashMap<ImageResolveRequest, ResolvedImage>>,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
@@ -870,32 +870,32 @@ fn next_host_webkit_id() -> u32 {
     HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
-fn wait_for_image_dimensions(
-    shared: &SharedImageDimensions,
+fn wait_for_image_metadata(
+    shared: &SharedImageMetadata,
     id: u32,
     timeout: Duration,
-) -> Option<(u32, u32)> {
+) -> Option<ResolvedImageMetadata> {
     let (lock, cvar) = &**shared;
     let deadline = Instant::now() + timeout;
-    let mut dims = match lock.lock() {
+    let mut images = match lock.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     loop {
-        if let Some(size) = dims.get(&id).copied() {
-            return Some(size);
+        if let Some(metadata) = images.get(&id).cloned() {
+            return Some(metadata);
         }
         let remaining = deadline.checked_duration_since(Instant::now())?;
-        match cvar.wait_timeout(dims, remaining) {
+        match cvar.wait_timeout(images, remaining) {
             Ok((guard, result)) => {
-                dims = guard;
+                images = guard;
                 if result.timed_out() {
-                    return dims.get(&id).copied();
+                    return images.get(&id).cloned();
                 }
             }
             Err(poisoned) => {
                 let (guard, _) = poisoned.into_inner();
-                dims = guard;
+                images = guard;
             }
         }
     }
@@ -1570,24 +1570,22 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
         let image = match self.request_image(request.clone())? {
-            Some(image) if image.dimensions_known => return Ok(Some(image)),
+            Some(image) if image.metadata.is_some() => return Ok(Some(image)),
             Some(image) => image,
             None => return Ok(None),
         };
 
-        let Some((width, height)) = wait_for_image_dimensions(
-            &self.image_dimensions,
-            image.image_id,
-            Duration::from_secs(1),
-        ) else {
+        let Some(metadata) =
+            wait_for_image_metadata(&self.image_metadata, image.image_id, Duration::from_secs(1))
+        else {
             return Ok(None);
         };
 
         let resolved = ResolvedImage {
             image_id: image.image_id,
-            width,
-            height,
-            dimensions_known: true,
+            width: metadata.width,
+            height: metadata.height,
+            metadata: Some(metadata),
         };
         match self.resolved_images.lock() {
             Ok(mut cache) => {
@@ -1608,20 +1606,20 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 Err(poisoned) => poisoned.into_inner(),
             };
             if let Some(image) = cache.get(&request).cloned() {
-                if image.dimensions_known {
+                if image.metadata.is_some() {
                     return Ok(Some(image));
                 }
-                let (lock, _) = &*self.image_dimensions;
-                let dims = match lock.lock() {
-                    Ok(dims) => dims.get(&image.image_id).copied(),
-                    Err(poisoned) => poisoned.into_inner().get(&image.image_id).copied(),
+                let (lock, _) = &*self.image_metadata;
+                let metadata = match lock.lock() {
+                    Ok(images) => images.get(&image.image_id).cloned(),
+                    Err(poisoned) => poisoned.into_inner().get(&image.image_id).cloned(),
                 };
-                if let Some((width, height)) = dims {
+                if let Some(metadata) = metadata {
                     let updated = ResolvedImage {
                         image_id: image.image_id,
-                        width,
-                        height,
-                        dimensions_known: true,
+                        width: metadata.width,
+                        height: metadata.height,
+                        metadata: Some(metadata),
                     };
                     cache.insert(request, updated.clone());
                     return Ok(Some(updated));
@@ -1666,7 +1664,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             image_id,
             width,
             height,
-            dimensions_known: false,
+            metadata: None,
         };
         match self.resolved_images.lock() {
             Ok(mut cache) => {
@@ -2268,7 +2266,7 @@ fn run_gui_main_thread(
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
-    let gui_image_dimensions: SharedImageDimensions =
+    let gui_image_metadata: SharedImageMetadata =
         Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
     let shared_monitors: SharedMonitorInfo = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
 
@@ -2280,7 +2278,7 @@ fn run_gui_main_thread(
         bootstrap_display,
         emacs_comms,
         Arc::clone(&primary_window_size),
-        Arc::clone(&gui_image_dimensions),
+        Arc::clone(&gui_image_metadata),
         Arc::clone(&shared_monitors),
         render_waker.clone(),
     );
@@ -2296,7 +2294,7 @@ fn run_gui_main_thread(
         width,
         height,
         "Neomacs".to_string(),
-        Arc::clone(&gui_image_dimensions),
+        Arc::clone(&gui_image_metadata),
         Arc::clone(&shared_monitors),
     );
     if let Err(err) = &render_result {
@@ -2329,7 +2327,7 @@ fn spawn_gui_evaluator_worker(
     bootstrap_display: BootstrapDisplayConfig,
     emacs_comms: EmacsComms,
     primary_window_size: SharedPrimaryWindowSize,
-    gui_image_dimensions: SharedImageDimensions,
+    gui_image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
     render_waker: GuiEventLoopWaker,
 ) -> std::thread::JoinHandle<EvaluatorExit> {
@@ -2353,7 +2351,7 @@ fn spawn_gui_evaluator_worker(
                     bootstrap_display,
                     emacs_comms,
                     primary_window_size,
-                    gui_image_dimensions,
+                    gui_image_metadata,
                     shared_monitors,
                     render_waker,
                 )
@@ -2443,7 +2441,7 @@ fn run_gui_evaluator_worker(
     bootstrap_display: BootstrapDisplayConfig,
     emacs_comms: EmacsComms,
     primary_window_size: SharedPrimaryWindowSize,
-    gui_image_dimensions: SharedImageDimensions,
+    gui_image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
     render_waker: GuiEventLoopWaker,
 ) -> EvaluatorExit {
@@ -2474,7 +2472,7 @@ fn run_gui_evaluator_worker(
         last_window_titles: Mutex::new(HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&primary_window_size),
-        image_dimensions: Arc::clone(&gui_image_dimensions),
+        image_metadata: Arc::clone(&gui_image_metadata),
         resolved_images: Mutex::new(HashMap::new()),
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),

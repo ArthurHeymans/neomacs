@@ -130,14 +130,18 @@ impl WgpuRenderer {
         self.caches.image.is_ready(id)
     }
 
+    pub fn has_pending_images(&self) -> bool {
+        self.caches.image.has_pending()
+    }
+
     /// Free an image from cache
     pub fn free_image(&mut self, id: u32) {
         self.caches.image.free(id)
     }
 
     /// Process pending decoded images (call each frame before rendering)
-    pub fn process_pending_images(&mut self) {
-        self.caches.image.process_pending(&self.device, &self.queue);
+    pub fn process_pending_images(&mut self) -> Vec<(u32, crate::ImageMetadata)> {
+        self.caches.image.process_pending(&self.device, &self.queue)
     }
 
     /// Load video from file path (async - returns immediately)

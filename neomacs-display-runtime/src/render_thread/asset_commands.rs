@@ -1,7 +1,7 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
-use crate::thread_comm::{AssetCommand, InputEvent, MediaSource};
+use crate::thread_comm::{AssetCommand, MediaSource};
 
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeWebView;
@@ -44,19 +44,6 @@ impl RenderApp {
                     renderer.load_image_file_with_id(
                         id, &path, max_width, max_height, fg_color, bg_color,
                     );
-                    if let Some((w, h)) = renderer.get_image_size(id) {
-                        let (lock, cvar) = &*self.image_dimensions;
-                        if let Ok(mut dims) = lock.lock() {
-                            dims.insert(id, (w, h));
-                            cvar.notify_all();
-                        }
-                        self.comms.send_input(InputEvent::ImageDimensionsReady {
-                            id,
-                            width: w,
-                            height: h,
-                        });
-                        tracing::debug!("Sent ImageDimensionsReady for image {}: {}x{}", id, w, h);
-                    }
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", id);
                 }
@@ -80,24 +67,6 @@ impl RenderApp {
                     renderer.load_image_data_with_id(
                         id, &data, max_width, max_height, fg_color, bg_color,
                     );
-                    if let Some((w, h)) = renderer.get_image_size(id) {
-                        let (lock, cvar) = &*self.image_dimensions;
-                        if let Ok(mut dims) = lock.lock() {
-                            dims.insert(id, (w, h));
-                            cvar.notify_all();
-                        }
-                        self.comms.send_input(InputEvent::ImageDimensionsReady {
-                            id,
-                            width: w,
-                            height: h,
-                        });
-                        tracing::debug!(
-                            "Sent ImageDimensionsReady for image data {}: {}x{}",
-                            id,
-                            w,
-                            h
-                        );
-                    }
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image data {}", id);
                 }
@@ -118,13 +87,6 @@ impl RenderApp {
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_argb32_with_id(id, &data, width, height, stride);
-                    if let Some((w, h)) = renderer.get_image_size(id) {
-                        let (lock, cvar) = &*self.image_dimensions;
-                        if let Ok(mut dims) = lock.lock() {
-                            dims.insert(id, (w, h));
-                            cvar.notify_all();
-                        }
-                    }
                 }
             }
             AssetCommand::ImageLoadRgb24 {
@@ -143,13 +105,6 @@ impl RenderApp {
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_rgb24_with_id(id, &data, width, height, stride);
-                    if let Some((w, h)) = renderer.get_image_size(id) {
-                        let (lock, cvar) = &*self.image_dimensions;
-                        if let Ok(mut dims) = lock.lock() {
-                            dims.insert(id, (w, h));
-                            cvar.notify_all();
-                        }
-                    }
                 }
             }
             AssetCommand::ImageFree { id } => {

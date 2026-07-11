@@ -28,7 +28,7 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
 
     let comms = ThreadComms::new().expect("ThreadComms::new failed");
     let (_emacs, render) = comms.split();
-    let image_dimensions = Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
+    let image_metadata = Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
     let shared_monitors = Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new()));
 
     let mut app = RenderApp::new(
@@ -36,7 +36,7 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
         width,
         height,
         "test".to_string(),
-        image_dimensions,
+        image_metadata,
         shared_monitors,
         true,
         #[cfg(feature = "neo-term")]

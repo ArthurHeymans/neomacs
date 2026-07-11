@@ -1484,11 +1484,22 @@ pub struct ImageResolveRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedImageMetadata {
+    pub width: u32,
+    pub height: u32,
+    /// GNU's decoded four-corner background guess (0x00RRGGBB).
+    pub background: u32,
+    /// GNU's decoded four-corner mask classification.
+    pub background_transparent: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedImage {
     pub image_id: u32,
     pub width: u32,
     pub height: u32,
-    pub dimensions_known: bool,
+    /// Present only after the render thread has decoded the final pixels.
+    pub metadata: Option<ResolvedImageMetadata>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -373,8 +373,37 @@ impl RenderApp {
     /// Process pending image uploads (decode → GPU texture)
     pub(super) fn process_pending_images(&mut self) {
         if let Some(ref mut renderer) = self.renderer {
-            renderer.process_pending_images();
+            for (id, metadata) in renderer.process_pending_images() {
+                let metadata = neovm_core::emacs_core::eval::ResolvedImageMetadata {
+                    width: metadata.width,
+                    height: metadata.height,
+                    background: metadata.background,
+                    background_transparent: metadata.background_transparent,
+                };
+                let (lock, cvar) = &*self.image_metadata;
+                match lock.lock() {
+                    Ok(mut images) => {
+                        images.insert(id, metadata.clone());
+                    }
+                    Err(poisoned) => {
+                        poisoned.into_inner().insert(id, metadata.clone());
+                    }
+                }
+                cvar.notify_all();
+                self.comms
+                    .send_input(crate::thread_comm::InputEvent::ImageDimensionsReady {
+                        id,
+                        width: metadata.width,
+                        height: metadata.height,
+                    });
+            }
         }
+    }
+
+    pub(super) fn has_pending_images(&self) -> bool {
+        self.renderer
+            .as_ref()
+            .is_some_and(|renderer| renderer.has_pending_images())
     }
 
     /// Update terminal content and expand Terminal glyphs into renderable cells.

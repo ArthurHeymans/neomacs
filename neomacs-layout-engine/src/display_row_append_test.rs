@@ -435,7 +435,7 @@ impl DisplayHost for RecordingAppendImageHost {
             image_id: 42,
             width: 64,
             height: 32,
-            dimensions_known: true,
+            metadata: None,
         }))
     }
 }

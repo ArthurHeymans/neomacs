@@ -13,6 +13,7 @@ use neomacs_display_protocol::{
     PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
+use neovm_core::emacs_core::eval::ResolvedImageMetadata;
 
 use super::cursor::CursorState;
 use super::frame_windows::{
@@ -22,8 +23,8 @@ use super::frame_windows::{
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::{WpeBackend, WpeWebView};
 
-/// Shared storage for image dimensions accessible from both threads.
-pub type SharedImageDimensions = Arc<(Mutex<HashMap<u32, (u32, u32)>>, Condvar)>;
+/// Decoded image facts shared from the render thread to the evaluator.
+pub type SharedImageMetadata = Arc<(Mutex<HashMap<u32, ResolvedImageMetadata>>, Condvar)>;
 
 /// Shared storage for monitor info accessible from both threads.
 /// The Condvar is notified once monitors have been populated.
@@ -547,7 +548,7 @@ pub(super) struct RenderApp {
 
     pub(super) modifiers: u32,
 
-    pub(super) image_dimensions: SharedImageDimensions,
+    pub(super) image_metadata: SharedImageMetadata,
 
     pub(super) cursor_defaults: CursorState,
 
@@ -613,7 +614,7 @@ impl RenderApp {
         width: u32,
         height: u32,
         title: String,
-        image_dimensions: SharedImageDimensions,
+        image_metadata: SharedImageMetadata,
         shared_monitors: SharedMonitorInfo,
         poll_when_idle: bool,
         #[cfg(feature = "neo-term")] shared_terminals: crate::terminal::SharedTerminals,
@@ -646,7 +647,7 @@ impl RenderApp {
             faces: HashMap::new(),
             faces_signature: Vec::new(),
             modifiers: 0,
-            image_dimensions,
+            image_metadata,
             cursor_defaults: CursorState::default(),
             effects: EffectsConfig::default(),
             transition_policy: TransitionPolicy::default(),

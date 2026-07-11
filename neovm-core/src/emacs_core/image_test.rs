@@ -27,7 +27,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             image_id: 9,
             width: 40,
             height: 30,
-            dimensions_known: true,
+            metadata: None,
         }))
     }
 
@@ -40,7 +40,7 @@ impl DisplayHost for RecordingImageDisplayHost {
             image_id: 9,
             width: 0,
             height: 0,
-            dimensions_known: false,
+            metadata: None,
         }))
     }
 }

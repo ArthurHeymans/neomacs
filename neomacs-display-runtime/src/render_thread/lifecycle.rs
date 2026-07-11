@@ -217,6 +217,10 @@ impl RenderApp {
             return;
         }
 
+        // Decoder workers cannot wake winit directly. Poll their result channel
+        // while work is pending so decoded image metadata and pixels become visible.
+        self.process_pending_images();
+
         if let Some(gpu) = &self.gpu {
             self.frame_windows.process_creates(
                 event_loop,
@@ -290,6 +294,12 @@ impl RenderApp {
             const WPE_SERVICE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
             let service = now + WPE_SERVICE_INTERVAL;
             deadline = Some(deadline.map_or(service, |d| d.min(service)));
+        }
+        if self.has_pending_images() {
+            const IMAGE_DECODE_POLL_INTERVAL: std::time::Duration =
+                std::time::Duration::from_millis(16);
+            let image_poll = now + IMAGE_DECODE_POLL_INTERVAL;
+            deadline = Some(deadline.map_or(image_poll, |d| d.min(image_poll)));
         }
 
         match deadline {

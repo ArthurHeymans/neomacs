@@ -55,7 +55,6 @@ pub(crate) struct DisplayImageLayout {
     pub(crate) scale: f32,
     pub(crate) ascent: DisplayImageAscentPolicy,
     pub(crate) margin: DisplayImageMargin,
-    pub(crate) opaque_background: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -168,7 +167,6 @@ pub(crate) fn parse_display_image_layout(
     let mut margin = DisplayImageMargin::default();
     let mut fg_color = default_fg;
     let mut bg_color = default_bg;
-    let mut opaque_background = None;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -206,7 +204,6 @@ pub(crate) fn parse_display_image_layout(
             Some(ImageSpecKey::Background) => {
                 if let Some(pixel) = parse_image_color_pixel(value) {
                     bg_color = pixel;
-                    opaque_background = Some(pixel);
                 }
             }
             _ => {}
@@ -225,7 +222,6 @@ pub(crate) fn parse_display_image_layout(
         scale,
         ascent,
         margin,
-        opaque_background,
     })
 }
 
@@ -661,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn image_background_retains_only_an_explicit_opaque_color() {
+    fn image_background_is_only_decoder_input_not_opacity_evidence() {
         let mut eval = neovm_core::emacs_core::Context::new();
         eval.setup_thread_locals();
         let explicit = Value::list(vec![
@@ -675,14 +671,9 @@ mod tests {
         assert_eq!(
             parse_display_image_layout(&explicit, 0, 0)
                 .unwrap()
-                .opaque_background,
-            Some(0x12_34_56)
-        );
-        assert_eq!(
-            parse_display_image_layout(&image_spec(None), 0, 0)
-                .unwrap()
-                .opaque_background,
-            None
+                .request
+                .bg_color,
+            0x12_34_56
         );
     }
 
