@@ -6,6 +6,10 @@
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
+use neomacs_display_protocol::frame_chrome::{
+    BandRect, ChromeAction, CompactBarContent, MenuBarContent, PositionedChromeItem, ToolBarContent,
+};
+use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neovm_core::emacs_core::image::{ImageSpecKey, ImageType};
 use neovm_core::emacs_core::intern::intern;
@@ -86,6 +90,173 @@ pub fn collect_gui_tool_bar_items(eval: &mut Context) -> Vec<ToolBarItem> {
         items.push(item);
     });
     items
+}
+
+const GUI_CHROME_HORIZONTAL_PADDING: f32 = 8.0;
+const TOOL_BAR_SEPARATOR_WIDTH: f32 = 12.0;
+const TOOL_BAR_ITEM_SPACING: f32 = 2.0;
+const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
+const GNU_TOOL_BAR_BASE_PADDING: f32 = 5.0;
+
+pub(crate) fn toolbar_visual_config_for_height(height: f32) -> (u32, u32) {
+    let height_px = if height.is_finite() && height > 0.0 {
+        height.round().max(1.0) as u32
+    } else {
+        GNU_TOOL_BAR_BASE_HEIGHT as u32
+    };
+    let scale = (height_px as f32 / GNU_TOOL_BAR_BASE_HEIGHT).max(0.1);
+    let max_padding = height_px.saturating_sub(1) / 2;
+    let padding = ((GNU_TOOL_BAR_BASE_PADDING * scale).round() as u32).min(max_padding);
+    let icon_size = height_px.saturating_sub(padding.saturating_mul(2)).max(1);
+    (icon_size, padding)
+}
+
+fn fitted_local_bounds(x: f32, width: f32, band_width: f32, band_height: f32) -> Option<BandRect> {
+    let remaining = (band_width - x).max(0.0);
+    let width = width.min(remaining);
+    (width > 0.0).then(|| {
+        BandRect::new(x, 0.0, width, band_height)
+            .expect("layout-owned chrome dimensions must be finite and nonnegative")
+    })
+}
+
+fn position_menu_items(
+    items: Vec<MenuBarItem>,
+    band_width: f32,
+    band_height: f32,
+    char_width: f32,
+    start_x: f32,
+) -> (Vec<PositionedChromeItem<MenuBarItem>>, f32) {
+    let mut positioned = Vec::new();
+    let mut x = start_x;
+    for item in items {
+        let width =
+            item.label.chars().count() as f32 * char_width + GUI_CHROME_HORIZONTAL_PADDING * 2.0;
+        let Some(bounds) = fitted_local_bounds(x, width, band_width, band_height) else {
+            break;
+        };
+        let action = ChromeAction::OpenMenu {
+            index: item.index,
+            key: item.key.clone(),
+        };
+        positioned.push(PositionedChromeItem::new(bounds, item, action));
+        x += width;
+    }
+    (positioned, x)
+}
+
+fn position_tool_bar_items(
+    items: Vec<ToolBarItem>,
+    band_width: f32,
+    band_height: f32,
+    icon_size: u32,
+    padding: u32,
+    start_x: f32,
+) -> Vec<PositionedChromeItem<ToolBarItem>> {
+    let item_width = icon_size as f32 + padding as f32 * 2.0;
+    let mut positioned = Vec::new();
+    let mut x = start_x;
+    for item in items {
+        let width = if item.is_separator() {
+            TOOL_BAR_SEPARATOR_WIDTH
+        } else {
+            item_width
+        };
+        let Some(bounds) = fitted_local_bounds(x, width, band_width, band_height) else {
+            break;
+        };
+        let separator = item.is_separator();
+        let index = item.index;
+        if separator {
+            positioned.push(PositionedChromeItem::decorative(bounds, item));
+            x += TOOL_BAR_SEPARATOR_WIDTH;
+        } else {
+            positioned.push(PositionedChromeItem::new(
+                bounds,
+                item,
+                ChromeAction::InvokeToolBarItem { index },
+            ));
+            x += item_width + TOOL_BAR_ITEM_SPACING;
+        }
+    }
+    positioned
+}
+
+pub(crate) fn layout_gui_menu_bar_content(
+    items: Vec<MenuBarItem>,
+    band_width: f32,
+    band_height: f32,
+    char_width: f32,
+    foreground: Color,
+    background: Color,
+) -> MenuBarContent {
+    let (items, _) = position_menu_items(
+        items,
+        band_width,
+        band_height,
+        char_width,
+        GUI_CHROME_HORIZONTAL_PADDING,
+    );
+    MenuBarContent::new(items, foreground, background)
+}
+
+pub(crate) fn layout_gui_tool_bar_content(
+    items: Vec<ToolBarItem>,
+    band_width: f32,
+    band_height: f32,
+    foreground: Color,
+    background: Color,
+) -> ToolBarContent {
+    let (icon_size, padding) = toolbar_visual_config_for_height(band_height);
+    let items = position_tool_bar_items(
+        items,
+        band_width,
+        band_height,
+        icon_size,
+        padding,
+        padding as f32,
+    );
+    ToolBarContent::new(items, foreground, background, icon_size, padding)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn layout_gui_compact_bar_content(
+    menu_items: Vec<MenuBarItem>,
+    tool_items: Vec<ToolBarItem>,
+    band_width: f32,
+    band_height: f32,
+    char_width: f32,
+    menu_foreground: Color,
+    menu_background: Color,
+    tool_foreground: Color,
+    tool_background: Color,
+) -> CompactBarContent {
+    let (menu_items, menu_end_x) = position_menu_items(
+        menu_items,
+        band_width,
+        band_height,
+        char_width,
+        GUI_CHROME_HORIZONTAL_PADDING,
+    );
+    let (icon_size, padding) = toolbar_visual_config_for_height(band_height);
+    let tool_items = position_tool_bar_items(
+        tool_items,
+        band_width,
+        band_height,
+        icon_size,
+        padding,
+        menu_end_x + GUI_CHROME_HORIZONTAL_PADDING + padding as f32,
+    );
+    CompactBarContent::new(
+        menu_items,
+        tool_items,
+        menu_foreground,
+        menu_background,
+        tool_foreground,
+        tool_background,
+        icon_size,
+        padding,
+    )
 }
 
 fn normalize_binding_def(def: &Value) -> Value {

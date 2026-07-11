@@ -158,7 +158,7 @@ impl MaterializedChromeHitRegion {
 pub struct PositionedChromeItem<T> {
     local_bounds: BandRect,
     item: T,
-    action: ChromeAction,
+    action: Option<ChromeAction>,
 }
 
 impl<T> PositionedChromeItem<T> {
@@ -166,7 +166,15 @@ impl<T> PositionedChromeItem<T> {
         Self {
             local_bounds,
             item,
-            action,
+            action: Some(action),
+        }
+    }
+
+    pub fn decorative(local_bounds: BandRect, item: T) -> Self {
+        Self {
+            local_bounds,
+            item,
+            action: None,
         }
     }
 
@@ -178,8 +186,8 @@ impl<T> PositionedChromeItem<T> {
         &self.item
     }
 
-    pub fn action(&self) -> &ChromeAction {
-        &self.action
+    pub fn action(&self) -> Option<&ChromeAction> {
+        self.action.as_ref()
     }
 }
 
@@ -225,6 +233,8 @@ pub struct ToolBarContent {
     items: Vec<PositionedChromeItem<ToolBarItem>>,
     foreground: Color,
     background: Color,
+    icon_size: u32,
+    padding: u32,
 }
 
 impl ToolBarContent {
@@ -232,16 +242,20 @@ impl ToolBarContent {
         items: Vec<PositionedChromeItem<ToolBarItem>>,
         foreground: Color,
         background: Color,
+        icon_size: u32,
+        padding: u32,
     ) -> Self {
         Self {
             items,
             foreground,
             background,
+            icon_size,
+            padding,
         }
     }
 
     pub fn empty() -> Self {
-        Self::new(Vec::new(), Color::WHITE, Color::BLACK)
+        Self::new(Vec::new(), Color::WHITE, Color::BLACK, 1, 0)
     }
 
     pub fn items(&self) -> &[PositionedChromeItem<ToolBarItem>] {
@@ -255,6 +269,14 @@ impl ToolBarContent {
     pub fn background(&self) -> Color {
         self.background
     }
+
+    pub fn icon_size(&self) -> u32 {
+        self.icon_size
+    }
+
+    pub fn padding(&self) -> u32 {
+        self.padding
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -265,6 +287,8 @@ pub struct CompactBarContent {
     menu_background: Color,
     tool_foreground: Color,
     tool_background: Color,
+    icon_size: u32,
+    padding: u32,
 }
 
 impl CompactBarContent {
@@ -275,6 +299,8 @@ impl CompactBarContent {
         menu_background: Color,
         tool_foreground: Color,
         tool_background: Color,
+        icon_size: u32,
+        padding: u32,
     ) -> Self {
         Self {
             menu_items,
@@ -283,6 +309,8 @@ impl CompactBarContent {
             menu_background,
             tool_foreground,
             tool_background,
+            icon_size,
+            padding,
         }
     }
 
@@ -294,6 +322,8 @@ impl CompactBarContent {
             Color::BLACK,
             Color::WHITE,
             Color::BLACK,
+            1,
+            0,
         )
     }
 
@@ -303,6 +333,14 @@ impl CompactBarContent {
 
     pub fn tool_items(&self) -> &[PositionedChromeItem<ToolBarItem>] {
         &self.tool_items
+    }
+
+    pub fn icon_size(&self) -> u32 {
+        self.icon_size
+    }
+
+    pub fn padding(&self) -> u32 {
+        self.padding
     }
 }
 

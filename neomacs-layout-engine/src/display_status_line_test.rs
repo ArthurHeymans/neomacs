@@ -1,8 +1,13 @@
 use super::*;
+use crate::display_item::DisplaySourcePosition;
 use crate::display_row::DisplayRowFace;
+use crate::display_row_builder::DisplayRowGlyphSlot;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
+use neomacs_display_protocol::frame_chrome::ChromeAction;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::face::FaceTable;
 
 #[test]
@@ -211,6 +216,80 @@ fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
     let first_width = measured.rendered().row().glyphs[GlyphArea::Text.index()][0].pixel_width;
 
     assert_matches_proportional_dot_width(first_width, "tab-bar");
+}
+
+#[test]
+fn tab_bar_hit_regions_follow_rendered_caption_bounds() {
+    let slots = vec![
+        DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 4.0, 1),
+        DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 1, 1), 4.0, 1, 6.0, 1),
+        DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 2, 2), 10.0, 2, 8.0, 1),
+        DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 3, 3), 18.0, 3, 5.0, 1),
+    ];
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(23.0, 4, 0.0, 18.0),
+        slots,
+        Vec::new(),
+        Vec::new(),
+    );
+    let items = vec![
+        TabBarItem {
+            index: 3,
+            label: "ab".to_string(),
+            help: String::new(),
+            enabled: true,
+            selected: true,
+            is_separator: false,
+        },
+        TabBarItem {
+            index: 7,
+            label: "cd".to_string(),
+            help: String::new(),
+            enabled: true,
+            selected: false,
+            is_separator: false,
+        },
+    ];
+
+    let regions = tab_bar_hit_regions_for_rendered_captions(&rendered, &items, &[0..2, 2..4], 18.0);
+
+    assert_eq!(regions[0].local_bounds().raw().x, 0.0);
+    assert_eq!(regions[0].local_bounds().raw().width, 10.0);
+    assert_eq!(regions[0].action(), &ChromeAction::SelectTab { index: 3 });
+    assert_eq!(regions[1].local_bounds().raw().x, 10.0);
+    assert_eq!(regions[1].local_bounds().raw().width, 13.0);
+}
+
+#[test]
+fn built_tab_bar_preserves_concatenated_caption_ranges() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let source = TabBarDisplaySource {
+        captions: vec![Value::string("ab"), Value::string("cde")],
+        items: vec![
+            TabBarItem {
+                index: 0,
+                label: "ab".to_string(),
+                help: String::new(),
+                enabled: true,
+                selected: true,
+                is_separator: false,
+            },
+            TabBarItem {
+                index: 1,
+                label: "cde".to_string(),
+                help: String::new(),
+                enabled: true,
+                selected: false,
+                is_separator: false,
+            },
+        ],
+    };
+
+    let built = source.into_built_tab_bar(&mut eval).expect("built tab bar");
+
+    assert_eq!(built.item_char_ranges, vec![0..2, 2..5]);
 }
 
 /// A mode-line whose text carries a tall `display` element (here a glyph with

@@ -1,4 +1,6 @@
 use super::*;
+use neomacs_display_protocol::frame_chrome::ChromeAction;
+use neomacs_display_protocol::types::Color;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
@@ -199,4 +201,118 @@ fn collect_gui_tool_bar_items_after_setup_uses_default_theme() {
             .is_some_and(|path| path.ends_with("etc/toolbar-icons/vscode-like/search.svg"))),
         "tool-bar items: {items:#?}"
     );
+}
+
+#[test]
+fn layout_gui_menu_bar_content_assigns_local_bounds_and_actions() {
+    let content = layout_gui_menu_bar_content(
+        vec![
+            MenuBarItem {
+                index: 0,
+                label: "File".to_string(),
+                key: "file".to_string(),
+            },
+            MenuBarItem {
+                index: 1,
+                label: "Edit".to_string(),
+                key: "edit".to_string(),
+            },
+        ],
+        200.0,
+        18.0,
+        8.0,
+        Color::WHITE,
+        Color::BLACK,
+    );
+
+    assert_eq!(
+        content.items()[0].local_bounds().raw(),
+        neomacs_display_protocol::types::Rect::new(8.0, 0.0, 48.0, 18.0)
+    );
+    assert_eq!(
+        content.items()[0].action(),
+        Some(&ChromeAction::OpenMenu {
+            index: 0,
+            key: "file".to_string(),
+        })
+    );
+    assert_eq!(content.items()[1].local_bounds().raw().x, 56.0);
+}
+
+#[test]
+fn layout_gui_tool_bar_content_uses_one_height_policy() {
+    let items = vec![
+        ToolBarItem {
+            index: 0,
+            key: "save".to_string(),
+            image: None,
+            label: "Save".to_string(),
+            help: String::new(),
+            enabled: true,
+            selected: false,
+            item_type: ToolBarItemType::Button,
+            wrap: false,
+        },
+        ToolBarItem {
+            index: 1,
+            key: "separator".to_string(),
+            image: None,
+            label: String::new(),
+            help: String::new(),
+            enabled: false,
+            selected: false,
+            item_type: ToolBarItemType::Separator,
+            wrap: false,
+        },
+    ];
+    let content = layout_gui_tool_bar_content(items, 200.0, 34.0, Color::WHITE, Color::BLACK);
+
+    assert_eq!(content.icon_size(), 24);
+    assert_eq!(content.padding(), 5);
+    assert_eq!(
+        content.items()[0].local_bounds().raw(),
+        neomacs_display_protocol::types::Rect::new(5.0, 0.0, 34.0, 34.0)
+    );
+    assert_eq!(
+        content.items()[0].action(),
+        Some(&ChromeAction::InvokeToolBarItem { index: 0 })
+    );
+    assert_eq!(content.items()[1].action(), None);
+}
+
+#[test]
+fn layout_gui_compact_bar_content_places_tools_after_menu_items() {
+    let menu_items = vec![MenuBarItem {
+        index: 0,
+        label: "File".to_string(),
+        key: "file".to_string(),
+    }];
+    let tool_items = vec![ToolBarItem {
+        index: 0,
+        key: "save".to_string(),
+        image: None,
+        label: "Save".to_string(),
+        help: String::new(),
+        enabled: true,
+        selected: false,
+        item_type: ToolBarItemType::Button,
+        wrap: false,
+    }];
+    let content = layout_gui_compact_bar_content(
+        menu_items,
+        tool_items,
+        240.0,
+        34.0,
+        8.0,
+        Color::WHITE,
+        Color::BLACK,
+        Color::WHITE,
+        Color::BLACK,
+    );
+
+    let menu_right = {
+        let bounds = content.menu_items()[0].local_bounds().raw();
+        bounds.x + bounds.width
+    };
+    assert!(content.tool_items()[0].local_bounds().raw().x > menu_right);
 }

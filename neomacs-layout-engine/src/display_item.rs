@@ -67,6 +67,13 @@ impl DisplaySourcePosition {
             offset,
         }
     }
+
+    pub(crate) fn lisp_string_char_index(&self) -> Option<usize> {
+        match self {
+            Self::LispString { char_index, .. } => Some(*char_index),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

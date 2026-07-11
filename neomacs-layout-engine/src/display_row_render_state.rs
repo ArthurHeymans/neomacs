@@ -90,7 +90,6 @@ impl RenderedDisplayRow {
         self.progress
     }
 
-    #[cfg(test)]
     pub(crate) fn source_slots(&self) -> &[DisplayRowGlyphSlot] {
         &self.source_slots
     }

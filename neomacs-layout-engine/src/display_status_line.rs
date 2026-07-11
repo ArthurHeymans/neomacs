@@ -40,6 +40,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
+use neomacs_display_protocol::frame_chrome::{BandRect, ChromeAction, ChromeHitRegion};
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
@@ -51,6 +52,7 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::window::{FrameId, WindowId};
+use std::ops::Range;
 use strum::{EnumString, IntoStaticStr};
 
 // Instrumentation: count how many times the mode line is *evaluated* (the
@@ -1120,6 +1122,7 @@ fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
 pub(crate) struct BuiltTabBar {
     pub(crate) text: Value,
     pub(crate) items: Vec<TabBarItem>,
+    pub(crate) item_char_ranges: Vec<Range<usize>>,
 }
 
 struct TabBarDisplayBuildRequest {
@@ -1233,6 +1236,19 @@ impl TabBarDisplaySource {
     }
 
     fn into_built_tab_bar(self, evaluator: &mut Context) -> Option<BuiltTabBar> {
+        let mut char_start = 0usize;
+        let item_char_ranges = self
+            .captions
+            .iter()
+            .map(|caption| {
+                let char_len = caption
+                    .as_runtime_string_owned()
+                    .map_or(0, |caption| caption.chars().count());
+                let range = char_start..char_start + char_len;
+                char_start += char_len;
+                range
+            })
+            .collect();
         let mut concat_form = Vec::with_capacity(self.captions.len() + 1);
         concat_form.push(Value::symbol("concat"));
         concat_form.extend(self.captions);
@@ -1242,8 +1258,41 @@ impl TabBarDisplaySource {
             .then_some(BuiltTabBar {
                 text,
                 items: self.items,
+                item_char_ranges,
             })
     }
+}
+
+pub(crate) fn tab_bar_hit_regions_for_rendered_captions(
+    rendered: &RenderedDisplayRow,
+    items: &[TabBarItem],
+    item_char_ranges: &[Range<usize>],
+    height: f32,
+) -> Vec<ChromeHitRegion> {
+    items
+        .iter()
+        .zip(item_char_ranges)
+        .filter_map(|(item, range)| {
+            let mut left = f32::INFINITY;
+            let mut right = f32::NEG_INFINITY;
+            for slot in rendered.source_slots() {
+                let Some(char_index) = slot.source().lisp_string_char_index() else {
+                    continue;
+                };
+                if range.contains(&char_index) {
+                    left = left.min(slot.x_px());
+                    right = right.max(slot.x_px() + slot.width_px());
+                }
+            }
+            (left.is_finite() && right.is_finite() && right > left).then(|| {
+                ChromeHitRegion::new(
+                    BandRect::new(left, 0.0, right - left, height)
+                        .expect("rendered tab caption bounds are valid"),
+                    ChromeAction::SelectTab { index: item.index },
+                )
+            })
+        })
+        .collect()
 }
 
 pub(crate) struct ScratchGcRootScope {
