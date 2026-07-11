@@ -8,6 +8,7 @@
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
 use crate::face::{Face, FaceAttributes};
+use crate::frame_chrome::FrameChromeContent;
 use crate::frame_glyphs::CursorStyle;
 use crate::glyph_matrix::*;
 use crate::types::{Color, FaceId};
@@ -351,14 +352,34 @@ impl TtyRif {
             self.rasterize_face_fill(origin_col, origin_row, state, fill);
         }
 
-        for frame_row in &state.frame_chrome_rows {
+        if state.frame_chrome.bands().is_empty() {
+            for frame_row in &state.frame_chrome_rows {
+                let char_w = state.char_width.max(1.0);
+                let win_col = origin_col + (frame_row.pixel_bounds.x / char_w) as usize;
+                self.rasterize_glyph_row(
+                    win_col,
+                    origin_row + frame_row.row_index as usize,
+                    &frame_row.row,
+                );
+            }
+        } else {
             let char_w = state.char_width.max(1.0);
-            let win_col = origin_col + (frame_row.pixel_bounds.x / char_w) as usize;
-            self.rasterize_glyph_row(
-                win_col,
-                origin_row + frame_row.row_index as usize,
-                &frame_row.row,
-            );
+            let char_h = state.char_height.max(1.0);
+            for band in state.frame_chrome.bands() {
+                let band_col = origin_col + (band.bounds().x() / char_w).round() as usize;
+                let band_row = origin_row + (band.bounds().y() / char_h).round() as usize;
+                match band.content() {
+                    FrameChromeContent::DisplayRow(content) => {
+                        self.rasterize_glyph_row(band_col, band_row, content.row());
+                    }
+                    FrameChromeContent::MenuBar(content) => {
+                        let cols = (band.bounds().width() / char_w).round().max(0.0) as usize;
+                        let rows = (band.bounds().height() / char_h).round().max(1.0) as usize;
+                        self.rasterize_frame_menu_content(content, band_col, band_row, cols, rows);
+                    }
+                    FrameChromeContent::ToolBar(_) | FrameChromeContent::CompactBar(_) => {}
+                }
+            }
         }
 
         for entry in &state.window_matrices {
@@ -390,7 +411,9 @@ impl TtyRif {
         // window matrices so the menu bar always wins at row 0..lines-1
         // (the layout engine has already shifted the root window down to
         // make room).
-        if let Some(menu_bar) = state.menu_bar.as_ref() {
+        if state.frame_chrome.bands().is_empty()
+            && let Some(menu_bar) = state.menu_bar.as_ref()
+        {
             self.rasterize_menu_bar_at(menu_bar, origin_col, origin_row, state.frame_cols);
         }
 
@@ -476,6 +499,57 @@ impl TtyRif {
     ///   future hit-tester can ignore them (mirrors GNU storing the
     ///   item's column in slot `i+3` and only valid columns being
     ///   reachable via `tty_menu_activate`).
+    fn rasterize_frame_menu_content(
+        &mut self,
+        menu: &crate::frame_chrome::MenuBarContent,
+        origin_col: usize,
+        origin_row: usize,
+        frame_cols: usize,
+        lines: usize,
+    ) {
+        let attrs = menu.terminal_style().map_or_else(
+            || CellAttrs {
+                fg: Some(color_to_rgb_tuple(menu.foreground())),
+                bg: Some(color_to_rgb_tuple(menu.background())),
+                ..CellAttrs::default()
+            },
+            |style| CellAttrs {
+                fg: (!style.use_default_foreground).then(|| rgb_pixel_to_tuple(style.fg)),
+                bg: (!style.use_default_background).then(|| rgb_pixel_to_tuple(style.bg)),
+                bold: style.bold,
+                italic: false,
+                underline: 0,
+                strikethrough: false,
+                inverse: style.inverse,
+            },
+        );
+        let lines = lines.min(self.desired.height.saturating_sub(origin_row));
+        let width = frame_cols.min(self.desired.width.saturating_sub(origin_col));
+        if lines == 0 || width == 0 {
+            return;
+        }
+        for row in 0..lines {
+            for col in 0..width {
+                self.desired
+                    .set(origin_row + row, origin_col + col, ' ', attrs, false);
+            }
+        }
+        let mut col = 0;
+        for positioned in menu.items() {
+            for ch in positioned.item().label.chars() {
+                if col >= width {
+                    return;
+                }
+                self.desired
+                    .set(origin_row, origin_col + col, ch, attrs, false);
+                col += 1;
+            }
+            if col < width {
+                col += 1;
+            }
+        }
+    }
+
     fn rasterize_menu_bar_at(
         &mut self,
         menu_bar: &TtyMenuBarState,
@@ -862,6 +936,14 @@ fn rgb_pixel_to_tuple(pixel: u32) -> (u8, u8, u8) {
         ((pixel >> 16) & 0xFF) as u8,
         ((pixel >> 8) & 0xFF) as u8,
         (pixel & 0xFF) as u8,
+    )
+}
+
+fn color_to_rgb_tuple(color: Color) -> (u8, u8, u8) {
+    (
+        (color.r.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (color.g.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (color.b.clamp(0.0, 1.0) * 255.0).round() as u8,
     )
 }
 

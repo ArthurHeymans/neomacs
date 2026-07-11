@@ -697,7 +697,13 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
 }
 
 #[test]
-fn rasterize_frame_chrome_rows_outside_window_matrices() {
+fn tty_frame_chrome_rasterizes_menu_and_tab_bands_in_order() {
+    use crate::frame_chrome::{
+        BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, FrameChrome,
+        FrameChromeContent, FrameChromeKind, FrameSize, MenuBarContent, PositionedChromeItem,
+    };
+    use crate::ui_types::MenuBarItem;
+
     let mut state = FrameDisplayState::new(10, 5, 1.0, 1.0);
     state.background = Color::BLACK;
 
@@ -710,17 +716,46 @@ fn rasterize_frame_chrome_rows_outside_window_matrices() {
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
 
-    state.frame_chrome_rows.push(FrameChromeRow {
-        row_index: 0,
-        pixel_bounds: Rect::new(0.0, 0.0, 10.0, 1.0),
-        row,
-    });
+    let menu = MenuBarContent::new(
+        vec![PositionedChromeItem::new(
+            BandRect::new(0.0, 0.0, 5.0, 1.0).expect("menu item bounds"),
+            MenuBarItem {
+                index: 0,
+                label: "File".into(),
+                key: "file".into(),
+            },
+            ChromeAction::OpenMenu {
+                index: 0,
+                key: "file".into(),
+            },
+        )],
+        Color::WHITE,
+        Color::BLACK,
+    );
+    state.frame_chrome = FrameChrome::layout(
+        FrameSize::new(10.0, 5.0).expect("frame size"),
+        vec![
+            ChromeBandRequest::new(
+                FrameChromeKind::MenuBar,
+                1.0,
+                FrameChromeContent::MenuBar(menu),
+            ),
+            ChromeBandRequest::new(
+                FrameChromeKind::TabBar,
+                1.0,
+                FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row, Vec::new())),
+            ),
+        ],
+    )
+    .expect("frame chrome");
 
     let mut rif = TtyRif::new(10, 5);
     rif.rasterize(&state);
 
-    assert_eq!(rif.desired.cells[0].ch, 'T');
-    assert_eq!(rif.desired.cells[1].ch, 'B');
+    assert_eq!(rif.desired.cells[0].ch, 'F');
+    assert_eq!(rif.desired.cells[1].ch, 'i');
+    assert_eq!(rif.desired.cells[10].ch, 'T');
+    assert_eq!(rif.desired.cells[11].ch, 'B');
 }
 
 #[test]

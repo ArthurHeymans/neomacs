@@ -208,6 +208,17 @@ pub struct MenuBarContent {
     items: Vec<PositionedChromeItem<MenuBarItem>>,
     foreground: Color,
     background: Color,
+    terminal_style: Option<TerminalMenuBarStyle>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TerminalMenuBarStyle {
+    pub fg: u32,
+    pub bg: u32,
+    pub use_default_foreground: bool,
+    pub use_default_background: bool,
+    pub bold: bool,
+    pub inverse: bool,
 }
 
 impl MenuBarContent {
@@ -220,7 +231,13 @@ impl MenuBarContent {
             items,
             foreground,
             background,
+            terminal_style: None,
         }
+    }
+
+    pub fn with_terminal_style(mut self, style: TerminalMenuBarStyle) -> Self {
+        self.terminal_style = Some(style);
+        self
     }
 
     pub fn empty() -> Self {
@@ -237,6 +254,10 @@ impl MenuBarContent {
 
     pub fn background(&self) -> Color {
         self.background
+    }
+
+    pub fn terminal_style(&self) -> Option<TerminalMenuBarStyle> {
+        self.terminal_style
     }
 }
 

@@ -72,6 +72,7 @@ use crate::incremental_layout::{
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
+    TerminalMenuBarStyle,
 };
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -940,6 +941,7 @@ impl LayoutEngine {
             } else {
                 if frame_params.menu_bar_height > 0.0 {
                     let face = face_resolver.resolve_named_face_without_inverse_video("menu");
+                    let terminal_face = face_resolver.resolve_named_face("menu");
                     let content = layout_gui_menu_bar_content(
                         collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
                         frame_params.width,
@@ -947,7 +949,15 @@ impl LayoutEngine {
                         frame_params.char_width,
                         pixel_to_color(face.fg),
                         pixel_to_color(face.bg),
-                    );
+                    )
+                    .with_terminal_style(TerminalMenuBarStyle {
+                        fg: terminal_face.fg,
+                        bg: terminal_face.bg,
+                        use_default_foreground: terminal_face.use_default_foreground,
+                        use_default_background: terminal_face.use_default_background,
+                        bold: terminal_face.font_weight >= 600,
+                        inverse: terminal_face.terminal_inverse_video,
+                    });
                     self.frame_output
                         .add_frame_chrome_band(ChromeBandRequest::new(
                             ProtocolFrameChromeKind::MenuBar,
