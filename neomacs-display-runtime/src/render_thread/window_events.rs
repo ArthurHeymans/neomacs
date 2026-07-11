@@ -401,6 +401,10 @@ impl RenderApp {
                 self.handle_cursor_moved(window_id, position);
             }
 
+            WindowEvent::CursorLeft { .. } => {
+                self.handle_cursor_left(window_id);
+            }
+
             WindowEvent::MouseWheel { delta, .. } => {
                 self.handle_mouse_wheel(window_id, delta);
             }

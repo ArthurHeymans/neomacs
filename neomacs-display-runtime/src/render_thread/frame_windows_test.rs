@@ -46,6 +46,57 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     buf
 }
 
+fn install_pointer_region(
+    frame: &mut FrameGlyphBuffer,
+    interaction: Option<neomacs_display_protocol::InteractionId>,
+    visual: bool,
+) {
+    use neomacs_display_protocol::{
+        FaceId, FrameRect, PointerAppearanceId, PointerDrawMode, PresentedPaintSpan,
+        PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+    };
+
+    let appearance = visual.then(|| {
+        let face = FaceId::new(7);
+        frame.set_face(
+            face,
+            Color::WHITE,
+            None,
+            400,
+            false,
+            0,
+            None,
+            0,
+            None,
+            0,
+            None,
+        );
+        frame.add_char('x', 0.0, 0.0, 10.0, 10.0, 8.0, false);
+        PresentedPointerAppearance::new(
+            vec![PresentedPaintSpan::new(
+                PresentedPrimitiveKind::Glyph,
+                0,
+                1,
+                FrameRect::new(0.0, 0.0, 20.0, 20.0).unwrap(),
+            )],
+            PointerDrawMode::Face(face),
+            PointerDrawMode::Face(face),
+        )
+    });
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(0.0, 0.0, 20.0, 20.0).unwrap(),
+                interaction,
+                appearance
+                    .as_ref()
+                    .map(|_| PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            appearance.into_iter().collect(),
+        )
+        .unwrap();
+}
+
 fn make_test_device() -> Option<wgpu::Device> {
     let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     instance_descriptor.backends = wgpu::Backends::all();
@@ -308,6 +359,112 @@ fn displayed_presentations_include_root_and_children_for_atomic_retirement() {
         std::collections::HashSet::from([7, 8])
     );
     assert_eq!(render.child_presentation(0x99), Some(8));
+}
+
+#[test]
+fn presented_pointer_hit_selects_the_displayed_root_or_child_map_in_local_coordinates() {
+    use neomacs_display_protocol::{
+        InteractionId, PointerAppearanceId, frame_chrome::PresentationId,
+    };
+
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let mut root = make_frame(0x42, 0);
+    root.presentation_id = PresentationId::new(21);
+    install_pointer_region(&mut root, None, true);
+    render.set_current_frame(Some(root), None);
+
+    let mut child = make_frame(0x99, 0x42);
+    child.presentation_id = PresentationId::new(22);
+    child.parent_x = 100.0;
+    child.parent_y = 80.0;
+    install_pointer_region(&mut child, Some(InteractionId::new(5)), false);
+    assert!(render.update_child_frame(child));
+
+    let root_hit = render
+        .presented_pointer_hit(0x42, 5.0, 5.0)
+        .expect("root visual-only hit");
+    assert_eq!(root_hit.presentation(), PresentationId::new(21));
+    assert_eq!(root_hit.interaction(), None);
+    assert_eq!(
+        root_hit.appearance_key().map(|key| key.appearance()),
+        Some(PointerAppearanceId::try_from(0usize).unwrap())
+    );
+
+    let child_hit = render
+        .presented_pointer_hit(0x99, 5.0, 5.0)
+        .expect("child click-only local hit");
+    assert_eq!(child_hit.presentation(), PresentationId::new(22));
+    assert_eq!(child_hit.interaction(), Some(InteractionId::new(5)));
+    assert_eq!(child_hit.appearance_key(), None);
+    assert!(render.presented_pointer_hit(0x99, 105.0, 85.0).is_none());
+}
+
+#[test]
+fn replacing_a_frame_clears_pointer_appearance_from_the_retired_presentation() {
+    use crate::render_thread::state::PresentedAppearanceKey;
+    use neomacs_display_protocol::{PointerAppearanceId, frame_chrome::PresentationId};
+
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let mut old = make_frame(0x42, 0);
+    old.presentation_id = PresentationId::new(7);
+    render.set_current_frame(Some(old), None);
+    render
+        .pointer_appearance
+        .hover(Some(PresentedAppearanceKey::new(
+            PresentationId::new(7),
+            PointerAppearanceId::try_from(2usize).unwrap(),
+        )));
+    render.pointer_appearance.press();
+
+    let mut replacement = make_frame(0x42, 0);
+    replacement.presentation_id = PresentationId::new(8);
+    render.set_current_frame(Some(replacement), None);
+
+    assert_eq!(render.pointer_appearance.active(), None);
+    assert_eq!(render.pointer_appearance.pressed(), None);
+}
+
+#[test]
+fn replacing_or_removing_a_child_clears_only_its_pointer_appearance() {
+    use crate::render_thread::state::PresentedAppearanceKey;
+    use neomacs_display_protocol::{PointerAppearanceId, frame_chrome::PresentationId};
+
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let mut root = make_frame(0x42, 0);
+    root.presentation_id = PresentationId::new(7);
+    render.set_current_frame(Some(root), None);
+    let mut child = make_frame(0x99, 0x42);
+    child.presentation_id = PresentationId::new(17);
+    assert!(render.update_child_frame(child));
+    render
+        .pointer_appearance
+        .hover(Some(PresentedAppearanceKey::new(
+            PresentationId::new(17),
+            PointerAppearanceId::try_from(1usize).unwrap(),
+        )));
+
+    let mut root_replacement = make_frame(0x42, 0);
+    root_replacement.presentation_id = PresentationId::new(8);
+    render.set_current_frame(Some(root_replacement), None);
+    assert_eq!(
+        render.pointer_appearance.active().unwrap().presentation(),
+        PresentationId::new(17),
+        "retiring the root must not clear a child presentation's appearance"
+    );
+
+    let mut replacement = make_frame(0x99, 0x42);
+    replacement.presentation_id = PresentationId::new(18);
+    assert!(render.update_child_frame(replacement));
+    assert_eq!(render.pointer_appearance.active(), None);
+
+    render
+        .pointer_appearance
+        .hover(Some(PresentedAppearanceKey::new(
+            PresentationId::new(18),
+            PointerAppearanceId::try_from(1usize).unwrap(),
+        )));
+    assert!(render.remove_child_frame(0x99));
+    assert_eq!(render.pointer_appearance.active(), None);
 }
 
 #[test]

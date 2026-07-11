@@ -17,8 +17,9 @@ use winit::window::{Fullscreen, Window, WindowId};
 use super::child_frames::ChildFrameManager;
 use super::cursor::{CursorState, CursorTarget};
 use super::state::{
-    FpsCounter, GuiChromeInteractionState, IdleDimState, ImeCursorArea, TypingSpeedState,
-    WindowChrome, effective_window_scale_factor, window_size_from_emacs_pixels,
+    FpsCounter, GuiChromeInteractionState, IdleDimState, ImeCursorArea, PointerAppearanceState,
+    PresentedPointerHit, TypingSpeedState, WindowChrome, effective_window_scale_factor,
+    window_size_from_emacs_pixels,
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
@@ -90,12 +91,18 @@ pub(crate) struct GuiFrameRenderState {
     pub compositor: FrameCompositor,
     /// GUI chrome (menu bar, tool bar, compact bar) for this frame window.
     pub chrome: ChromeState,
+    /// Snapshot-qualified visual state selected from displayed pointer maps.
+    pub(super) pointer_appearance: PointerAppearanceState,
     /// Transient overlays (popup, tooltip, bell, fps, typing, idle, ime).
     pub overlays: OverlayState,
     /// Text cursor animation and blink state for this frame window.
     pub(super) cursor: CursorState,
     /// Last known pointer position in this frame's logical coordinates.
     pub mouse_pos: (f32, f32),
+    /// Whether the native window currently owns the pointer. The last position
+    /// remains useful for input coordinates after leave, but must not reactivate
+    /// a visual range on a captured release.
+    pub(super) pointer_inside: bool,
     /// Floating WebKit overlays rendered on this frame window.
     #[cfg(feature = "wpe-webkit")]
     pub floating_webkits: Vec<FloatingWebKit>,
@@ -209,9 +216,8 @@ impl ChromeState {
         match press {
             ChromePress::MenuBar(idx) => self.interaction.menu_bar_active = Some(*idx),
             ChromePress::ToolBar(idx) => self.interaction.toolbar_pressed = Some(*idx),
-            ChromePress::TabBar(idx) => {
+            ChromePress::TabBar => {
                 self.interaction.tab_bar_press_captured = true;
-                self.interaction.tab_bar_pressed = Some(*idx);
             }
         }
     }
@@ -225,7 +231,7 @@ impl ChromeState {
 pub(crate) enum ChromePress {
     MenuBar(u32),
     ToolBar(u32),
-    TabBar(u32),
+    TabBar,
 }
 
 /// Per-window state for a top-level GUI frame.
@@ -290,6 +296,7 @@ impl GuiFrameRenderState {
                 retained_static: None,
             },
             chrome: ChromeState::default(),
+            pointer_appearance: PointerAppearanceState::default(),
             overlays: OverlayState {
                 popup_menu: None,
                 tooltip: None,
@@ -305,6 +312,7 @@ impl GuiFrameRenderState {
             },
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
+            pointer_inside: false,
             #[cfg(feature = "wpe-webkit")]
             floating_webkits: Vec::new(),
         }
@@ -328,6 +336,7 @@ impl GuiFrameRenderState {
                 retained_static: None,
             },
             chrome: ChromeState::default(),
+            pointer_appearance: PointerAppearanceState::default(),
             overlays: OverlayState {
                 popup_menu: None,
                 tooltip: None,
@@ -343,6 +352,7 @@ impl GuiFrameRenderState {
             },
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
+            pointer_inside: false,
             #[cfg(feature = "wpe-webkit")]
             floating_webkits: Vec::new(),
         }
@@ -357,6 +367,32 @@ impl GuiFrameRenderState {
 
     pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
         self.compositor.current_frame.clone()
+    }
+
+    /// Hit-tests pointer semantics from the immutable buffer currently shown
+    /// for `target_frame_id`. Coordinates are local to that target frame.
+    pub(super) fn presented_pointer_hit(
+        &self,
+        target_frame_id: u64,
+        x: f32,
+        y: f32,
+    ) -> Option<PresentedPointerHit> {
+        let frame = if target_frame_id == self.emacs_frame_id {
+            self.compositor.current_frame.as_ref()?
+        } else {
+            &self
+                .compositor
+                .child_frames
+                .frames
+                .get(&target_frame_id)?
+                .frame
+        };
+        let region = frame.presented_pointer().hit_test(x, y)?;
+        Some(PresentedPointerHit::new(
+            frame.presentation_id,
+            region.interaction(),
+            region.appearance(),
+        ))
     }
 
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
@@ -483,7 +519,6 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn clear_all_chrome_pressed(&mut self) {
-        self.chrome.interaction.tab_bar_pressed = None;
         self.chrome.interaction.tab_bar_press_captured = false;
         self.chrome.interaction.compact_bar_tool_pressed = None;
         self.chrome.interaction.toolbar_pressed = None;
@@ -497,6 +532,16 @@ impl GuiFrameRenderState {
 
     pub(super) fn set_mouse_pos(&mut self, pos: (f32, f32)) {
         self.mouse_pos = pos;
+        self.pointer_inside = true;
+    }
+
+    pub(super) fn clear_pointer_hover(&mut self) -> bool {
+        self.pointer_inside = false;
+        let changed = self.pointer_appearance.hover(None);
+        if changed {
+            self.mark_dirty();
+        }
+        changed
     }
 
     pub(super) fn set_current_frame(
@@ -504,7 +549,19 @@ impl GuiFrameRenderState {
         frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
         row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
     ) {
+        let previous_presentation = self
+            .compositor
+            .current_frame
+            .as_ref()
+            .map(|frame| frame.presentation_id);
+        let next_presentation = frame.as_ref().map(|frame| frame.presentation_id);
         self.compositor.current_frame = frame;
+        if let Some(previous) = previous_presentation
+            && Some(previous) != next_presentation
+            && self.pointer_appearance.retire(previous)
+        {
+            self.compositor.dirty = true;
+        }
         self.compositor.current_frame_ingest_seq = super::frame_state::next_faces_ingest_seq();
         self.compositor.current_row_damage = row_damage;
     }
@@ -784,6 +841,12 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
+        let removed_presentation = self
+            .compositor
+            .child_frames
+            .frames
+            .get(&frame_id)
+            .map(|entry| entry.frame.presentation_id);
         self.compositor.hidden_child_frames.insert(frame_id);
         let removed = self.compositor.child_frames.remove_frame(frame_id);
         if removed {
@@ -798,6 +861,9 @@ impl GuiFrameRenderState {
         );
         if removed {
             self.compositor.dirty = true;
+            if let Some(presentation) = removed_presentation {
+                self.pointer_appearance.retire(presentation);
+            }
         }
         if self
             .cursor
@@ -859,9 +925,21 @@ impl GuiFrameRenderState {
             );
             return false;
         }
+        let previous_presentation = self
+            .compositor
+            .child_frames
+            .frames
+            .get(&frame_id)
+            .map(|entry| entry.frame.presentation_id);
+        let next_presentation = frame.presentation_id;
         let changed = self.compositor.child_frames.update_frame(frame);
         if changed {
             self.compositor.dirty = true;
+            if let Some(previous) = previous_presentation
+                && previous != next_presentation
+            {
+                self.pointer_appearance.retire(previous);
+            }
         }
         changed
     }

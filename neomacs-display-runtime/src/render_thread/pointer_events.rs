@@ -179,12 +179,20 @@ impl RenderApp {
         Self::frame_window_tool_hit_test(window_state, x, y)
     }
 
-    fn frame_window_tab_bar_hit_test(
+    pub(super) fn frame_window_tab_bar_hit_test(
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> Option<(u64, u32)> {
         let frame = window_state.render.compositor.current_frame.as_ref()?;
+        if let Some(hit) =
+            window_state
+                .render
+                .presented_pointer_hit(window_state.render.emacs_frame_id, x, y)
+            && let Some(interaction) = hit.interaction()
+        {
+            return Some((hit.presentation().get(), interaction.get()));
+        }
         match frame_chrome_hit(frame, x, y)?.0 {
             ChromeAction::Presented { interaction } => {
                 Some((frame.presentation_id.get(), interaction.get()))
@@ -268,6 +276,27 @@ impl RenderApp {
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 let x = window_state.render.mouse_pos.0;
                 let y = window_state.render.mouse_pos.1;
+                if button == MouseButton::Left {
+                    let (local_x, local_y, target_frame_id) =
+                        Self::pointer_target_for_frame_window(window_state, x, y);
+                    let appearance = if window_state.render.pointer_inside {
+                        window_state
+                            .render
+                            .presented_pointer_hit(target_frame_id, local_x, local_y)
+                            .and_then(|hit| hit.appearance_key())
+                    } else {
+                        None
+                    };
+                    let mut visual_changed =
+                        window_state.render.pointer_appearance.hover(appearance);
+                    visual_changed |= match state {
+                        ElementState::Pressed => window_state.render.pointer_appearance.press(),
+                        ElementState::Released => window_state.render.pointer_appearance.release(),
+                    };
+                    if visual_changed {
+                        window_state.render.mark_dirty();
+                    }
+                }
                 let popup_was_open = window_state.render.overlays.popup_menu.is_some();
                 if !popup_was_open && state == ElementState::Pressed && button == MouseButton::Left
                 {
@@ -389,7 +418,7 @@ impl RenderApp {
                                 window_state
                                     .render
                                     .chrome
-                                    .press_with_popup(&ChromePress::TabBar(interaction));
+                                    .press_with_popup(&ChromePress::TabBar);
                                 event = Some(InputEvent::PresentedPointer {
                                     presentation,
                                     interaction,
@@ -587,7 +616,7 @@ impl RenderApp {
                             window_state
                                 .render
                                 .chrome
-                                .press_with_popup(&ChromePress::TabBar(interaction));
+                                .press_with_popup(&ChromePress::TabBar);
                             event = Some(InputEvent::PresentedPointer {
                                 presentation,
                                 interaction,
@@ -638,12 +667,6 @@ impl RenderApp {
                             .chrome
                             .interaction
                             .toolbar_press_captured
-                        || window_state
-                            .render
-                            .chrome
-                            .interaction
-                            .tab_bar_pressed
-                            .is_some()
                         || window_state
                             .render
                             .chrome
@@ -911,12 +934,6 @@ impl RenderApp {
                         != old_tool_hover;
             }
 
-            let old_tab_hover = window_state.render.chrome.interaction.tab_bar_hovered;
-            window_state.render.chrome.interaction.tab_bar_hovered =
-                Self::frame_window_tab_bar_hit_test(window_state, lx, ly)
-                    .map(|(_, interaction)| interaction);
-            dirty |= window_state.render.chrome.interaction.tab_bar_hovered != old_tab_hover;
-
             let old_toolbar_hover = window_state.render.chrome.interaction.toolbar_hovered;
             window_state.render.chrome.interaction.toolbar_hovered =
                 Self::frame_window_toolbar_hit_test(window_state, lx, ly);
@@ -924,14 +941,18 @@ impl RenderApp {
 
             dirty |= window_state.render.update_popup_hover(lx, ly);
 
-            if dirty {
-                window_state.render.mark_dirty();
-            }
-
             window_state.set_mouse_hidden_for_typing(false);
 
             let (ev_x, ev_y, target_fid) =
                 Self::pointer_target_for_frame_window(window_state, lx, ly);
+            let appearance = window_state
+                .render
+                .presented_pointer_hit(target_fid, ev_x, ev_y)
+                .and_then(|hit| hit.appearance_key());
+            dirty |= window_state.render.pointer_appearance.hover(appearance);
+            if dirty {
+                window_state.render.mark_dirty();
+            }
             if event.is_none() {
                 event = Some(InputEvent::MouseMove {
                     x: ev_x,
@@ -944,6 +965,12 @@ impl RenderApp {
                 self.comms.send_input(event);
             }
             return;
+        }
+    }
+
+    pub(super) fn handle_cursor_left(&mut self, window_id: WindowId) {
+        if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
+            window_state.render.clear_pointer_hover();
         }
     }
 

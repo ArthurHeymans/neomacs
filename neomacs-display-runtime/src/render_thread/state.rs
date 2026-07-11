@@ -7,7 +7,10 @@ use winit::dpi::{LogicalSize, PhysicalSize, Size};
 use crate::core::face::Face;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
-use neomacs_display_protocol::{EffectsConfig, ToolBarImageSource, TransitionPolicy};
+use neomacs_display_protocol::{
+    EffectsConfig, InteractionId, PointerAppearanceId, PresentationId, ToolBarImageSource,
+    TransitionPolicy,
+};
 use neomacs_renderer_wgpu::WgpuRenderer;
 
 use super::cursor::CursorState;
@@ -211,12 +214,171 @@ pub(super) struct ImeCursorArea {
     pub(super) height: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PresentedAppearanceKey {
+    presentation: PresentationId,
+    appearance: PointerAppearanceId,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct PresentedPointerHit {
+    presentation: PresentationId,
+    interaction: Option<InteractionId>,
+    appearance: Option<PointerAppearanceId>,
+}
+
+impl PresentedPointerHit {
+    pub(super) const fn new(
+        presentation: PresentationId,
+        interaction: Option<InteractionId>,
+        appearance: Option<PointerAppearanceId>,
+    ) -> Self {
+        Self {
+            presentation,
+            interaction,
+            appearance,
+        }
+    }
+
+    pub(super) const fn presentation(self) -> PresentationId {
+        self.presentation
+    }
+
+    pub(super) const fn interaction(self) -> Option<InteractionId> {
+        self.interaction
+    }
+
+    pub(super) fn appearance_key(self) -> Option<PresentedAppearanceKey> {
+        self.appearance
+            .map(|appearance| PresentedAppearanceKey::new(self.presentation, appearance))
+    }
+}
+
+impl PresentedAppearanceKey {
+    pub(super) const fn new(presentation: PresentationId, appearance: PointerAppearanceId) -> Self {
+        Self {
+            presentation,
+            appearance,
+        }
+    }
+
+    pub(super) const fn presentation(self) -> PresentationId {
+        self.presentation
+    }
+
+    pub(super) const fn appearance(self) -> PointerAppearanceId {
+        self.appearance
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PointerAppearancePhase {
+    Hover,
+    Pressed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ActivePointerAppearance {
+    key: PresentedAppearanceKey,
+    phase: PointerAppearancePhase,
+}
+
+impl ActivePointerAppearance {
+    pub(super) const fn new(key: PresentedAppearanceKey, phase: PointerAppearancePhase) -> Self {
+        Self { key, phase }
+    }
+
+    pub(super) const fn key(self) -> PresentedAppearanceKey {
+        self.key
+    }
+
+    pub(super) const fn presentation(self) -> PresentationId {
+        self.key.presentation()
+    }
+
+    pub(super) const fn appearance(self) -> PointerAppearanceId {
+        self.key.appearance()
+    }
+
+    pub(super) const fn phase(self) -> PointerAppearancePhase {
+        self.phase
+    }
+}
+
+/// Snapshot-qualified pointer visual selection.
+///
+/// The pressed key is intentionally independent from the currently hovered
+/// key: capture may remain on one visual range while the pointer hovers
+/// another, and returning to the captured range restores its pressed phase.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct PointerAppearanceState {
+    active: Option<ActivePointerAppearance>,
+    pressed: Option<PresentedAppearanceKey>,
+}
+
+impl PointerAppearanceState {
+    pub(super) const fn active(self) -> Option<ActivePointerAppearance> {
+        self.active
+    }
+
+    pub(super) const fn pressed(self) -> Option<PresentedAppearanceKey> {
+        self.pressed
+    }
+
+    pub(super) fn hover(&mut self, key: Option<PresentedAppearanceKey>) -> bool {
+        let next = key.map(|key| {
+            let phase = if self.pressed == Some(key) {
+                PointerAppearancePhase::Pressed
+            } else {
+                PointerAppearancePhase::Hover
+            };
+            ActivePointerAppearance::new(key, phase)
+        });
+        let changed = self.active != next;
+        self.active = next;
+        changed
+    }
+
+    pub(super) fn press(&mut self) -> bool {
+        let previous_active = self.active;
+        self.pressed = self.active.map(ActivePointerAppearance::key);
+        if let Some(active) = self.active.as_mut() {
+            active.phase = PointerAppearancePhase::Pressed;
+        }
+        self.active != previous_active
+    }
+
+    pub(super) fn release(&mut self) -> bool {
+        let previous_active = self.active;
+        self.pressed = None;
+        if let Some(active) = self.active.as_mut() {
+            active.phase = PointerAppearancePhase::Hover;
+        }
+        self.active != previous_active
+    }
+
+    pub(super) fn retire(&mut self, presentation: PresentationId) -> bool {
+        let previous_active = self.active;
+        if self
+            .active
+            .is_some_and(|active| active.presentation() == presentation)
+        {
+            self.active = None;
+        }
+        if self
+            .pressed
+            .is_some_and(|pressed| pressed.presentation() == presentation)
+        {
+            self.pressed = None;
+        }
+        self.active != previous_active
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct GuiChromeInteractionState {
     pub(super) menu_bar_hovered: Option<u32>,
     pub(super) menu_bar_active: Option<u32>,
-    pub(super) tab_bar_hovered: Option<u32>,
-    pub(super) tab_bar_pressed: Option<u32>,
     pub(super) tab_bar_press_captured: bool,
     pub(super) toolbar_hovered: Option<u32>,
     pub(super) toolbar_pressed: Option<u32>,
@@ -234,8 +396,6 @@ impl GuiChromeInteractionState {
     }
 
     pub(super) fn clear_tab_bar(&mut self) {
-        self.tab_bar_hovered = None;
-        self.tab_bar_pressed = None;
         // Preserve press capture across chrome removal so a chrome press does
         // not leak a buffer release if the tab bar disappears mid-click.
     }

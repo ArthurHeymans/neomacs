@@ -167,19 +167,7 @@ impl RenderApp {
     /// Hit-test a tab-bar presentation target.
     #[cfg(test)]
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<(u64, u32)> {
-        let frame = self
-            .frame_windows
-            .primary_window()?
-            .render
-            .compositor
-            .current_frame
-            .as_ref()?;
-        match frame_chrome_hit(frame, x, y)?.0 {
-            ChromeAction::Presented { interaction } => {
-                Some((frame.presentation_id.get(), interaction.get()))
-            }
-            _ => None,
-        }
+        Self::frame_window_tab_bar_hit_test(self.frame_windows.primary_window()?, x, y)
     }
 
     /// Hit-test menu bar items. Returns the item under (x, y), or None.

@@ -2,6 +2,10 @@ use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
+use crate::render_thread::state::{
+    ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState, PresentedAppearanceKey,
+};
+use neomacs_display_protocol::PointerAppearanceId;
 use neomacs_display_protocol::frame_chrome::InteractionId;
 use neomacs_display_protocol::frame_chrome::PresentationId;
 use winit::keyboard::{Key, NamedKey, SmolStr};
@@ -60,6 +64,123 @@ fn make_test_device() -> Option<wgpu::Device> {
     }))
     .ok()?;
     Some(device)
+}
+
+fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKey {
+    PresentedAppearanceKey::new(
+        PresentationId::new(presentation),
+        PointerAppearanceId::try_from(appearance).expect("appearance id"),
+    )
+}
+
+#[test]
+fn pointer_appearance_is_qualified_by_presentation_and_phase() {
+    let first = appearance_key(7, 1);
+    let second = appearance_key(7, 2);
+    let replacement = appearance_key(8, 1);
+    let mut state = PointerAppearanceState::default();
+
+    assert!(state.hover(Some(first)));
+    assert_eq!(
+        state.active(),
+        Some(ActivePointerAppearance::new(
+            first,
+            PointerAppearancePhase::Hover
+        ))
+    );
+    assert!(!state.hover(Some(first)), "same visual range is stable");
+
+    assert!(state.press());
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Pressed
+    );
+    assert!(
+        !state.press(),
+        "repeated press does not change the draw phase"
+    );
+
+    assert!(state.hover(Some(second)));
+    assert_eq!(
+        state.active(),
+        Some(ActivePointerAppearance::new(
+            second,
+            PointerAppearancePhase::Hover
+        ))
+    );
+    assert!(state.hover(Some(first)));
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Pressed
+    );
+
+    assert!(state.release());
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Hover
+    );
+    assert!(!state.release(), "repeated release is visually stable");
+    assert!(state.hover(Some(replacement)));
+    assert_eq!(
+        state.active().unwrap().presentation(),
+        PresentationId::new(8)
+    );
+    assert!(state.hover(None));
+    assert_eq!(state.active(), None);
+}
+
+#[test]
+fn pressed_visual_stays_captured_while_hover_follows_pointer() {
+    let pressed_visual = appearance_key(11, 3);
+    let other_visual = appearance_key(11, 4);
+    let mut state = PointerAppearanceState::default();
+
+    state.hover(Some(pressed_visual));
+    state.press();
+    state.hover(Some(other_visual));
+
+    assert_eq!(state.pressed(), Some(pressed_visual));
+    assert_eq!(state.active().unwrap().key(), other_visual);
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Hover
+    );
+
+    state.hover(Some(pressed_visual));
+    assert_eq!(
+        state.active().unwrap().phase(),
+        PointerAppearancePhase::Pressed
+    );
+}
+
+#[test]
+fn visual_transitions_do_not_mutate_evaluator_press_capture() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.tab_bar_press_captured = true;
+
+    render.pointer_appearance.hover(Some(appearance_key(11, 3)));
+    render.pointer_appearance.press();
+    render.pointer_appearance.hover(Some(appearance_key(11, 4)));
+    render.pointer_appearance.release();
+
+    assert!(render.chrome.interaction.tab_bar_press_captured);
+}
+
+#[test]
+fn cursor_leave_clears_hover_but_preserves_visual_and_input_capture() {
+    let pressed_visual = appearance_key(11, 3);
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.tab_bar_press_captured = true;
+    render.pointer_appearance.hover(Some(pressed_visual));
+    render.pointer_appearance.press();
+    render.set_dirty(false);
+
+    assert!(render.clear_pointer_hover());
+
+    assert_eq!(render.pointer_appearance.active(), None);
+    assert_eq!(render.pointer_appearance.pressed(), Some(pressed_visual));
+    assert!(render.chrome.interaction.tab_bar_press_captured);
+    assert!(render.compositor.dirty);
 }
 
 fn ensure_primary_frame(app: &mut RenderApp) -> Option<&mut GuiFrameRenderState> {
@@ -205,6 +326,17 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
         Some((ChromeAction::Presented { interaction }, bounds))
             if interaction.get() == 4 && bounds.y() == 52.0
     ));
+    frame
+        .install_presented_pointer(
+            vec![neomacs_display_protocol::PresentedPointerRegion::new(
+                neomacs_display_protocol::FrameRect::new(8.0, 52.0, 80.0, 18.0)
+                    .expect("pointer bounds"),
+                Some(InteractionId::new(12)),
+                None,
+            )],
+            vec![],
+        )
+        .expect("displayed pointer map");
     let mut app = make_test_app(800, 600, 1.0);
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
         return;
@@ -212,7 +344,7 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
     primary_frame.compositor.current_frame = Some(frame);
     assert_eq!(app.toolbar_y_origin(), 18.0);
     assert_eq!(app.toolbar_hit_test(20.0, 30.0), Some(0));
-    assert_eq!(app.tab_bar_hit_test(20.0, 56.0), Some((9, 4)));
+    assert_eq!(app.tab_bar_hit_test(20.0, 56.0), Some((9, 12)));
     let hit = app.menu_bar_hit_test(20.0, 10.0).expect("menu hit");
     assert_eq!(hit.index, 0);
     assert_eq!(hit.key, "file");
