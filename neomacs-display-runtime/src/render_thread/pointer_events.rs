@@ -12,6 +12,30 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
 use winit::window::WindowId;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum PointerOwner {
+    Popup,
+    Child { frame_id: u64, x: f32, y: f32 },
+    Root { frame_id: u64, x: f32, y: f32 },
+}
+
+impl PointerOwner {
+    pub(super) fn target(self) -> Option<(f32, f32, u64)> {
+        match self {
+            Self::Popup => None,
+            Self::Child { frame_id, x, y } | Self::Root { frame_id, x, y } => {
+                Some((x, y, frame_id))
+            }
+        }
+    }
+
+    /// Popup handling deliberately delegates menu/chrome clicks back to the
+    /// existing popup branch, but never exposes an underlying presented target.
+    pub(super) fn permits_root_chrome(self) -> bool {
+        !matches!(self, Self::Child { .. })
+    }
+}
+
 /// Search a glyph buffer for an inline xwidget at the given local coordinates.
 /// Returns `(xwidget_id, relative_x, relative_y)` if found.
 fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, i32, i32)> {
@@ -36,6 +60,30 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
 }
 
 impl RenderApp {
+    pub(super) fn pointer_owner(
+        window_state: &GuiFrameWindowState,
+        x: f32,
+        y: f32,
+    ) -> PointerOwner {
+        if window_state.render.overlays.popup_menu.is_some() {
+            return PointerOwner::Popup;
+        }
+        if let Some((frame_id, local_x, local_y)) =
+            window_state.render.compositor.child_frames.hit_test(x, y)
+        {
+            PointerOwner::Child {
+                frame_id,
+                x: local_x,
+                y: local_y,
+            }
+        } else {
+            PointerOwner::Root {
+                frame_id: window_state.render.emacs_frame_id,
+                x,
+                y,
+            }
+        }
+    }
     #[cfg(feature = "wpe-webkit")]
     fn floating_webkit_hit_test(
         floating_webkits: &[crate::core::scene::FloatingWebKit],
@@ -224,15 +272,42 @@ impl RenderApp {
         }
     }
 
-    pub(super) fn take_tab_bar_release_event(
-        render: &mut super::frame_windows::GuiFrameRenderState,
+    fn capture_tab_bar_press(
+        window_state: &mut GuiFrameWindowState,
         x: f32,
         y: f32,
     ) -> Option<InputEvent> {
-        let target = render.chrome.interaction.take_tab_bar_capture()?.target()?;
-        Some(Self::presented_pointer_input_event(
-            render, target, false, x, y,
-        ))
+        let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
+        window_state
+            .render
+            .chrome
+            .interaction
+            .capture_tab_bar(target);
+        target.map(|target| {
+            Self::presented_pointer_input_event(&window_state.render, target, true, x, y)
+        })
+    }
+
+    pub(super) fn take_tab_bar_release_events(
+        render: &mut super::frame_windows::GuiFrameRenderState,
+        x: f32,
+        y: f32,
+    ) -> Vec<InputEvent> {
+        let release = render
+            .chrome
+            .interaction
+            .take_tab_bar_capture()
+            .and_then(|capture| capture.target())
+            .map(|target| Self::presented_pointer_input_event(render, target, false, x, y));
+        release
+            .into_iter()
+            .chain(
+                render
+                    .take_deferred_pointer_retirements()
+                    .into_iter()
+                    .map(|presentation| InputEvent::PresentationRetired { presentation }),
+            )
+            .collect()
     }
 
     fn frame_window_tool_hit_test(
@@ -305,19 +380,23 @@ impl RenderApp {
         self.record_idle_dim_activity(window_id);
         if self.frame_windows.get_by_winit(window_id).is_some() {
             let mut event = None;
+            let mut captured_events = Vec::new();
             let mut handled_chrome = false;
             let mut delivered_mouse_button = false;
             if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
                 let x = window_state.render.mouse_pos.0;
                 let y = window_state.render.mouse_pos.1;
+                let pointer_owner = Self::pointer_owner(window_state, x, y);
                 if button == MouseButton::Left {
-                    let (local_x, local_y, target_frame_id) =
-                        Self::pointer_target_for_frame_window(window_state, x, y);
                     let appearance = if window_state.render.pointer_inside {
-                        window_state
-                            .render
-                            .presented_pointer_hit(target_frame_id, local_x, local_y)
-                            .and_then(|hit| hit.appearance_key())
+                        pointer_owner
+                            .target()
+                            .and_then(|(local_x, local_y, target_frame_id)| {
+                                window_state
+                                    .render
+                                    .presented_pointer_hit(target_frame_id, local_x, local_y)
+                                    .and_then(|hit| hit.appearance_key())
+                            })
                     } else {
                         None
                     };
@@ -441,21 +520,7 @@ impl RenderApp {
                                 .chrome
                                 .interaction
                                 .compact_bar_menu_active = None;
-                            let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
-                            window_state
-                                .render
-                                .chrome
-                                .interaction
-                                .capture_tab_bar(target);
-                            if let Some(target) = target {
-                                event = Some(Self::presented_pointer_input_event(
-                                    &window_state.render,
-                                    target,
-                                    true,
-                                    x,
-                                    y,
-                                ));
-                            }
+                            event = Self::capture_tab_bar_press(window_state, x, y);
                             window_state.render.mark_dirty();
                             handled_chrome = true;
                         } else if Self::frame_window_point_in_band(
@@ -604,6 +669,7 @@ impl RenderApp {
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
+                        && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
                             FrameChromeKind::MenuBar,
@@ -625,6 +691,7 @@ impl RenderApp {
                             handled_chrome = true;
                         }
                     } else if !handled_chrome
+                        && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
                             FrameChromeKind::TabBar,
@@ -632,24 +699,13 @@ impl RenderApp {
                             y,
                         )
                     {
-                        let target = Self::frame_window_tab_bar_hit_test(window_state, x, y);
-                        window_state
-                            .render
-                            .chrome
-                            .interaction
-                            .capture_tab_bar(target);
-                        if let Some(target) = target {
-                            event = Some(Self::presented_pointer_input_event(
-                                &window_state.render,
-                                target,
-                                true,
-                                x,
-                                y,
-                            ));
+                        event = Self::capture_tab_bar_press(window_state, x, y);
+                        if event.is_some() {
                             window_state.render.mark_dirty();
                         }
                         handled_chrome = true;
                     } else if !handled_chrome
+                        && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
                             FrameChromeKind::ToolBar,
@@ -708,13 +764,15 @@ impl RenderApp {
                         .tab_bar_capture()
                         .is_some()
                     {
-                        event = Self::take_tab_bar_release_event(&mut window_state.render, x, y);
+                        captured_events =
+                            Self::take_tab_bar_release_events(&mut window_state.render, x, y);
                     }
                     window_state.render.clear_all_chrome_pressed();
                     handled_chrome = true;
                 }
 
                 if !handled_chrome
+                    && pointer_owner.permits_root_chrome()
                     && window_state
                         .render
                         .compositor
@@ -774,6 +832,9 @@ impl RenderApp {
                 }
             }
             if let Some(event) = event {
+                self.comms.send_input(event);
+            }
+            for event in captured_events {
                 self.comms.send_input(event);
             }
             if state == ElementState::Pressed
@@ -957,10 +1018,15 @@ impl RenderApp {
 
             let (ev_x, ev_y, target_fid) =
                 Self::pointer_target_for_frame_window(window_state, lx, ly);
-            let appearance = window_state
-                .render
-                .presented_pointer_hit(target_fid, ev_x, ev_y)
-                .and_then(|hit| hit.appearance_key());
+            let appearance =
+                Self::pointer_owner(window_state, lx, ly)
+                    .target()
+                    .and_then(|(x, y, frame_id)| {
+                        window_state
+                            .render
+                            .presented_pointer_hit(frame_id, x, y)
+                            .and_then(|hit| hit.appearance_key())
+                    });
             dirty |= window_state.render.pointer_appearance.hover(appearance);
             if dirty {
                 window_state.render.mark_dirty();

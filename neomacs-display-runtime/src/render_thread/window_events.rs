@@ -204,10 +204,22 @@ impl RenderApp {
                     self.frame_coordinator
                         .set_focused(super::frame_sched::NativeWindowId(sched_id), focused);
                 }
+                let retirements = if focused {
+                    Vec::new()
+                } else {
+                    self.frame_windows
+                        .get_by_winit_mut(window_id)
+                        .map(|window| window.render.cancel_pointer_interaction().1)
+                        .unwrap_or_default()
+                };
                 self.comms.send_input(InputEvent::WindowFocus {
                     focused,
                     emacs_frame_id: emacs_fid,
                 });
+                for presentation in retirements {
+                    self.comms
+                        .send_input(InputEvent::PresentationRetired { presentation });
+                }
             }
 
             WindowEvent::Occluded(occluded) => {

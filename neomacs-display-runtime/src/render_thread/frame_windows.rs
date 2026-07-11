@@ -93,6 +93,8 @@ pub(crate) struct GuiFrameRenderState {
     pub chrome: ChromeState,
     /// Snapshot-qualified visual state selected from displayed pointer maps.
     pub(super) pointer_appearance: PointerAppearanceState,
+    /// Retirements pinned while a presented interaction still references them.
+    deferred_pointer_retirements: Vec<u64>,
     /// Transient overlays (popup, tooltip, bell, fps, typing, idle, ime).
     pub overlays: OverlayState,
     /// Text cursor animation and blink state for this frame window.
@@ -293,6 +295,7 @@ impl GuiFrameRenderState {
             },
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
+            deferred_pointer_retirements: Vec::new(),
             overlays: OverlayState {
                 popup_menu: None,
                 tooltip: None,
@@ -333,6 +336,7 @@ impl GuiFrameRenderState {
             },
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
+            deferred_pointer_retirements: Vec::new(),
             overlays: OverlayState {
                 popup_menu: None,
                 tooltip: None,
@@ -538,6 +542,39 @@ impl GuiFrameRenderState {
             self.mark_dirty();
         }
         changed
+    }
+
+    pub(super) fn route_presentation_retirement(&mut self, presentation: u64) -> Option<u64> {
+        let pinned = self
+            .chrome
+            .interaction
+            .tab_bar_capture()
+            .and_then(|capture| capture.target())
+            .is_some_and(|target| target.presentation().get() == presentation);
+        if pinned {
+            if !self.deferred_pointer_retirements.contains(&presentation) {
+                self.deferred_pointer_retirements.push(presentation);
+            }
+            None
+        } else {
+            Some(presentation)
+        }
+    }
+
+    pub(super) fn take_deferred_pointer_retirements(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.deferred_pointer_retirements)
+    }
+
+    pub(super) fn cancel_pointer_interaction(&mut self) -> (bool, Vec<u64>) {
+        let visual_changed = self.pointer_appearance.cancel();
+        self.chrome.interaction.clear_tab_bar_capture();
+        self.chrome.interaction.toolbar_press_captured = false;
+        self.chrome.interaction.toolbar_pressed = None;
+        self.chrome.interaction.compact_bar_tool_pressed = None;
+        if visual_changed {
+            self.mark_dirty();
+        }
+        (visual_changed, self.take_deferred_pointer_retirements())
     }
 
     pub(super) fn set_current_frame(

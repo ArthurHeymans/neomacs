@@ -413,6 +413,12 @@ impl PointerAppearanceState {
         }
         *self != previous
     }
+
+    pub(super) fn cancel(&mut self) -> bool {
+        let changed = self.active.is_some() || self.pressed.is_some();
+        *self = Self::default();
+        changed
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

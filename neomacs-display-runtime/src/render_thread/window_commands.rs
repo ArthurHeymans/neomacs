@@ -203,12 +203,26 @@ impl RenderApp {
             WindowCommand::DestroyWindow { frame } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
-                let presentations = self
-                    .frame_windows
-                    .get(emacs_frame_id)
-                    .map(|window| window.render.displayed_presentations())
-                    .unwrap_or_default();
-                for presentation in presentations {
+                let mut retirements = Vec::new();
+                if let Some(window) = self.frame_windows.get_mut(emacs_frame_id) {
+                    // Destruction cancels capture first, flushing any older
+                    // pinned generation before retiring buffers still shown.
+                    retirements.extend(window.render.cancel_pointer_interaction().1);
+                    let mut presentations: Vec<_> = window
+                        .render
+                        .displayed_presentations()
+                        .into_iter()
+                        .collect();
+                    presentations.sort_unstable();
+                    for presentation in presentations {
+                        if let Some(presentation) =
+                            window.render.route_presentation_retirement(presentation)
+                        {
+                            retirements.push(presentation);
+                        }
+                    }
+                }
+                for presentation in retirements {
                     self.comms
                         .send_input(InputEvent::PresentationRetired { presentation });
                 }
@@ -242,15 +256,19 @@ impl RenderApp {
                     frame_id,
                     "child_frame_lifecycle: render_thread_remove_command"
                 );
-                let mut presentations = std::collections::HashSet::new();
-                self.frame_windows.for_each_top_level_window(|window| {
+                let mut retirements = Vec::new();
+                self.frame_windows.for_each_top_level_window_mut(|window| {
                     if let Some(presentation) = window.render.child_presentation(frame_id) {
-                        presentations.insert(presentation);
+                        if let Some(presentation) =
+                            window.render.route_presentation_retirement(presentation)
+                        {
+                            retirements.push(presentation);
+                        }
                     }
                 });
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
-                for presentation in presentations {
+                for presentation in retirements {
                     self.comms
                         .send_input(InputEvent::PresentationRetired { presentation });
                 }

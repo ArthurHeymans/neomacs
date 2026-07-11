@@ -2,6 +2,7 @@ use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
+use crate::render_thread::pointer_events::PointerOwner;
 use crate::render_thread::state::{
     ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState,
     PresentedAppearanceKey, PresentedInteractionKey, TabBarPressCapture,
@@ -224,7 +225,9 @@ fn tab_release_uses_the_original_capture_after_hover_moves_or_leaves() {
     render.pointer_appearance.press();
     render.pointer_appearance.hover(Some(appearance_key(21, 2)));
 
-    let event = RenderApp::take_tab_bar_release_event(&mut render, 500.0, 700.0)
+    let event = RenderApp::take_tab_bar_release_events(&mut render, 500.0, 700.0)
+        .into_iter()
+        .next()
         .expect("captured release event");
 
     assert!(matches!(
@@ -250,8 +253,51 @@ fn blank_tab_band_capture_suppresses_release_without_fake_interaction() {
         render.chrome.interaction.tab_bar_capture(),
         Some(TabBarPressCapture::new(None))
     );
-    assert!(RenderApp::take_tab_bar_release_event(&mut render, 40.0, 10.0).is_none());
+    assert!(RenderApp::take_tab_bar_release_events(&mut render, 40.0, 10.0).is_empty());
     assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+}
+
+#[test]
+fn captured_release_precedes_deferred_presentation_retirement() {
+    let target = PresentedInteractionKey::new(PresentationId::new(41), InteractionId::new(9));
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.capture_tab_bar(Some(target));
+    assert_eq!(render.route_presentation_retirement(41), None);
+
+    let events = RenderApp::take_tab_bar_release_events(&mut render, 1.0, 2.0);
+    assert!(matches!(
+        events.as_slice(),
+        [
+            crate::thread_comm::InputEvent::PresentedPointer {
+                presentation: 41,
+                interaction: 9,
+                pressed: false,
+                ..
+            },
+            crate::thread_comm::InputEvent::PresentationRetired { presentation: 41 }
+        ]
+    ));
+}
+
+#[test]
+fn cancellation_flushes_pinned_retirement_without_release() {
+    let target = PresentedInteractionKey::new(PresentationId::new(51), InteractionId::new(10));
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.chrome.interaction.capture_tab_bar(Some(target));
+    render.chrome.interaction.toolbar_press_captured = true;
+    render.chrome.interaction.toolbar_pressed = Some(3);
+    render.pointer_appearance.hover(Some(appearance_key(51, 1)));
+    render.pointer_appearance.press();
+    assert_eq!(render.route_presentation_retirement(51), None);
+
+    let (changed, retirements) = render.cancel_pointer_interaction();
+    assert!(changed);
+    assert_eq!(retirements, vec![51]);
+    assert_eq!(render.pointer_appearance.active(), None);
+    assert_eq!(render.pointer_appearance.pressed(), None);
+    assert_eq!(render.chrome.interaction.tab_bar_capture(), None);
+    assert!(!render.chrome.interaction.toolbar_press_captured);
+    assert_eq!(render.chrome.interaction.toolbar_pressed, None);
 }
 
 #[test]
@@ -265,6 +311,52 @@ fn tab_capture_survives_tab_bar_removal_until_release() {
     assert_eq!(
         interaction.tab_bar_capture(),
         Some(TabBarPressCapture::new(Some(captured)))
+    );
+}
+
+#[test]
+fn topmost_child_blocks_root_chrome_ownership() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_emacs_frame_id(0x42);
+    let mut child = FrameGlyphBuffer::with_size(100.0, 100.0);
+    child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
+    child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
+    child.parent_x = 0.0;
+    child.parent_y = 40.0;
+    render.update_child_frame(child);
+    let window = app.frame_windows.primary_window().unwrap();
+
+    assert!(matches!(
+        RenderApp::pointer_owner(window, 20.0, 56.0),
+        PointerOwner::Child { frame_id: 0x99, .. }
+    ));
+}
+
+#[test]
+fn popup_owns_pointer_above_underlying_presented_content() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_popup_menu(Some(neomacs_renderer_wgpu::PopupMenuState::new(
+        0.0,
+        0.0,
+        vec![],
+        None,
+        13.0,
+        17.0,
+        8.0,
+    )));
+    let window = app.frame_windows.primary_window().unwrap();
+
+    let owner = RenderApp::pointer_owner(window, 20.0, 56.0);
+    assert_eq!(owner, PointerOwner::Popup);
+    assert!(
+        owner.target().is_none(),
+        "popup suppresses underlying appearance"
+    );
+    assert!(
+        owner.permits_root_chrome(),
+        "popup branch retains explicit chrome delegation"
     );
 }
 

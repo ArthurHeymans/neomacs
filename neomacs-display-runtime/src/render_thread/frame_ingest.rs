@@ -468,7 +468,11 @@ impl RenderApp {
                     } else {
                         window_state.reset_ime_cursor_area();
                     }
-                    if let Some(presentation) = retired {
+                    if let Some(presentation) = retired.and_then(|presentation| {
+                        window_state
+                            .render
+                            .route_presentation_retirement(presentation)
+                    }) {
                         self.comms.send_input(
                             crate::thread_comm::InputEvent::PresentationRetired { presentation },
                         );
@@ -517,7 +521,13 @@ impl RenderApp {
                             );
                         }
                         if let Some(presentation) =
-                            retired_presentation(old_presentation, new_presentation)
+                            retired_presentation(old_presentation, new_presentation).and_then(
+                                |presentation| {
+                                    window_state
+                                        .render
+                                        .route_presentation_retirement(presentation)
+                                },
+                            )
                         {
                             self.comms.send_input(
                                 crate::thread_comm::InputEvent::PresentationRetired {
@@ -544,7 +554,11 @@ impl RenderApp {
                     let new_presentation = frame.presentation_id;
                     if ws.render.update_child_frame(frame)
                         && let Some(presentation) =
-                            retired_presentation(old_presentation, new_presentation)
+                            retired_presentation(old_presentation, new_presentation).and_then(
+                                |presentation| {
+                                    ws.render.route_presentation_retirement(presentation)
+                                },
+                            )
                     {
                         self.comms.send_input(
                             crate::thread_comm::InputEvent::PresentationRetired { presentation },
@@ -575,7 +589,9 @@ impl RenderApp {
                         row_damage,
                         cursor_config,
                     );
-                    if let Some(presentation) = retired {
+                    if let Some(presentation) = retired.and_then(|presentation| {
+                        primary_frame.route_presentation_retirement(presentation)
+                    }) {
                         self.comms.send_input(
                             crate::thread_comm::InputEvent::PresentationRetired { presentation },
                         );
