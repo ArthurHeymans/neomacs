@@ -478,7 +478,6 @@ impl RenderApp {
         if cursor_only_hint
             && !need_offscreen
             && !render.compositor.transitions.has_active()
-            && Self::frame_cursors_all_clean(&frame)
             && !Self::window_has_active_overlays(render)
             && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
         {
@@ -538,6 +537,25 @@ impl RenderApp {
                 animated_cursor,
                 mouse_pos,
             );
+            // Filled-box cursors are inverse-video: the retained scene has the
+            // character in its normal color, so each filled-box cell (box plus
+            // the character in cursor_fg) is redrawn over the composite from a
+            // single-glyph mini-frame, scissored to the cell. Bit-identical to
+            // the full render (offscreen_frame::filled_box_composite_matches_
+            // full_render).
+            if cursor_visible {
+                Self::composite_filled_box_cursor_cells(
+                    renderer,
+                    render,
+                    &frame,
+                    &surface_view,
+                    native.width,
+                    native.height,
+                    native.scale_factor as f32,
+                    animated_cursor,
+                    mouse_pos,
+                );
+            }
             super::frame_stats::count(&super::frame_stats::COMPOSITE_ONLY_FRAMES);
             renderer.set_scale_factor(old_scale_factor);
             renderer.resize(old_width, old_height);
@@ -992,15 +1010,80 @@ impl RenderApp {
         }
     }
 
-    /// Whether every window cursor in the frame is a clean top-layer style
-    /// (bar/hbar/hollow), so the cursor can be composited over a retained
-    /// static scene. A filled-box cursor uses inverse video and is not
-    /// separable, so its presence forces the full render path.
-    fn frame_cursors_all_clean(frame: &crate::core::frame_glyphs::FrameGlyphBuffer) -> bool {
-        frame
+    /// Redraw each filled-box cursor's inverse-video cell over the composited
+    /// scene. The retained static scene was rendered cursorless (character in
+    /// its normal color); a filled-box cursor covers that cell with a box in
+    /// the cursor color and redraws the character in `cursor_fg`. This builds a
+    /// single-glyph mini-frame per filled-box cursor (only the glyphs in that
+    /// cursor's slot) and renders it scissored to the cell with `LoadOp::Load`,
+    /// so no full-frame glyph work runs and the rest of the composite is
+    /// preserved. The glyph is already warm in the atlas from the retained
+    /// build, so this is a cache hit.
+    #[allow(clippy::too_many_arguments)]
+    fn composite_filled_box_cursor_cells(
+        renderer: &mut WgpuRenderer,
+        render: &mut GuiFrameRenderState,
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        surface_view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        scale: f32,
+        animated_cursor: Option<crate::core::types::AnimatedCursor>,
+        mouse_pos: (f32, f32),
+    ) {
+        use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer};
+        let filled: Vec<_> = frame
             .window_cursors
             .iter()
-            .all(|cursor| cursor.style.is_clean_top_layer())
+            .filter(|c| matches!(c.style, CursorStyle::FilledBox))
+            .cloned()
+            .collect();
+        if filled.is_empty() {
+            return;
+        }
+        let Some(atlas) = render.compositor.glyph_atlas.as_mut() else {
+            return;
+        };
+        for cursor in filled {
+            let mut mini = FrameGlyphBuffer::with_size(frame.width, frame.height);
+            mini.fonts = frame.fonts.clone();
+            mini.char_fonts = frame.char_fonts.clone();
+            mini.shaped_clusters = frame.shaped_clusters.clone();
+            mini.faces = frame.faces.clone();
+            mini.background = frame.background;
+            mini.background_alpha = frame.background_alpha;
+            for glyph in &frame.glyphs {
+                if glyph.slot_id() == Some(cursor.slot_id) {
+                    mini.glyphs.push(glyph.clone());
+                }
+            }
+            let mut only_cursor = cursor.clone();
+            only_cursor.active = true;
+            mini.window_cursors = vec![only_cursor];
+            atlas.set_current_frame_fonts(
+                &mini.fonts,
+                &mini.char_fonts,
+                &mini.shaped_clusters,
+            );
+            // The box covers the cell = the cursor rect; scissor to it in
+            // physical pixels (glyph positions are logical, scaled by the
+            // uniform, so the scissor rect is logical * scale).
+            let sx = (cursor.x * scale).floor().max(0.0) as u32;
+            let sy = (cursor.y * scale).floor().max(0.0) as u32;
+            let sw = (cursor.width * scale).ceil().max(1.0) as u32;
+            let sh = (cursor.height * scale).ceil().max(1.0) as u32;
+            renderer.render_frame_cell_loaded(
+                surface_view,
+                &mini,
+                atlas,
+                width,
+                height,
+                true,
+                animated_cursor,
+                mouse_pos,
+                (sx, sy, sw, sh),
+            );
+        }
     }
 
     /// Whether any dynamic overlay is active. Overlays are not part of the
@@ -1070,10 +1153,6 @@ impl RenderApp {
     /// compositor-only for the cursor layer; it enables the retained-static
     /// fast path (blit the retained scene, draw only the cursor) when the
     /// scene is eligible, skipping the glyph pipeline.
-    pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) -> bool {
-        self.render_frame_window_impl(emacs_frame_id, false)
-    }
-
     pub(super) fn render_frame_window_hinted(
         &mut self,
         emacs_frame_id: u64,

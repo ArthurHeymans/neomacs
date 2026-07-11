@@ -1071,6 +1071,7 @@ impl WgpuRenderer {
     // The `background_gradient` parameter is an RGB-pair tuple; a type alias
     // would not materially improve this signature.
     #[allow(clippy::type_complexity)]
+    #[allow(clippy::too_many_arguments)]
     pub fn render_frame_glyphs(
         &mut self,
         view: &wgpu::TextureView,
@@ -1083,6 +1084,72 @@ impl WgpuRenderer {
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
         row_damage: Option<&super::row_reuse::FrameRowDamage>,
+    ) {
+        self.render_frame_glyphs_impl(
+            view,
+            frame_glyphs,
+            glyph_atlas,
+            surface_width,
+            surface_height,
+            cursor_visible,
+            animated_cursor,
+            mouse_pos,
+            background_gradient,
+            row_damage,
+            false,
+            None,
+        );
+    }
+
+    /// Render a frame into `view` preserving existing content (`LoadOp::Load`)
+    /// and clipped to `scissor` (physical x, y, w, h). Used by the
+    /// retained-static fast path to redraw only the filled-box cursor cell
+    /// (box plus the inverse-video character) over the composited scene, from a
+    /// single-glyph mini-frame so no full-frame glyph work is done.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_frame_cell_loaded(
+        &mut self,
+        view: &wgpu::TextureView,
+        frame_glyphs: &FrameGlyphBuffer,
+        glyph_atlas: &mut WgpuGlyphAtlas,
+        surface_width: u32,
+        surface_height: u32,
+        cursor_visible: bool,
+        animated_cursor: Option<AnimatedCursor>,
+        mouse_pos: (f32, f32),
+        scissor: (u32, u32, u32, u32),
+    ) {
+        self.render_frame_glyphs_impl(
+            view,
+            frame_glyphs,
+            glyph_atlas,
+            surface_width,
+            surface_height,
+            cursor_visible,
+            animated_cursor,
+            mouse_pos,
+            None,
+            None,
+            true,
+            Some(scissor),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame_glyphs_impl(
+        &mut self,
+        view: &wgpu::TextureView,
+        frame_glyphs: &FrameGlyphBuffer,
+        glyph_atlas: &mut WgpuGlyphAtlas,
+        surface_width: u32,
+        surface_height: u32,
+        cursor_visible: bool,
+        animated_cursor: Option<AnimatedCursor>,
+        mouse_pos: (f32, f32),
+        background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        row_damage: Option<&super::row_reuse::FrameRowDamage>,
+        load_existing: bool,
+        scissor: Option<(u32, u32, u32, u32)>,
     ) {
         self.arenas.begin_frame();
 
@@ -1194,20 +1261,27 @@ impl WgpuRenderer {
         // Render pass - Clear with frame background color since we rebuild
         // the entire frame from current_matrix each time (no incremental updates).
         let bg = &frame_glyphs.background;
+        let load = if load_existing {
+            // Preserve already-composited content (the retained static scene)
+            // and only overwrite within the scissor rect below.
+            wgpu::LoadOp::Load
+        } else {
+            wgpu::LoadOp::Clear(wgpu::Color {
+                // Pre-multiply RGB by alpha for correct compositing
+                r: (bg.r * bg.a) as f64,
+                g: (bg.g * bg.a) as f64,
+                b: (bg.b * bg.a) as f64,
+                a: bg.a as f64,
+            })
+        };
         {
-            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Frame Glyphs Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            // Pre-multiply RGB by alpha for correct compositing
-                            r: (bg.r * bg.a) as f64,
-                            g: (bg.g * bg.a) as f64,
-                            b: (bg.b * bg.a) as f64,
-                            a: bg.a as f64,
-                        }),
+                        load,
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -1217,6 +1291,13 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            if let Some((sx, sy, sw, sh)) = scissor {
+                // Clip every draw in this pass to the cell; combined with
+                // LoadOp::Load, only the cursor cell is overwritten.
+                let max_w = surface_width.saturating_sub(sx);
+                let max_h = surface_height.saturating_sub(sy);
+                render_pass.set_scissor_rect(sx, sy, sw.min(max_w), sh.min(max_h));
+            }
             let mut ctx = FramePassCtx {
                 pass: render_pass,
                 params: &params,

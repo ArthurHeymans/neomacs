@@ -307,3 +307,57 @@ fn retained_static_reused_across_cursor_colors() {
     }}
     assert!(cursor_changed, "cursor color must change between composites");
 }
+
+// Filled-box cursor over a glyph: the composite (static cursorless scene +
+// blit + scissored cell redraw with box + char in cursor_fg) must equal the
+// full render. The glyph renders as an emergency fallback here, but both
+// paths use it identically, so pixel-equality proves the composite logic.
+fn filled_box_frame() -> FrameGlyphBuffer {
+    use neomacs_display_protocol::types::FaceId;
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::rgb(0.10, 0.12, 0.16);
+    frame.set_face(FaceId::default(), Color::rgb(0.9,0.9,0.9), None, 400, false, 0, None, 0, None, 0, None);
+    frame.add_char('A', 20.0, 16.0, 10.0, 18.0, 14.0, false);
+    frame.set_phys_cursor(PhysCursor {
+        window_id: DisplayWindowId::new(1), charpos: 0, row: 0, col: 0,
+        slot_id: DisplaySlotId { window_id: DisplayWindowId::new(1), row: 0, col: 0 },
+        x: 20.0, y: 16.0, width: 10.0, height: 18.0, ascent: 14.0,
+        style: CursorStyle::FilledBox,
+        color: Color::rgb(1.0, 0.5, 0.0), cursor_fg: Color::rgb(0.05,0.05,0.05),
+    });
+    frame
+}
+
+#[test]
+fn filled_box_composite_matches_full_render() {
+    let Some(mut h) = try_harness() else { return; };
+    h.renderer.effects.cursor_color_cycle.enabled = false;
+    let frame = filled_box_frame();
+    h.atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+
+    // A: full render with the filled-box cursor inline.
+    let (ta, va) = make_tex(&h.renderer, "fb-full");
+    h.renderer.render_frame_glyphs(&va, &frame, &mut h.atlas, W, H, true, None, (0.0,0.0), None, None);
+    let full = read_tex(&h.renderer, &ta);
+
+    // B: cursorless static -> blit -> scissored cell redraw (box + char).
+    let (_ts, vs) = make_tex(&h.renderer, "fb-static");
+    h.renderer.render_frame_glyphs(&vs, &frame, &mut h.atlas, W, H, false, None, (0.0,0.0), None, None);
+    let (tc, vc) = make_tex(&h.renderer, "fb-composite");
+    let bg = h.renderer.create_texture_bind_group(&vs);
+    h.renderer.blit_texture_to_view(&bg, &vc, W, H);
+    // Match the runtime sequence exactly: render_cursor_only draws the box
+    // (cursor_bg) unscissored, then the scissored cell redraw adds box + char.
+    h.renderer.render_cursor_only(&vc, &frame, W, H, true, None, (0.0,0.0));
+    // cursor cell = the glyph cell (20,16,10,18)
+    h.renderer.render_frame_cell_loaded(&vc, &frame, &mut h.atlas, W, H, true, None, (0.0,0.0), (20,16,10,18));
+    let comp = read_tex(&h.renderer, &tc);
+
+    let mut max_diff = 0i32;
+    for y in 0..H { for x in 0..W {
+        let a = pxb(&full,x,y); let b = pxb(&comp,x,y);
+        for c in 0..4 { let d=(a[c] as i32-b[c] as i32).abs(); if d>max_diff {max_diff=d;} }
+    }}
+    eprintln!("filled-box composite vs full: max_diff={}", max_diff);
+    assert!(max_diff <= 2, "filled-box composite must match full render, max_diff={max_diff}");
+}
