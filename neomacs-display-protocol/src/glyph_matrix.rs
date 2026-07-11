@@ -1300,17 +1300,19 @@ impl FrameDisplayState {
                 );
             }
         }
-        for frame_row in &self.frame_chrome_rows {
-            self.for_each_grid_row_glyph(
-                DisplayWindowId::new(0),
-                frame_row.row_index,
-                &frame_row.row,
-                frame_row.pixel_bounds,
-                frame_row.pixel_bounds,
-                self.char_width,
-                self.char_height,
-                &mut push,
-            );
+        if self.frame_chrome.bands().is_empty() {
+            for frame_row in &self.frame_chrome_rows {
+                self.for_each_grid_row_glyph(
+                    DisplayWindowId::new(0),
+                    frame_row.row_index,
+                    &frame_row.row,
+                    frame_row.pixel_bounds,
+                    frame_row.pixel_bounds,
+                    self.char_width,
+                    self.char_height,
+                    &mut push,
+                );
+            }
         }
         for entry in &self.window_matrices {
             // Body (`Text`) rows clip to the text-area band so a vscroll's
@@ -1440,6 +1442,14 @@ impl FrameDisplayState {
 
         // --- Materialize standalone images ---
         for img in &self.images {
+            if img.row_role == GlyphRowRole::TabBar
+                && self
+                    .frame_chrome
+                    .band(super::frame_chrome::FrameChromeKind::TabBar)
+                    .is_some()
+            {
+                continue;
+            }
             push(FrameGlyph::Image {
                 window_id: img.window_id,
                 row_role: img.row_role,
@@ -1455,6 +1465,14 @@ impl FrameDisplayState {
 
         // --- Materialize videos ---
         for vid in &self.videos {
+            if vid.row_role == GlyphRowRole::TabBar
+                && self
+                    .frame_chrome
+                    .band(super::frame_chrome::FrameChromeKind::TabBar)
+                    .is_some()
+            {
+                continue;
+            }
             push(FrameGlyph::Video {
                 window_id: vid.window_id,
                 row_role: vid.row_role,
@@ -1472,6 +1490,14 @@ impl FrameDisplayState {
 
         // --- Materialize xwidgets ---
         for xwidget in &self.xwidgets {
+            if xwidget.row_role == GlyphRowRole::TabBar
+                && self
+                    .frame_chrome
+                    .band(super::frame_chrome::FrameChromeKind::TabBar)
+                    .is_some()
+            {
+                continue;
+            }
             push(FrameGlyph::Xwidget {
                 window_id: xwidget.window_id,
                 row_role: xwidget.row_role,

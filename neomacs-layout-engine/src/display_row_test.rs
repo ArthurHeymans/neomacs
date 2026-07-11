@@ -2,7 +2,7 @@ use super::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, SourceSpan};
 use crate::display_rendered_row_output_install::{
-    install_measured_frame_chrome_display_row, install_measured_window_display_row,
+    frame_chrome_display_row, install_measured_window_display_row,
 };
 use crate::display_row_builder::{
     DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowItemMeasurement,
@@ -3413,11 +3413,11 @@ fn measured_display_row_materializes_absolute_and_window_relative_output_rows() 
 }
 
 /// Regression guard: an RTL (Hebrew) FRAME-CHROME row (e.g. an RTL tab-bar
-/// string) must reorder to correct VISUAL order at install.
+/// string) must reorder to correct VISUAL order when converted to typed chrome.
 ///
 /// Frame chrome rows do NOT pass through the window-row `Complete` lifecycle —
-/// they materialize and install straight into `frame_chrome_rows`. That direct
-/// install is their SOLE reorder timing. The rendered row is built in LOGICAL
+/// they become a `ChromeDisplayRow` before `FrameChrome` placement. That
+/// conversion is their SOLE reorder timing. The rendered row is built in LOGICAL
 /// order (only `normalize_external_row` ran; no pre-pass reorder), so if the
 /// install-time finalizer ever stops reordering, this Hebrew "אב" would render
 /// in logical (wrong) order and the assertions below would fail.
@@ -3455,11 +3455,9 @@ fn frame_chrome_rtl_row_reorders_to_visual_order_at_install() {
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
 
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    let mut frame_chrome_rows = Vec::new();
-    install_measured_frame_chrome_display_row(&mut builder, &mut frame_chrome_rows, &measured);
+    let installed_content = frame_chrome_display_row(&measured);
 
-    let installed = &frame_chrome_rows[0].row;
+    let installed = installed_content.row();
     let glyphs = &installed.glyphs[GlyphArea::Text.index()];
     // Reordered to visual "בא": the second logical char now comes first.
     assert_eq!(glyphs.len(), 2);

@@ -90,6 +90,69 @@ fn frame_params() -> FrameParams {
     }
 }
 
+#[test]
+fn frame_output_owner_publishes_canonical_frame_chrome_order() {
+    use neomacs_display_protocol::frame_chrome::{
+        FrameChromeContent, MenuBarContent, ToolBarContent,
+    };
+
+    let mut owner = FrameOutputOwner::new();
+    owner.add_frame_chrome_band(ChromeBandRequest::new(
+        FrameChromeKind::TabBar,
+        18.0,
+        FrameChromeContent::DisplayRow(
+            neomacs_display_protocol::frame_chrome::ChromeDisplayRow::empty_tab_bar(),
+        ),
+    ));
+    owner.add_frame_chrome_band(ChromeBandRequest::new(
+        FrameChromeKind::ToolBar,
+        34.0,
+        FrameChromeContent::ToolBar(ToolBarContent::empty()),
+    ));
+    owner.add_frame_chrome_band(ChromeBandRequest::new(
+        FrameChromeKind::MenuBar,
+        18.0,
+        FrameChromeContent::MenuBar(MenuBarContent::empty()),
+    ));
+
+    let state = owner.finish(&frame_params()).expect("valid frame chrome");
+    let bands = state.frame_chrome.bands();
+    assert_eq!(bands.len(), 3);
+    assert_eq!(bands[0].kind(), FrameChromeKind::MenuBar);
+    assert_eq!(bands[0].bounds().y(), 0.0);
+    assert_eq!(bands[1].kind(), FrameChromeKind::ToolBar);
+    assert_eq!(bands[1].bounds().y(), 18.0);
+    assert_eq!(bands[2].kind(), FrameChromeKind::TabBar);
+    assert_eq!(bands[2].bounds().y(), 52.0);
+}
+
+#[test]
+fn frame_output_owner_uses_compact_bar_instead_of_split_menu_and_tool_bars() {
+    use neomacs_display_protocol::frame_chrome::{CompactBarContent, FrameChromeContent};
+
+    let mut owner = FrameOutputOwner::new();
+    owner.add_frame_chrome_band(ChromeBandRequest::new(
+        FrameChromeKind::CompactBar,
+        34.0,
+        FrameChromeContent::CompactBar(CompactBarContent::empty()),
+    ));
+    owner.add_frame_chrome_band(ChromeBandRequest::new(
+        FrameChromeKind::TabBar,
+        18.0,
+        FrameChromeContent::DisplayRow(
+            neomacs_display_protocol::frame_chrome::ChromeDisplayRow::empty_tab_bar(),
+        ),
+    ));
+
+    let state = owner.finish(&frame_params()).expect("valid frame chrome");
+    let bands = state.frame_chrome.bands();
+    assert_eq!(bands.len(), 2);
+    assert_eq!(bands[0].kind(), FrameChromeKind::CompactBar);
+    assert_eq!(bands[0].bounds().y(), 0.0);
+    assert_eq!(bands[1].kind(), FrameChromeKind::TabBar);
+    assert_eq!(bands[1].bounds().y(), 34.0);
+}
+
 fn window_info(params: &WindowParams) -> WindowInfo {
     WindowInfo {
         window_id: DisplayWindowId::new(params.window_id),

@@ -32,6 +32,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
+use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::FaceId;
@@ -13851,6 +13852,86 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     // primary "renders any target-frame text at all" check
     // and leaves frame-scoped tab isolation as a separate
     // concern.
+}
+
+#[test]
+fn layout_frame_rust_publishes_authoritative_frame_chrome() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("authoritative-frame-chrome", 640, 180, buf_id);
+    eval.obarray_mut()
+        .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
+    eval.eval_str(
+        r#"
+          (require 'tab-bar)
+          (setq tab-bar-format '(tab-bar-format-tabs))
+          (select-frame layout-target-frame nil)
+        "#,
+    )
+    .expect("configure frame chrome");
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.parent_frame = Value::NIL;
+        frame.window_system = Some(Value::symbol("neomacs"));
+        frame.displays_chrome = true;
+        frame.char_height = 18.0;
+        frame
+            .parameters
+            .insert(Value::symbol("menu-bar-lines"), Value::fixnum(1));
+        frame
+            .parameters
+            .insert(Value::symbol("tool-bar-lines"), Value::fixnum(1));
+        frame
+            .parameters
+            .insert(Value::symbol("compact-bar-lines"), Value::fixnum(0));
+        frame.sync_menu_bar_height_from_parameters();
+        frame.sync_tool_bar_height_from_parameters();
+        frame.sync_compact_bar_height_from_parameters();
+        frame.tab_bar_height = 18;
+        frame.sync_window_area_bounds();
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let bands = state.frame_chrome.bands();
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(
+        bands.len(),
+        3,
+        "published kinds={:?}, frame heights=({}, {}, {}, {}), parent={:?}",
+        bands.iter().map(|band| band.kind()).collect::<Vec<_>>(),
+        frame.menu_bar_height,
+        frame.tool_bar_height,
+        frame.compact_bar_height,
+        frame.tab_bar_height,
+        frame.parent_frame,
+    );
+    assert_eq!(bands[0].kind(), FrameChromeKind::MenuBar);
+    assert_eq!(bands[0].bounds().y(), 0.0);
+    assert_eq!(bands[1].kind(), FrameChromeKind::ToolBar);
+    assert_eq!(bands[1].bounds().y(), bands[0].bounds().height());
+    assert_eq!(bands[2].kind(), FrameChromeKind::TabBar);
+    assert_eq!(
+        bands[2].bounds().y(),
+        bands[0].bounds().height() + bands[1].bounds().height()
+    );
+    let FrameChromeContent::DisplayRow(tab_row) = bands[2].content() else {
+        panic!("tab bar must contain a display row");
+    };
+    assert_eq!(tab_row.row().pixel_y, 0.0);
 }
 
 #[test]

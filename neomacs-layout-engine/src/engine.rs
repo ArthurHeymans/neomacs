@@ -9,10 +9,13 @@ use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
-    max_mini_window_lines_from_value,
+    max_mini_window_lines_from_value, tab_bar_hit_regions_for_rendered_captions,
 };
 use super::font_metrics::FontMetricsService;
-use super::gui_chrome::{collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items};
+use super::gui_chrome::{
+    collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items,
+    layout_gui_compact_bar_content, layout_gui_menu_bar_content, layout_gui_tool_bar_content,
+};
 use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
@@ -42,6 +45,7 @@ use crate::display_frame_output::{
 };
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
+use crate::display_rendered_row_output_install::frame_chrome_display_row;
 #[cfg(test)]
 use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
@@ -66,6 +70,9 @@ use crate::incremental_layout::{
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::frame_chrome::{
+    ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
+};
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::frame_glyphs::WindowInfo;
@@ -257,13 +264,16 @@ impl LayoutEngine {
     fn finish_frame_output(
         &mut self,
         frame_params: &FrameParams,
-    ) -> neomacs_display_protocol::glyph_matrix::FrameDisplayState {
-        let mut state = self.frame_output.finish(frame_params);
+    ) -> Result<
+        neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+        neomacs_display_protocol::frame_chrome::ChromeLayoutError,
+    > {
+        let mut state = self.frame_output.finish(frame_params)?;
         // Publish exact resolved font identities for every realized face so
         // the render thread rasterizes the same fonts layout measured with
         // (font realization / render boundary design, Phase 1).
         crate::font_metrics::realize_frame_fonts(&mut state, &mut self.font_metrics);
-        state
+        Ok(state)
     }
 
     fn render_window_output_decorations(
@@ -890,7 +900,87 @@ impl LayoutEngine {
             break (frame_params, curr_window_infos, retained_keys);
         };
 
-        let mut frame_display_state = self.finish_frame_output(&frame_params);
+        // Collect semantic GUI chrome before publishing the frame. FrameChrome
+        // is the single owner of band ordering and absolute placement; each
+        // content builder receives only band-local dimensions.
+        let is_root_frame = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .is_some_and(|frame| frame.parent_frame.as_frame_id().unwrap_or(0) == 0);
+        if is_root_frame {
+            let pixel_to_color = |pixel: u32| -> Color {
+                Color::rgb(
+                    ((pixel >> 16) & 0xFF) as f32 / 255.0,
+                    ((pixel >> 8) & 0xFF) as f32 / 255.0,
+                    (pixel & 0xFF) as f32 / 255.0,
+                )
+            };
+            if frame_params.compact_bar_height > 0.0 {
+                let menu_face = face_resolver.resolve_named_face_without_inverse_video("menu");
+                let tool_face = face_resolver.resolve_named_face("tool-bar");
+                let menu_items = collect_gui_menu_bar_items_for_frame(evaluator, frame_id);
+                let tool_items = collect_gui_tool_bar_items(evaluator);
+                let content = layout_gui_compact_bar_content(
+                    menu_items,
+                    tool_items,
+                    frame_params.width,
+                    frame_params.compact_bar_height,
+                    frame_params.char_width,
+                    pixel_to_color(menu_face.fg),
+                    pixel_to_color(menu_face.bg),
+                    pixel_to_color(tool_face.fg),
+                    pixel_to_color(tool_face.bg),
+                );
+                self.frame_output
+                    .add_frame_chrome_band(ChromeBandRequest::new(
+                        ProtocolFrameChromeKind::CompactBar,
+                        frame_params.compact_bar_height,
+                        FrameChromeContent::CompactBar(content),
+                    ));
+            } else {
+                if frame_params.menu_bar_height > 0.0 {
+                    let face = face_resolver.resolve_named_face_without_inverse_video("menu");
+                    let content = layout_gui_menu_bar_content(
+                        collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
+                        frame_params.width,
+                        frame_params.menu_bar_height,
+                        frame_params.char_width,
+                        pixel_to_color(face.fg),
+                        pixel_to_color(face.bg),
+                    );
+                    self.frame_output
+                        .add_frame_chrome_band(ChromeBandRequest::new(
+                            ProtocolFrameChromeKind::MenuBar,
+                            frame_params.menu_bar_height,
+                            FrameChromeContent::MenuBar(content),
+                        ));
+                }
+                if frame_params.tool_bar_height > 0.0 {
+                    let face = face_resolver.resolve_named_face("tool-bar");
+                    let content = layout_gui_tool_bar_content(
+                        collect_gui_tool_bar_items(evaluator),
+                        frame_params.width,
+                        frame_params.tool_bar_height,
+                        pixel_to_color(face.fg),
+                        pixel_to_color(face.bg),
+                    );
+                    self.frame_output
+                        .add_frame_chrome_band(ChromeBandRequest::new(
+                            ProtocolFrameChromeKind::ToolBar,
+                            frame_params.tool_bar_height,
+                            FrameChromeContent::ToolBar(content),
+                        ));
+                }
+            }
+        }
+
+        let mut frame_display_state = match self.finish_frame_output(&frame_params) {
+            Ok(state) => state,
+            Err(error) => {
+                tracing::error!(?error, "rejecting invalid frame chrome snapshot");
+                return;
+            }
+        };
 
         // Embed the user-defined fringe bitmaps once per frame so the renderer
         // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
@@ -1589,22 +1679,11 @@ impl LayoutEngine {
         let tab_bar_face =
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabBar);
         let tab_bar_ascent = frame_params.char_height * 0.8;
-        let chrome_before_tab = frame_params.menu_bar_height
-            + frame_params.tool_bar_height
-            + frame_params.compact_bar_height;
-        let row_index = if frame_params.char_height > 0.0 {
-            (chrome_before_tab / frame_params.char_height)
-                .round()
-                .max(0.0) as u32
-        } else {
-            0
-        };
-        let tab_bar_y = chrome_before_tab;
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let rendered_tab_bar = self.frame_output.render_frame_tab_bar_row(
             FrameTabBarDisplayRowRequest {
-                row_index,
-                y: tab_bar_y,
+                row_index: 0,
+                y: 0.0,
                 width,
                 height: tab_bar_height,
                 metrics: DisplayRowFallbackMetrics::from_frame_defaults(
@@ -1622,10 +1701,24 @@ impl LayoutEngine {
             return None;
         };
         let actual_tab_bar_height = measured.bounds().height;
+        let hit_regions = tab_bar_hit_regions_for_rendered_captions(
+            measured.rendered(),
+            &tab_bar.items,
+            &tab_bar.item_char_ranges,
+            actual_tab_bar_height,
+        );
+        self.frame_output.add_frame_chrome_band(
+            ChromeBandRequest::new(
+                ProtocolFrameChromeKind::TabBar,
+                actual_tab_bar_height,
+                FrameChromeContent::DisplayRow(frame_chrome_display_row(&measured)),
+            )
+            .with_hit_regions(hit_regions),
+        );
         self.frame_output
             .set_tab_bar(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
                 items: tab_bar.items,
-                y: tab_bar_y,
+                y: 0.0,
                 height: actual_tab_bar_height,
             });
         Some(actual_tab_bar_height)

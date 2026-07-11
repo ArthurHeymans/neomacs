@@ -9,8 +9,8 @@ use crate::display_row_render_state::{
     RenderedDisplayRow, RenderedDisplayRowMedia, RenderedDisplayRowMediaKind,
 };
 use neomacs_display_protocol::face::Face;
+use neomacs_display_protocol::frame_chrome::{BandRect, ChromeDisplayRow, ChromeMedia};
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, GlyphRowRole};
-use neomacs_display_protocol::glyph_matrix::FrameChromeRow;
 use neomacs_display_protocol::types::{DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 
 pub(crate) fn install_measured_window_display_row(
@@ -22,14 +22,63 @@ pub(crate) fn install_measured_window_display_row(
 
 pub(crate) fn install_measured_frame_chrome_display_row(
     builder: &mut DisplayOutputBuilder,
-    frame_chrome_rows: &mut Vec<FrameChromeRow>,
     measured: &MeasuredDisplayRow,
 ) {
-    MeasuredFrameChromeRowInstallRequest {
-        frame_chrome_rows,
-        measured,
-    }
-    .install(builder);
+    MeasuredFrameChromeRowInstallRequest { measured }.install(builder);
+}
+
+pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeDisplayRow {
+    let mut row = measured.absolute_output_row();
+    crate::display_row_finalizer::GlyphRowFinalizationContext::new(
+        FRAME_CHROME_WINDOW_ID as u64,
+        measured.row_index() as usize,
+        measured.bounds(),
+    )
+    .finalize_row(&mut row, 0, None);
+    let window_id = DisplayWindowId::new(FRAME_CHROME_WINDOW_ID);
+    let media = measured
+        .rendered()
+        .media()
+        .iter()
+        .map(|medium| {
+            let local_bounds = BandRect::new(
+                medium.x,
+                medium.y - measured.bounds().y,
+                medium.width,
+                medium.height,
+            )
+            .expect("rendered frame chrome media must have valid local bounds");
+            let slot_id = Some(DisplaySlotId {
+                window_id,
+                row: measured.row_index(),
+                col: medium.col,
+            });
+            match medium.kind {
+                RenderedDisplayRowMediaKind::Image { image_id } => ChromeMedia::Image {
+                    local_bounds,
+                    image_id: ImageId::new(image_id),
+                    slot_id,
+                },
+                RenderedDisplayRowMediaKind::Video {
+                    video_id,
+                    loop_count,
+                    autoplay,
+                } => ChromeMedia::Video {
+                    local_bounds,
+                    video_id: VideoId::new(video_id),
+                    slot_id,
+                    loop_count,
+                    autoplay,
+                },
+                RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => ChromeMedia::Xwidget {
+                    local_bounds,
+                    xwidget_id: XwidgetId::new(xwidget_id),
+                    slot_id,
+                },
+            }
+        })
+        .collect();
+    ChromeDisplayRow::new(row, media)
 }
 
 pub(crate) fn install_rendered_display_row_fragment_assets(
@@ -78,12 +127,11 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
     }
 }
 
-struct MeasuredFrameChromeRowInstallRequest<'a, 'rows> {
-    frame_chrome_rows: &'rows mut Vec<FrameChromeRow>,
+struct MeasuredFrameChromeRowInstallRequest<'a> {
     measured: &'a MeasuredDisplayRow,
 }
 
-impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
+impl MeasuredFrameChromeRowInstallRequest<'_> {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         let measured = self.measured;
         let DisplayRowOwner::FrameChrome { kind } = measured.owner() else {
@@ -96,25 +144,6 @@ impl MeasuredFrameChromeRowInstallRequest<'_, '_> {
             measured.bounds(),
         )
         .install(builder);
-        let mut row = measured.absolute_output_row();
-        // Frame chrome rows install straight into `frame_chrome_rows` rather
-        // than through the window-row `Complete` lifecycle, so this is their
-        // sole install point. Reorder to visual order here via the same
-        // finalizer the window paths use, so every row reorders exactly once at
-        // install. Frame chrome never bears the buffer phys cursor (`None`).
-        // `matrix_ncols` is only read to recompute the cursor x; frame chrome
-        // passes `None` for the cursor, so `0` (no cursor geometry) is correct.
-        crate::display_row_finalizer::GlyphRowFinalizationContext::new(
-            FRAME_CHROME_WINDOW_ID as u64,
-            measured.row_index() as usize,
-            measured.bounds(),
-        )
-        .finalize_row(&mut row, 0, None);
-        self.frame_chrome_rows.push(FrameChromeRow {
-            row_index: measured.row_index(),
-            pixel_bounds: measured.bounds(),
-            row,
-        });
     }
 }
 
