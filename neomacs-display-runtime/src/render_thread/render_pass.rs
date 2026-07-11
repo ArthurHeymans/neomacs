@@ -475,8 +475,15 @@ impl RenderApp {
         // through to the full render below. The composite is proven
         // bit-identical to a full render (offscreen_frame::composite_matches_
         // full_render). Set NEOMACS_DISABLE_RETAINED_STATIC to force-disable.
+        // Gate on an *active* transition, not on `need_offscreen`: the latter
+        // is true whenever crossfade/scroll transitions are merely enabled
+        // (the default), because the offscreen snapshot only has to be kept
+        // current across scene commits. A cursor-only frame changes no buffer
+        // content, so it cannot start a transition, and the "before" snapshot
+        // captured at the last scene-commit full render stays correct. Gating
+        // on `!need_offscreen` here would disable the fast path entirely under
+        // the default transition policy.
         if cursor_only_hint
-            && !need_offscreen
             && !render.compositor.transitions.has_active()
             && !Self::window_has_active_overlays(render)
             && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
