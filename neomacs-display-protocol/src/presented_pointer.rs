@@ -1005,15 +1005,14 @@ impl PresentedPointerMap {
                     };
                     if let Some(slot) = slot {
                         let row = PresentedPointerDamageRow::new(slot.window_id, slot.row);
-                        if !appearance.damage_rows.contains(&row) {
-                            appearance.damage_rows.push(row);
-                        }
+                        appearance.damage_rows.push(row);
                     }
                 }
             }
             appearance
                 .damage_rows
                 .sort_unstable_by_key(|row| (row.window_id().get(), row.row()));
+            appearance.damage_rows.dedup();
         }
     }
 
