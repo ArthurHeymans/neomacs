@@ -631,6 +631,8 @@ impl<'a> TextRowOutputRenderState<'a> {
         let end = display_row_output_end_position(progress);
         self.output
             .install_rendered_fragment_assets(role, output.row(), &faces, &media);
+        self.output
+            .record_buffer_pointer_slots(output, &source_slots);
         let output_spans = output.spans_for_source_slots(&source_slots);
         self.output_emitter
             .emit_text_output_spans(self.evaluator, output, output_spans, end);

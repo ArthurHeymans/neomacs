@@ -477,6 +477,45 @@ impl PresentedPointerSourceMap {
         &self.appearances
     }
 
+    /// Append another source-addressed adapter, remapping only its local
+    /// appearance IDs.  This lets independent layout producers (buffer text,
+    /// frame chrome) share the one canonical primitive materialization pass.
+    pub fn append(
+        &mut self,
+        other: PresentedPointerSourceMap,
+    ) -> Result<(), PresentedPointerMapError> {
+        let offset = self.appearances.len();
+        let new_len = offset
+            .checked_add(other.appearances.len())
+            .ok_or(PresentedPointerMapError::PaintSpanOutOfRange)?;
+        if new_len > u32::MAX as usize + 1 {
+            return Err(PresentedPointerMapError::PaintSpanOutOfRange);
+        }
+        let mut remapped_regions = Vec::with_capacity(other.regions.len());
+        for region in &other.regions {
+            let appearance = region
+                .appearance
+                .map(|id| {
+                    let local = usize::try_from(id.get())
+                        .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)?;
+                    if local >= other.appearances.len() {
+                        return Err(PresentedPointerMapError::UnknownAppearance(id));
+                    }
+                    PointerAppearanceId::try_from(offset + local)
+                        .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)
+                })
+                .transpose()?;
+            remapped_regions.push(PresentedPointerRegion::new(
+                region.bounds,
+                region.interaction,
+                appearance,
+            ));
+        }
+        self.appearances.extend(other.appearances);
+        self.regions.extend(remapped_regions);
+        Ok(())
+    }
+
     pub(crate) fn resolve_against(
         &self,
         frame: &FrameGlyphBuffer,

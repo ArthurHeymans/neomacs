@@ -310,6 +310,22 @@ impl DisplayItemFaceResolver for SymbolFaceResolver {
             _ => base,
         }
     }
+
+    fn resolve_pointer_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        face_value: Value,
+    ) -> Option<RenderFaceRef> {
+        match face_value.as_symbol_name() {
+            Some("highlight") => Some(RenderFaceRef::FaceId(FaceId::new(11))),
+            Some("low-mouse") => Some(RenderFaceRef::FaceId(FaceId::new(12))),
+            Some("high-mouse") => Some(RenderFaceRef::FaceId(FaceId::new(13))),
+            _ => self
+                .resolve_face_ref(base, face_value)
+                .ne(&base)
+                .then(|| self.resolve_face_ref(base, face_value)),
+        }
+    }
 }
 
 struct ResolvedDisplayPropertyResolver {
@@ -914,6 +930,147 @@ fn buffer_text_source_cursor_emits_text_runs_with_buffer_spans() {
             snapshot.layout_char_pos_to_emacs_byte_pos(CharPos0::new(3))
         )
     );
+}
+
+#[test]
+fn buffer_mouse_face_is_resolved_over_the_effective_display_face() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("abc");
+        let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(1));
+        let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        );
+        buffer.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(start, end),
+            Value::symbol("mouse-face"),
+            Value::symbol("highlight"),
+        );
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
+    let end = buffer.total_char_end_pos();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        end,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let items = std::iter::from_fn(|| source.next_item(&mut context)).collect::<Vec<_>>();
+
+    assert!(items[0].pointer_appearance().is_none());
+    let pointer = items[1]
+        .pointer_appearance()
+        .expect("mouse-face run must retain its alternate paint");
+    assert_eq!(items[1].face, RenderFaceRef::FaceId(FaceId::new(7)));
+    assert_eq!(pointer.face(), RenderFaceRef::FaceId(FaceId::new(11)));
+    assert_eq!(pointer.source().buffer_id(), Some(buffer_id));
+    assert_eq!(pointer.source().end_char_index(), 2);
+    assert!(items[2].pointer_appearance().is_none());
+}
+
+#[test]
+fn overlay_mouse_face_uses_the_highest_priority_effective_property() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("x");
+        for (serial, priority, face) in [(1, 1, "low-mouse"), (2, 20, "high-mouse")] {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                serial,
+                plist: Value::NIL,
+                buffer: Some(buffer_id),
+                start: 0,
+                end: 1,
+                front_advance: false,
+                rear_advance: false,
+            });
+            buffer.overlays_mut().insert_overlay(overlay);
+            buffer
+                .overlays_mut()
+                .overlay_put(overlay, Value::symbol("priority"), Value::fixnum(priority))
+                .unwrap();
+            buffer
+                .overlays_mut()
+                .overlay_put(overlay, Value::symbol("mouse-face"), Value::symbol(face))
+                .unwrap();
+        }
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).unwrap();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        buffer.total_char_end_pos(),
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let item = source.next_item(&mut context).unwrap();
+
+    assert_eq!(
+        item.pointer_appearance().map(|pointer| pointer.face()),
+        Some(RenderFaceRef::FaceId(FaceId::new(13)))
+    );
+}
+
+#[test]
+fn lisp_string_mouse_face_survives_display_replacement_mapping() {
+    let _eval = Context::new();
+    let value = Value::string_with_text_properties(
+        "xy",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("mouse-face"),
+                Value::symbol("highlight"),
+            ]),
+        }],
+    );
+    let mut source = LispStringSourceCursor::new(
+        41,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(3)),
+        LispStringSourceOrigin::Normal,
+    )
+    .expect("string source");
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    let item = source.next_item(&mut context).expect("mouse-face item");
+    let pointer = item
+        .pointer_appearance()
+        .expect("string property must publish pointer appearance");
+    assert_eq!(pointer.face(), RenderFaceRef::FaceId(FaceId::new(11)));
+    assert_eq!(pointer.source().source_id(), Some(DisplaySourceId::new(41)));
+    assert_eq!(pointer.source().end_char_index(), 2);
 }
 
 #[test]

@@ -1,9 +1,9 @@
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
-    DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayRowBreak,
-    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
-    SourceSpan, glyphless_method_for_char,
+    DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayPointerAppearance,
+    DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
+    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
+    GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
 use crate::display_property::{
@@ -82,6 +82,16 @@ impl<'a> DisplaySourceContext<'a> {
             .unwrap_or(base)
     }
 
+    pub(crate) fn resolve_pointer_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        face_value: Value,
+    ) -> Option<RenderFaceRef> {
+        self.face_resolver
+            .as_mut()
+            .and_then(|resolver| resolver.resolve_pointer_face_ref(base, face_value))
+    }
+
     fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
@@ -154,6 +164,15 @@ impl DisplayItemSource for DisplayItemOnceSource {
 
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
+
+    fn resolve_pointer_face_ref(
+        &mut self,
+        base: RenderFaceRef,
+        face_value: Value,
+    ) -> Option<RenderFaceRef> {
+        let resolved = self.resolve_face_ref(base, face_value);
+        (resolved != base).then_some(resolved)
+    }
 
     fn resolve_display_media_replacement(
         &mut self,
@@ -696,6 +715,7 @@ impl DisplaySourceItem {
             face,
             kind,
             layout,
+            pointer_appearance,
         } = self.item;
         let DisplayItemKind::TextRun(run) = kind else {
             return None;
@@ -717,7 +737,12 @@ impl DisplaySourceItem {
                 charpos,
                 ch,
             );
-            items.push(DisplaySourceItem::new(item, byte_idx, charpos, Some(ch)));
+            items.push(DisplaySourceItem::new(
+                item.with_pointer_appearance(pointer_appearance.clone()),
+                byte_idx,
+                charpos,
+                Some(ch),
+            ));
             byte_idx = byte_idx.saturating_add(ch_len);
             charpos = charpos.saturating_add(1);
         }
@@ -740,6 +765,7 @@ impl DisplaySourceItem {
             face,
             kind,
             layout,
+            pointer_appearance,
         } = self.item;
         let DisplayItemKind::TextRun(run) = kind else {
             return None;
@@ -789,7 +815,8 @@ impl DisplaySourceItem {
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(prefix_text)),
         )
-        .with_layout(layout);
+        .with_layout(layout)
+        .with_pointer_appearance(pointer_appearance.clone());
         let suffix = DisplayItem::new(
             SourceSpan::new(
                 DisplaySourcePosition::buffer(buffer_id, split_char_pos, split_byte_pos),
@@ -798,7 +825,8 @@ impl DisplaySourceItem {
             face,
             DisplayItemKind::TextRun(DisplayTextRun::new(suffix_text)),
         )
-        .with_layout(layout);
+        .with_layout(layout)
+        .with_pointer_appearance(pointer_appearance);
         Some((
             DisplaySourceItem::new(prefix, self.start_byte_idx, self.start_charpos, None),
             DisplaySourceItem::new(suffix, split_byte_idx, split_charpos, None),
@@ -2293,6 +2321,7 @@ impl LispStringSourceFrame {
         let start = self.char_index;
         let property_end = self.next_property_change(start).max(start + 1);
         let face = self.face_at(start, context);
+        let pointer_appearance = self.pointer_appearance_at(start, property_end, face, context);
         let span = self.span(start, property_end);
 
         let mut item_layout = DisplayItemLayout::default();
@@ -2319,7 +2348,9 @@ impl LispStringSourceFrame {
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
                         self.char_index = display_end;
-                        return LispStringAction::Emit(item);
+                        return LispStringAction::Emit(
+                            item.with_pointer_appearance(pointer_appearance),
+                        );
                     }
                     DisplayPropertySourceCursorAction::Skip => {
                         self.char_index = display_end;
@@ -2352,14 +2383,17 @@ impl LispStringSourceFrame {
                             composition.text().to_owned(),
                         )),
                     )
-                    .with_layout(item_layout),
+                    .with_layout(item_layout)
+                    .with_pointer_appearance(pointer_appearance),
                 );
             }
         }
         if let Some(kind) = display_item_kind_for_text_source_char(ch) {
             self.char_index = start + 1;
             return LispStringAction::Emit(
-                DisplayItem::new(self.span(start, start + 1), face, kind).with_layout(item_layout),
+                DisplayItem::new(self.span(start, start + 1), face, kind)
+                    .with_layout(item_layout)
+                    .with_pointer_appearance(pointer_appearance),
             );
         }
 
@@ -2371,7 +2405,8 @@ impl LispStringSourceFrame {
                 face,
                 DisplayItemKind::TextRun(DisplayTextRun::new(self.text_slice(start, end))),
             )
-            .with_layout(item_layout),
+            .with_layout(item_layout)
+            .with_pointer_appearance(pointer_appearance),
         )
     }
 
@@ -2479,6 +2514,28 @@ impl LispStringSourceFrame {
             .or_else(|| props.get_property_at_char_pos(char_pos, Value::symbol("font-lock-face")));
         face.map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face)
+    }
+
+    fn pointer_appearance_at(
+        &self,
+        char_index: usize,
+        property_end: usize,
+        face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> Option<DisplayPointerAppearance> {
+        let value = self
+            .props
+            .as_ref()?
+            .get_property_at_char_pos(CharPos0::new(char_index), Value::symbol("mouse-face"))?;
+        if value.is_nil() {
+            return None;
+        }
+        let pointer_face = context.resolve_pointer_face_ref(face, value)?;
+        let source = DisplayPointerSourceRange::ending_at(
+            DisplaySourcePosition::lisp_string(self.source_id, 0, 0),
+            property_end,
+        );
+        Some(DisplayPointerAppearance::new(source, pointer_face))
     }
 }
 

@@ -1489,3 +1489,48 @@ fn render_row_text(row: &GlyphRow) -> String {
     }
     s
 }
+
+#[test]
+fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
+    use crate::display_item::{
+        DisplayPointerAppearance, DisplayPointerSourceRange, DisplaySourcePosition, RenderFaceRef,
+    };
+    use neomacs_display_protocol::{DisplayWindowId, FrameRect, PresentedPrimitiveKind};
+    use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
+
+    let pointer = DisplayPointerAppearance::new(
+        DisplayPointerSourceRange::ending_at(
+            DisplaySourcePosition::buffer(BufferId(7), CharPos0::ZERO, EmacsBytePos::new(0)),
+            12,
+        ),
+        RenderFaceRef::FaceId(FaceId::new(9)),
+    );
+    let observations = vec![
+        BufferPointerObservation {
+            appearance: pointer.clone(),
+            window_id: DisplayWindowId::new(3),
+            row: 1,
+            col: 4,
+            bounds: FrameRect::new(10.0, 20.0, 8.0, 16.0).unwrap(),
+        },
+        BufferPointerObservation {
+            appearance: pointer,
+            window_id: DisplayWindowId::new(3),
+            row: 2,
+            col: 0,
+            bounds: FrameRect::new(2.0, 36.0, 8.0, 16.0).unwrap(),
+        },
+    ];
+
+    let source = buffer_pointer_source_map(observations);
+
+    assert_eq!(source.appearances().len(), 1);
+    assert_eq!(source.regions().len(), 2);
+    assert_eq!(source.appearances()[0].paint_spans().len(), 2);
+    assert!(
+        source.appearances()[0]
+            .paint_spans()
+            .iter()
+            .all(|span| span.kind() == PresentedPrimitiveKind::Glyph)
+    );
+}

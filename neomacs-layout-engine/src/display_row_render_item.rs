@@ -92,6 +92,7 @@ fn clipped_display_item_remainder(
         face,
         kind,
         layout,
+        pointer_appearance,
     } = item;
     let emitted_chars = progress.slots().len();
     match kind {
@@ -105,6 +106,7 @@ fn clipped_display_item_remainder(
                 face,
                 kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
                 layout,
+                pointer_appearance,
             })
         }
         DisplayItemKind::SourceMappedText(text) => {
@@ -114,6 +116,7 @@ fn clipped_display_item_remainder(
                 face,
                 kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(remaining)),
                 layout,
+                pointer_appearance,
             })
         }
         _ => None,

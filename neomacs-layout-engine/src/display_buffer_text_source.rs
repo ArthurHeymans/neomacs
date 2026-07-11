@@ -1,7 +1,7 @@
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
-    DisplayItemKind, DisplayItemLayout, DisplaySourceMappedText, DisplaySourcePosition,
-    DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItemKind, DisplayItemLayout, DisplayPointerAppearance, DisplayPointerSourceRange,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -284,6 +284,56 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         face
     }
 
+    /// GNU `get_char_property_and_overlay` semantics for `mouse-face`: the
+    /// highest-priority overlay which supplies a non-nil property wins over
+    /// the buffer text property.  Run production is already stopped at every
+    /// overlay boundary, so the selected value is stable for this item.
+    fn mouse_face_at(&self, char_pos: CharPos0) -> Option<Value> {
+        let bytepos = self.byte_pos(char_pos);
+        let overlays = self.buffer.layout_overlays();
+        overlays
+            .overlays_at_emacs_byte_pos(bytepos)
+            .iter()
+            .filter_map(|oid| {
+                let value = overlays.overlay_get_named(*oid, Value::symbol("mouse-face"))?;
+                if value.is_nil() {
+                    return None;
+                }
+                let priority = overlays
+                    .overlay_get_named(*oid, Value::symbol("priority"))
+                    .and_then(|value| value.as_int())
+                    .unwrap_or(0);
+                Some((priority, value))
+            })
+            .max_by_key(|(priority, _)| *priority)
+            .map(|(_, value)| value)
+            .or_else(|| {
+                self.buffer
+                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("mouse-face"))
+                    .filter(|value| !value.is_nil())
+            })
+    }
+
+    fn pointer_appearance_at(
+        &self,
+        start: CharPos0,
+        property_end: CharPos0,
+        face: RenderFaceRef,
+        context: &mut DisplaySourceContext<'_>,
+    ) -> Option<DisplayPointerAppearance> {
+        let value = self.mouse_face_at(start)?;
+        let pointer_face = context.resolve_pointer_face_ref(face, value)?;
+        let source = DisplayPointerSourceRange::ending_at(
+            DisplaySourcePosition::buffer(
+                self.buffer_id,
+                CharPos0::ZERO,
+                self.byte_pos(CharPos0::ZERO),
+            ),
+            property_end.get(),
+        );
+        Some(DisplayPointerAppearance::new(source, pointer_face))
+    }
+
     fn next_text_run_end(&self, start: CharPos0, limit: CharPos0) -> CharPos0 {
         let mut end = start;
         while end < limit {
@@ -441,6 +491,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 .max(start.add_len(CharLen::new(1)))
                 .min(self.end);
             let face = self.face_at(start, context);
+            let pointer_appearance = self.pointer_appearance_at(start, property_end, face, context);
             let span = self.span(start, property_end);
 
             if let Some(display_prop) = self.display_prop_at(start) {
@@ -492,7 +543,9 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                         ));
                     }
                     DisplayPropertySourceCursorAction::Emit(item) => {
-                        return Some(BufferTextCursorItem::Item(item));
+                        return Some(BufferTextCursorItem::Item(
+                            item.with_pointer_appearance(pointer_appearance),
+                        ));
                     }
                     DisplayPropertySourceCursorAction::Skip => {
                         // `(left-fringe …)`: covered text already consumed
@@ -503,11 +556,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 };
                 return self
                     .next_text_item_with_layout(start, property_end, face, item_layout)
+                    .map(|item| item.with_pointer_appearance(pointer_appearance))
                     .map(BufferTextCursorItem::Item);
             }
 
             return self
                 .next_text_item(start, property_end, face)
+                .map(|item| item.with_pointer_appearance(pointer_appearance))
                 .map(BufferTextCursorItem::Item);
         }
     }

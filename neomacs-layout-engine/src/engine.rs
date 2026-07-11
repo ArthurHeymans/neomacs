@@ -1043,7 +1043,14 @@ impl LayoutEngine {
         {
             let canonical_row = tab_bar.canonical_row(frame_display_state.char_height);
             match pointer_plan.into_source_map(tab_bar.bounds(), canonical_row) {
-                Ok(source) => frame_display_state.presented_pointer_source = source,
+                Ok(source) => {
+                    if let Err(error) = frame_display_state.presented_pointer_source.append(source)
+                    {
+                        tracing::error!(?error, "rejecting combined pointer snapshot");
+                        evaluator.retire_interaction_presentation(presentation_id);
+                        return;
+                    }
+                }
                 Err(error) => {
                     tracing::error!(?error, "rejecting invalid tab-bar pointer snapshot");
                     evaluator.retire_interaction_presentation(presentation_id);

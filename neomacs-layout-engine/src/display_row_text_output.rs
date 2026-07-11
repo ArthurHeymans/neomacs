@@ -40,12 +40,10 @@ impl TextRowOutput {
         self.row_y
     }
 
-    #[cfg(test)]
     pub(crate) fn glyph_y(self) -> f32 {
         self.glyph_y
     }
 
-    #[cfg(test)]
     pub(crate) fn height(self) -> f32 {
         self.height
     }

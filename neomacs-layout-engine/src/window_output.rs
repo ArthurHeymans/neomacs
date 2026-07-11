@@ -297,6 +297,14 @@ impl<'a> TextWindowOutputTarget<'a> {
         );
     }
 
+    pub(crate) fn record_buffer_pointer_slots(
+        &mut self,
+        output: crate::display_row_text_output::TextRowOutput,
+        slots: &[crate::display_row_builder::DisplayRowGlyphSlot],
+    ) {
+        self.builder().record_buffer_pointer_slots(output, slots);
+    }
+
     pub(crate) fn install_measured_window_display_row(&mut self, measured: &MeasuredDisplayRow) {
         install_measured_window_display_row(self.builder(), measured);
     }

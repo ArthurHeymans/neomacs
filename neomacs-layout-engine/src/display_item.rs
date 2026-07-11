@@ -129,11 +129,72 @@ impl SourceSpan {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum RenderFaceRef {
     #[allow(dead_code)]
     Inherit,
     FaceId(FaceId),
+}
+
+/// Semantic source range whose rendered primitives share one transient
+/// `mouse-face` appearance.  The end position (together with the source
+/// identity) is stable when a run is clipped and resumed on a wrapped row.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct DisplayPointerSourceRange {
+    source: DisplaySourcePosition,
+    end_char_index: usize,
+}
+
+impl DisplayPointerSourceRange {
+    pub(crate) fn ending_at(source: DisplaySourcePosition, end_char_index: usize) -> Self {
+        Self {
+            source,
+            end_char_index,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn buffer_id(&self) -> Option<BufferId> {
+        match self.source {
+            DisplaySourcePosition::Buffer { buffer_id, .. } => Some(buffer_id),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn source_id(&self) -> Option<DisplaySourceId> {
+        match self.source {
+            DisplaySourcePosition::LispString { source_id, .. }
+            | DisplaySourcePosition::Synthetic { source_id, .. } => Some(source_id),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn end_char_index(&self) -> usize {
+        self.end_char_index
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct DisplayPointerAppearance {
+    source: DisplayPointerSourceRange,
+    face: RenderFaceRef,
+}
+
+impl DisplayPointerAppearance {
+    pub(crate) const fn new(source: DisplayPointerSourceRange, face: RenderFaceRef) -> Self {
+        Self { source, face }
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn source(&self) -> &DisplayPointerSourceRange {
+        &self.source
+    }
+
+    pub(crate) const fn face(&self) -> RenderFaceRef {
+        self.face
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -142,6 +203,7 @@ pub(crate) struct DisplayItem {
     pub(crate) face: RenderFaceRef,
     pub(crate) kind: DisplayItemKind,
     pub(crate) layout: DisplayItemLayout,
+    pub(crate) pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
 impl DisplayItem {
@@ -154,12 +216,26 @@ impl DisplayItem {
                 raise: None,
                 height: None,
             },
+            pointer_appearance: None,
         }
     }
 
     pub(crate) const fn with_layout(mut self, layout: DisplayItemLayout) -> Self {
         self.layout = layout;
         self
+    }
+
+    pub(crate) fn with_pointer_appearance(
+        mut self,
+        appearance: Option<DisplayPointerAppearance>,
+    ) -> Self {
+        self.pointer_appearance = appearance;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pointer_appearance(&self) -> Option<&DisplayPointerAppearance> {
+        self.pointer_appearance.as_ref()
     }
 }
 
@@ -258,6 +334,7 @@ impl BufferDisplayReplacementSource {
         };
         self.item_with_face(item.face, kind)
             .with_layout(item.layout)
+            .with_pointer_appearance(item.pointer_appearance)
     }
 }
 

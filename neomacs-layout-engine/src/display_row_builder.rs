@@ -625,9 +625,11 @@ pub(crate) struct DisplayRowGlyphSlot {
     col: usize,
     width_px: f32,
     width_cols: usize,
+    pointer_appearance: Option<crate::display_item::DisplayPointerAppearance>,
 }
 
 impl DisplayRowGlyphSlot {
+    #[cfg(test)]
     pub(crate) fn new(
         source: DisplaySourcePosition,
         x_px: f32,
@@ -635,12 +637,24 @@ impl DisplayRowGlyphSlot {
         width_px: f32,
         width_cols: usize,
     ) -> Self {
+        Self::with_pointer_appearance(source, x_px, col, width_px, width_cols, None)
+    }
+
+    pub(crate) fn with_pointer_appearance(
+        source: DisplaySourcePosition,
+        x_px: f32,
+        col: usize,
+        width_px: f32,
+        width_cols: usize,
+        pointer_appearance: Option<crate::display_item::DisplayPointerAppearance>,
+    ) -> Self {
         Self {
             source,
             x_px,
             col,
             width_px,
             width_cols,
+            pointer_appearance,
         }
     }
 
@@ -662,6 +676,12 @@ impl DisplayRowGlyphSlot {
 
     pub(crate) fn width_cols(&self) -> usize {
         self.width_cols
+    }
+
+    pub(crate) fn pointer_appearance(
+        &self,
+    ) -> Option<&crate::display_item::DisplayPointerAppearance> {
+        self.pointer_appearance.as_ref()
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {
@@ -1047,6 +1067,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             face,
             kind,
             layout: item_layout,
+            pointer_appearance,
         } = item;
         let status = match kind {
             DisplayItemKind::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
@@ -1056,6 +1077,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 item_layout,
                 run.text.as_ref(),
                 DisplayTextSourceMapping::NaturalText,
+                pointer_appearance.as_ref(),
                 &mut metrics,
                 &mut slots,
             ),
@@ -1065,6 +1087,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 item_layout,
                 text.text.as_ref(),
                 DisplayTextSourceMapping::SourceMapped,
+                pointer_appearance.as_ref(),
                 &mut metrics,
                 &mut slots,
             ),
@@ -1072,9 +1095,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
                 let checkpoint = DisplayRowGlyphCheckpoint::capture(self.writer.row);
-                let written = self
-                    .writer
-                    .push_item(DisplayItem::new(span, face, kind).with_layout(item_layout));
+                let written = self.writer.push_item(
+                    DisplayItem::new(span, face, kind)
+                        .with_layout(item_layout)
+                        .with_pointer_appearance(pointer_appearance.clone()),
+                );
                 if written.has_positive_width()
                     && self.position.x_px() + written.width_px() > self.max_x_px
                 {
@@ -1088,12 +1113,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                     );
                 }
                 if !written.is_empty() {
-                    slots.push(DisplayRowGlyphSlot::new(
+                    slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
                         slot_source,
                         slot_start.x_px(),
                         slot_start.col(),
                         written.width_px(),
                         written.width_cols(),
+                        pointer_appearance.clone(),
                     ));
                 }
                 self.advance(written);
@@ -1112,6 +1138,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         item_layout: DisplayItemLayout,
         text: &str,
         source_mapping: DisplayTextSourceMapping,
+        pointer_appearance: Option<&crate::display_item::DisplayPointerAppearance>,
         metrics: &mut DisplayRowWriteMetrics,
         slots: &mut Vec<DisplayRowGlyphSlot>,
     ) -> DisplayRowAppendStatus {
@@ -1144,12 +1171,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             );
             self.writer.apply_item_layout_since(before_len, item_layout);
             let written = self.metrics_since(before_len);
-            slots.push(DisplayRowGlyphSlot::new(
+            slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
                 source_mapping.slot_source(&span.start, char_offset, byte_offset),
                 slot_start.x_px(),
                 slot_start.col(),
                 written.width_px(),
                 written.width_cols(),
+                pointer_appearance.cloned(),
             ));
             self.advance(written);
             metrics.add(written);
