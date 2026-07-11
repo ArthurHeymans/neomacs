@@ -4,7 +4,10 @@
 //! the band is band-local and can be translated to frame coordinates only via
 //! [`FrameRect::place`].
 
-use crate::types::Rect;
+use crate::frame_glyphs::{DisplaySlotId, GlyphRowRole};
+use crate::glyph_matrix::GlyphRow;
+use crate::types::{Color, ImageId, Rect, VideoId, XwidgetId};
+use crate::ui_types::{MenuBarItem, ToolBarItem};
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FrameSize {
@@ -135,6 +138,230 @@ pub struct ChromeHitRegion {
     action: ChromeAction,
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MaterializedChromeHitRegion {
+    bounds: FrameRect,
+    action: ChromeAction,
+}
+
+impl MaterializedChromeHitRegion {
+    pub fn bounds(&self) -> FrameRect {
+        self.bounds
+    }
+
+    pub fn action(&self) -> &ChromeAction {
+        &self.action
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PositionedChromeItem<T> {
+    local_bounds: BandRect,
+    item: T,
+    action: ChromeAction,
+}
+
+impl<T> PositionedChromeItem<T> {
+    pub fn new(local_bounds: BandRect, item: T, action: ChromeAction) -> Self {
+        Self {
+            local_bounds,
+            item,
+            action,
+        }
+    }
+
+    pub fn local_bounds(&self) -> BandRect {
+        self.local_bounds
+    }
+
+    pub fn item(&self) -> &T {
+        &self.item
+    }
+
+    pub fn action(&self) -> &ChromeAction {
+        &self.action
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MenuBarContent {
+    items: Vec<PositionedChromeItem<MenuBarItem>>,
+    foreground: Color,
+    background: Color,
+}
+
+impl MenuBarContent {
+    pub fn new(
+        items: Vec<PositionedChromeItem<MenuBarItem>>,
+        foreground: Color,
+        background: Color,
+    ) -> Self {
+        Self {
+            items,
+            foreground,
+            background,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(Vec::new(), Color::WHITE, Color::BLACK)
+    }
+
+    pub fn items(&self) -> &[PositionedChromeItem<MenuBarItem>] {
+        &self.items
+    }
+
+    pub fn foreground(&self) -> Color {
+        self.foreground
+    }
+
+    pub fn background(&self) -> Color {
+        self.background
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ToolBarContent {
+    items: Vec<PositionedChromeItem<ToolBarItem>>,
+    foreground: Color,
+    background: Color,
+}
+
+impl ToolBarContent {
+    pub fn new(
+        items: Vec<PositionedChromeItem<ToolBarItem>>,
+        foreground: Color,
+        background: Color,
+    ) -> Self {
+        Self {
+            items,
+            foreground,
+            background,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(Vec::new(), Color::WHITE, Color::BLACK)
+    }
+
+    pub fn items(&self) -> &[PositionedChromeItem<ToolBarItem>] {
+        &self.items
+    }
+
+    pub fn foreground(&self) -> Color {
+        self.foreground
+    }
+
+    pub fn background(&self) -> Color {
+        self.background
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CompactBarContent {
+    menu_items: Vec<PositionedChromeItem<MenuBarItem>>,
+    tool_items: Vec<PositionedChromeItem<ToolBarItem>>,
+    menu_foreground: Color,
+    menu_background: Color,
+    tool_foreground: Color,
+    tool_background: Color,
+}
+
+impl CompactBarContent {
+    pub fn new(
+        menu_items: Vec<PositionedChromeItem<MenuBarItem>>,
+        tool_items: Vec<PositionedChromeItem<ToolBarItem>>,
+        menu_foreground: Color,
+        menu_background: Color,
+        tool_foreground: Color,
+        tool_background: Color,
+    ) -> Self {
+        Self {
+            menu_items,
+            tool_items,
+            menu_foreground,
+            menu_background,
+            tool_foreground,
+            tool_background,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(
+            Vec::new(),
+            Vec::new(),
+            Color::WHITE,
+            Color::BLACK,
+            Color::WHITE,
+            Color::BLACK,
+        )
+    }
+
+    pub fn menu_items(&self) -> &[PositionedChromeItem<MenuBarItem>] {
+        &self.menu_items
+    }
+
+    pub fn tool_items(&self) -> &[PositionedChromeItem<ToolBarItem>] {
+        &self.tool_items
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum ChromeMedia {
+    Image {
+        local_bounds: BandRect,
+        image_id: ImageId,
+        slot_id: Option<DisplaySlotId>,
+    },
+    Video {
+        local_bounds: BandRect,
+        video_id: VideoId,
+        slot_id: Option<DisplaySlotId>,
+        loop_count: i32,
+        autoplay: bool,
+    },
+    Xwidget {
+        local_bounds: BandRect,
+        xwidget_id: XwidgetId,
+        slot_id: Option<DisplaySlotId>,
+    },
+}
+
+impl ChromeMedia {
+    pub fn local_bounds(&self) -> BandRect {
+        match self {
+            Self::Image { local_bounds, .. }
+            | Self::Video { local_bounds, .. }
+            | Self::Xwidget { local_bounds, .. } => *local_bounds,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChromeDisplayRow {
+    row: GlyphRow,
+    media: Vec<ChromeMedia>,
+}
+
+impl ChromeDisplayRow {
+    pub fn new(mut row: GlyphRow, media: Vec<ChromeMedia>) -> Self {
+        row.pixel_y = 0.0;
+        Self { row, media }
+    }
+
+    pub fn empty_tab_bar() -> Self {
+        Self::new(GlyphRow::new(GlyphRowRole::TabBar), Vec::new())
+    }
+
+    pub fn row(&self) -> &GlyphRow {
+        &self.row
+    }
+
+    pub fn media(&self) -> &[ChromeMedia] {
+        &self.media
+    }
+}
+
 impl ChromeHitRegion {
     pub fn new(local_bounds: BandRect, action: ChromeAction) -> Self {
         Self {
@@ -154,9 +381,50 @@ impl ChromeHitRegion {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum FrameChromeContent {
-    /// Migration placeholder. Replaced by typed display/menu/tool content in
-    /// the next protocol step.
-    Empty,
+    DisplayRow(ChromeDisplayRow),
+    MenuBar(MenuBarContent),
+    ToolBar(ToolBarContent),
+    CompactBar(CompactBarContent),
+}
+
+impl FrameChromeContent {
+    pub fn kind(&self) -> FrameChromeKind {
+        match self {
+            Self::DisplayRow(_) => FrameChromeKind::TabBar,
+            Self::MenuBar(_) => FrameChromeKind::MenuBar,
+            Self::ToolBar(_) => FrameChromeKind::ToolBar,
+            Self::CompactBar(_) => FrameChromeKind::CompactBar,
+        }
+    }
+
+    fn validate_in(&self, bounds: FrameRect) -> Result<(), ChromeLayoutError> {
+        match self {
+            Self::DisplayRow(content) => {
+                for medium in content.media() {
+                    bounds.place(medium.local_bounds())?;
+                }
+            }
+            Self::MenuBar(content) => {
+                for item in content.items() {
+                    bounds.place(item.local_bounds())?;
+                }
+            }
+            Self::ToolBar(content) => {
+                for item in content.items() {
+                    bounds.place(item.local_bounds())?;
+                }
+            }
+            Self::CompactBar(content) => {
+                for item in content.menu_items() {
+                    bounds.place(item.local_bounds())?;
+                }
+                for item in content.tool_items() {
+                    bounds.place(item.local_bounds())?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,10 +437,24 @@ pub struct ChromeBandRequest {
 
 impl ChromeBandRequest {
     pub fn empty(kind: FrameChromeKind, height: f32) -> Self {
+        let content = match kind {
+            FrameChromeKind::MenuBar => FrameChromeContent::MenuBar(MenuBarContent::empty()),
+            FrameChromeKind::ToolBar => FrameChromeContent::ToolBar(ToolBarContent::empty()),
+            FrameChromeKind::CompactBar => {
+                FrameChromeContent::CompactBar(CompactBarContent::empty())
+            }
+            FrameChromeKind::TabBar => {
+                FrameChromeContent::DisplayRow(ChromeDisplayRow::empty_tab_bar())
+            }
+        };
+        Self::new(kind, height, content)
+    }
+
+    pub fn new(kind: FrameChromeKind, height: f32, content: FrameChromeContent) -> Self {
         Self {
             kind,
             height,
-            content: FrameChromeContent::Empty,
+            content,
             hit_regions: Vec::new(),
         }
     }
@@ -211,6 +493,20 @@ impl FrameChromeBand {
 
     pub fn hit_regions(&self) -> &[ChromeHitRegion] {
         &self.hit_regions
+    }
+
+    pub fn materialized_hit_regions(
+        &self,
+    ) -> Result<Vec<MaterializedChromeHitRegion>, ChromeLayoutError> {
+        self.hit_regions
+            .iter()
+            .map(|region| {
+                Ok(MaterializedChromeHitRegion {
+                    bounds: self.bounds.place(region.local_bounds())?,
+                    action: region.action().clone(),
+                })
+            })
+            .collect()
     }
 }
 
@@ -256,6 +552,7 @@ impl FrameChrome {
                 return Err(ChromeLayoutError::ContentExceedsFrame { kind });
             }
             let bounds = FrameRect::new(0.0, y, frame.width(), request.height)?;
+            request.content.validate_in(bounds)?;
             for region in &request.hit_regions {
                 bounds.place(region.local_bounds())?;
             }
@@ -289,6 +586,9 @@ fn validate_requests(requests: &[ChromeBandRequest]) -> Result<(), ChromeLayoutE
         if seen.contains(&request.kind) {
             return Err(ChromeLayoutError::DuplicateBand { kind: request.kind });
         }
+        if request.content.kind() != request.kind {
+            return Err(ChromeLayoutError::ContentKindMismatch { kind: request.kind });
+        }
         seen.push(request.kind);
     }
 
@@ -316,4 +616,5 @@ pub enum ChromeLayoutError {
     ConflictingPresentation,
     ContentExceedsFrame { kind: FrameChromeKind },
     ContentExceedsBand,
+    ContentKindMismatch { kind: FrameChromeKind },
 }

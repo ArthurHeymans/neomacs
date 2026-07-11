@@ -803,6 +803,9 @@ pub struct FrameGlyphBuffer {
     /// All glyphs to render this frame
     pub glyphs: Vec<FrameGlyph>,
 
+    /// Authoritative frame-level chrome bands and interaction geometry.
+    pub frame_chrome: crate::frame_chrome::FrameChrome,
+
     /// Per-window metadata for animation detection
     pub window_infos: Vec<WindowInfo>,
 
@@ -1034,6 +1037,7 @@ impl FrameGlyphBuffer {
             background_alpha: 1.0,
             no_accept_focus: false,
             glyphs: Vec::with_capacity(10000),
+            frame_chrome: crate::frame_chrome::FrameChrome::default(),
             window_infos: Vec::with_capacity(16),
             transition_hints: Vec::with_capacity(16),
             effect_hints: Vec::with_capacity(16),
@@ -1071,6 +1075,7 @@ impl FrameGlyphBuffer {
     /// Called at the start of each frame by the matrix walker.
     pub fn clear_all(&mut self) {
         self.glyphs.clear();
+        self.frame_chrome = crate::frame_chrome::FrameChrome::default();
         self.window_infos.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();

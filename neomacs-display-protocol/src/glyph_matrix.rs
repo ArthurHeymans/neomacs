@@ -10,6 +10,7 @@
 
 use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
+use super::frame_chrome::{ChromeMedia, FrameChrome, FrameChromeContent};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, FringeBitmapData,
     FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
@@ -246,7 +247,7 @@ impl Glyph {
 /// Contains three glyph areas (left margin, text, right margin) matching
 /// GNU's layout. Row hashing enables fast diff: if hashes match, the rows
 /// are likely identical; if they differ, the row needs redrawing.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GlyphRow {
     /// Glyphs per area: [left_margin, text, right_margin].
     pub glyphs: [Vec<Glyph>; 3],
@@ -694,6 +695,9 @@ pub struct FrameDisplayState {
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Frame-level chrome rows that are not owned by any leaf window.
     pub frame_chrome_rows: Vec<FrameChromeRow>,
+    /// Authoritative frame-level chrome bands. The legacy split fields remain
+    /// only while their consumers migrate to this value.
+    pub frame_chrome: FrameChrome,
     pub frame_cols: usize,
     pub frame_rows: usize,
     pub frame_pixel_width: f32,
@@ -871,6 +875,7 @@ impl FrameDisplayState {
             protocol_version: crate::PROTOCOL_VERSION,
             window_matrices: Vec::new(),
             frame_chrome_rows: Vec::new(),
+            frame_chrome: FrameChrome::default(),
             frame_cols,
             frame_rows,
             frame_pixel_width: frame_cols as f32 * char_width,
@@ -954,6 +959,7 @@ impl FrameDisplayState {
         state.char_fonts = buf.char_fonts.clone();
         state.shaped_clusters = buf.shaped_clusters.clone();
         state.window_infos = buf.window_infos.clone();
+        state.frame_chrome = buf.frame_chrome.clone();
         // Reconstruct the layout-internal phys_cursor from the unified list's
         // active entry; charpos isn't carried on WindowCursor so default to 0.
         state.phys_cursor = buf.active_cursor().map(|c| PhysCursor {
@@ -1190,6 +1196,7 @@ impl FrameDisplayState {
 
         // Copy transition hints
         buf.transition_hints = self.transition_hints.clone();
+        buf.frame_chrome = self.frame_chrome.clone();
         buf.tab_bar = self.tab_bar.clone();
 
         // --- Materialize all glyphs (backgrounds, grid, borders, images,
@@ -1268,6 +1275,31 @@ impl FrameDisplayState {
         }
 
         // --- Materialize grid content -> pixel-positioned Char/Stretch glyphs ---
+        for band in self.frame_chrome.bands() {
+            let FrameChromeContent::DisplayRow(content) = band.content() else {
+                continue;
+            };
+            let bounds = band.bounds().raw();
+            let row_index = (bounds.y / self.char_height.max(1.0)).round().max(0.0) as u32;
+            self.for_each_grid_row_glyph(
+                DisplayWindowId::new(0),
+                row_index,
+                content.row(),
+                bounds,
+                bounds,
+                self.char_width,
+                self.char_height,
+                &mut push,
+            );
+            for medium in content.media() {
+                self.materialize_frame_chrome_medium(
+                    band.bounds(),
+                    content.row().role,
+                    medium,
+                    &mut push,
+                );
+            }
+        }
         for frame_row in &self.frame_chrome_rows {
             self.for_each_grid_row_glyph(
                 DisplayWindowId::new(0),
@@ -1472,6 +1504,69 @@ impl FrameDisplayState {
                 track_color: sb.track_color,
                 thumb_color: sb.thumb_color,
             });
+        }
+    }
+
+    fn materialize_frame_chrome_medium(
+        &self,
+        band_bounds: super::frame_chrome::FrameRect,
+        row_role: GlyphRowRole,
+        medium: &ChromeMedia,
+        push: &mut impl FnMut(FrameGlyph),
+    ) {
+        let frame_bounds = band_bounds
+            .place(medium.local_bounds())
+            .expect("frame chrome validates media bounds before publication")
+            .raw();
+        let clip_rect = Some(band_bounds.raw());
+        match medium {
+            ChromeMedia::Image {
+                image_id, slot_id, ..
+            } => push(FrameGlyph::Image {
+                window_id: DisplayWindowId::new(0),
+                row_role,
+                clip_rect,
+                slot_id: *slot_id,
+                image_id: *image_id,
+                x: frame_bounds.x,
+                y: frame_bounds.y,
+                width: frame_bounds.width,
+                height: frame_bounds.height,
+            }),
+            ChromeMedia::Video {
+                video_id,
+                slot_id,
+                loop_count,
+                autoplay,
+                ..
+            } => push(FrameGlyph::Video {
+                window_id: DisplayWindowId::new(0),
+                row_role,
+                clip_rect,
+                slot_id: *slot_id,
+                video_id: *video_id,
+                x: frame_bounds.x,
+                y: frame_bounds.y,
+                width: frame_bounds.width,
+                height: frame_bounds.height,
+                loop_count: *loop_count,
+                autoplay: *autoplay,
+            }),
+            ChromeMedia::Xwidget {
+                xwidget_id,
+                slot_id,
+                ..
+            } => push(FrameGlyph::Xwidget {
+                window_id: DisplayWindowId::new(0),
+                row_role,
+                clip_rect,
+                slot_id: *slot_id,
+                xwidget_id: *xwidget_id,
+                x: frame_bounds.x,
+                y: frame_bounds.y,
+                width: frame_bounds.width,
+                height: frame_bounds.height,
+            }),
         }
     }
 

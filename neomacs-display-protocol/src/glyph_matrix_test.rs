@@ -1347,6 +1347,122 @@ fn materialize_new_fields_default_to_empty() {
 }
 
 #[test]
+fn frame_chrome_materializes_nonzero_tab_origin_once() {
+    use crate::frame_chrome::{
+        BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion, ChromeMedia,
+        FrameChrome, FrameChromeContent, FrameChromeKind, FrameSize, MenuBarContent,
+        ToolBarContent,
+    };
+
+    let mut state = FrameDisplayState::new(80, 36, 7.8, 18.0);
+    state.frame_pixel_width = 624.0;
+    state.frame_pixel_height = 648.0;
+
+    let mut tab_row = GlyphRow::new(GlyphRowRole::TabBar);
+    tab_row.enabled = true;
+    tab_row.pixel_y = 52.0;
+    tab_row.height_px = 18.0;
+    tab_row.ascent_px = 14.0;
+    tab_row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::char('T', FaceId::new(0), 0).with_pixel_width(7.8));
+    tab_row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::stretch(2, FaceId::new(0)).with_pixel_geometry(16.0, 18.0, 14.0));
+
+    let tab_content = ChromeDisplayRow::new(
+        tab_row,
+        vec![ChromeMedia::Image {
+            local_bounds: BandRect::new(24.0, 0.0, 16.0, 16.0).expect("local image bounds"),
+            image_id: ImageId::new(77),
+            slot_id: None,
+        }],
+    );
+    assert_eq!(tab_content.row().pixel_y, 0.0);
+
+    state.frame_chrome = FrameChrome::layout(
+        FrameSize::new(624.0, 648.0).expect("valid frame"),
+        vec![
+            ChromeBandRequest::new(
+                FrameChromeKind::MenuBar,
+                18.0,
+                FrameChromeContent::MenuBar(MenuBarContent::empty()),
+            ),
+            ChromeBandRequest::new(
+                FrameChromeKind::ToolBar,
+                34.0,
+                FrameChromeContent::ToolBar(ToolBarContent::empty()),
+            ),
+            ChromeBandRequest::new(
+                FrameChromeKind::TabBar,
+                18.0,
+                FrameChromeContent::DisplayRow(tab_content),
+            )
+            .with_hit_regions(vec![ChromeHitRegion::new(
+                BandRect::new(0.0, 0.0, 24.0, 18.0).expect("local hit bounds"),
+                ChromeAction::SelectTab { index: 0 },
+            )]),
+        ],
+    )
+    .expect("valid chrome");
+
+    let materialized = state.materialize();
+    let tab_char = materialized
+        .glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Char {
+                    row_role: GlyphRowRole::TabBar,
+                    ..
+                }
+            )
+        })
+        .expect("tab character");
+    let tab_stretch = materialized
+        .glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Stretch {
+                    row_role: GlyphRowRole::TabBar,
+                    ..
+                }
+            )
+        })
+        .expect("tab stretch");
+    let tab_image = materialized
+        .glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Image {
+                    row_role: GlyphRowRole::TabBar,
+                    image_id,
+                    ..
+                } if *image_id == ImageId::new(77)
+            )
+        })
+        .expect("tab image");
+
+    assert_eq!(tab_char.geometry().map(|rect| rect.y), Some(52.0));
+    assert_eq!(tab_stretch.geometry().map(|rect| rect.y), Some(52.0));
+    assert_eq!(tab_image.geometry().map(|rect| rect.y), Some(52.0));
+    assert_eq!(
+        tab_char.clip_rect(),
+        Some(Rect::new(0.0, 52.0, 624.0, 18.0))
+    );
+
+    let tab_band = materialized
+        .frame_chrome
+        .band(FrameChromeKind::TabBar)
+        .expect("tab band");
+    let hits = tab_band.materialized_hit_regions().expect("valid hits");
+    assert_eq!(hits[0].bounds().y(), 52.0);
+}
+
+#[test]
 fn materialize_mixed_grid_and_nongrid_items() {
     let mut state = state_with_text("Hi");
 

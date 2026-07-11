@@ -1,7 +1,11 @@
 use crate::frame_chrome::{
-    BandRect, ChromeAction, ChromeBandRequest, ChromeHitRegion, ChromeLayoutError, FrameChrome,
-    FrameChromeKind, FrameRect, FrameSize,
+    BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion,
+    ChromeLayoutError, ChromeMedia, FrameChrome, FrameChromeContent, FrameChromeKind, FrameRect,
+    FrameSize, MenuBarContent,
 };
+use crate::frame_glyphs::GlyphRowRole;
+use crate::glyph_matrix::GlyphRow;
+use crate::types::ImageId;
 use crate::types::Rect;
 use proptest::prelude::*;
 
@@ -172,6 +176,49 @@ fn frame_chrome_layout_rejects_hit_regions_outside_their_band() {
     .expect_err("hit region exceeds its band");
 
     assert_eq!(error, ChromeLayoutError::ContentExceedsBand);
+}
+
+#[test]
+fn frame_chrome_layout_rejects_media_outside_its_band() {
+    let content = ChromeDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        vec![ChromeMedia::Image {
+            local_bounds: BandRect::new(620.0, 0.0, 16.0, 16.0).expect("local image bounds"),
+            image_id: ImageId::new(7),
+            slot_id: None,
+        }],
+    );
+    let error = FrameChrome::layout(
+        FrameSize::new(624.0, 648.0).expect("valid frame"),
+        vec![ChromeBandRequest::new(
+            FrameChromeKind::TabBar,
+            18.0,
+            FrameChromeContent::DisplayRow(content),
+        )],
+    )
+    .expect_err("media exceeds its band");
+
+    assert_eq!(error, ChromeLayoutError::ContentExceedsBand);
+}
+
+#[test]
+fn frame_chrome_layout_rejects_content_for_another_band_kind() {
+    let error = FrameChrome::layout(
+        FrameSize::new(624.0, 648.0).expect("valid frame"),
+        vec![ChromeBandRequest::new(
+            FrameChromeKind::TabBar,
+            18.0,
+            FrameChromeContent::MenuBar(MenuBarContent::empty()),
+        )],
+    )
+    .expect_err("menu content cannot inhabit a tab band");
+
+    assert_eq!(
+        error,
+        ChromeLayoutError::ContentKindMismatch {
+            kind: FrameChromeKind::TabBar,
+        }
+    );
 }
 
 proptest! {
