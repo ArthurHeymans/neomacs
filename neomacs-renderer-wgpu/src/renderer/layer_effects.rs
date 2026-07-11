@@ -31,11 +31,12 @@ macro_rules! draw_effect {
             $rp.draw(0..verts.len() as u32, 0..1);
         }
     }};
-    // Animated/time-based effects: sets needs_continuous_redraw only when effect is active
+    // Animated/time-based effects. Continuation is no longer latched here: the
+    // effect's own state is polled by RendererFrameEffects::needs_redraw, so
+    // the `continuous` marker is retained only to keep call sites readable.
     ($self:ident, $rp:ident, $label:expr, $verts:expr, continuous) => {{
         let verts = $verts;
         if !verts.is_empty() {
-            $self.fx.needs_continuous_redraw = true;
             if let Some(upload) = $self
                 .arenas
                 .rect
@@ -50,13 +51,13 @@ macro_rules! draw_effect {
     }};
 }
 
-/// Draw effect vertices from a stateful effect function that returns (Vec<RectVertex>, bool).
+/// Draw effect vertices from a stateful effect function that returns
+/// `(Vec<RectVertex>, bool)`. The bool (whether the effect wants another
+/// frame) is ignored: continuation is polled from effect state by
+/// `needs_redraw`, not latched during drawing.
 macro_rules! draw_stateful {
     ($self:ident, $rp:ident, $label:expr, $result:expr) => {{
-        let (verts, needs_redraw) = $result;
-        if needs_redraw {
-            $self.fx.needs_continuous_redraw = true;
-        }
+        let (verts, _needs_redraw) = $result;
         if let Some(upload) = $self
             .arenas
             .rect

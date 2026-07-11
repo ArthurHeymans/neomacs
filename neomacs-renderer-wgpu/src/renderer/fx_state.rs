@@ -460,8 +460,6 @@ pub(crate) struct ErrorPulseState {
 /// frame's `RendererFrameEffects` as one unit.
 #[derive(Default)]
 pub(crate) struct EffectsState {
-    /// Flag: renderer needs continuous redraws (e.g. dim fade in progress)
-    pub(crate) needs_continuous_redraw: bool,
     /// Whether any fancy (animated) border styles are present in the current frame
     pub(crate) has_animated_borders: bool,
     pub(crate) dim: WindowDimState,
@@ -586,77 +584,82 @@ pub struct RendererFrameEffects {
 }
 
 impl RendererFrameEffects {
+    /// Whether the frame has any animating effect and therefore needs another
+    /// frame. This is a pure poll of effect *state* — the demand is known
+    /// before drawing, not latched during it (frame scheduling plan: demand
+    /// exists before drawing). It is the union of the per-category predicates
+    /// below, which the scheduler also uses to attribute the demand.
     pub fn needs_redraw(&self) -> bool {
-        self.fx.needs_continuous_redraw
-            || self.fx.has_animated_borders
-            || !self.fx.line_anim.active.is_empty()
-            || !self.fx.window_fade.active.is_empty()
-            || !self.fx.title_fade.active.is_empty()
-            || !self.fx.border_transition.transitions.is_empty()
-            || !self.fx.mode_line_fade.active.is_empty()
-            || !self.fx.text_fade.active.is_empty()
-            || !self.fx.scroll_spacing.active.is_empty()
-            || self.fx.cursor_wake.started.is_some()
-            || !self.fx.cursor_magnetism.entries.is_empty()
-            || !self.fx.cursor_comet.positions.is_empty()
-            || !self.fx.cursor_particles.entries.is_empty()
-            || !self.fx.typing_heatmap.entries.is_empty()
-            || !self.fx.scroll_velocity.fades.is_empty()
-            || self.fx.resize_padding.started.is_some()
-            || !self.fx.scroll_momentum.active.is_empty()
-            || !self.fx.cursor_ghost.entries.is_empty()
-            || !self.fx.sonar_ping.entries.is_empty()
-            || !self.fx.lightning_bolt.segments.is_empty()
-            || self.fx.pendulum.swing_start.is_some()
-            || !self.fx.sparkle_burst.entries.is_empty()
-            || self.fx.metronome.tick_start.is_some()
-            || self.fx.ripple_ring.start.is_some()
-            || self.fx.shockwave.start.is_some()
-            || self.fx.bubble.spawn_time.is_some()
-            || self.fx.firework.start.is_some()
-            || self.fx.cursor_lightning.start.is_some()
-            || self.fx.snowflake.start.is_some()
-            || !self.fx.edge_glow.entries.is_empty()
-            || !self.fx.ripple_wave.waves.is_empty()
-            || self.has_transient_effects()
+        self.cursor_effects_active()
+            || self.window_effects_active()
+            || self.text_effects_active()
+            || self.scroll_effects_active()
+            || self.decorative_effects_active()
+            || self.transient_effects_active()
     }
 
-    pub fn is_active(&self) -> bool {
-        self.needs_redraw()
-            || !self.fx.typing_ripple.active.is_empty()
-            || !self.fx.line_anim.active.is_empty()
-            || !self.fx.window_fade.active.is_empty()
-            || !self.fx.title_fade.active.is_empty()
-            || !self.fx.border_transition.transitions.is_empty()
-            || !self.fx.mode_line_fade.active.is_empty()
-            || !self.fx.text_fade.active.is_empty()
-            || !self.fx.scroll_spacing.active.is_empty()
-            || self.fx.cursor_wake.started.is_some()
+    /// Cursor-attached animations (wake, trail, magnetism, comet, particles,
+    /// ghost, lightning, pendulum, sonar, sparkle, metronome).
+    pub fn cursor_effects_active(&self) -> bool {
+        self.fx.cursor_wake.started.is_some()
             || !self.fx.cursor_trail.positions.is_empty()
             || !self.fx.cursor_magnetism.entries.is_empty()
             || !self.fx.cursor_comet.positions.is_empty()
             || !self.fx.cursor_particles.entries.is_empty()
-            || !self.fx.typing_heatmap.entries.is_empty()
-            || !self.fx.scroll_velocity.fades.is_empty()
-            || self.fx.resize_padding.started.is_some()
-            || !self.fx.scroll_momentum.active.is_empty()
-            || !self.fx.matrix_rain.columns.is_empty()
             || !self.fx.cursor_ghost.entries.is_empty()
-            || !self.fx.sonar_ping.entries.is_empty()
-            || !self.fx.lightning_bolt.segments.is_empty()
+            || self.fx.cursor_lightning.start.is_some()
             || self.fx.pendulum.swing_start.is_some()
+            || !self.fx.sonar_ping.entries.is_empty()
             || !self.fx.sparkle_burst.entries.is_empty()
             || self.fx.metronome.tick_start.is_some()
+    }
+
+    /// Window/border/chrome animations (window fade, title fade, border
+    /// transition, mode-line fade, animated borders, edge glow).
+    pub fn window_effects_active(&self) -> bool {
+        self.fx.has_animated_borders
+            || !self.fx.window_fade.active.is_empty()
+            || !self.fx.title_fade.active.is_empty()
+            || !self.fx.border_transition.transitions.is_empty()
+            || !self.fx.mode_line_fade.active.is_empty()
+            || !self.fx.edge_glow.entries.is_empty()
+    }
+
+    /// Text animations (typing ripple, line insert/delete slide, text fade-in,
+    /// typing heat map).
+    pub fn text_effects_active(&self) -> bool {
+        !self.fx.typing_ripple.active.is_empty()
+            || !self.fx.line_anim.active.is_empty()
+            || !self.fx.text_fade.active.is_empty()
+            || !self.fx.typing_heatmap.entries.is_empty()
+    }
+
+    /// Scroll animations (line-spacing slide, velocity fade, momentum).
+    pub fn scroll_effects_active(&self) -> bool {
+        !self.fx.scroll_spacing.active.is_empty()
+            || !self.fx.scroll_velocity.fades.is_empty()
+            || !self.fx.scroll_momentum.active.is_empty()
+    }
+
+    /// Decorative/ambient one-shots (matrix rain, lightning, ripple ring,
+    /// shockwave, bubble, firework, snowflake, rain, ripple wave, resize
+    /// padding).
+    pub fn decorative_effects_active(&self) -> bool {
+        !self.fx.matrix_rain.columns.is_empty()
+            || !self.fx.lightning_bolt.segments.is_empty()
             || self.fx.ripple_ring.start.is_some()
             || self.fx.shockwave.start.is_some()
             || self.fx.bubble.spawn_time.is_some()
             || self.fx.firework.start.is_some()
-            || self.fx.cursor_lightning.start.is_some()
             || self.fx.snowflake.start.is_some()
-            || !self.fx.edge_glow.entries.is_empty()
             || !self.fx.rain.drops.is_empty()
             || !self.fx.ripple_wave.waves.is_empty()
-            || self.has_transient_effects()
+            || self.fx.resize_padding.started.is_some()
+    }
+
+    /// Short-lived interaction effects (click halo, edge snap, error pulse).
+    pub fn transient_effects_active(&self) -> bool {
+        self.has_transient_effects()
     }
 
     pub fn has_transient_effects(&self) -> bool {
@@ -733,5 +736,69 @@ impl RendererFrameEffects {
 
     pub fn trigger_cursor_error_pulse(&mut self, now: std::time::Instant) {
         self.fx.error_pulse.started = Some(now);
+    }
+}
+
+#[cfg(test)]
+mod effect_category_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn default_effects_are_quiet() {
+        let fx = RendererFrameEffects::default();
+        assert!(!fx.needs_redraw());
+        assert!(!fx.cursor_effects_active());
+        assert!(!fx.window_effects_active());
+        assert!(!fx.text_effects_active());
+        assert!(!fx.scroll_effects_active());
+        assert!(!fx.decorative_effects_active());
+        assert!(!fx.transient_effects_active());
+    }
+
+    #[test]
+    fn each_category_drives_needs_redraw() {
+        let now = Instant::now();
+
+        // Cursor: wake.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.cursor_wake.started = Some(now);
+        assert!(fx.cursor_effects_active() && fx.needs_redraw());
+
+        // Window: animated borders.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.has_animated_borders = true;
+        assert!(fx.window_effects_active() && fx.needs_redraw());
+
+        // Text: typing ripple.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.typing_ripple.active.push((0.0, 0.0, now));
+        assert!(fx.text_effects_active() && fx.needs_redraw());
+
+        // Scroll: velocity fade.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.scroll_velocity.fades.push(ScrollVelocityFadeEntry {
+            window_id: 1,
+            bounds: neomacs_display_protocol::types::Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            velocity: 1.0,
+            started: now,
+            duration: Duration::from_millis(100),
+        });
+        assert!(fx.scroll_effects_active() && fx.needs_redraw());
+
+        // Decorative: ripple ring.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.ripple_ring.start = Some(now);
+        assert!(fx.decorative_effects_active() && fx.needs_redraw());
+
+        // Transient: error pulse.
+        let mut fx = RendererFrameEffects::default();
+        fx.fx.error_pulse.started = Some(now);
+        assert!(fx.transient_effects_active() && fx.needs_redraw());
     }
 }

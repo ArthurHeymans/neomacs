@@ -132,8 +132,17 @@ pub(crate) enum DemandReason {
     Terminal,
     Expose,
     DebugCapture,
-    /// Stage 1 compatibility adapter for legacy untyped dirty/effect state.
-    LegacyActivity,
+    /// New editor content or blink toggle needing a repaint.
+    Redisplay,
+    /// Render-effect families (Stage 6). Each names the group animating so
+    /// diagnostics can answer "why is this window still rendering?" without
+    /// per-effect logging.
+    CursorEffect,
+    WindowEffect,
+    TextEffect,
+    ScrollEffect,
+    DecorativeEffect,
+    TransientEffect,
 }
 
 /// A declaration that pixels need to change, with reason, scope, and cadence.

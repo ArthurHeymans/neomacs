@@ -340,28 +340,53 @@ impl RenderApp {
             }
             let max_rate = Self::window_max_rate(window_state);
 
-            let legacy_active = window_state.has_presentable_dirty_content()
-                || window_state
-                    .render
-                    .compositor
-                    .renderer_effects
-                    .needs_redraw()
-                || window_state.render.cursor.is_animating()
-                || window_state.render.compositor.transitions.has_active();
+            // Stage 6: each active render-effect family (and dirty content,
+            // cursor animation, and transitions) submits its own typed demand
+            // so diagnostics can attribute the demand, rather than one opaque
+            // catch-all. All use the same repaint invalidation and cadence, so
+            // aggregate behavior is unchanged; only the reason differs.
+            let fx = &window_state.render.compositor.renderer_effects;
+            let effect_demands = [
+                (
+                    window_state.has_presentable_dirty_content(),
+                    DemandReason::Redisplay,
+                ),
+                (fx.cursor_effects_active(), DemandReason::CursorEffect),
+                (fx.window_effects_active(), DemandReason::WindowEffect),
+                (fx.text_effects_active(), DemandReason::TextEffect),
+                (fx.scroll_effects_active(), DemandReason::ScrollEffect),
+                (
+                    fx.decorative_effects_active(),
+                    DemandReason::DecorativeEffect,
+                ),
+                (fx.transient_effects_active(), DemandReason::TransientEffect),
+                (
+                    window_state.render.cursor.is_animating(),
+                    DemandReason::CursorAnimation,
+                ),
+                (
+                    window_state.render.compositor.transitions.has_active(),
+                    DemandReason::Transition,
+                ),
+            ];
             let mut action = PacingAction::Sleep;
-            if legacy_active {
-                action = self.frame_coordinator.submit_demand(
-                    id,
-                    FrameDemand {
-                        invalidation: legacy_repaint,
-                        cadence: Cadence::MaxRate(max_rate),
-                        reason: DemandReason::LegacyActivity,
-                    },
-                    now,
-                );
-            } else {
-                self.frame_coordinator
-                    .retract(id, DemandReason::LegacyActivity);
+            for (active, reason) in effect_demands {
+                if active {
+                    let a = self.frame_coordinator.submit_demand(
+                        id,
+                        FrameDemand {
+                            invalidation: legacy_repaint,
+                            cadence: Cadence::MaxRate(max_rate),
+                            reason,
+                        },
+                        now,
+                    );
+                    if a == PacingAction::RequestRedraw {
+                        action = PacingAction::RequestRedraw;
+                    }
+                } else {
+                    self.frame_coordinator.retract(id, reason);
+                }
             }
 
             for (active, reason) in [
@@ -443,7 +468,7 @@ impl RenderApp {
                 FrameDemand {
                     invalidation: legacy_repaint,
                     cadence: Cadence::At(now + LEGACY_IDLE_POLL),
-                    reason: DemandReason::LegacyActivity,
+                    reason: DemandReason::Redisplay,
                 },
                 now,
             );

@@ -1557,9 +1557,6 @@ impl WgpuRenderer {
                 .title_fade
                 .active
                 .retain(|f| f.started.elapsed() < f.duration);
-            if !self.fx.title_fade.active.is_empty() {
-                self.fx.needs_continuous_redraw = true;
-            }
         }
 
         let mut all_rect_vertices: Vec<RectVertex> = Vec::new();

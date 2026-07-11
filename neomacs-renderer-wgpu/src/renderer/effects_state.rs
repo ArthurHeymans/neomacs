@@ -36,7 +36,6 @@ impl WgpuRenderer {
             started: std::time::Instant::now(),
             duration: std::time::Duration::from_millis(duration_ms as u64),
         });
-        self.fx.needs_continuous_redraw = true;
     }
 
     /// Compute Y offset for a glyph due to active line animations
@@ -433,7 +432,6 @@ impl WgpuRenderer {
                 self.effects.text_fade_in.duration_ms as u64,
             ),
         });
-        self.fx.needs_continuous_redraw = true;
     }
 
     /// Get the text fade-in alpha multiplier for a glyph at (x, y).
@@ -480,7 +478,6 @@ impl WgpuRenderer {
                 self.durations.scroll_line_spacing_ms as u64,
             ),
         });
-        self.fx.needs_continuous_redraw = true;
     }
 
     /// Record a new cursor position for the trail

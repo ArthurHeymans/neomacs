@@ -808,7 +808,6 @@ impl WgpuRenderer {
         let effective_color = if let Some(pulse) = self.cursor_error_pulse_override() {
             if !style.is_hollow() {
                 error_pulse_color = pulse;
-                self.fx.needs_continuous_redraw = true;
                 &error_pulse_color
             } else {
                 effective_color
@@ -819,9 +818,6 @@ impl WgpuRenderer {
 
         let wake = self.cursor_wake_factor_for(effects);
         let wake_active = wake != 1.0 && !style.is_hollow();
-        if wake_active {
-            self.fx.needs_continuous_redraw = true;
-        }
 
         // Compose the slide animation at draw time, never by mutating the
         // frame's stored cursor geometry. The active window's cursor follows the
@@ -1457,8 +1453,6 @@ impl WgpuRenderer {
     }
 
     fn refresh_frame_animation_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
-        // Reset continuous redraw flag (will be set by dim fade or other animations).
-        self.fx.needs_continuous_redraw = false;
         // Reset animated borders flag (set during box rendering if any fancy style is used).
         self.fx.has_animated_borders = false;
 
@@ -1476,7 +1470,6 @@ impl WgpuRenderer {
             .line_anim
             .active
             .retain(|a| a.started.elapsed() < a.duration);
-        self.mark_continuous_redraw_if(!self.fx.line_anim.active.is_empty());
     }
 
     fn refresh_mode_line_transition_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
@@ -1484,7 +1477,6 @@ impl WgpuRenderer {
             .mode_line_fade
             .active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.fx.mode_line_fade.active.is_empty());
 
         if !self.effects.mode_line_transition.enabled {
             return;
@@ -1546,7 +1538,6 @@ impl WgpuRenderer {
                         self.effects.mode_line_transition.duration_ms as u64,
                     ),
                 });
-                self.fx.needs_continuous_redraw = true;
             }
         }
     }
@@ -1556,7 +1547,6 @@ impl WgpuRenderer {
             .text_fade
             .active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.fx.text_fade.active.is_empty());
     }
 
     fn refresh_scroll_spacing_state(&mut self) {
@@ -1565,7 +1555,6 @@ impl WgpuRenderer {
             .scroll_spacing
             .active
             .retain(|e| now_spacing.duration_since(e.started) < e.duration);
-        self.mark_continuous_redraw_if(!self.fx.scroll_spacing.active.is_empty());
     }
 
     fn refresh_cursor_wake_state(&mut self) {
@@ -1573,8 +1562,6 @@ impl WgpuRenderer {
             let dur = std::time::Duration::from_millis(self.effects.cursor_wake.duration_ms as u64);
             if started.elapsed() >= dur {
                 self.fx.cursor_wake.started = None;
-            } else {
-                self.fx.needs_continuous_redraw = true;
             }
         }
     }
@@ -1586,8 +1573,6 @@ impl WgpuRenderer {
             );
             if started.elapsed() >= dur {
                 self.fx.error_pulse.started = None;
-            } else {
-                self.fx.needs_continuous_redraw = true;
             }
         }
     }
@@ -1597,13 +1582,6 @@ impl WgpuRenderer {
             .scroll_momentum
             .active
             .retain(|e| e.started.elapsed() < e.duration);
-        self.mark_continuous_redraw_if(!self.fx.scroll_momentum.active.is_empty());
-    }
-
-    fn mark_continuous_redraw_if(&mut self, active: bool) {
-        if active {
-            self.fx.needs_continuous_redraw = true;
-        }
     }
 
     fn prepare_frame_uniforms(
