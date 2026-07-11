@@ -14,15 +14,47 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
-use super::layer_media::{MediaQuad, textured_quad_vertices};
+use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
 use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::HashSet;
+
+fn clipped_media_rect(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    clip: Option<&Rect>,
+) -> Option<(f32, f32, f32, f32, f32, f32, f32, f32)> {
+    let Some(clip) = clip else {
+        return Some((x, y, width, height, 0.0, 1.0, 0.0, 1.0));
+    };
+    let left = x.max(clip.x);
+    let top = y.max(clip.y);
+    let right = (x + width).min(clip.x + clip.width);
+    let bottom = (y + height).min(clip.y + clip.height);
+    let draw_width = right - left;
+    let draw_height = bottom - top;
+    if draw_width <= 0.0 || draw_height <= 0.0 || width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    Some((
+        left,
+        top,
+        draw_width,
+        draw_height,
+        (left - x) / width,
+        (right - x) / width,
+        (top - y) / height,
+        (bottom - y) / height,
+    ))
+}
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
     let t = blend.clamp(0.0, 1.0);
@@ -111,6 +143,7 @@ impl WgpuRenderer {
         cursor_visible: bool,
         animated_cursor: Option<AnimatedCursor>,
         clip_corner_radius: f32,
+        pointer_selection: Option<neomacs_display_protocol::PointerAppearanceSelection>,
     ) {
         self.arenas.glyph.begin_frame();
         self.arenas.subpixel.begin_frame();
@@ -123,6 +156,8 @@ impl WgpuRenderer {
             offset_y,
             frame.glyphs.len(),
         );
+        let pointer_override =
+            super::pointer_override::PointerOverrideResolver::new(frame, pointer_selection);
 
         let mut stats = GlyphRenderStats::new();
         stats.total_frame_glyphs = frame.glyphs.len();
@@ -131,7 +166,7 @@ impl WgpuRenderer {
         let faces = &frame.faces;
 
         // --- Box span merging (for proper border rendering) ---
-        let box_spans = self.merge_box_spans(frame);
+        let box_spans = self.merge_box_spans(frame, &pointer_override);
 
         // --- Collect vertices by category for correct z-ordering ---
         //
@@ -149,7 +184,7 @@ impl WgpuRenderer {
         let mut scroll_bar_thumbs: Vec<(f32, f32, f32, f32, f32, Color)> = Vec::new();
 
         // --- Step 1: Collect backgrounds ---
-        for glyph in &frame.glyphs {
+        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
             match glyph {
                 FrameGlyph::Background { bounds, color } => {
                     self.add_rect(
@@ -166,18 +201,29 @@ impl WgpuRenderer {
                     y,
                     width,
                     height,
-                    bg,
+                    bg: _,
+                    face_id,
                     stipple_id,
                     stipple_fg,
+                    clip_rect,
                     ..
                 } => {
+                    let face_id = pointer_override.face_id(glyph_index, *face_id);
+                    let bg = frame.resolved_face(face_id).bg;
+                    let effective_clip =
+                        pointer_override.glyph_clip(glyph_index, clip_rect.as_ref());
+                    let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
+                        clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
+                    else {
+                        continue;
+                    };
                     self.add_rect(
                         &mut bg_vertices,
-                        *x + offset_x,
-                        *y + offset_y,
-                        *width,
-                        *height,
-                        bg,
+                        draw_x + offset_x,
+                        draw_y + offset_y,
+                        draw_width,
+                        draw_height,
+                        &bg,
                     );
                     // Stipple pattern overlay
                     if *stipple_id > 0
@@ -186,10 +232,10 @@ impl WgpuRenderer {
                     {
                         self.render_stipple_pattern(
                             &mut bg_vertices,
-                            *x + offset_x,
-                            *y + offset_y,
-                            *width,
-                            *height,
+                            draw_x + offset_x,
+                            draw_y + offset_y,
+                            draw_width,
+                            draw_height,
                             fg,
                             pat,
                         );
@@ -201,17 +247,26 @@ impl WgpuRenderer {
                     width,
                     height,
                     face_id,
+                    clip_rect,
                     ..
                 } => {
                     // Per-glyph background was inlined as `Some(face.background)`;
                     // resolve it from the face table for the same value.
-                    let bg_color = frame.resolved_face(*face_id).bg;
+                    let face_id = pointer_override.face_id(glyph_index, *face_id);
+                    let bg_color = frame.resolved_face(face_id).bg;
+                    let effective_clip =
+                        pointer_override.glyph_clip(glyph_index, clip_rect.as_ref());
+                    let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
+                        clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
+                    else {
+                        continue;
+                    };
                     self.add_rect(
                         &mut bg_vertices,
-                        *x + offset_x,
-                        *y + offset_y,
-                        *width,
-                        *height,
+                        draw_x + offset_x,
+                        draw_y + offset_y,
+                        draw_width,
+                        draw_height,
                         &bg_color,
                     );
                 }
@@ -399,7 +454,7 @@ impl WgpuRenderer {
         let enable_subpixel = glyph_atlas.subpixel_enabled();
 
         let mut text_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
-        for glyph in &frame.glyphs {
+        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
             if let FrameGlyph::Char {
                 char: ch,
                 composed,
@@ -407,19 +462,22 @@ impl WgpuRenderer {
                 y: _,
                 baseline,
                 width: _,
+                height: _,
                 ascent: _,
                 face_id,
+                clip_rect,
                 ..
             } = glyph
             {
                 // Resolve the face-derived attributes (fg/bg/font_size/overstrike)
                 // that used to be inlined on the glyph. A one-entry cache reuses
                 // the resolve across runs of glyphs sharing a face.
+                let face_id = pointer_override.face_id(glyph_index, *face_id);
                 let rf = match text_face_cache {
-                    Some((id, ref data)) if id == *face_id => *data,
+                    Some((id, ref data)) if id == face_id => *data,
                     _ => {
-                        let data = frame.resolved_face(*face_id);
-                        text_face_cache = Some((*face_id, data));
+                        let data = frame.resolved_face(face_id);
+                        text_face_cache = Some((face_id, data));
                         data
                     }
                 };
@@ -428,7 +486,7 @@ impl WgpuRenderer {
                 let font_size = rf.font_size;
                 let overstrike = rf.overstrike;
 
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
 
                 // Decompose physical-pixel positions into integer + subpixel bin.
                 // The bin is baked into the rasterized bitmap by swash for subpixel
@@ -451,7 +509,7 @@ impl WgpuRenderer {
                     stats.composed_glyphs += 1;
                     seen_composed_keys.insert(ComposedGlyphKey {
                         text: text.clone(),
-                        face_id: *face_id,
+                        face_id,
                         font_size_bits: font_size.to_bits(),
                         font_identity,
                         x_bin,
@@ -461,7 +519,7 @@ impl WgpuRenderer {
                         &self.device,
                         &self.queue,
                         text,
-                        *face_id,
+                        face_id,
                         font_size.to_bits(),
                         face,
                         x_bin,
@@ -472,7 +530,7 @@ impl WgpuRenderer {
                     stats.text_glyphs += 1;
                     let key = GlyphKey {
                         charcode: *ch as u32,
-                        face_id: *face_id,
+                        face_id,
                         font_size_bits: font_size.to_bits(),
                         font_identity,
                         x_bin,
@@ -493,14 +551,37 @@ impl WgpuRenderer {
                     let metrics = entry.metrics();
                     let uv = entry.uv();
                     let content_rect = entry.rect();
-                    let tex_u_min = uv.min()[0];
-                    let tex_u_max = uv.max()[0];
-                    let tex_v_min = uv.min()[1];
-                    let tex_v_max = uv.max()[1];
-                    let glyph_x = (x_int as f32 + metrics.bearing_x) / sf;
-                    let glyph_y = (y_int as f32 - metrics.bearing_y) / sf;
-                    let glyph_w = content_rect.width() as f32 / sf;
-                    let glyph_h = content_rect.height() as f32 / sf;
+                    let base_u_min = uv.min()[0];
+                    let base_u_max = uv.max()[0];
+                    let base_v_min = uv.min()[1];
+                    let base_v_max = uv.max()[1];
+                    let base_glyph_x = (x_int as f32 + metrics.bearing_x) / sf;
+                    let base_glyph_y = (y_int as f32 - metrics.bearing_y) / sf;
+                    let base_glyph_w = content_rect.width() as f32 / sf;
+                    let base_glyph_h = content_rect.height() as f32 / sf;
+                    let effective_clip = pointer_override
+                        .glyph_clip(glyph_index, clip_rect.as_ref())
+                        .map(|clip| Rect {
+                            x: clip.x + offset_x,
+                            y: clip.y + offset_y,
+                            width: clip.width,
+                            height: clip.height,
+                        });
+                    let Some((glyph_x, glyph_y, glyph_w, glyph_h, u0, u1, v0, v1)) =
+                        clipped_media_rect(
+                            base_glyph_x,
+                            base_glyph_y,
+                            base_glyph_w,
+                            base_glyph_h,
+                            effective_clip.as_ref(),
+                        )
+                    else {
+                        continue;
+                    };
+                    let tex_u_min = base_u_min + (base_u_max - base_u_min) * u0;
+                    let tex_u_max = base_u_min + (base_u_max - base_u_min) * u1;
+                    let tex_v_min = base_v_min + (base_v_max - base_v_min) * v0;
+                    let tex_v_max = base_v_min + (base_v_max - base_v_min) * v1;
 
                     let mut effective_fg = *fg;
                     let mut effective_bg = bg
@@ -654,7 +735,7 @@ impl WgpuRenderer {
         // --- Step 3: Collect decorations (underline, overline, strikethrough) ---
         let mut decoration_vertices: Vec<RectVertex> = Vec::new();
         let mut deco_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
-        for glyph in &frame.glyphs {
+        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
             if let FrameGlyph::Char {
                 x,
                 y,
@@ -662,14 +743,25 @@ impl WgpuRenderer {
                 width,
                 ascent,
                 face_id,
+                clip_rect,
                 ..
             } = glyph
             {
+                let face_id = pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref())
+                    .map(|clip| Rect {
+                        x: clip.x + offset_x,
+                        y: clip.y + offset_y,
+                        width: clip.width,
+                        height: clip.height,
+                    });
+                let decoration_start = decoration_vertices.len();
                 let rf = match deco_face_cache {
-                    Some((id, ref data)) if id == *face_id => *data,
+                    Some((id, ref data)) if id == face_id => *data,
                     _ => {
-                        let data = frame.resolved_face(*face_id);
-                        deco_face_cache = Some((*face_id, data));
+                        let data = frame.resolved_face(face_id);
+                        deco_face_cache = Some((face_id, data));
                         data
                     }
                 };
@@ -688,7 +780,7 @@ impl WgpuRenderer {
                 // Per-face font metrics for underline positioning
                 let (ul_pos, ul_thick) = frame
                     .faces
-                    .get(face_id)
+                    .get(&face_id)
                     .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
                     .unwrap_or((1.0, 1.0));
 
@@ -824,6 +916,11 @@ impl WgpuRenderer {
                         st_color,
                     );
                 }
+                super::pointer_override::clip_new_rect_vertices(
+                    &mut decoration_vertices,
+                    decoration_start,
+                    effective_clip.as_ref(),
+                );
             }
         }
 
@@ -1269,19 +1366,28 @@ impl WgpuRenderer {
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             let mut image_quads = Vec::new();
-            for glyph in &frame.glyphs {
+            let mut relief_vertices = Vec::new();
+            for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
                 if let FrameGlyph::Image {
                     image_id,
                     x,
                     y,
                     width,
                     height,
+                    clip_rect,
                     ..
                 } = glyph
                     && self.caches.image.get(image_id.get()).is_some()
                 {
-                    let ix = *x + offset_x;
-                    let iy = *y + offset_y;
+                    let effective_clip =
+                        pointer_override.image_clip(glyph_index, clip_rect.as_ref());
+                    let Some((draw_x, draw_y, draw_width, draw_height, u0, u1, v0, v1)) =
+                        clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
+                    else {
+                        continue;
+                    };
+                    let ix = draw_x + offset_x;
+                    let iy = draw_y + offset_y;
                     tracing::debug!(
                         "render_frame_content: image {} at ({:.1},{:.1}) size {:.1}x{:.1}",
                         image_id,
@@ -1292,8 +1398,31 @@ impl WgpuRenderer {
                     );
                     image_quads.push(MediaQuad {
                         id: image_id.get(),
-                        vertices: textured_quad_vertices(ix, iy, *width, *height, 0.0, 1.0),
+                        vertices: textured_quad_vertices_uv(
+                            ix,
+                            iy,
+                            draw_width,
+                            draw_height,
+                            u0,
+                            u1,
+                            v0,
+                            v1,
+                        ),
                     });
+                    if let Some(paint) = pointer_override.image_override(glyph_index)
+                        && let Some(edges) = super::pointer_override::relief_edges(
+                            ix,
+                            iy,
+                            draw_width,
+                            draw_height,
+                            paint.mode(),
+                        )
+                    {
+                        for edge in edges {
+                            let (x, y, width, height) = edge.bounds();
+                            self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
+                        }
+                    }
                 }
             }
             let image_vertices: Vec<GlyphVertex> = image_quads
@@ -1313,6 +1442,19 @@ impl WgpuRenderer {
                     }
                 }
             }
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &relief_vertices)
+            {
+                pass.set_pipeline(rect_pl);
+                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                pass.set_vertex_buffer(0, upload.buffer_slice());
+                pass.draw(0..relief_vertices.len() as u32, 0..1);
+            }
+            // Inline videos below inherit the image pipeline.
+            pass.set_pipeline(image_pl);
+            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             // --- Draw inline videos (inherit the image pipeline set above) ---
             #[cfg(feature = "video")]
@@ -1342,7 +1484,9 @@ impl WgpuRenderer {
                         );
                         video_quads.push(MediaQuad {
                             id: video_id.get(),
-                            vertices: textured_quad_vertices(vx, vy, *width, *height, 0.0, 1.0),
+                            vertices: super::layer_media::textured_quad_vertices(
+                                vx, vy, *width, *height, 0.0, 1.0,
+                            ),
                         });
                     }
                 }
@@ -1400,7 +1544,9 @@ impl WgpuRenderer {
                             );
                             webkit_quads.push(MediaQuad {
                                 id: view_id,
-                                vertices: textured_quad_vertices(wx, wy, *width, *height, 0.0, 1.0),
+                                vertices: super::layer_media::textured_quad_vertices(
+                                    wx, wy, *width, *height, 0.0, 1.0,
+                                ),
                             });
                         }
                     }
@@ -1479,12 +1625,16 @@ impl WgpuRenderer {
     ///
     /// All box faces get span-merged. Rounded boxes (corner_radius > 0) get SDF
     /// treatment; standard boxes (corner_radius = 0) get rect borders.
-    fn merge_box_spans(&self, frame: &FrameGlyphBuffer) -> Vec<BoxSpan> {
+    fn merge_box_spans(
+        &self,
+        frame: &FrameGlyphBuffer,
+        pointer_override: &super::pointer_override::PointerOverrideResolver,
+    ) -> Vec<BoxSpan> {
         let faces = &frame.faces;
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
-        for glyph in &frame.glyphs {
-            let (gx, gy, gw, gh, gface_id) = match glyph {
+        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
+            let (gx, gy, gw, gh, base_face_id) = match glyph {
                 FrameGlyph::Char {
                     x,
                     y,
@@ -1503,6 +1653,7 @@ impl WgpuRenderer {
                 } => (*x, *y, *width, *height, *face_id),
                 _ => continue,
             };
+            let gface_id = pointer_override.face_id(glyph_index, base_face_id);
 
             // Only include glyphs whose face has box decorations. The box fill
             // background is the face's background (the value materialization used

@@ -1,8 +1,17 @@
 use crate::{
-    FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerDrawMode, PresentedPaintSpan,
-    PresentedPointerAppearance, PresentedPointerMap, PresentedPointerMapError,
-    PresentedPointerRegion, PresentedPrimitiveKind,
+    FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
+    PointerAppearanceSelection, PointerDrawMode, PresentedPaintSpan, PresentedPointerAppearance,
+    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
 };
+
+#[test]
+fn pointer_appearance_selection_carries_only_renderer_safe_identity_and_phase() {
+    let id = PointerAppearanceId::try_from(3usize).expect("small id");
+    let selection = PointerAppearanceSelection::new(id, PointerAppearancePhase::Pressed);
+
+    assert_eq!(selection.appearance(), id);
+    assert_eq!(selection.phase(), PointerAppearancePhase::Pressed);
+}
 
 fn rect(x: f32, y: f32, width: f32, height: f32) -> FrameRect {
     FrameRect::new(x, y, width, height).expect("valid test rectangle")

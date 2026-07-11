@@ -862,6 +862,10 @@ impl RenderApp {
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
         super::frame_stats::count(&super::frame_stats::ROOT_GLYPH_PASSES);
+        let pointer_selection = render
+            .pointer_appearance
+            .active()
+            .and_then(|active| active.selection_for(frame));
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
             atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
         }
@@ -877,6 +881,7 @@ impl RenderApp {
                 root_animated_cursor,
                 render.mouse_pos,
                 bg_gradient,
+                pointer_selection,
                 render.compositor.current_row_damage.as_ref(),
             );
         });
@@ -897,6 +902,10 @@ impl RenderApp {
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             for &child_id in render.compositor.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = render.compositor.child_frames.frames.get(&child_id) {
+                    let pointer_selection = render
+                        .pointer_appearance
+                        .active()
+                        .and_then(|active| active.selection_for(&child_entry.frame));
                     if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
                         atlas.set_current_frame_fonts(
                             &child_entry.frame.fonts,
@@ -929,6 +938,7 @@ impl RenderApp {
                         child_frame_style.shadow_layers,
                         child_frame_style.shadow_offset,
                         child_frame_style.shadow_opacity,
+                        pointer_selection,
                     );
                     tracing::debug!(
                         parent_frame_id = render.emacs_frame_id,

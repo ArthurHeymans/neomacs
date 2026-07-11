@@ -20,10 +20,12 @@ use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, GlyphRowRole};
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 
 use super::super::vertex::RectVertex;
+use super::pointer_override::PointerOverrideResolver;
 
 /// Immutable per-frame inputs shared by every render phase.
 pub(super) struct FrameParams<'a> {
     pub(super) frame_glyphs: &'a FrameGlyphBuffer,
+    pub(super) pointer_override: PointerOverrideResolver,
     pub(super) faces: &'a HashMap<FaceId, Face>,
     pub(super) cursor_visible: bool,
     pub(super) animated_cursor: &'a Option<AnimatedCursor>,

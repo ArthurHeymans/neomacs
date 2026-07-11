@@ -7,9 +7,13 @@ use crate::render_thread::state::{
     ActivePointerAppearance, PointerAppearancePhase, PointerAppearanceState,
     PresentedAppearanceKey, PresentedInteractionKey, TabBarPressCapture,
 };
-use neomacs_display_protocol::PointerAppearanceId;
 use neomacs_display_protocol::frame_chrome::InteractionId;
 use neomacs_display_protocol::frame_chrome::PresentationId;
+use neomacs_display_protocol::{
+    FaceId, FrameRect, PointerAppearanceId,
+    PointerAppearancePhase as ProtocolPointerAppearancePhase, PointerDrawMode, PresentedPaintSpan,
+    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+};
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
 
@@ -73,6 +77,47 @@ fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKe
         PresentationId::new(presentation),
         PointerAppearanceId::try_from(appearance).expect("appearance id"),
     )
+}
+
+#[test]
+fn active_pointer_appearance_selects_only_its_exact_presented_frame() {
+    let mut frame = FrameGlyphBuffer::with_size(100.0, 20.0);
+    frame.presentation_id = PresentationId::new(7);
+    frame
+        .faces
+        .insert(FaceId::new(9), crate::core::face::Face::new(FaceId::new(9)));
+    frame.add_char('a', 0.0, 0.0, 10.0, 20.0, 15.0, false);
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(0.0, 0.0, 10.0, 20.0).unwrap(),
+                None,
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Glyph,
+                    0,
+                    1,
+                    FrameRect::new(0.0, 0.0, 10.0, 20.0).unwrap(),
+                )],
+                PointerDrawMode::Face(FaceId::new(9)),
+                PointerDrawMode::Face(FaceId::new(9)),
+            )],
+        )
+        .unwrap();
+    let active =
+        ActivePointerAppearance::new(appearance_key(7, 0), PointerAppearancePhase::Pressed);
+
+    let selection = active.selection_for(&frame).expect("matching snapshot");
+    assert_eq!(
+        selection.appearance(),
+        PointerAppearanceId::try_from(0usize).unwrap()
+    );
+    assert_eq!(selection.phase(), ProtocolPointerAppearancePhase::Pressed);
+
+    frame.presentation_id = PresentationId::new(8);
+    assert_eq!(active.selection_for(&frame), None);
 }
 
 #[test]

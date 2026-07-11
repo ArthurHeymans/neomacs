@@ -31,6 +31,7 @@ mod layer_media;
 mod layer_text;
 mod media;
 mod pattern_effects;
+mod pointer_override;
 mod resources;
 mod row_reuse;
 mod stats;

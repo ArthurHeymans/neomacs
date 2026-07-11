@@ -7,9 +7,10 @@ use winit::dpi::{LogicalSize, PhysicalSize, Size};
 use crate::core::face::Face;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
+pub(super) use neomacs_display_protocol::PointerAppearancePhase;
 use neomacs_display_protocol::{
-    EffectsConfig, InteractionId, PointerAppearanceId, PresentationId, ToolBarImageSource,
-    TransitionPolicy,
+    EffectsConfig, FrameGlyphBuffer, InteractionId, PointerAppearanceId,
+    PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
 
@@ -312,12 +313,6 @@ impl PresentedAppearanceKey {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum PointerAppearancePhase {
-    Hover,
-    Pressed,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ActivePointerAppearance {
     key: PresentedAppearanceKey,
     phase: PointerAppearancePhase,
@@ -340,8 +335,29 @@ impl ActivePointerAppearance {
         self.key.appearance()
     }
 
+    #[cfg(test)]
     pub(super) const fn phase(self) -> PointerAppearancePhase {
         self.phase
+    }
+
+    /// Produce renderer state only for the exact immutable presentation that
+    /// owns both the appearance id and its primitive spans.
+    pub(super) fn selection_for(
+        self,
+        frame: &FrameGlyphBuffer,
+    ) -> Option<PointerAppearanceSelection> {
+        if self.presentation() != frame.presentation_id
+            || frame
+                .presented_pointer()
+                .appearance(self.appearance())
+                .is_none()
+        {
+            return None;
+        }
+        Some(PointerAppearanceSelection::new(
+            self.appearance(),
+            self.phase,
+        ))
     }
 }
 
@@ -361,6 +377,7 @@ impl PointerAppearanceState {
         self.active
     }
 
+    #[cfg(test)]
     pub(super) const fn pressed(self) -> Option<PresentedAppearanceKey> {
         self.pressed
     }

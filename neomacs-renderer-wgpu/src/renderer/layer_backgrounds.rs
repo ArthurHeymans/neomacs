@@ -27,15 +27,16 @@ impl WgpuRenderer {
         // Standard boxes (corner_radius=0) get merged rect borders drawn after text.
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             // The box-decoration pass applies only to the cursor-cell kinds that
             // resolve a face (Char/Stretch); skip everything else.
             let Some((gx, gy, gw, gh)) = glyph.cell_rect() else {
                 continue;
             };
-            let Some(gface_id) = glyph.face_id() else {
+            let Some(base_face_id) = glyph.face_id() else {
                 continue;
             };
+            let gface_id = params.pointer_override.face_id(glyph_index, base_face_id);
             let Some(g_role) = glyph.row_role() else {
                 continue;
             };
@@ -187,7 +188,7 @@ impl WgpuRenderer {
             }
         }
         // Non-overlay stretches (skip those inside a box span)
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Stretch {
                 x,
                 y,
@@ -204,25 +205,34 @@ impl WgpuRenderer {
                 && !row_role.is_chrome()
                 && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
             {
+                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = params
+                    .pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref());
                 let ya = if has_line_anims {
                     *y + self.line_y_offset(*x, *y)
                 } else {
                     *y
                 };
-                let Some((draw_y, draw_h)) = Self::clip_vertical(ya, *height, clip_rect.as_ref())
-                else {
+                let Some((draw_x, draw_y, draw_w, draw_h)) = super::pointer_override::clip_geometry(
+                    *x,
+                    ya,
+                    *width,
+                    *height,
+                    effective_clip.as_ref(),
+                ) else {
                     continue;
                 };
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
                 self.add_face_background_rect(
                     &mut non_overlay_rect_vertices,
                     face,
                     bg,
-                    *x,
+                    draw_x,
                     draw_y,
-                    *width,
+                    draw_w,
                     draw_h,
-                    clip_rect.as_ref(),
+                    effective_clip.as_ref(),
                 );
                 // Overlay stipple pattern if present
                 if *stipple_id > 0
@@ -231,9 +241,9 @@ impl WgpuRenderer {
                 {
                     self.render_stipple_pattern(
                         &mut non_overlay_rect_vertices,
-                        *x,
+                        draw_x,
                         draw_y,
-                        *width,
+                        draw_w,
                         draw_h,
                         fg,
                         pat,
@@ -243,7 +253,7 @@ impl WgpuRenderer {
         }
         // Non-overlay char backgrounds (skip boxed chars — they get rounded bg instead)
         let mut bg_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Char {
                 x,
                 y,
@@ -256,19 +266,23 @@ impl WgpuRenderer {
             } = glyph
                 && !row_role.is_chrome()
             {
+                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = params
+                    .pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref());
                 // The per-glyph background used to be inlined as
                 // `Some(face.background)` by materialization, so resolving
                 // it from the face reproduces that value exactly.
                 let rf = match bg_face_cache {
-                    Some((id, ref data)) if id == *face_id => *data,
+                    Some((id, ref data)) if id == face_id => *data,
                     _ => {
-                        let data = frame_glyphs.resolved_face(*face_id);
-                        bg_face_cache = Some((*face_id, data));
+                        let data = frame_glyphs.resolved_face(face_id);
+                        bg_face_cache = Some((face_id, data));
                         data
                     }
                 };
                 let bg: Option<Color> = Some(rf.bg);
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
                 let has_gradient = face
                     .and_then(|resolved| resolved.background_gradient.as_deref())
                     .is_some();
@@ -281,8 +295,14 @@ impl WgpuRenderer {
                     } else {
                         *y
                     };
-                    let Some((draw_y, draw_h)) =
-                        Self::clip_vertical(ya, *height, clip_rect.as_ref())
+                    let Some((draw_x, draw_y, draw_w, draw_h)) =
+                        super::pointer_override::clip_geometry(
+                            *x,
+                            ya,
+                            *width,
+                            *height,
+                            effective_clip.as_ref(),
+                        )
                     else {
                         continue;
                     };
@@ -294,11 +314,11 @@ impl WgpuRenderer {
                         &mut non_overlay_rect_vertices,
                         face,
                         &fallback,
-                        *x,
+                        draw_x,
                         draw_y,
-                        *width,
+                        draw_w,
                         draw_h,
-                        clip_rect.as_ref(),
+                        effective_clip.as_ref(),
                     );
                 }
             }
@@ -538,7 +558,7 @@ impl WgpuRenderer {
         let mut overlay_rect_vertices: Vec<RectVertex> = Vec::new();
 
         // Overlay stretches (skip those inside a box span)
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Stretch {
                 x,
                 y,
@@ -555,20 +575,29 @@ impl WgpuRenderer {
                 && row_role.is_chrome()
                 && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
             {
-                let Some((draw_y, draw_h)) = Self::clip_vertical(*y, *height, clip_rect.as_ref())
-                else {
+                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = params
+                    .pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref());
+                let Some((draw_x, draw_y, draw_w, draw_h)) = super::pointer_override::clip_geometry(
+                    *x,
+                    *y,
+                    *width,
+                    *height,
+                    effective_clip.as_ref(),
+                ) else {
                     continue;
                 };
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
                 self.add_face_background_rect(
                     &mut overlay_rect_vertices,
                     face,
                     bg,
-                    *x,
+                    draw_x,
                     draw_y,
-                    *width,
+                    draw_w,
                     draw_h,
-                    clip_rect.as_ref(),
+                    effective_clip.as_ref(),
                 );
                 if *stipple_id > 0
                     && let (Some(fg), Some(pat)) =
@@ -576,9 +605,9 @@ impl WgpuRenderer {
                 {
                     self.render_stipple_pattern(
                         &mut overlay_rect_vertices,
-                        *x,
+                        draw_x,
                         draw_y,
-                        *width,
+                        draw_w,
                         draw_h,
                         fg,
                         pat,
@@ -588,7 +617,7 @@ impl WgpuRenderer {
         }
         // Overlay char backgrounds (skip those inside a box span)
         let mut overlay_bg_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Char {
                 x,
                 y,
@@ -601,17 +630,21 @@ impl WgpuRenderer {
             } = glyph
                 && row_role.is_chrome()
             {
+                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = params
+                    .pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref());
                 // Background was inlined as `Some(face.background)`.
                 let rf = match overlay_bg_face_cache {
-                    Some((id, ref data)) if id == *face_id => *data,
+                    Some((id, ref data)) if id == face_id => *data,
                     _ => {
-                        let data = frame_glyphs.resolved_face(*face_id);
-                        overlay_bg_face_cache = Some((*face_id, data));
+                        let data = frame_glyphs.resolved_face(face_id);
+                        overlay_bg_face_cache = Some((face_id, data));
                         data
                     }
                 };
                 let bg: Option<Color> = Some(rf.bg);
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
                 let has_gradient = face
                     .and_then(|resolved| resolved.background_gradient.as_deref())
                     .is_some();
@@ -619,8 +652,14 @@ impl WgpuRenderer {
                 if (bg.is_some() || has_gradient || has_solid_bg)
                     && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
                 {
-                    let Some((draw_y, draw_h)) =
-                        Self::clip_vertical(*y, *height, clip_rect.as_ref())
+                    let Some((draw_x, draw_y, draw_w, draw_h)) =
+                        super::pointer_override::clip_geometry(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            effective_clip.as_ref(),
+                        )
                     else {
                         continue;
                     };
@@ -632,11 +671,11 @@ impl WgpuRenderer {
                         &mut overlay_rect_vertices,
                         face,
                         &fallback,
-                        *x,
+                        draw_x,
                         draw_y,
-                        *width,
+                        draw_w,
                         draw_h,
-                        clip_rect.as_ref(),
+                        effective_clip.as_ref(),
                     );
                 }
             }

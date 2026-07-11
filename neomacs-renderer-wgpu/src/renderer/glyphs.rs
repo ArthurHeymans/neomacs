@@ -6,6 +6,7 @@ use super::GlyphRenderStats;
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
 use super::frame_pass::{BoxSpan, FrameParams, FramePassCtx};
+use neomacs_display_protocol::PointerAppearanceSelection;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -1079,6 +1080,7 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
+        pointer_selection: Option<PointerAppearanceSelection>,
         row_damage: Option<&super::row_reuse::FrameRowDamage>,
     ) {
         self.render_frame_glyphs_impl(
@@ -1216,6 +1218,10 @@ impl WgpuRenderer {
 
         let params = FrameParams {
             frame_glyphs,
+            pointer_override: super::pointer_override::PointerOverrideResolver::new(
+                frame_glyphs,
+                pointer_selection,
+            ),
             faces,
             cursor_visible,
             animated_cursor: &animated_cursor,
@@ -1649,30 +1655,6 @@ impl WgpuRenderer {
                 && gy >= s.y - box_margin - 0.5
                 && gy < s.y + s.height + box_margin + 0.5
         })
-    }
-
-    pub(super) fn clip_vertical(
-        y: f32,
-        height: f32,
-        clip_rect: Option<&Rect>,
-    ) -> Option<(f32, f32)> {
-        if height <= 0.0 {
-            return None;
-        }
-        if let Some(clip) = clip_rect {
-            let top = clip.y;
-            let bottom = clip.y + clip.height;
-            let draw_y = y.max(top);
-            let draw_bottom = (y + height).min(bottom);
-            let draw_h = draw_bottom - draw_y;
-            if draw_h <= 0.0 {
-                None
-            } else {
-                Some((draw_y, draw_h))
-            }
-        } else {
-            Some((y, height))
-        }
     }
 
     pub(super) fn draw_rect_vertex_layer(

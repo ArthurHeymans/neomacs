@@ -125,7 +125,8 @@ impl WgpuRenderer {
         // would bake stale values in, so reuse and capture shut off entirely.
         let global_effects_active = params.has_line_anims
             || !self.fx.text_fade.active.is_empty()
-            || !self.fx.mode_line_fade.active.is_empty();
+            || !self.fx.mode_line_fade.active.is_empty()
+            || params.pointer_override.is_active();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
         let ctx = row_reuse::ReusePassCtx {
             damage: params.row_damage,
@@ -228,11 +229,16 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 // Resolve the face-derived attributes that used to be
                 // inlined on the glyph. Glyphs arrive in face-runs, so a
                 // one-entry cache avoids re-resolving per glyph.
+                let face_id = self.params.pointer_override.face_id(glyph_index, *face_id);
+                let effective_clip = self
+                    .params
+                    .pointer_override
+                    .glyph_clip(glyph_index, clip_rect.as_ref());
                 let rf = match self.glyph_face_cache {
-                    Some((id, ref data)) if id == *face_id => *data,
+                    Some((id, ref data)) if id == face_id => *data,
                     _ => {
-                        let data = frame_glyphs.resolved_face(*face_id);
-                        self.glyph_face_cache = Some((*face_id, data));
+                        let data = frame_glyphs.resolved_face(face_id);
+                        self.glyph_face_cache = Some((face_id, data));
                         data
                     }
                 };
@@ -241,7 +247,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 let font_size = rf.font_size;
                 let overstrike = rf.overstrike;
 
-                let face = faces.get(face_id);
+                let face = faces.get(&face_id);
                 if face.is_some_and(|face| face.background_gradient.is_some()) {
                     // sample_face_background samples the gradient at this
                     // glyph's y; the color lands in vertex bytes, so the row
@@ -273,7 +279,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 let handle_opt = if let Some(text) = composed {
                     self.seen_composed_keys.insert(ComposedGlyphKey {
                         text: text.clone(),
-                        face_id: *face_id,
+                        face_id,
                         font_size_bits: font_size.to_bits(),
                         font_identity,
                         x_bin,
@@ -283,7 +289,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                         &self.renderer.device,
                         &self.renderer.queue,
                         text,
-                        *face_id,
+                        face_id,
                         font_size.to_bits(),
                         face,
                         x_bin,
@@ -293,7 +299,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                 } else {
                     let key = GlyphKey {
                         charcode: *char as u32,
-                        face_id: *face_id,
+                        face_id,
                         font_size_bits: font_size.to_bits(),
                         font_identity,
                         x_bin,
@@ -338,41 +344,74 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                     let tex_v_min_base = uv.min()[1];
                     let tex_v_max_base = uv.max()[1];
 
-                    let (glyph_y, glyph_h, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
-                        let full_h = glyph_h;
-                        let v_range = tex_v_max_base - tex_v_min_base;
-                        let mut y0 = glyph_y;
-                        let mut h0 = glyph_h;
-                        let mut v0 = tex_v_min_base;
-                        let mut v1 = tex_v_max_base;
-                        let top = clip.y;
-                        let bottom = clip.y + clip.height;
-                        if row_reuse::glyph_extent_touches_band(y0, h0, top, bottom) {
-                            // Trimmed (or trim-prone under any shift): the
-                            // baked v-range depends on absolute y vs the band.
-                            tessellation.verbatim_only = true;
-                        }
-                        if y0 < top {
-                            let cut = top - y0;
-                            if cut >= h0 {
-                                continue;
+                    let (glyph_x, glyph_w, tex_u_min, tex_u_max) =
+                        if let Some(clip) = &effective_clip {
+                            let full_w = glyph_w;
+                            let u_range = tex_u_max - tex_u_min;
+                            let mut x0 = glyph_x;
+                            let mut w0 = glyph_w;
+                            let mut u0 = tex_u_min;
+                            let mut u1 = tex_u_max;
+                            let left = clip.x;
+                            let right = clip.x + clip.width;
+                            if x0 < left {
+                                let cut = left - x0;
+                                if cut >= w0 {
+                                    continue;
+                                }
+                                x0 = left;
+                                w0 -= cut;
+                                u0 += (cut / full_w) * u_range;
                             }
-                            y0 = top;
-                            h0 -= cut;
-                            v0 += (cut / full_h) * v_range;
-                        }
-                        if y0 + h0 > bottom {
-                            let cut = (y0 + h0) - bottom;
-                            if cut >= h0 {
-                                continue;
+                            if x0 + w0 > right {
+                                let cut = (x0 + w0) - right;
+                                if cut >= w0 {
+                                    continue;
+                                }
+                                w0 -= cut;
+                                u1 -= (cut / full_w) * u_range;
                             }
-                            h0 -= cut;
-                            v1 -= (cut / full_h) * v_range;
-                        }
-                        (y0, h0, v0, v1)
-                    } else {
-                        (glyph_y, glyph_h, tex_v_min_base, tex_v_max_base)
-                    };
+                            (x0, w0, u0, u1)
+                        } else {
+                            (glyph_x, glyph_w, tex_u_min, tex_u_max)
+                        };
+
+                    let (glyph_y, glyph_h, tex_v_min, tex_v_max) =
+                        if let Some(clip) = &effective_clip {
+                            let full_h = glyph_h;
+                            let v_range = tex_v_max_base - tex_v_min_base;
+                            let mut y0 = glyph_y;
+                            let mut h0 = glyph_h;
+                            let mut v0 = tex_v_min_base;
+                            let mut v1 = tex_v_max_base;
+                            let top = clip.y;
+                            let bottom = clip.y + clip.height;
+                            if row_reuse::glyph_extent_touches_band(y0, h0, top, bottom) {
+                                // Trimmed (or trim-prone under any shift): the
+                                // baked v-range depends on absolute y vs the band.
+                                tessellation.verbatim_only = true;
+                            }
+                            if y0 < top {
+                                let cut = top - y0;
+                                if cut >= h0 {
+                                    continue;
+                                }
+                                y0 = top;
+                                h0 -= cut;
+                                v0 += (cut / full_h) * v_range;
+                            }
+                            if y0 + h0 > bottom {
+                                let cut = (y0 + h0) - bottom;
+                                if cut >= h0 {
+                                    continue;
+                                }
+                                h0 -= cut;
+                                v1 -= (cut / full_h) * v_range;
+                            }
+                            (y0, h0, v0, v1)
+                        } else {
+                            (glyph_y, glyph_h, tex_v_min_base, tex_v_max_base)
+                        };
 
                     if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
                         let cell_right = *x + *width;
@@ -386,7 +425,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                                 .as_deref()
                                 .map(str::to_owned)
                                 .unwrap_or_else(|| char.to_string()),
-                            face_id: *face_id,
+                            face_id,
                             font_size,
                             cell_x: *x,
                             cell_y: *y,
@@ -412,7 +451,7 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                         *y,
                         *width,
                         *height,
-                        clip_rect.as_ref(),
+                        effective_clip.as_ref(),
                     )
                     .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
                     if cursor_visible
@@ -874,7 +913,7 @@ impl WgpuRenderer {
             let mut decoration_vertices: Vec<RectVertex> = Vec::new();
 
             let mut deco_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
-            for glyph in &frame_glyphs.glyphs {
+            for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
                 if let FrameGlyph::Char {
                     x,
                     y,
@@ -884,6 +923,7 @@ impl WgpuRenderer {
                     ascent,
                     face_id,
                     row_role,
+                    clip_rect,
                     ..
                 } = glyph
                 {
@@ -891,11 +931,18 @@ impl WgpuRenderer {
                         continue;
                     }
 
+                    let face_id = ctx.params.pointer_override.face_id(glyph_index, *face_id);
+                    let effective_clip = ctx
+                        .params
+                        .pointer_override
+                        .glyph_clip(glyph_index, clip_rect.as_ref());
+                    let decoration_start = decoration_vertices.len();
+
                     let rf = match deco_face_cache {
-                        Some((id, ref data)) if id == *face_id => *data,
+                        Some((id, ref data)) if id == face_id => *data,
                         _ => {
-                            let data = frame_glyphs.resolved_face(*face_id);
-                            deco_face_cache = Some((*face_id, data));
+                            let data = frame_glyphs.resolved_face(face_id);
+                            deco_face_cache = Some((face_id, data));
                             data
                         }
                     };
@@ -918,7 +965,7 @@ impl WgpuRenderer {
                     // Get per-face font metrics for proper decoration positioning
                     let (ul_pos, ul_thick) = frame_glyphs
                         .faces
-                        .get(face_id)
+                        .get(&face_id)
                         .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
                         .unwrap_or((1.0, 1.0));
 
@@ -1055,26 +1102,38 @@ impl WgpuRenderer {
                             st_color,
                         );
                     }
+                    super::pointer_override::clip_new_rect_vertices(
+                        &mut decoration_vertices,
+                        decoration_start,
+                        effective_clip.as_ref(),
+                    );
                 }
             }
 
             // Also draw decorations for Stretch glyphs (e.g. align-to
             // gaps in mode-line).  Look up the face by face_id to get
             // underline/overline/strike-through attributes.
-            for glyph in &frame_glyphs.glyphs {
+            for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
                 if let FrameGlyph::Stretch {
                     x,
                     y,
                     width,
                     face_id,
                     row_role,
+                    clip_rect,
                     ..
                 } = glyph
                 {
                     if row_role.is_chrome() != want_overlay {
                         continue;
                     }
-                    let face = match frame_glyphs.faces.get(face_id) {
+                    let face_id = ctx.params.pointer_override.face_id(glyph_index, *face_id);
+                    let effective_clip = ctx
+                        .params
+                        .pointer_override
+                        .glyph_clip(glyph_index, clip_rect.as_ref());
+                    let decoration_start = decoration_vertices.len();
+                    let face = match frame_glyphs.faces.get(&face_id) {
                         Some(f) => f,
                         None => continue,
                     };
@@ -1212,6 +1271,11 @@ impl WgpuRenderer {
                             st_color,
                         );
                     }
+                    super::pointer_override::clip_new_rect_vertices(
+                        &mut decoration_vertices,
+                        decoration_start,
+                        effective_clip.as_ref(),
+                    );
                 }
             }
 

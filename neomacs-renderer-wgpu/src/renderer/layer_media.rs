@@ -3,7 +3,7 @@
 
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 
-use super::super::vertex::GlyphVertex;
+use super::super::vertex::{GlyphVertex, RectVertex};
 use super::WgpuRenderer;
 #[cfg(feature = "video")]
 use super::frame_pass::FrameParams;
@@ -19,6 +19,8 @@ pub(super) struct MediaQuad<Id> {
 
 /// Untinted (white) textured quad spanning the full u range and the given
 /// (possibly clip-trimmed) v range.
+// Default features use this only from test and feature-gated video/WebKit paths.
+#[allow(dead_code)]
 pub(super) fn textured_quad_vertices(
     x: f32,
     y: f32,
@@ -27,36 +29,49 @@ pub(super) fn textured_quad_vertices(
     tex_v_min: f32,
     tex_v_max: f32,
 ) -> [GlyphVertex; 6] {
+    textured_quad_vertices_uv(x, y, width, height, 0.0, 1.0, tex_v_min, tex_v_max)
+}
+
+pub(super) fn textured_quad_vertices_uv(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    tex_u_min: f32,
+    tex_u_max: f32,
+    tex_v_min: f32,
+    tex_v_max: f32,
+) -> [GlyphVertex; 6] {
     let white = [1.0, 1.0, 1.0, 1.0];
     [
         GlyphVertex {
             position: [x, y],
-            tex_coords: [0.0, tex_v_min],
+            tex_coords: [tex_u_min, tex_v_min],
             color: white,
         },
         GlyphVertex {
             position: [x + width, y],
-            tex_coords: [1.0, tex_v_min],
+            tex_coords: [tex_u_max, tex_v_min],
             color: white,
         },
         GlyphVertex {
             position: [x + width, y + height],
-            tex_coords: [1.0, tex_v_max],
+            tex_coords: [tex_u_max, tex_v_max],
             color: white,
         },
         GlyphVertex {
             position: [x, y],
-            tex_coords: [0.0, tex_v_min],
+            tex_coords: [tex_u_min, tex_v_min],
             color: white,
         },
         GlyphVertex {
             position: [x + width, y + height],
-            tex_coords: [1.0, tex_v_max],
+            tex_coords: [tex_u_max, tex_v_max],
             color: white,
         },
         GlyphVertex {
             position: [x, y + height],
-            tex_coords: [0.0, tex_v_max],
+            tex_coords: [tex_u_min, tex_v_max],
             color: white,
         },
     ]
@@ -69,8 +84,9 @@ impl WgpuRenderer {
         // Gather quads for images with a ready texture (same skip logic the
         // per-quad draw used), then upload once and draw per-image ranges.
         let mut quads = Vec::new();
+        let mut relief_vertices: Vec<RectVertex> = Vec::new();
 
-        for glyph in &frame_glyphs.glyphs {
+        for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Image {
                 image_id,
                 x,
@@ -81,13 +97,53 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let (draw_y, clipped_height, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
+                let effective_clip = ctx
+                    .params
+                    .pointer_override
+                    .image_clip(glyph_index, clip_rect.as_ref());
+                let (
+                    draw_x,
+                    draw_y,
+                    clipped_width,
+                    clipped_height,
+                    tex_u_min,
+                    tex_u_max,
+                    tex_v_min,
+                    tex_v_max,
+                ) = if let Some(clip) = &effective_clip {
+                    let mut x0 = *x;
                     let mut y0 = *y;
+                    let mut w0 = *width;
                     let mut h0 = *height;
+                    let mut u0 = 0.0_f32;
+                    let mut u1 = 1.0_f32;
                     let mut v0 = 0.0_f32;
                     let mut v1 = 1.0_f32;
+                    let left = clip.x;
+                    let right = clip.x + clip.width;
                     let top = clip.y;
                     let bottom = clip.y + clip.height;
+                    if x0 < left {
+                        let cut = left - x0;
+                        if cut >= w0 {
+                            continue;
+                        }
+                        x0 = left;
+                        w0 -= cut;
+                        if *width > 0.0 {
+                            u0 += cut / *width;
+                        }
+                    }
+                    if x0 + w0 > right {
+                        let cut = (x0 + w0) - right;
+                        if cut >= w0 {
+                            continue;
+                        }
+                        w0 -= cut;
+                        if *width > 0.0 {
+                            u1 -= cut / *width;
+                        }
+                    }
                     if y0 < top {
                         let cut = top - y0;
                         if cut >= h0 {
@@ -109,13 +165,13 @@ impl WgpuRenderer {
                             v1 -= cut / *height;
                         }
                     }
-                    (y0, h0, v0, v1)
+                    (x0, y0, w0, h0, u0, u1, v0, v1)
                 } else {
-                    (*y, *height, 0.0, 1.0)
+                    (*x, *y, *width, *height, 0.0, 1.0, 0.0, 1.0)
                 };
 
                 // Skip if fully clipped
-                if clipped_height <= 0.0 {
+                if clipped_width <= 0.0 || clipped_height <= 0.0 {
                     continue;
                 }
 
@@ -133,15 +189,32 @@ impl WgpuRenderer {
                     // Create vertices for image quad (white color = no tinting)
                     quads.push(MediaQuad {
                         id: image_id.get(),
-                        vertices: textured_quad_vertices(
-                            *x,
+                        vertices: textured_quad_vertices_uv(
+                            draw_x,
                             draw_y,
-                            *width,
+                            clipped_width,
                             clipped_height,
+                            tex_u_min,
+                            tex_u_max,
                             tex_v_min,
                             tex_v_max,
                         ),
                     });
+                    if let Some(override_paint) =
+                        ctx.params.pointer_override.image_override(glyph_index)
+                        && let Some(edges) = super::pointer_override::relief_edges(
+                            draw_x,
+                            draw_y,
+                            clipped_width,
+                            clipped_height,
+                            override_paint.mode(),
+                        )
+                    {
+                        for edge in edges {
+                            let (x, y, width, height) = edge.bounds();
+                            self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
+                        }
+                    }
                 }
             }
         }
@@ -170,6 +243,11 @@ impl WgpuRenderer {
                 render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
             }
         }
+        self.draw_rect_vertex_layer(&mut ctx.pass, &relief_vertices);
+        // Feature-gated video rendering intentionally inherits the image
+        // pipeline from this phase, so restore it after relief edges.
+        ctx.pass.set_pipeline(&self.pipelines.image);
+        ctx.pass.set_bind_group(0, &self.uniform_bind_group, &[]);
     }
 
     /// Apply video loop_count and autoplay before rendering.

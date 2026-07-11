@@ -39,6 +39,41 @@ impl std::fmt::Display for PointerAppearanceIdOverflow {
 
 impl std::error::Error for PointerAppearanceIdOverflow {}
 
+/// Transient phase selected by pointer input for an immutable presentation.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PointerAppearancePhase {
+    Hover,
+    Pressed,
+}
+
+/// Renderer-safe transient appearance selection.
+///
+/// Presentation identity stays at the runtime boundary: callers may create
+/// this value only after proving that the active appearance belongs to the
+/// exact [`FrameGlyphBuffer`] being rendered.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct PointerAppearanceSelection {
+    appearance: PointerAppearanceId,
+    phase: PointerAppearancePhase,
+}
+
+impl PointerAppearanceSelection {
+    #[must_use]
+    pub const fn new(appearance: PointerAppearanceId, phase: PointerAppearancePhase) -> Self {
+        Self { appearance, phase }
+    }
+
+    #[must_use]
+    pub const fn appearance(self) -> PointerAppearanceId {
+        self.appearance
+    }
+
+    #[must_use]
+    pub const fn phase(self) -> PointerAppearancePhase {
+        self.phase
+    }
+}
+
 /// Existing presentation primitive table addressed by a paint span.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum PresentedPrimitiveKind {

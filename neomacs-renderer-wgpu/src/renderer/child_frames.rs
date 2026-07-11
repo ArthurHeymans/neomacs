@@ -3,6 +3,7 @@
 use super::super::glyph_atlas::WgpuGlyphAtlas;
 use super::super::vertex::{RectVertex, RoundedRectVertex, Uniforms};
 use super::WgpuRenderer;
+use neomacs_display_protocol::PointerAppearanceSelection;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 
@@ -29,6 +30,7 @@ impl WgpuRenderer {
         shadow_layers: u32,
         shadow_offset: f32,
         shadow_opacity: f32,
+        pointer_selection: Option<PointerAppearanceSelection>,
     ) {
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -309,6 +311,7 @@ impl WgpuRenderer {
             cursor_visible,
             animated_cursor,
             corner_radius,
+            pointer_selection,
         );
     }
 }
