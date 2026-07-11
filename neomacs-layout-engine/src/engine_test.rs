@@ -13694,6 +13694,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
     apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
     // Bootstrap may or may not install an initial selected
     // frame depending on cache state. Capture whatever exists
     // so we can restore the selection after switching to the
@@ -13769,6 +13770,18 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         frame.tab_bar_height > 0,
         "expected tab-bar-mode to reserve frame tab-bar height"
     );
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame
+            .parameters
+            .insert(Value::symbol("menu-bar-lines"), Value::fixnum(1));
+        frame
+            .parameters
+            .insert(Value::symbol("tool-bar-lines"), Value::fixnum(1));
+        frame.sync_menu_bar_height_from_parameters();
+        frame.sync_tool_bar_height_from_parameters();
+        frame.sync_window_area_bounds();
+    }
 
     let mut engine = LayoutEngine::new();
     neomacs_display_protocol::glyph_matrix::reset_materialize_call_count_for_current_thread();

@@ -1180,6 +1180,7 @@ impl TabBarDisplayBuildRequest {
 
         let restore = TabBarDisplaySelectionRestore::activate(evaluator, FrameId(self.frame_id))?;
         let result = Self::make_keymap(evaluator)
+            .inspect(|keymap| gc_roots.root(*keymap))
             .and_then(|keymap| TabBarDisplaySource::from_keymap(evaluator, keymap))
             .and_then(|source| source.into_built_tab_bar(evaluator));
         if let Some(tab_bar) = &result {
@@ -1344,17 +1345,52 @@ fn tab_bar_mouse_face_at(evaluator: &mut Context, text: Value, char_index: usize
         .unwrap_or(Value::NIL)
 }
 
-pub(crate) fn tab_bar_effective_mouse_faces(
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TabBarPointerSlotPlan {
+    col: u16,
+    x: f32,
+    width: f32,
+    item_index: usize,
+    enabled: bool,
+    close: bool,
+    mouse_face: Value,
+}
+
+pub(crate) fn tab_bar_pointer_slot_plan(
     evaluator: &mut Context,
     rendered: &RenderedDisplayRow,
     text: Value,
-) -> Vec<Value> {
-    let mut faces = Vec::new();
+    items: &[TabBarSourceItem],
+) -> Vec<TabBarPointerSlotPlan> {
+    let mut slots = Vec::new();
     for slot in rendered.source_slots() {
         let Some(char_index) = slot.source().lisp_string_char_index() else {
             continue;
         };
-        let face = tab_bar_mouse_face_at(evaluator, text, char_index);
+        let item_index = items.partition_point(|item| item.char_range.end <= char_index);
+        let Some(item) = items
+            .get(item_index)
+            .filter(|item| item.char_range.contains(&char_index))
+        else {
+            continue;
+        };
+        slots.push(TabBarPointerSlotPlan {
+            col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+            x: slot.x_px(),
+            width: slot.width_px(),
+            item_index,
+            enabled: item.enabled,
+            close: tab_bar_close_at(evaluator, text, char_index),
+            mouse_face: tab_bar_mouse_face_at(evaluator, text, char_index),
+        });
+    }
+    slots
+}
+
+pub(crate) fn tab_bar_effective_mouse_faces(slots: &[TabBarPointerSlotPlan]) -> Vec<Value> {
+    let mut faces = Vec::new();
+    for slot in slots {
+        let face = slot.mouse_face;
         if !face.is_nil() && !faces.contains(&face) {
             faces.push(face);
         }
@@ -1553,6 +1589,7 @@ impl TabBarPresentedPointerPlan {
     pub(crate) fn into_source_map(
         self,
         band: FrameRect,
+        canonical_row: u32,
     ) -> Result<neomacs_display_protocol::PresentedPointerSourceMap, PresentedPointerMapBuildError>
     {
         let mut appearance_bounds: HashMap<PointerAppearanceRangeId, FrameRect> = HashMap::new();
@@ -1609,7 +1646,7 @@ impl TabBarPresentedPointerPlan {
                         neomacs_display_protocol::GlyphRowRole::TabBar,
                         neomacs_display_protocol::DisplaySlotId {
                             window_id: neomacs_display_protocol::DisplayWindowId::new(0),
-                            row: 0,
+                            row: canonical_row,
                             col: run.col,
                         },
                         appearance_bounds[&appearance.identity],
@@ -1658,7 +1695,7 @@ impl TabBarPresentedPointerPlan {
         frame: &mut FrameGlyphBuffer,
         band: FrameRect,
     ) -> Result<(), PresentedPointerMapBuildError> {
-        let source = self.into_source_map(band)?;
+        let source = self.into_source_map(band, 0)?;
         frame
             .install_presented_pointer_source_map(&source)
             .map_err(Into::into)
@@ -1668,8 +1705,7 @@ impl TabBarPresentedPointerPlan {
 pub(crate) fn tab_bar_presented_pointer_plan(
     evaluator: &mut Context,
     presentation: u64,
-    rendered: &RenderedDisplayRow,
-    text: Value,
+    slots: &[TabBarPointerSlotPlan],
     items: &[TabBarSourceItem],
     height: f32,
     style: TabBarPointerAppearanceStyle,
@@ -1683,22 +1719,14 @@ pub(crate) fn tab_bar_presented_pointer_plan(
     let mut last_mouse_face: Option<(usize, usize, Value, PointerAppearanceRangeId)> = None;
     let mut relief_by_item: HashMap<usize, PointerAppearanceRangeId> = HashMap::new();
 
-    for slot in rendered.source_slots() {
-        let Some(char_index) = slot.source().lisp_string_char_index() else {
-            continue;
-        };
-        let Some((item_index, item)) = items
-            .iter()
-            .enumerate()
-            .find(|(_, item)| item.char_range.contains(&char_index))
-        else {
-            continue;
-        };
-        if !item.enabled {
+    for slot in slots {
+        let item_index = slot.item_index;
+        let item = &items[item_index];
+        if !slot.enabled {
             last_mouse_face = None;
             continue;
         }
-        let close = tab_bar_close_at(evaluator, text, char_index);
+        let close = slot.close;
         let interaction = if let Some(interaction) = targets.get(&(item_index, close)).copied() {
             interaction
         } else {
@@ -1715,9 +1743,9 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             targets.insert((item_index, close), interaction);
             interaction
         };
-        let local_bounds = FrameRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+        let local_bounds = FrameRect::new(slot.x, 0.0, slot.width, height)
             .expect("rendered tab source slots have valid geometry");
-        let mouse_face = tab_bar_mouse_face_at(evaluator, text, char_index);
+        let mouse_face = slot.mouse_face;
         let appearance = if !mouse_face.is_nil() {
             let Some((_, mouse_face_id)) =
                 mouse_faces.iter().find(|(value, _)| *value == mouse_face)
@@ -1725,12 +1753,12 @@ pub(crate) fn tab_bar_presented_pointer_plan(
                 last_mouse_face = None;
                 runs.push(TabBarPointerRunPlan {
                     local_bounds,
-                    col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+                    col: slot.col,
                     interaction: InteractionId::new(interaction),
                     appearance: None,
                 });
                 hit_regions.push(ChromeHitRegion::new(
-                    BandRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+                    BandRect::new(slot.x, 0.0, slot.width, height)
                         .expect("rendered tab source slots have valid geometry"),
                     ChromeAction::Presented {
                         interaction: InteractionId::new(interaction),
@@ -1741,7 +1769,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             let identity = if let Some((previous_item, previous_char, previous_face, identity)) =
                 last_mouse_face
                 && previous_item == item_index
-                && previous_char + 1 == char_index
+                && previous_char + 1 == usize::from(slot.col)
                 && previous_face == mouse_face
             {
                 identity
@@ -1750,7 +1778,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
                 next_appearance += 1;
                 identity
             };
-            last_mouse_face = Some((item_index, char_index, mouse_face, identity));
+            last_mouse_face = Some((item_index, usize::from(slot.col), mouse_face, identity));
             Some(TabBarPointerAppearancePlan {
                 identity,
                 kind: TabBarPointerPaintKind::Face,
@@ -1766,7 +1794,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             });
             let style = image_styles
                 .iter()
-                .find_map(|(col, style)| (*col == slot.col() as u16).then_some(*style))
+                .find_map(|(col, style)| (*col == slot.col).then_some(*style))
                 .unwrap_or(style);
             Some(TabBarPointerAppearancePlan {
                 identity,
@@ -1781,12 +1809,12 @@ pub(crate) fn tab_bar_presented_pointer_plan(
         let interaction = InteractionId::new(interaction);
         runs.push(TabBarPointerRunPlan {
             local_bounds,
-            col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+            col: slot.col,
             interaction,
             appearance,
         });
         hit_regions.push(ChromeHitRegion::new(
-            BandRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+            BandRect::new(slot.x, 0.0, slot.width, height)
                 .expect("rendered tab source slots have valid geometry"),
             ChromeAction::Presented { interaction },
         ));

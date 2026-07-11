@@ -507,11 +507,11 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
         char_range: 0..2,
     }];
     let highlight = FaceId::new(33);
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, text, &items);
     let plan = tab_bar_presented_pointer_plan(
         &mut eval,
         presentation,
-        &rendered,
-        text,
+        &slots,
         &items,
         18.0,
         TabBarPointerAppearanceStyle::new(
@@ -580,11 +580,11 @@ fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief()
     let raised = test_tab_pointer_relief(true);
     let sunken = test_tab_pointer_relief(false);
     let highlight = FaceId::new(33);
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, caption, &items);
     let plan = tab_bar_presented_pointer_plan(
         &mut eval,
         presentation,
-        &rendered,
-        caption,
+        &slots,
         &items,
         18.0,
         TabBarPointerAppearanceStyle::new(raised, sunken),
@@ -592,10 +592,25 @@ fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief()
         &[],
     );
     let mut frame = tab_pointer_test_frame(highlight);
-    plan.install_into(&mut frame, FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+    frame.height = 54.0;
+    for glyph in &mut frame.glyphs {
+        match glyph {
+            FrameGlyph::Char { slot_id, .. } | FrameGlyph::Stretch { slot_id, .. } => {
+                slot_id.row = 2;
+            }
+            FrameGlyph::Image {
+                slot_id: Some(slot_id),
+                ..
+            } => slot_id.row = 2,
+            _ => {}
+        }
+    }
+    let source = plan
+        .into_source_map(FrameRect::new(0.0, 36.0, 80.0, 18.0).unwrap(), 2)
         .unwrap();
+    frame.install_presented_pointer_source_map(&source).unwrap();
 
-    let hit = frame.presented_pointer().hit_test(12.0, 9.0).unwrap();
+    let hit = frame.presented_pointer().hit_test(12.0, 45.0).unwrap();
     let appearance = frame
         .presented_pointer()
         .appearance(hit.appearance().unwrap())
@@ -843,21 +858,21 @@ fn tab_bar_pointer_appearance_uses_each_effective_mouse_face_and_skips_invalid_f
             },
         ],
     );
-    let item = TabBarSourceItem {
+    let items = [TabBarSourceItem {
         caption: text,
         key: Value::symbol("tab-1"),
         binding: Value::symbol("ignore"),
         char_range: 0..3,
         enabled: true,
-    };
+    }];
     let face_a = FaceId::new(40);
     let face_b = FaceId::new(41);
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, text, &items);
     let plan = tab_bar_presented_pointer_plan(
         &mut eval,
         presentation,
-        &rendered,
-        text,
-        &[item],
+        &slots,
+        &items,
         18.0,
         TabBarPointerAppearanceStyle::new(
             test_tab_pointer_relief(true),
@@ -870,7 +885,7 @@ fn tab_bar_pointer_appearance_uses_each_effective_mouse_face_and_skips_invalid_f
         ],
     );
     let source = plan
-        .into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+        .into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap(), 0)
         .unwrap();
 
     assert_eq!(source.appearances().len(), 2);
@@ -904,20 +919,20 @@ fn disabled_tab_bar_item_publishes_no_pointer_behavior() {
         Vec::new(),
     );
     let text = Value::string("x");
-    let item = TabBarSourceItem {
+    let items = [TabBarSourceItem {
         caption: text,
         key: Value::symbol("add-tab"),
         binding: Value::symbol("tab-bar-new-tab"),
         char_range: 0..1,
         enabled: false,
-    };
+    }];
     let presentation = eval.begin_interaction_presentation();
+    let slots = tab_bar_pointer_slot_plan(&mut eval, &rendered, text, &items);
     let plan = tab_bar_presented_pointer_plan(
         &mut eval,
         presentation,
-        &rendered,
-        text,
-        &[item],
+        &slots,
+        &items,
         18.0,
         TabBarPointerAppearanceStyle::new(
             test_tab_pointer_relief(true),
@@ -928,7 +943,7 @@ fn disabled_tab_bar_item_publishes_no_pointer_behavior() {
     );
     assert!(plan.hit_regions().is_empty());
     assert!(
-        plan.into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+        plan.into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap(), 0)
             .unwrap()
             .is_empty()
     );

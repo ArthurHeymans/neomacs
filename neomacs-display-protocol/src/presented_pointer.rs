@@ -77,7 +77,7 @@ impl PointerAppearanceSelection {
 }
 
 /// Existing presentation primitive table addressed by a paint span.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum PresentedPrimitiveKind {
     Glyph,
     Image,
@@ -484,26 +484,39 @@ impl PresentedPointerSourceMap {
         (Vec<PresentedPointerRegion>, Vec<PresentedPointerAppearance>),
         PresentedPointerMapError,
     > {
+        let mut primitive_index = std::collections::HashMap::with_capacity(frame.glyphs.len());
+        for (index, primitive) in frame.glyphs.iter().enumerate() {
+            let Some(slot) = primitive.slot_id() else {
+                continue;
+            };
+            let Some(row_role) = primitive.row_role() else {
+                continue;
+            };
+            let kind = match primitive {
+                FrameGlyph::Char { .. } | FrameGlyph::Stretch { .. } => {
+                    PresentedPrimitiveKind::Glyph
+                }
+                FrameGlyph::Image { .. } => PresentedPrimitiveKind::Image,
+                _ => continue,
+            };
+            if primitive_index
+                .insert((kind, row_role, slot), index)
+                .is_some()
+            {
+                return Err(PresentedPointerMapError::DuplicateSourceIdentity);
+            }
+        }
         let mut resolved_appearances = Vec::new();
         let mut appearance_remap = Vec::with_capacity(self.appearances.len());
         for appearance in &self.appearances {
             let mut seen = std::collections::HashSet::new();
             let mut paint_spans = Vec::new();
             for source_span in &appearance.paint_spans {
-                let primitive = frame.glyphs.iter().enumerate().find(|(_, primitive)| {
-                    primitive.slot_id() == Some(source_span.slot)
-                        && primitive.row_role() == Some(source_span.row_role)
-                        && match source_span.kind {
-                            PresentedPrimitiveKind::Glyph => matches!(
-                                primitive,
-                                FrameGlyph::Char { .. } | FrameGlyph::Stretch { .. }
-                            ),
-                            PresentedPrimitiveKind::Image => {
-                                matches!(primitive, FrameGlyph::Image { .. })
-                            }
-                        }
-                });
-                let Some((index, _)) = primitive else {
+                let Some(&index) = primitive_index.get(&(
+                    source_span.kind,
+                    source_span.row_role,
+                    source_span.slot,
+                )) else {
                     continue;
                 };
                 if !seen.insert(index) {
@@ -621,6 +634,7 @@ pub enum PresentedPointerMapError {
     RegionOutsideFrame,
     ClipOutsideFrame,
     PrimitiveKindMismatch,
+    DuplicateSourceIdentity,
     UnknownFace(FaceId),
     InvalidImageRelief,
 }

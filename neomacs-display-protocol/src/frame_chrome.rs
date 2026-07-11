@@ -641,6 +641,11 @@ impl FrameChromeBand {
         self.bounds
     }
 
+    /// Canonical grid-row identity used by materialized chrome primitives and source maps.
+    pub fn canonical_row(&self, char_height: f32) -> u32 {
+        (self.bounds.y() / char_height.max(1.0)).round().max(0.0) as u32
+    }
+
     pub fn content(&self) -> &FrameChromeContent {
         &self.content
     }

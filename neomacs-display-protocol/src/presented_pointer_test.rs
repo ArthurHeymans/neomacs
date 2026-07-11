@@ -179,6 +179,12 @@ fn source_pointer_map_disambiguates_equal_chrome_slots_by_row_role() {
         frame.presented_pointer().appearances()[0].paint_spans()[0].first(),
         1
     );
+
+    frame.glyphs.push(glyph(crate::GlyphRowRole::TabBar));
+    assert_eq!(
+        frame.install_presented_pointer_source_map(&source),
+        Err(PresentedPointerMapError::DuplicateSourceIdentity)
+    );
 }
 
 fn try_map(

@@ -1161,7 +1161,7 @@ impl FrameDisplayState {
                 continue;
             };
             let bounds = band.bounds().raw();
-            let row_index = (bounds.y / self.char_height.max(1.0)).round().max(0.0) as u32;
+            let row_index = band.canonical_row(self.char_height);
             self.for_each_grid_row_glyph(
                 DisplayWindowId::new(0),
                 row_index,
@@ -1175,6 +1175,7 @@ impl FrameDisplayState {
             for medium in content.media() {
                 self.materialize_frame_chrome_medium(
                     band.bounds(),
+                    row_index,
                     content.row().role,
                     medium,
                     &mut push,
@@ -1403,6 +1404,7 @@ impl FrameDisplayState {
     fn materialize_frame_chrome_medium(
         &self,
         band_bounds: super::frame_chrome::FrameRect,
+        canonical_row: u32,
         row_role: GlyphRowRole,
         medium: &ChromeMedia,
         push: &mut impl FnMut(FrameGlyph),
@@ -1412,6 +1414,12 @@ impl FrameDisplayState {
             .expect("frame chrome validates media bounds before publication")
             .raw();
         let clip_rect = Some(band_bounds.raw());
+        let canonical_slot = |slot_id: Option<DisplaySlotId>| {
+            slot_id.map(|slot| DisplaySlotId {
+                row: canonical_row,
+                ..slot
+            })
+        };
         match medium {
             ChromeMedia::Image {
                 image_id, slot_id, ..
@@ -1419,7 +1427,7 @@ impl FrameDisplayState {
                 window_id: DisplayWindowId::new(0),
                 row_role,
                 clip_rect,
-                slot_id: *slot_id,
+                slot_id: canonical_slot(*slot_id),
                 image_id: *image_id,
                 x: frame_bounds.x,
                 y: frame_bounds.y,
@@ -1436,7 +1444,7 @@ impl FrameDisplayState {
                 window_id: DisplayWindowId::new(0),
                 row_role,
                 clip_rect,
-                slot_id: *slot_id,
+                slot_id: canonical_slot(*slot_id),
                 video_id: *video_id,
                 x: frame_bounds.x,
                 y: frame_bounds.y,
@@ -1453,7 +1461,7 @@ impl FrameDisplayState {
                 window_id: DisplayWindowId::new(0),
                 row_role,
                 clip_rect,
-                slot_id: *slot_id,
+                slot_id: canonical_slot(*slot_id),
                 xwidget_id: *xwidget_id,
                 x: frame_bounds.x,
                 y: frame_bounds.y,

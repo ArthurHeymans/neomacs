@@ -10,7 +10,8 @@ use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     ResizeMiniWindowsMode, ScratchGcRootScope, TabBarPresentedPointerPlan, build_tab_bar_display,
     gnu_tab_bar_pointer_appearance_style, max_mini_window_lines_from_value,
-    tab_bar_effective_mouse_faces, tab_bar_image_relief_styles, tab_bar_presented_pointer_plan,
+    tab_bar_effective_mouse_faces, tab_bar_image_relief_styles, tab_bar_pointer_slot_plan,
+    tab_bar_presented_pointer_plan,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
@@ -1040,7 +1041,8 @@ impl LayoutEngine {
                 .frame_chrome
                 .band(ProtocolFrameChromeKind::TabBar)
         {
-            match pointer_plan.into_source_map(tab_bar.bounds()) {
+            let canonical_row = tab_bar.canonical_row(frame_display_state.char_height);
+            match pointer_plan.into_source_map(tab_bar.bounds(), canonical_row) {
                 Ok(source) => frame_display_state.presented_pointer_source = source,
                 Err(error) => {
                     tracing::error!(?error, "rejecting invalid tab-bar pointer snapshot");
@@ -1656,8 +1658,13 @@ impl LayoutEngine {
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
         };
-        let effective_mouse_faces =
-            tab_bar_effective_mouse_faces(evaluator, measured.rendered(), tab_bar.text);
+        let pointer_slots = tab_bar_pointer_slot_plan(
+            evaluator,
+            measured.rendered(),
+            tab_bar.text,
+            &tab_bar.source_items,
+        );
+        let effective_mouse_faces = tab_bar_effective_mouse_faces(&pointer_slots);
         let mut realized_mouse_faces = Vec::new();
         for value in effective_mouse_faces {
             let Some(mut resolved) = face_resolver.resolve_face_value_over(&tab_bar_face, &value)
@@ -1700,8 +1707,7 @@ impl LayoutEngine {
         let pointer_plan = tab_bar_presented_pointer_plan(
             evaluator,
             presentation_id,
-            measured.rendered(),
-            tab_bar.text,
+            &pointer_slots,
             &tab_bar.source_items,
             actual_tab_bar_height,
             pointer_style,

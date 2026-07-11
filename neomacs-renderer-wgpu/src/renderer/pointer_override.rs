@@ -727,14 +727,8 @@ pub(super) fn relief_edges(
     if relief.thickness() <= 0.0 {
         return None;
     }
-    let margins = relief.margins();
-    let x = x - margins.left();
-    let y = y - margins.top();
-    let width = width + margins.left() + margins.right();
-    let height = height + margins.top() + margins.bottom();
-    if width <= 0.0 || height <= 0.0 {
-        return None;
-    }
+    let bounds = resolved_relief_rect(x, y, width, height, relief)?;
+    let (x, y, width, height) = (bounds.x, bounds.y, bounds.width, bounds.height);
     let top_left = relief.top_left_color();
     let bottom_right = relief.bottom_right_color();
     let edge = relief.thickness().min(width * 0.5).min(height * 0.5);
@@ -787,6 +781,23 @@ pub(super) fn relief_edges(
     ]))
 }
 
+fn resolved_relief_rect(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    relief: PointerImageRelief,
+) -> Option<Rect> {
+    let margins = relief.margins();
+    let bounds = Rect {
+        x: x - margins.left(),
+        y: y - margins.top(),
+        width: width + margins.left() + margins.right(),
+        height: height + margins.top() + margins.bottom(),
+    };
+    (bounds.width > 0.0 && bounds.height > 0.0).then_some(bounds)
+}
+
 /// GNU pgtk erases rounded corners only where a horizontal and vertical relief
 /// edge meet. The order matches its `enum corners` iteration order.
 pub(super) fn relief_corner_erases(
@@ -799,16 +810,9 @@ pub(super) fn relief_corner_erases(
     if relief.thickness() <= 0.0 {
         return ReliefCornerErasePlan([None; 4]);
     }
-    let margins = relief.margins();
-    let bounds = Rect {
-        x: x + margins.left(),
-        y: y + margins.top(),
-        width: width - margins.left() - margins.right(),
-        height: height - margins.top() - margins.bottom(),
-    };
-    if bounds.width <= 0.0 || bounds.height <= 0.0 {
+    let Some(bounds) = resolved_relief_rect(x, y, width, height, relief) else {
         return ReliefCornerErasePlan([None; 4]);
-    }
+    };
     let enabled = relief.edges();
     let erase = relief.corner_erase();
     let make = |corner| ReliefCornerErase {

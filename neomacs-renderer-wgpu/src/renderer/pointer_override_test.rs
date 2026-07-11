@@ -491,7 +491,7 @@ fn gnu_relief_corner_erasure_is_last_and_respects_margins_and_clip() {
     assert!(
         erases
             .iter()
-            .all(|erase| erase.bounds() == (11.0, 22.0, 26.0, 18.0))
+            .all(|erase| erase.bounds() == (9.0, 18.0, 34.0, 30.0))
     );
     assert!(erases.iter().all(|erase| erase.color() == erase_color));
 
@@ -507,12 +507,12 @@ fn gnu_relief_corner_erasure_is_last_and_respects_margins_and_clip() {
         vertex.color == [erase_color.r, erase_color.g, erase_color.b, erase_color.a]
     }));
 
-    let clip = neomacs_display_protocol::Rect::new(11.0, 22.0, 3.0, 3.0);
+    let clip = neomacs_display_protocol::Rect::new(9.0, 18.0, 3.0, 3.0);
     let mut clipped = Vec::new();
     append_clipped_relief(&mut clipped, 10.0, 20.0, 30.0, 24.0, spec, Some(&clip));
     assert!(!clipped.is_empty());
     assert!(clipped.iter().all(|vertex| {
-        (11.0..=14.0).contains(&vertex.position[0]) && (22.0..=25.0).contains(&vertex.position[1])
+        (9.0..=12.0).contains(&vertex.position[0]) && (18.0..=21.0).contains(&vertex.position[1])
     }));
     let clipped_erase = clipped
         .iter()
@@ -522,7 +522,7 @@ fn gnu_relief_corner_erasure_is_last_and_respects_margins_and_clip() {
         .collect::<Vec<_>>();
     assert!(!clipped_erase.is_empty());
     assert!(clipped_erase.iter().all(|vertex| {
-        (11.0..=14.0).contains(&vertex.position[0]) && (22.0..=25.0).contains(&vertex.position[1])
+        (9.0..=12.0).contains(&vertex.position[0]) && (18.0..=21.0).contains(&vertex.position[1])
     }));
 }
 
