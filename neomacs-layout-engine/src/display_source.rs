@@ -2539,21 +2539,29 @@ impl LispStringSourceFrame {
     fn pointer_appearance_at(
         &self,
         char_index: usize,
-        property_end: usize,
+        _property_end: usize,
         face: RenderFaceRef,
         context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayPointerAppearance> {
-        let value = self
-            .props
-            .as_ref()?
-            .get_property_at_char_pos(CharPos0::new(char_index), Value::symbol("mouse-face"))?;
+        let props = self.props.as_ref()?;
+        let property = Value::symbol("mouse-face");
+        let char_pos = CharPos0::new(char_index);
+        let value = props.get_property_at_char_pos(char_pos, property)?;
         if value.is_nil() {
             return None;
         }
         let pointer_face = context.resolve_pointer_face_ref(face, value)?;
-        let source = DisplayPointerSourceRange::ending_at(
+        let range_start = props
+            .previous_single_property_change_before_char_pos(char_pos, property)
+            .unwrap_or(CharPos0::ZERO);
+        let range_end = props
+            .next_single_property_change_after_char_pos(char_pos, property)
+            .unwrap_or_else(|| CharPos0::new(self.char_count()));
+        let source = DisplayPointerSourceRange::effective(
             DisplaySourcePosition::lisp_string(self.source_id, 0, 0),
-            property_end,
+            range_start.get(),
+            range_end.get(),
+            None,
         );
         Some(DisplayPointerAppearance::new(source, pointer_face))
     }

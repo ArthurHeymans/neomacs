@@ -142,14 +142,33 @@ pub(crate) enum RenderFaceRef {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct DisplayPointerSourceRange {
     source: DisplaySourcePosition,
+    start_char_index: usize,
     end_char_index: usize,
+    overlay_owner: Option<Value>,
 }
 
 impl DisplayPointerSourceRange {
+    #[cfg(test)]
     pub(crate) fn ending_at(source: DisplaySourcePosition, end_char_index: usize) -> Self {
         Self {
             source,
+            start_char_index: 0,
             end_char_index,
+            overlay_owner: None,
+        }
+    }
+
+    pub(crate) fn effective(
+        source: DisplaySourcePosition,
+        start_char_index: usize,
+        end_char_index: usize,
+        overlay_owner: Option<Value>,
+    ) -> Self {
+        Self {
+            source,
+            start_char_index,
+            end_char_index,
+            overlay_owner,
         }
     }
 

@@ -2043,6 +2043,35 @@ impl TextPropertyTable {
         self.previous_property_change_raw(pos)
     }
 
+    /// Previous boundary where the single property `name` changes, ignoring
+    /// unrelated plist changes. The active value is the one at `pos`.
+    pub fn previous_single_property_change_before_char_pos(
+        &self,
+        pos: CharPos0,
+        name: Value,
+    ) -> Option<CharPos0> {
+        let current = self.get_property_raw(pos, name);
+        let mut cursor = pos.add_len(CharLen::new(1));
+        while let Some(previous) = self.previous_interval_boundary_raw(cursor) {
+            if previous == CharPos0::ZERO {
+                return current.is_some().then_some(CharPos0::ZERO);
+            }
+            let previous_value =
+                self.get_property_raw(previous.saturating_sub_len(CharLen::new(1)), name);
+            if !eq_value(
+                &current.unwrap_or(Value::NIL),
+                &previous_value.unwrap_or(Value::NIL),
+            ) {
+                return Some(previous);
+            }
+            if previous.get() >= cursor.get() {
+                return None;
+            }
+            cursor = previous;
+        }
+        current.is_some().then_some(CharPos0::ZERO)
+    }
+
     fn previous_property_change_raw(&self, pos: CharPos0) -> Option<CharPos0> {
         if pos == CharPos0::ZERO {
             return None;

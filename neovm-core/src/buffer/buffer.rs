@@ -1729,6 +1729,15 @@ impl BufferTextSnapshot {
         self.text
             .text_props_next_single_change_after_emacs_byte_pos(pos, name)
     }
+
+    pub fn previous_single_text_prop_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_previous_single_change_before_emacs_byte_pos(pos, name)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2675,6 +2684,18 @@ impl Buffer {
     ) -> Option<EmacsBytePos> {
         self.text
             .text_props_previous_change_before_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
+    }
+
+    pub fn text_props_previous_single_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_previous_single_change_before_emacs_byte_pos(
+                self.clamped_emacs_byte_pos(pos),
+                name,
+            )
     }
 
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(

@@ -1282,6 +1282,22 @@ impl BufferText {
         prev.map(|prev| self.char_pos_to_emacs_byte_pos(prev))
     }
 
+    pub fn text_props_previous_single_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
+            .start();
+        let previous = self
+            .storage
+            .borrow()
+            .text_props
+            .previous_single_property_change_before_char_pos(char_pos, name);
+        previous.map(|previous| self.char_pos_to_emacs_byte_pos(previous))
+    }
+
     pub fn text_props_next_interval_boundary_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

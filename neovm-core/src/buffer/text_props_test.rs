@@ -603,6 +603,41 @@ fn next_single_property_change_ignores_other_properties() {
 }
 
 #[test]
+fn previous_single_property_change_ignores_other_properties() {
+    let mut table = TextPropertyTable::new();
+    put_chars(
+        &mut table,
+        0,
+        30,
+        Value::symbol("mouse-face"),
+        Value::symbol("highlight"),
+    );
+    put_chars(
+        &mut table,
+        10,
+        20,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
+
+    assert_eq!(
+        table
+            .previous_single_property_change_before_char_pos(
+                char_pos(25),
+                Value::symbol("mouse-face"),
+            )
+            .map(CharPos0::get),
+        Some(0)
+    );
+    assert_eq!(
+        table
+            .previous_single_property_change_before_char_pos(char_pos(12), Value::symbol("face"),)
+            .map(CharPos0::get),
+        Some(10)
+    );
+}
+
+#[test]
 fn previous_property_change_basic() {
     crate::test_utils::init_test_tracing();
     let mut table = TextPropertyTable::new();

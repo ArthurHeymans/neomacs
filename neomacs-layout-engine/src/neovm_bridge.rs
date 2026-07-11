@@ -117,6 +117,11 @@ pub(crate) trait LayoutBufferView {
         pos: EmacsBytePos,
         name: Value,
     ) -> Option<EmacsBytePos>;
+    fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos>;
     fn layout_overlays(&self) -> &OverlayList;
 }
 
@@ -276,6 +281,14 @@ impl LayoutBufferView for Buffer {
         self.text_props_next_single_change_after_emacs_byte_pos(pos, name)
     }
 
+    fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text_props_previous_single_change_before_emacs_byte_pos(pos, name)
+    }
+
     fn layout_overlays(&self) -> &OverlayList {
         self.overlays()
     }
@@ -354,6 +367,15 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     ) -> Option<EmacsBytePos> {
         self.text_snapshot
             .next_single_text_prop_change_after_emacs_byte_pos(pos, name)
+    }
+
+    fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+    ) -> Option<EmacsBytePos> {
+        self.text_snapshot
+            .previous_single_text_prop_change_before_emacs_byte_pos(pos, name)
     }
 
     fn layout_overlays(&self) -> &OverlayList {
