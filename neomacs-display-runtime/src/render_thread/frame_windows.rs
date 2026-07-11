@@ -920,6 +920,7 @@ impl FrameLifecycle {
 
     pub fn request_redraw(&self) {
         if let Self::Active { native, .. } = self {
+            super::frame_stats::count(&super::frame_stats::REDRAW_REQUESTS);
             native.window.request_redraw();
         }
     }

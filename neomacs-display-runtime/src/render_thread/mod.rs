@@ -11,6 +11,7 @@ mod cursor;
 mod cursor_runtime;
 mod frame_ingest;
 mod frame_state;
+mod frame_stats;
 pub(crate) mod frame_windows;
 mod input;
 mod lifecycle;

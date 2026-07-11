@@ -246,6 +246,7 @@ impl RenderApp {
     pub(super) fn poll_frame(&mut self) {
         self.frame_windows.tick_top_level_child_frames();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
+            super::frame_stats::note_scene_commit(std::time::Instant::now());
             let frame_id = display_state.frame_id;
             let parent_id = display_state.parent_id;
             self.sync_frame_chrome_assets(&display_state.frame_chrome);

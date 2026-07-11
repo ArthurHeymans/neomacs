@@ -754,6 +754,7 @@ impl RenderApp {
         root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
+        super::frame_stats::count(&super::frame_stats::ROOT_GLYPH_PASSES);
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
             atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
         }
@@ -994,6 +995,7 @@ impl RenderApp {
                 );
             }
             output.present();
+            super::frame_stats::note_present(std::time::Instant::now());
             if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
                 tracing::debug!(
                     parent_frame_id = emacs_frame_id,

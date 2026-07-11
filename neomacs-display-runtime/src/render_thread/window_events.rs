@@ -386,6 +386,7 @@ impl RenderApp {
             }
 
             WindowEvent::RedrawRequested => {
+                super::frame_stats::count(&super::frame_stats::REDRAW_EVENTS);
                 if let Some(emacs_fid) = self.frame_windows.event_frame_for_winit(window_id) {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);

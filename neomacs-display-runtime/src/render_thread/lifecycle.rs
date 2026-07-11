@@ -194,6 +194,8 @@ impl RenderApp {
     }
 
     pub(super) fn handle_about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        super::frame_stats::count(&super::frame_stats::EVENT_LOOP_WAKEUPS);
+        super::frame_stats::maybe_log_snapshot(std::time::Instant::now());
         if !self.lifecycle_flags.about_to_wait_seen {
             tracing::info!(
                 "Render thread entered about_to_wait: primary_window_exists={} frame_windows={}",
@@ -294,6 +296,7 @@ impl RenderApp {
                     .primary_window()
                     .and_then(|ws| ws.window())
             {
+                super::frame_stats::count(&super::frame_stats::REDRAW_REQUESTS);
                 window.request_redraw();
             }
         }
