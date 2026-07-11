@@ -1,8 +1,8 @@
 use crate::{
     Color, FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
-    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefEdges,
-    PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerMap,
-    PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
+    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
+    PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
+    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion, PresentedPrimitiveKind,
 };
 
 #[test]
@@ -32,6 +32,7 @@ fn image_relief_mode(pressed: bool) -> PointerDrawMode {
         1.0,
         PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
         PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::rgb(0.1, 0.2, 0.3), 6.0, 1.0),
     ))
 }
 
@@ -41,13 +42,15 @@ fn pointer_image_relief_carries_only_resolved_renderer_parameters() {
     let bottom_right = Color::new(0.2, 0.3, 0.4, 1.0);
     let margins = PointerReliefMargins::new(2.0, 3.0, 4.0, 5.0);
     let edges = PointerReliefEdges::new(true, false, true, false);
-    let relief = PointerImageRelief::new(top_left, bottom_right, 2.5, margins, edges);
+    let corner_erase = PointerReliefCornerErase::new(Color::BLUE, 6.0, 1.0);
+    let relief = PointerImageRelief::new(top_left, bottom_right, 2.5, margins, edges, corner_erase);
 
     assert_eq!(relief.top_left_color(), top_left);
     assert_eq!(relief.bottom_right_color(), bottom_right);
     assert_eq!(relief.thickness(), 2.5);
     assert_eq!(relief.margins(), margins);
     assert_eq!(relief.edges(), edges);
+    assert_eq!(relief.corner_erase(), corner_erase);
     assert!(edges.top());
     assert!(!edges.left());
     assert!(edges.bottom());
@@ -67,6 +70,7 @@ fn presented_pointer_map_rejects_non_renderer_safe_relief_geometry() {
         f32::NAN,
         PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
         PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::WHITE, 6.0, 1.0),
     ));
     let appearance = PresentedPointerAppearance::new(
         vec![PresentedPaintSpan::new(

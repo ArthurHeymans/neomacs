@@ -1,13 +1,14 @@
 use super::{
-    FacePaint, PointerOverrideResolver, PrimitivePaintPlan, append_clipped_relief_edge,
-    clip_glyph_quad, clip_new_rect_vertices, clip_new_rounded_vertices, relief_edges,
+    FacePaint, PointerOverrideResolver, PrimitivePaintPlan, ReliefCorner, append_clipped_relief,
+    append_clipped_relief_edge, clip_glyph_quad, clip_new_rect_vertices, clip_new_rounded_vertices,
+    relief_corner_erases, relief_edges,
 };
 use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex};
 use neomacs_display_protocol::{
     Color, DisplayWindowId, Face, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, GlyphRowRole,
     PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode,
-    PointerImageRelief, PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan,
-    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+    PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
+    PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
 };
 use neomacs_display_protocol::{ColorStop, Gradient};
 
@@ -25,6 +26,7 @@ fn relief(pressed: bool) -> PointerImageRelief {
         1.0,
         PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
         PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::rgb(0.12, 0.13, 0.14), 6.0, 1.0),
     )
 }
 
@@ -267,6 +269,7 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         2.0,
         PointerReliefMargins::new(1.0, 2.0, 3.0, 4.0),
         PointerReliefEdges::new(true, false, false, true),
+        PointerReliefCornerErase::new(Color::GREEN, 6.0, 1.0),
     );
     let edges = relief_edges(10.0, 20.0, 30.0, 24.0, spec)
         .unwrap()
@@ -290,6 +293,7 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         2.0,
         PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
         PointerReliefEdges::new(false, true, false, true),
+        PointerReliefCornerErase::new(Color::GREEN, 6.0, 1.0),
     );
     let mut vertices = Vec::new();
     let subsection = neomacs_display_protocol::Rect::new(10.0, 0.0, 10.0, 10.0);
@@ -310,6 +314,7 @@ fn thick_image_relief_matches_gnu_edge_order_and_corner_ownership() {
         3.0,
         PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
         PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::RED, 6.0, 1.0),
     );
     let edges = relief_edges(0.0, 0.0, 20.0, 12.0, spec)
         .unwrap()
@@ -367,6 +372,7 @@ fn gnu_relief_top_bottom_and_side_only_edges_remain_rectangles() {
             1.0,
             PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
             edges,
+            PointerReliefCornerErase::new(Color::RED, 6.0, 1.0),
         )
     };
     let collect = |spec| {
@@ -394,6 +400,107 @@ fn gnu_relief_top_bottom_and_side_only_edges_remain_rectangles() {
     assert_eq!(sides.len(), 2);
     assert_eq!(sides[0].bounds(), (2.0, 4.0, 1.0, 8.0));
     assert_eq!(sides[1].bounds(), (11.0, 4.0, 1.0, 8.0));
+}
+
+#[test]
+fn gnu_relief_erases_exactly_the_four_adjacent_edge_corners() {
+    let make = |edges| {
+        PointerImageRelief::new(
+            Color::WHITE,
+            Color::BLACK,
+            1.0,
+            PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+            edges,
+            PointerReliefCornerErase::new(Color::RED, 6.0, 1.0),
+        )
+    };
+    let corners = |edges| {
+        relief_corner_erases(0.0, 0.0, 20.0, 12.0, make(edges))
+            .into_iter()
+            .map(|erase| erase.corner())
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(
+        corners(PointerReliefEdges::new(true, true, true, true)),
+        vec![
+            ReliefCorner::BottomRight,
+            ReliefCorner::BottomLeft,
+            ReliefCorner::TopLeft,
+            ReliefCorner::TopRight,
+        ]
+    );
+    assert_eq!(
+        corners(PointerReliefEdges::new(true, true, false, false)),
+        vec![ReliefCorner::TopLeft]
+    );
+    assert_eq!(
+        corners(PointerReliefEdges::new(true, false, false, true)),
+        vec![ReliefCorner::TopRight]
+    );
+    assert_eq!(
+        corners(PointerReliefEdges::new(false, true, true, false)),
+        vec![ReliefCorner::BottomLeft]
+    );
+    assert_eq!(
+        corners(PointerReliefEdges::new(false, false, true, true)),
+        vec![ReliefCorner::BottomRight]
+    );
+    assert!(corners(PointerReliefEdges::new(true, false, true, false)).is_empty());
+    assert!(corners(PointerReliefEdges::new(false, true, false, true)).is_empty());
+}
+
+#[test]
+fn gnu_relief_corner_erasure_is_last_and_respects_margins_and_clip() {
+    let erase_color = Color::GREEN;
+    let spec = PointerImageRelief::new(
+        Color::WHITE,
+        Color::BLACK,
+        2.0,
+        PointerReliefMargins::new(1.0, 2.0, 3.0, 4.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(erase_color, 6.0, 1.0),
+    );
+    let erases = relief_corner_erases(10.0, 20.0, 30.0, 24.0, spec)
+        .into_iter()
+        .collect::<Vec<_>>();
+    assert_eq!(erases.len(), 4);
+    assert!(
+        erases
+            .iter()
+            .all(|erase| erase.bounds() == (11.0, 22.0, 26.0, 18.0))
+    );
+    assert!(erases.iter().all(|erase| erase.color() == erase_color));
+
+    let edge_vertex_count = relief_edges(10.0, 20.0, 30.0, 24.0, spec)
+        .unwrap()
+        .into_iter()
+        .count()
+        * 6;
+    let mut ordered = Vec::new();
+    append_clipped_relief(&mut ordered, 10.0, 20.0, 30.0, 24.0, spec, None);
+    assert!(ordered.len() > edge_vertex_count);
+    assert!(ordered[edge_vertex_count..].iter().all(|vertex| {
+        vertex.color == [erase_color.r, erase_color.g, erase_color.b, erase_color.a]
+    }));
+
+    let clip = neomacs_display_protocol::Rect::new(11.0, 22.0, 3.0, 3.0);
+    let mut clipped = Vec::new();
+    append_clipped_relief(&mut clipped, 10.0, 20.0, 30.0, 24.0, spec, Some(&clip));
+    assert!(!clipped.is_empty());
+    assert!(clipped.iter().all(|vertex| {
+        (11.0..=14.0).contains(&vertex.position[0]) && (22.0..=25.0).contains(&vertex.position[1])
+    }));
+    let clipped_erase = clipped
+        .iter()
+        .filter(|vertex| {
+            vertex.color == [erase_color.r, erase_color.g, erase_color.b, erase_color.a]
+        })
+        .collect::<Vec<_>>();
+    assert!(!clipped_erase.is_empty());
+    assert!(clipped_erase.iter().all(|vertex| {
+        (11.0..=14.0).contains(&vertex.position[0]) && (22.0..=25.0).contains(&vertex.position[1])
+    }));
 }
 
 #[test]

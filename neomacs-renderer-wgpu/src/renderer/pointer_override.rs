@@ -627,6 +627,57 @@ impl IntoIterator for ReliefEdgePlan {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ReliefCorner {
+    BottomRight,
+    BottomLeft,
+    TopLeft,
+    TopRight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ReliefCornerErase {
+    corner: ReliefCorner,
+    bounds: Rect,
+    color: Color,
+    radius: f32,
+    margin: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct ReliefCornerErasePlan([Option<ReliefCornerErase>; 4]);
+
+impl IntoIterator for ReliefCornerErasePlan {
+    type Item = ReliefCornerErase;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<ReliefCornerErase>, 4>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter().flatten()
+    }
+}
+
+impl ReliefCornerErase {
+    #[cfg(test)]
+    pub(super) const fn corner(self) -> ReliefCorner {
+        self.corner
+    }
+
+    #[cfg(test)]
+    pub(super) const fn bounds(self) -> (f32, f32, f32, f32) {
+        (
+            self.bounds.x,
+            self.bounds.y,
+            self.bounds.width,
+            self.bounds.height,
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) const fn color(self) -> Color {
+        self.color
+    }
+}
+
 impl ReliefEdge {
     #[cfg(test)]
     pub(super) fn bounds(self) -> (f32, f32, f32, f32) {
@@ -731,6 +782,157 @@ pub(super) fn relief_edges(
         (enabled.left() && edge > 1.0).then_some(rectangle(x, y, x + 1.0, bottom, bottom_right)),
         (enabled.top() && edge > 1.0).then_some(rectangle(x, y, right, y + 1.0, bottom_right)),
     ]))
+}
+
+/// GNU pgtk erases rounded corners only where a horizontal and vertical relief
+/// edge meet. The order matches its `enum corners` iteration order.
+pub(super) fn relief_corner_erases(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    relief: PointerImageRelief,
+) -> ReliefCornerErasePlan {
+    let margins = relief.margins();
+    let bounds = Rect {
+        x: x + margins.left(),
+        y: y + margins.top(),
+        width: width - margins.left() - margins.right(),
+        height: height - margins.top() - margins.bottom(),
+    };
+    if bounds.width <= 0.0 || bounds.height <= 0.0 {
+        return ReliefCornerErasePlan([None; 4]);
+    }
+    let enabled = relief.edges();
+    let erase = relief.corner_erase();
+    let make = |corner| ReliefCornerErase {
+        corner,
+        bounds,
+        color: erase.color(),
+        radius: erase.radius(),
+        margin: erase.margin(),
+    };
+    ReliefCornerErasePlan([
+        (enabled.bottom() && enabled.right()).then(|| make(ReliefCorner::BottomRight)),
+        (enabled.bottom() && enabled.left()).then(|| make(ReliefCorner::BottomLeft)),
+        (enabled.top() && enabled.left()).then(|| make(ReliefCorner::TopLeft)),
+        (enabled.top() && enabled.right()).then(|| make(ReliefCorner::TopRight)),
+    ])
+}
+
+/// Append the complete resolved relief in GNU paint order: edges, thick-edge
+/// corrections, then background-colored corner erasure.
+pub(super) fn append_clipped_relief(
+    vertices: &mut Vec<RectVertex>,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    relief: PointerImageRelief,
+    clip: Option<&Rect>,
+) {
+    if let Some(edges) = relief_edges(x, y, width, height, relief) {
+        for edge in edges {
+            append_clipped_relief_edge(vertices, edge, clip);
+        }
+    }
+    for erase in relief_corner_erases(x, y, width, height, relief) {
+        append_clipped_relief_corner_erase(vertices, erase, clip);
+    }
+}
+
+fn append_clipped_relief_corner_erase(
+    vertices: &mut Vec<RectVertex>,
+    erase: ReliefCornerErase,
+    clip: Option<&Rect>,
+) {
+    let bounds = erase.bounds;
+    let left = bounds.x;
+    let top = bounds.y;
+    let right = left + bounds.width;
+    let bottom = top + bounds.height;
+    let (outer, center, start_angle) = match erase.corner {
+        ReliefCorner::BottomRight => (
+            [right + erase.margin, bottom + erase.margin],
+            [
+                right + erase.margin - erase.radius,
+                bottom + erase.margin - erase.radius,
+            ],
+            0.0,
+        ),
+        ReliefCorner::BottomLeft => (
+            [left - erase.margin, bottom + erase.margin],
+            [
+                left - erase.margin + erase.radius,
+                bottom + erase.margin - erase.radius,
+            ],
+            std::f32::consts::FRAC_PI_2,
+        ),
+        ReliefCorner::TopLeft => (
+            [left - erase.margin, top - erase.margin],
+            [
+                left - erase.margin + erase.radius,
+                top - erase.margin + erase.radius,
+            ],
+            std::f32::consts::PI,
+        ),
+        ReliefCorner::TopRight => (
+            [right + erase.margin, top - erase.margin],
+            [
+                right + erase.margin - erase.radius,
+                top - erase.margin + erase.radius,
+            ],
+            3.0 * std::f32::consts::FRAC_PI_2,
+        ),
+    };
+    const SEGMENTS: usize = 16;
+    let point = |index: usize| {
+        let angle = start_angle + std::f32::consts::FRAC_PI_2 * (index as f32 / SEGMENTS as f32);
+        [
+            center[0] + erase.radius * angle.cos(),
+            center[1] + erase.radius * angle.sin(),
+        ]
+    };
+    for index in 0..SEGMENTS {
+        append_clipped_relief_triangle(
+            vertices,
+            [outer, point(index), point(index + 1)],
+            erase.color,
+            &bounds,
+            clip,
+        );
+    }
+}
+
+fn append_clipped_relief_triangle(
+    vertices: &mut Vec<RectVertex>,
+    triangle: [[f32; 2]; 3],
+    color: Color,
+    bounds: &Rect,
+    clip: Option<&Rect>,
+) {
+    let mut polygon = [[0.0; 2]; 8];
+    polygon[..3].copy_from_slice(&triangle);
+    let mut len = 3;
+    for clip in std::iter::once(bounds).chain(clip) {
+        for (axis, boundary, keep_greater) in [
+            (0, clip.x, true),
+            (0, clip.x + clip.width, false),
+            (1, clip.y, true),
+            (1, clip.y + clip.height, false),
+        ] {
+            (polygon, len) = clip_convex_polygon(polygon, len, axis, boundary, keep_greater);
+            if len < 3 {
+                return;
+            }
+        }
+    }
+    let color = [color.r, color.g, color.b, color.a];
+    for index in 1..len - 1 {
+        for position in [polygon[0], polygon[index], polygon[index + 1]] {
+            vertices.push(RectVertex { position, color });
+        }
+    }
 }
 
 pub(super) fn append_clipped_relief_edge(

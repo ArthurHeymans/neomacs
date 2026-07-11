@@ -201,6 +201,42 @@ impl PointerReliefEdges {
     }
 }
 
+/// Fully resolved GNU-style corner erasure applied after image-relief edges.
+/// The producer supplies the background color and geometry; the renderer only
+/// executes this paint operation.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PointerReliefCornerErase {
+    color: crate::Color,
+    radius: f32,
+    margin: f32,
+}
+
+impl PointerReliefCornerErase {
+    #[must_use]
+    pub const fn new(color: crate::Color, radius: f32, margin: f32) -> Self {
+        Self {
+            color,
+            radius,
+            margin,
+        }
+    }
+
+    #[must_use]
+    pub const fn color(self) -> crate::Color {
+        self.color
+    }
+
+    #[must_use]
+    pub const fn radius(self) -> f32 {
+        self.radius
+    }
+
+    #[must_use]
+    pub const fn margin(self) -> f32 {
+        self.margin
+    }
+}
+
 /// Fully resolved image-relief geometry and colors. Semantic raised/sunken
 /// policy is resolved before this renderer-safe value enters the protocol.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -210,6 +246,7 @@ pub struct PointerImageRelief {
     thickness: f32,
     margins: PointerReliefMargins,
     edges: PointerReliefEdges,
+    corner_erase: PointerReliefCornerErase,
 }
 
 impl PointerImageRelief {
@@ -220,6 +257,7 @@ impl PointerImageRelief {
         thickness: f32,
         margins: PointerReliefMargins,
         edges: PointerReliefEdges,
+        corner_erase: PointerReliefCornerErase,
     ) -> Self {
         Self {
             top_left_color,
@@ -227,6 +265,7 @@ impl PointerImageRelief {
             thickness,
             margins,
             edges,
+            corner_erase,
         }
     }
 
@@ -249,6 +288,11 @@ impl PointerImageRelief {
     #[must_use]
     pub const fn edges(self) -> PointerReliefEdges {
         self.edges
+    }
+
+    #[must_use]
+    pub const fn corner_erase(self) -> PointerReliefCornerErase {
+        self.corner_erase
     }
 }
 
@@ -706,7 +750,12 @@ fn validate_mode(
 }
 
 fn image_relief_is_valid(relief: PointerImageRelief) -> bool {
-    let colors = [relief.top_left_color(), relief.bottom_right_color()];
+    let corner_erase = relief.corner_erase();
+    let colors = [
+        relief.top_left_color(),
+        relief.bottom_right_color(),
+        corner_erase.color(),
+    ];
     let margins = relief.margins();
     colors.into_iter().all(|color| {
         [color.r, color.g, color.b, color.a]
@@ -714,6 +763,10 @@ fn image_relief_is_valid(relief: PointerImageRelief) -> bool {
             .all(f32::is_finite)
     }) && relief.thickness().is_finite()
         && relief.thickness() > 0.0
+        && corner_erase.radius().is_finite()
+        && corner_erase.radius() > 0.0
+        && corner_erase.margin().is_finite()
+        && corner_erase.margin() >= 0.0
         && [
             margins.left(),
             margins.top(),

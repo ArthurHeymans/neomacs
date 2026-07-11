@@ -201,20 +201,20 @@ impl WgpuRenderer {
                         ctx.params.pointer_override.image_override(glyph_index)
                         && let neomacs_display_protocol::PointerDrawMode::ImageRelief(relief) =
                             override_paint.mode()
-                        && let Some(edges) =
-                            super::pointer_override::relief_edges(*x, *y, *width, *height, relief)
                     {
                         let relief_clip = ctx
                             .params
                             .pointer_override
                             .image_clip(glyph_index, clip_rect.as_ref());
-                        for edge in edges {
-                            super::pointer_override::append_clipped_relief_edge(
-                                &mut relief_vertices,
-                                edge,
-                                relief_clip.as_ref(),
-                            );
-                        }
+                        super::pointer_override::append_clipped_relief(
+                            &mut relief_vertices,
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            relief,
+                            relief_clip.as_ref(),
+                        );
                     }
                 }
             }
