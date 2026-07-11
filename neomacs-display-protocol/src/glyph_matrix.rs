@@ -145,6 +145,40 @@ pub struct Glyph {
     pub vertical_offset_px: f32,
     /// Padding glyph — second cell of a wide character.
     pub padding: bool,
+    /// Layout-owned pointer appearance identity carried transactionally with
+    /// the authoritative glyph through rollback, bidi reorder, and row reuse.
+    #[serde(default)]
+    pub pointer_appearance: Option<GlyphPointerAppearance>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GlyphPointerAppearance {
+    pub source: GlyphPointerSourceIdentity,
+    pub face_id: FaceId,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GlyphPointerSourceIdentity {
+    pub kind: GlyphPointerSourceKind,
+    pub source_id: u64,
+    pub range_start: u64,
+    pub range_end: u64,
+    pub property_owner: u64,
+    pub occurrence: GlyphPointerOccurrenceIdentity,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum GlyphPointerSourceKind {
+    Buffer,
+    LispString,
+    Synthetic,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum GlyphPointerOccurrenceIdentity {
+    Source,
+    OverlayString { overlay_id: u64, after: bool },
+    BufferDisplayReplacement { buffer_id: u64, anchor: u64 },
 }
 
 impl Glyph {
@@ -161,6 +195,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            pointer_appearance: None,
         }
     }
 
@@ -177,6 +212,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            pointer_appearance: None,
         }
     }
 
@@ -193,6 +229,7 @@ impl Glyph {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: true,
+            pointer_appearance: None,
         }
     }
 

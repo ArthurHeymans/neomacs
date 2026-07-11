@@ -625,7 +625,6 @@ pub(crate) struct DisplayRowGlyphSlot {
     col: usize,
     width_px: f32,
     width_cols: usize,
-    pointer_appearance: Option<crate::display_item::DisplayPointerAppearance>,
 }
 
 impl DisplayRowGlyphSlot {
@@ -646,7 +645,7 @@ impl DisplayRowGlyphSlot {
         col: usize,
         width_px: f32,
         width_cols: usize,
-        pointer_appearance: Option<crate::display_item::DisplayPointerAppearance>,
+        _pointer_appearance: Option<crate::display_item::DisplayPointerAppearance>,
     ) -> Self {
         Self {
             source,
@@ -654,7 +653,6 @@ impl DisplayRowGlyphSlot {
             col,
             width_px,
             width_cols,
-            pointer_appearance,
         }
     }
 
@@ -676,12 +674,6 @@ impl DisplayRowGlyphSlot {
 
     pub(crate) fn width_cols(&self) -> usize {
         self.width_cols
-    }
-
-    pub(crate) fn pointer_appearance(
-        &self,
-    ) -> Option<&crate::display_item::DisplayPointerAppearance> {
-        self.pointer_appearance.as_ref()
     }
 
     pub(crate) fn start_position(&self) -> DisplayRowPosition {
@@ -1170,6 +1162,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 advance_request,
             );
             self.writer.apply_item_layout_since(before_len, item_layout);
+            let pointer_metadata =
+                pointer_appearance.and_then(|appearance| appearance.glyph_metadata());
+            for glyph in &mut self.writer.row.glyphs[self.writer.area_index][before_len..] {
+                glyph.pointer_appearance = pointer_metadata;
+            }
             let written = self.metrics_since(before_len);
             slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
                 source_mapping.slot_source(&span.start, char_offset, byte_offset),
@@ -1254,6 +1251,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
     fn push_item(&mut self, item: DisplayItem) -> DisplayRowWriteMetrics {
         let item_layout = item.layout;
+        let pointer_appearance = item
+            .pointer_appearance
+            .as_ref()
+            .and_then(|appearance| appearance.glyph_metadata());
         let face_id = self.face_id(item.face);
         let area_index = self.area_index;
         let before_len = self.row.glyphs[area_index].len();
@@ -1287,6 +1288,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayItemKind::RowBreak(_) => {}
         }
         self.apply_item_layout_since(before_len, item_layout);
+        for glyph in &mut self.row.glyphs[area_index][before_len..] {
+            glyph.pointer_appearance = pointer_appearance;
+        }
         DisplayRowWriteMetrics::from_glyphs(
             &self.row.glyphs[area_index][before_len..],
             self.layout.char_width_px,
@@ -1560,6 +1564,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            pointer_appearance: None,
         };
         self.row.glyphs[self.area_index].push(glyph);
         if self.area_index == GlyphArea::Text.index() {

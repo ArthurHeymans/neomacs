@@ -3,7 +3,7 @@ use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) enum OverlayStringKind {
     Before,
     After,

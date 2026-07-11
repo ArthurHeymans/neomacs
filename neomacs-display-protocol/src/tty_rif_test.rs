@@ -133,6 +133,7 @@ fn glyph_to_char_returns_first_char_for_composite() {
         pixel_ascent: 0.0,
         vertical_offset_px: 0.0,
         padding: false,
+        pointer_appearance: None,
     };
     assert_eq!(glyph_to_char(&g), 'a');
 }
@@ -1517,6 +1518,7 @@ fn run_composite(text: &str, bidi_level: u8) -> Glyph {
         pixel_ascent: 0.0,
         vertical_offset_px: 0.0,
         padding: false,
+        pointer_appearance: None,
     }
 }
 
@@ -1583,6 +1585,7 @@ fn run_member_padding_cluster(text: &str, charpos: usize) -> Glyph {
         pixel_ascent: 0.0,
         vertical_offset_px: 0.0,
         padding: false,
+        pointer_appearance: None,
     };
     g.padding = true;
     g

@@ -137,6 +137,7 @@ pub(crate) struct LispStringSourceAppendRequest {
     pub(crate) position: DisplayRowPosition,
     pub(crate) source_id: LispStringSourceId,
     pub(crate) value: Value,
+    source_origin: LispStringSourceOrigin,
 }
 
 impl LispStringSourceAppendRequest {
@@ -149,7 +150,13 @@ impl LispStringSourceAppendRequest {
             position,
             source_id,
             value,
+            source_origin: LispStringSourceOrigin::Normal,
         }
+    }
+
+    pub(crate) fn with_source_origin(mut self, source_origin: LispStringSourceOrigin) -> Self {
+        self.source_origin = source_origin;
+        self
     }
 
     fn into_source(self, base_face_id: FaceId) -> Option<LispStringSourceCursor> {
@@ -157,7 +164,7 @@ impl LispStringSourceAppendRequest {
             self.source_id.raw(),
             self.value,
             RenderFaceRef::FaceId(base_face_id),
-            LispStringSourceOrigin::Normal,
+            self.source_origin,
         )
     }
 }

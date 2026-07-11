@@ -1,11 +1,12 @@
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
     DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayPointerAppearance,
-    DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun,
-    GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan, glyphless_method_for_char,
+    DisplayPointerOccurrence, DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason,
+    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
+    DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan,
+    glyphless_method_for_char,
 };
-use crate::display_origin::{DisplayOrigin, DisplayPropertySource};
+use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
     classify_display_property_modifiers_only,
@@ -2101,7 +2102,7 @@ impl BufferDisplayReplacementStringRequest {
             self.source_id,
             self.value,
             RenderFaceRef::FaceId(fallback_face_id),
-            LispStringSourceOrigin::DisplayPropertyReplacement,
+            LispStringSourceOrigin::BufferDisplayReplacement(self.replacement_source),
         )?;
         Some(BufferDisplayReplacementStringSource::new(
             self.replacement_source,
@@ -2145,12 +2146,26 @@ pub(crate) struct LispStringSourceCursor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LispStringSourceOrigin {
     Normal,
-    DisplayPropertyReplacement,
+    BufferDisplayReplacement(BufferDisplayReplacementSource),
+    OverlayString {
+        overlay_id: Value,
+        kind: OverlayStringKind,
+    },
 }
 
 impl LispStringSourceOrigin {
     const fn from_display_property(self) -> bool {
-        matches!(self, Self::DisplayPropertyReplacement)
+        matches!(self, Self::BufferDisplayReplacement(_))
+    }
+
+    const fn pointer_occurrence(self) -> DisplayPointerOccurrence {
+        match self {
+            Self::OverlayString { overlay_id, kind } => {
+                DisplayPointerOccurrence::OverlayString { overlay_id, kind }
+            }
+            Self::BufferDisplayReplacement(source) => source.pointer_occurrence(),
+            Self::Normal => DisplayPointerOccurrence::Source,
+        }
     }
 }
 
@@ -2228,12 +2243,17 @@ impl LispStringSourceStack {
         replacement_source: Option<BufferDisplayReplacementSource>,
     ) {
         let source_id = self.allocate_source_id();
-        if let Some(frame) = LispStringSourceFrame::new_with_replacement_source(
+        let occurrence = replacement_source
+            .map(BufferDisplayReplacementSource::pointer_occurrence)
+            .or_else(|| self.frames.last().map(|frame| frame.pointer_occurrence))
+            .unwrap_or_default();
+        if let Some(frame) = LispStringSourceFrame::new_with_occurrence(
             source_id,
             value,
             base_face,
             replacement_source,
-            LispStringSourceOrigin::DisplayPropertyReplacement,
+            true,
+            occurrence,
         ) {
             self.frames.push(frame);
         }
@@ -2296,6 +2316,7 @@ struct LispStringSourceFrame {
     base_face: RenderFaceRef,
     replacement_source: Option<BufferDisplayReplacementSource>,
     from_display_property: bool,
+    pointer_occurrence: DisplayPointerOccurrence,
 }
 
 impl LispStringSourceFrame {
@@ -2315,6 +2336,24 @@ impl LispStringSourceFrame {
         replacement_source: Option<BufferDisplayReplacementSource>,
         origin: LispStringSourceOrigin,
     ) -> Option<Self> {
+        Self::new_with_occurrence(
+            source_id,
+            value,
+            base_face,
+            replacement_source,
+            origin.from_display_property(),
+            origin.pointer_occurrence(),
+        )
+    }
+
+    fn new_with_occurrence(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        replacement_source: Option<BufferDisplayReplacementSource>,
+        from_display_property: bool,
+        pointer_occurrence: DisplayPointerOccurrence,
+    ) -> Option<Self> {
         let text = value.as_runtime_string_owned()?;
         let mut char_byte_offsets = text
             .char_indices()
@@ -2329,7 +2368,8 @@ impl LispStringSourceFrame {
             char_index: 0,
             base_face,
             replacement_source,
-            from_display_property: origin.from_display_property(),
+            from_display_property,
+            pointer_occurrence,
         })
     }
 
@@ -2562,7 +2602,8 @@ impl LispStringSourceFrame {
             range_start.get(),
             range_end.get(),
             None,
-        );
+        )
+        .in_occurrence(self.pointer_occurrence);
         Some(DisplayPointerAppearance::new(source, pointer_face))
     }
 }

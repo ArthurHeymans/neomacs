@@ -9,7 +9,6 @@
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_item::{DisplayPointerAppearance, RenderFaceRef};
 use crate::display_output_frame_state::OutputFrameBuildState;
 use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest,
@@ -24,10 +23,8 @@ use crate::display_output_row_request::{
 };
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_output_window_state::OutputWindowBuildState;
-use crate::display_row_builder::DisplayRowGlyphSlot;
 #[cfg(test)]
 use crate::display_row_face_state::resolved_display_row_face;
-use crate::display_row_text_output::TextRowOutput;
 #[cfg(test)]
 use crate::font_metrics::FontMetrics;
 #[cfg(test)]
@@ -51,16 +48,6 @@ pub(crate) const FRAME_CHROME_WINDOW_ID: i64 = 0;
 pub(crate) struct DisplayOutputBuilder {
     window_state: OutputWindowBuildState,
     frame_state: OutputFrameBuildState,
-    pointer_observations: Vec<BufferPointerObservation>,
-}
-
-#[derive(Clone)]
-struct BufferPointerObservation {
-    appearance: DisplayPointerAppearance,
-    window_id: neomacs_display_protocol::DisplayWindowId,
-    row: u32,
-    col: u16,
-    bounds: neomacs_display_protocol::FrameRect,
 }
 
 impl DisplayOutputBuilder {
@@ -68,14 +55,12 @@ impl DisplayOutputBuilder {
         Self {
             window_state: OutputWindowBuildState::new(),
             frame_state: OutputFrameBuildState::new(),
-            pointer_observations: Vec::new(),
         }
     }
 
     pub(crate) fn reset(&mut self) {
         self.window_state.reset();
         self.frame_state.reset();
-        self.pointer_observations.clear();
     }
 
     #[cfg(test)]
@@ -478,36 +463,6 @@ impl DisplayOutputBuilder {
         self.window_state.current_window_text_pixel_bounds()
     }
 
-    pub(crate) fn record_buffer_pointer_slots(
-        &mut self,
-        output: TextRowOutput,
-        slots: &[DisplayRowGlyphSlot],
-    ) {
-        let window_id =
-            neomacs_display_protocol::DisplayWindowId::new(self.current_window_id_i64());
-        let window = self.current_window_pixel_bounds();
-        for slot in slots {
-            let Some(appearance) = slot.pointer_appearance().cloned() else {
-                continue;
-            };
-            let Ok(bounds) = neomacs_display_protocol::FrameRect::new(
-                window.x + slot.x_px(),
-                window.y + output.glyph_y(),
-                slot.width_px(),
-                output.height(),
-            ) else {
-                continue;
-            };
-            self.pointer_observations.push(BufferPointerObservation {
-                appearance,
-                window_id,
-                row: output.row().min(u32::MAX as usize) as u32,
-                col: slot.col().min(usize::from(u16::MAX)) as u16,
-                bounds,
-            });
-        }
-    }
-
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
         self.window_state.cursor_visual_column_context()
     }
@@ -605,12 +560,11 @@ impl DisplayOutputBuilder {
         let Self {
             window_state,
             frame_state,
-            pointer_observations,
         } = self;
         let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
         state.window_matrices = window_state.into_window_matrix_entries();
         frame_state.install_into(&mut state);
-        state.presented_pointer_source = buffer_pointer_source_map(pointer_observations);
+        state.presented_pointer_source = buffer_pointer_source_map(&state);
         state
     }
 
@@ -631,7 +585,7 @@ impl DisplayOutputBuilder {
 }
 
 fn buffer_pointer_source_map(
-    observations: Vec<BufferPointerObservation>,
+    state: &FrameDisplayState,
 ) -> neomacs_display_protocol::PresentedPointerSourceMap {
     use neomacs_display_protocol::{
         PointerAppearanceId, PointerDrawMode, PresentedPointerRegion,
@@ -639,38 +593,114 @@ fn buffer_pointer_source_map(
     };
     use std::collections::HashMap;
 
-    let mut positions: HashMap<
-        (
-            neomacs_display_protocol::DisplayWindowId,
-            DisplayPointerAppearance,
-        ),
-        usize,
-    > = HashMap::new();
+    let mut positions = HashMap::new();
     let mut appearance_records: Vec<(Vec<PresentedSourcePaintSpan>, FaceId)> = Vec::new();
     let mut pending_regions = Vec::new();
-    for observation in observations {
-        let RenderFaceRef::FaceId(face_id) = observation.appearance.face() else {
-            continue;
+    for entry in &state.window_matrices {
+        let row_bounds = entry.row_pixel_bounds(GlyphRowRole::Text);
+        let row_clip = entry.text_area_clip_rect();
+        let char_width = if entry.matrix.ncols > 0 {
+            row_bounds.width / entry.matrix.ncols as f32
+        } else {
+            state.char_width
         };
-        let key = (observation.window_id, observation.appearance.clone());
-        let index = *positions.entry(key).or_insert_with(|| {
-            appearance_records.push((Vec::new(), face_id));
-            appearance_records.len() - 1
-        });
-        let slot = DisplaySlotId {
-            window_id: observation.window_id,
-            row: observation.row,
-            col: observation.col,
-        };
-        appearance_records[index]
-            .0
-            .push(PresentedSourcePaintSpan::new(
-                PresentedPrimitiveKind::Glyph,
-                GlyphRowRole::Text,
-                slot,
-                observation.bounds,
-            ));
-        pending_regions.push((observation.bounds, index));
+        for (row_index, row) in entry.matrix.rows.iter().enumerate() {
+            if !row.enabled || row.role != GlyphRowRole::Text {
+                continue;
+            }
+            let row_height = if row.height_px > 0.0 {
+                row.height_px
+            } else {
+                state.char_height
+            };
+            let y = row_bounds.y
+                + if row.height_px > 0.0 {
+                    row.pixel_y
+                } else {
+                    row_index as f32 * state.char_height
+                };
+            let mut x = row_bounds.x;
+            if row.reversed_p {
+                let used = row.glyphs[GlyphArea::Text.index()]
+                    .iter()
+                    .filter(|glyph| !glyph.padding)
+                    .map(|glyph| {
+                        if glyph.pixel_width > 0.0 {
+                            glyph.pixel_width
+                        } else {
+                            match &glyph.glyph_type {
+                                GlyphType::Stretch { width_cols } => {
+                                    *width_cols as f32 * char_width
+                                }
+                                _ if glyph.wide => char_width * 2.0,
+                                _ => char_width,
+                            }
+                        }
+                    })
+                    .sum::<f32>();
+                x += (row_bounds.width - used).max(0.0);
+            }
+            let mut col = 0usize;
+            for area in &row.glyphs {
+                for glyph in area {
+                    if glyph.padding {
+                        continue;
+                    }
+                    let width = if glyph.pixel_width > 0.0 {
+                        glyph.pixel_width
+                    } else {
+                        match &glyph.glyph_type {
+                            GlyphType::Stretch { width_cols } => *width_cols as f32 * char_width,
+                            _ if glyph.wide => char_width * 2.0,
+                            _ => char_width,
+                        }
+                    };
+                    let visible_left = x.max(row_clip.x);
+                    let visible_top = y.max(row_clip.y);
+                    let visible_right = (x + width)
+                        .min(row_clip.x + row_clip.width)
+                        .min(row_bounds.x + row_bounds.width);
+                    let visible_bottom = (y + row_height).min(row_clip.y + row_clip.height);
+                    if let Some(pointer) = glyph.pointer_appearance
+                        && visible_right > visible_left
+                        && visible_bottom > visible_top
+                        && let Ok(bounds) = neomacs_display_protocol::FrameRect::new(
+                            visible_left,
+                            visible_top,
+                            visible_right - visible_left,
+                            visible_bottom - visible_top,
+                        )
+                    {
+                        let index =
+                            *positions
+                                .entry((entry.window_id, pointer))
+                                .or_insert_with(|| {
+                                    appearance_records.push((Vec::new(), pointer.face_id));
+                                    appearance_records.len() - 1
+                                });
+                        appearance_records[index]
+                            .0
+                            .push(PresentedSourcePaintSpan::new(
+                                PresentedPrimitiveKind::Glyph,
+                                GlyphRowRole::Text,
+                                DisplaySlotId {
+                                    window_id: entry.window_id,
+                                    row: row_index as u32,
+                                    col: col.min(usize::from(u16::MAX)) as u16,
+                                },
+                                bounds,
+                            ));
+                        pending_regions.push((bounds, index));
+                    }
+                    col += match &glyph.glyph_type {
+                        GlyphType::Stretch { width_cols } => *width_cols as usize,
+                        _ if glyph.wide => 2,
+                        _ => 1,
+                    };
+                    x += width;
+                }
+            }
+        }
     }
     let appearances = appearance_records
         .into_iter()

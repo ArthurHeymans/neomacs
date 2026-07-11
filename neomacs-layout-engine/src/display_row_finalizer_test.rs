@@ -46,6 +46,38 @@ fn finalizes_matrix_row_with_bidi_reorder() {
     assert!(row.reversed_p);
 }
 
+#[test]
+fn bidi_reorder_carries_pointer_metadata_with_its_glyph() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    push_text(&mut row, "אב");
+    let pointer = GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 0,
+            range_end: 1,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    };
+    row.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+
+    GlyphRowFinalizationContext::new(1, 0, Rect::new(0.0, 0.0, 80.0, 16.0))
+        .finalize_row(&mut row, 10, None);
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs[0].glyph_type, GlyphType::Char { ch: 'ב' });
+    assert_eq!(glyphs[0].pointer_appearance, None);
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Char { ch: 'א' });
+    assert_eq!(glyphs[1].pointer_appearance, Some(pointer));
+}
+
 /// A logical-order row that has only been normalized (NOT reordered) still
 /// reorders correctly at install. Reordering now happens exactly once, at
 /// install; there is no pre-pass reorder and no idempotency early-return.

@@ -145,6 +145,21 @@ pub(crate) struct DisplayPointerSourceRange {
     start_char_index: usize,
     end_char_index: usize,
     overlay_owner: Option<Value>,
+    occurrence: DisplayPointerOccurrence,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub(crate) enum DisplayPointerOccurrence {
+    #[default]
+    Source,
+    OverlayString {
+        overlay_id: Value,
+        kind: crate::display_origin::OverlayStringKind,
+    },
+    BufferDisplayReplacement {
+        buffer_id: BufferId,
+        anchor_charpos: CharPos0,
+    },
 }
 
 impl DisplayPointerSourceRange {
@@ -155,6 +170,7 @@ impl DisplayPointerSourceRange {
             start_char_index: 0,
             end_char_index,
             overlay_owner: None,
+            occurrence: DisplayPointerOccurrence::Source,
         }
     }
 
@@ -169,7 +185,13 @@ impl DisplayPointerSourceRange {
             start_char_index,
             end_char_index,
             overlay_owner,
+            occurrence: DisplayPointerOccurrence::Source,
         }
+    }
+
+    pub(crate) fn in_occurrence(mut self, occurrence: DisplayPointerOccurrence) -> Self {
+        self.occurrence = occurrence;
+        self
     }
 
     #[cfg(test)]
@@ -193,6 +215,49 @@ impl DisplayPointerSourceRange {
     pub(crate) const fn end_char_index(&self) -> usize {
         self.end_char_index
     }
+
+    fn protocol_identity(
+        &self,
+    ) -> neomacs_display_protocol::glyph_matrix::GlyphPointerSourceIdentity {
+        use neomacs_display_protocol::glyph_matrix::{
+            GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity, GlyphPointerSourceKind,
+        };
+        let (kind, source_id) = match self.source {
+            DisplaySourcePosition::Buffer { buffer_id, .. } => {
+                (GlyphPointerSourceKind::Buffer, buffer_id.0 as u64)
+            }
+            DisplaySourcePosition::LispString { source_id, .. } => {
+                (GlyphPointerSourceKind::LispString, source_id.get())
+            }
+            DisplaySourcePosition::Synthetic { source_id, .. } => {
+                (GlyphPointerSourceKind::Synthetic, source_id.get())
+            }
+        };
+        let occurrence = match self.occurrence {
+            DisplayPointerOccurrence::Source => GlyphPointerOccurrenceIdentity::Source,
+            DisplayPointerOccurrence::OverlayString { overlay_id, kind } => {
+                GlyphPointerOccurrenceIdentity::OverlayString {
+                    overlay_id: overlay_id.bits() as u64,
+                    after: matches!(kind, crate::display_origin::OverlayStringKind::After),
+                }
+            }
+            DisplayPointerOccurrence::BufferDisplayReplacement {
+                buffer_id,
+                anchor_charpos,
+            } => GlyphPointerOccurrenceIdentity::BufferDisplayReplacement {
+                buffer_id: buffer_id.0 as u64,
+                anchor: anchor_charpos.get() as u64,
+            },
+        };
+        GlyphPointerSourceIdentity {
+            kind,
+            source_id,
+            range_start: self.start_char_index as u64,
+            range_end: self.end_char_index as u64,
+            property_owner: self.overlay_owner.map_or(0, |owner| owner.bits() as u64),
+            occurrence,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -211,8 +276,23 @@ impl DisplayPointerAppearance {
         &self.source
     }
 
+    #[cfg(test)]
     pub(crate) const fn face(&self) -> RenderFaceRef {
         self.face
+    }
+
+    pub(crate) fn glyph_metadata(
+        &self,
+    ) -> Option<neomacs_display_protocol::glyph_matrix::GlyphPointerAppearance> {
+        let RenderFaceRef::FaceId(face_id) = self.face else {
+            return None;
+        };
+        Some(
+            neomacs_display_protocol::glyph_matrix::GlyphPointerAppearance {
+                source: self.source.protocol_identity(),
+                face_id,
+            },
+        )
     }
 }
 
@@ -284,7 +364,7 @@ pub(crate) enum DisplayItemKind {
     RowBreak(DisplayRowBreak),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct BufferDisplayReplacementSource {
     buffer_id: BufferId,
     char_pos: CharPos0,
@@ -323,6 +403,13 @@ impl BufferDisplayReplacementSource {
 
     pub(crate) fn buffer_id(self) -> BufferId {
         self.buffer_id
+    }
+
+    pub(crate) const fn pointer_occurrence(self) -> DisplayPointerOccurrence {
+        DisplayPointerOccurrence::BufferDisplayReplacement {
+            buffer_id: self.buffer_id,
+            anchor_charpos: self.char_pos,
+        }
     }
 
     fn span(self) -> SourceSpan {

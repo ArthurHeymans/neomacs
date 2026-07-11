@@ -1397,6 +1397,7 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            pointer_appearance: None,
         });
         cp += 1;
         for _ in word.chars().skip(1) {
@@ -1442,6 +1443,7 @@ fn rtl_paragraph_row_is_marked_reversed() {
             pixel_ascent: 0.0,
             vertical_offset_px: 0.0,
             padding: false,
+            pointer_appearance: None,
         });
         text.push(Glyph::padding_for(FaceId::new(0), 1));
         text.push(Glyph::padding_for(FaceId::new(0), 2));
@@ -1495,7 +1497,7 @@ fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
     use crate::display_item::{
         DisplayPointerAppearance, DisplayPointerSourceRange, DisplaySourcePosition, RenderFaceRef,
     };
-    use neomacs_display_protocol::{DisplayWindowId, FrameRect, PresentedPrimitiveKind};
+    use neomacs_display_protocol::PresentedPrimitiveKind;
     use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
     let pointer = DisplayPointerAppearance::new(
@@ -1505,24 +1507,25 @@ fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
         ),
         RenderFaceRef::FaceId(FaceId::new(9)),
     );
-    let observations = vec![
-        BufferPointerObservation {
-            appearance: pointer.clone(),
-            window_id: DisplayWindowId::new(3),
-            row: 1,
-            col: 4,
-            bounds: FrameRect::new(10.0, 20.0, 8.0, 16.0).unwrap(),
-        },
-        BufferPointerObservation {
-            appearance: pointer,
-            window_id: DisplayWindowId::new(3),
-            row: 2,
-            col: 0,
-            bounds: FrameRect::new(2.0, 36.0, 8.0, 16.0).unwrap(),
-        },
-    ];
+    let metadata = pointer.glyph_metadata().expect("face-backed appearance");
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(3, 3, 10, Rect::new(2.0, 4.0, 80.0, 48.0), true);
+    for (row, col) in [(1, 4), (2, 0)] {
+        builder.begin_row(row, GlyphRowRole::Text);
+        for index in 0..=col {
+            write_char_to_current_row(&mut builder, 'x', FaceId::new(0), index);
+        }
+        builder
+            .edit_current_row_for_test(|row| {
+                row.glyphs[GlyphArea::Text.index()][col].pointer_appearance = Some(metadata);
+            })
+            .expect("current row");
+        builder.end_row();
+    }
+    builder.end_window();
 
-    let source = buffer_pointer_source_map(observations);
+    let state = builder.finish(10, 3, 8.0, 16.0);
+    let source = &state.presented_pointer_source;
 
     assert_eq!(source.appearances().len(), 1);
     assert_eq!(source.regions().len(), 2);
@@ -1533,4 +1536,83 @@ fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
             .iter()
             .all(|span| span.kind() == PresentedPrimitiveKind::Glyph)
     );
+}
+
+#[test]
+fn buffer_mouse_face_is_derived_only_from_the_final_authoritative_row() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    let pointer = GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 0,
+            range_end: 1,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    };
+    let mut stale = external_text_row(
+        GlyphRowRole::Text,
+        vec![Glyph::char('x', FaceId::new(0), 0)],
+    );
+    stale.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+    let replacement = external_text_row(
+        GlyphRowRole::Text,
+        vec![Glyph::char('y', FaceId::new(0), 1)],
+    );
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(3, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.install_finalized_output_row(0, stale);
+    builder.install_finalized_output_row(0, replacement);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert!(state.presented_pointer_source.appearances().is_empty());
+    assert!(state.presented_pointer_source.regions().is_empty());
+}
+
+#[test]
+fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    let pointer = GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 0,
+            range_end: 1,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    };
+    let mut retained = external_text_row(
+        GlyphRowRole::Text,
+        vec![Glyph::char('x', FaceId::new(0), 0).with_pixel_width(9.0)],
+    );
+    retained.pixel_y = 11.0;
+    retained.height_px = 18.0;
+    retained.glyphs[GlyphArea::Text.index()][0].pointer_appearance = Some(pointer);
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(3, 2, 10, Rect::new(2.0, 4.0, 80.0, 40.0), true);
+    builder.install_finalized_output_row(1, retained);
+    builder.end_window();
+
+    let state = builder.finish(10, 2, 8.0, 16.0);
+    let regions = state.presented_pointer_source.regions();
+    assert_eq!(regions.len(), 1);
+    assert_eq!(regions[0].bounds().x(), 2.0);
+    assert_eq!(regions[0].bounds().y(), 15.0);
+    assert_eq!(regions[0].bounds().width(), 9.0);
+    assert_eq!(regions[0].bounds().height(), 18.0);
 }

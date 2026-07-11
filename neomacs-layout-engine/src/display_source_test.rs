@@ -1461,6 +1461,81 @@ fn lisp_string_mouse_face_survives_display_replacement_mapping() {
 }
 
 #[test]
+fn overlay_string_mouse_faces_are_scoped_to_the_overlay_occurrence() {
+    let _eval = Context::new();
+    let value = Value::string_with_text_properties(
+        "xy",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("mouse-face"),
+                Value::symbol("highlight"),
+            ]),
+        }],
+    );
+    let pointer_for = |overlay_id, kind| {
+        let mut source = LispStringSourceCursor::new(
+            1,
+            value,
+            RenderFaceRef::FaceId(FaceId::new(3)),
+            LispStringSourceOrigin::OverlayString { overlay_id, kind },
+        )
+        .expect("overlay string source");
+        let mut resolver = SymbolFaceResolver;
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        source
+            .next_item(&mut context)
+            .and_then(|item| item.pointer_appearance().cloned())
+            .expect("overlay string mouse face")
+    };
+
+    let before = pointer_for(Value::fixnum(10), OverlayStringKind::Before);
+    let before_fragment = pointer_for(Value::fixnum(10), OverlayStringKind::Before);
+    let after = pointer_for(Value::fixnum(10), OverlayStringKind::After);
+    let other_overlay = pointer_for(Value::fixnum(11), OverlayStringKind::Before);
+
+    assert_eq!(before, before_fragment);
+    assert_ne!(before, after);
+    assert_ne!(before, other_overlay);
+}
+
+#[test]
+fn display_replacement_string_mouse_faces_are_scoped_to_the_buffer_anchor() {
+    let _eval = Context::new();
+    let value = Value::string_with_text_properties(
+        "xy",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("mouse-face"),
+                Value::symbol("highlight"),
+            ]),
+        }],
+    );
+    let pointer_for = |anchor| {
+        let replacement_source = BufferDisplayReplacementSource::new(
+            BufferId(7),
+            CharPos0::new(anchor),
+            EmacsBytePos::new(anchor),
+        );
+        let mut source = BufferDisplayReplacementStringRequest::new(1, value, replacement_source)
+            .into_source(FaceId::new(3))
+            .expect("replacement string source");
+        let mut resolver = SymbolFaceResolver;
+        let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+        source
+            .next_item(&mut context)
+            .and_then(|item| item.pointer_appearance().cloned())
+            .expect("replacement string mouse face")
+    };
+
+    assert_eq!(pointer_for(4), pointer_for(4));
+    assert_ne!(pointer_for(4), pointer_for(9));
+}
+
+#[test]
 fn buffer_text_source_cursor_renders_explicit_composition_property_replacement() {
     let mut eval = Context::new();
     let buffer_id = eval

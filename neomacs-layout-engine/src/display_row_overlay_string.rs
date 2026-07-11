@@ -25,6 +25,7 @@ use crate::display_row_render_state::DisplayRowRenderStop;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_transition::DisplayRowLineBreakTransitionRequest;
 use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_source::LispStringSourceOrigin;
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{
     LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
@@ -104,6 +105,10 @@ impl OverlayStringRenderSource {
         position: DisplayRowPosition,
     ) -> LispStringSourceAppendRequest {
         LispStringSourceAppendRequest::new(position, LispStringSourceId::OVERLAY_STRING, self.value)
+            .with_source_origin(LispStringSourceOrigin::OverlayString {
+                overlay_id: self.overlay_id,
+                kind: self.kind,
+            })
     }
 }
 
