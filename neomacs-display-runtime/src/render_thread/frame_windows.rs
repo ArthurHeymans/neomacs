@@ -395,6 +395,50 @@ impl GuiFrameRenderState {
         ))
     }
 
+    fn presented_pointer_appearance_at(
+        &self,
+        target: Option<(u64, f32, f32)>,
+    ) -> Option<super::state::PresentedAppearanceKey> {
+        let (target_frame_id, x, y) = target?;
+        self.presented_pointer_hit(target_frame_id, x, y)
+            .and_then(|hit| hit.appearance_key())
+    }
+
+    /// Apply pointer motion to the immutable root or child presentation that
+    /// currently owns the hit. Returns whether the selected paint changed.
+    pub(super) fn update_presented_pointer_motion(
+        &mut self,
+        target: Option<(u64, f32, f32)>,
+    ) -> bool {
+        let appearance = self.presented_pointer_appearance_at(target);
+        let changed = self.pointer_appearance.hover(appearance);
+        if changed {
+            self.mark_dirty();
+        }
+        changed
+    }
+
+    /// Apply a primary-button phase after resolving hover from the same
+    /// displayed snapshot. Input capture remains owned by the interaction
+    /// pipeline; this operation changes only renderer-facing appearance.
+    pub(super) fn update_presented_pointer_button(
+        &mut self,
+        target: Option<(u64, f32, f32)>,
+        pressed: bool,
+    ) -> bool {
+        let appearance = self.presented_pointer_appearance_at(target);
+        let mut changed = self.pointer_appearance.hover(appearance);
+        changed |= if pressed {
+            self.pointer_appearance.press()
+        } else {
+            self.pointer_appearance.release()
+        };
+        if changed {
+            self.mark_dirty();
+        }
+        changed
+    }
+
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
         self.compositor
             .glyph_atlas

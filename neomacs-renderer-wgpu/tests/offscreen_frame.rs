@@ -9,10 +9,17 @@
 //!
 //! Skips (passes) cleanly where no GPU adapter is available.
 
+use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyphBuffer, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
+use neomacs_display_protocol::{
+    FrameRect, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
+    PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
+    PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion,
+    PresentedPrimitiveKind,
+};
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 
 const W: u32 = 96;
@@ -216,6 +223,272 @@ fn cursor_visible_false_suppresses_cursor() {
     }
     eprintln!("cursor_visible=false red pixels: {}", red);
     assert_eq!(red, 0, "cursor_visible=false must draw no cursor");
+}
+
+fn presented_pointer_integration_mouse_face_frame() -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.presentation_id = PresentationId::new(501);
+    frame.background = Color::rgb(0.05, 0.06, 0.07);
+    frame.set_face(
+        FaceId::new(1),
+        Color::WHITE,
+        Some(Color::rgb(0.1, 0.2, 0.8)),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    frame.add_char(' ', 16.0, 16.0, 48.0, 24.0, 18.0, false);
+    frame.set_face(
+        FaceId::new(2),
+        Color::BLACK,
+        Some(Color::rgb(0.9, 0.15, 0.1)),
+        700,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(16.0, 16.0, 48.0, 24.0).unwrap(),
+                None,
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Glyph,
+                    0,
+                    1,
+                    FrameRect::new(16.0, 16.0, 48.0, 24.0).unwrap(),
+                )],
+                PointerDrawMode::Face(FaceId::new(2)),
+                PointerDrawMode::Face(FaceId::new(2)),
+            )],
+        )
+        .unwrap();
+    frame
+}
+
+#[test]
+fn presented_pointer_integration_mouse_face_changes_pixels_and_leave_restores_base() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let frame = presented_pointer_integration_mouse_face_frame();
+    let presentation = frame.presentation_id;
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (24.0, 24.0),
+        None,
+        None,
+        None,
+    );
+    let base = read_back(&h);
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (24.0, 24.0),
+        None,
+        Some(PointerAppearanceSelection::new(
+            PointerAppearanceId::try_from(0usize).unwrap(),
+            PointerAppearancePhase::Hover,
+        )),
+        None,
+    );
+    let hovered = read_back(&h);
+
+    assert_eq!(
+        frame.presentation_id, presentation,
+        "hover does not publish a frame"
+    );
+    assert!(
+        hovered
+            .iter()
+            .zip(&base)
+            .any(|(hovered, base)| hovered != base),
+        "mouse-face must alter the rendered pixels"
+    );
+    let base_pixel = px(&base, 32, 24);
+    let hovered_pixel = px(&hovered, 32, 24);
+    assert!(
+        base_pixel[2] > base_pixel[0] && hovered_pixel[0] > hovered_pixel[2],
+        "expected blue base and red mouse-face pixels, got {base_pixel:?} -> {hovered_pixel:?}"
+    );
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (80.0, 50.0),
+        None,
+        None,
+        None,
+    );
+    let restored = read_back(&h);
+    assert_eq!(
+        restored, base,
+        "leaving restores byte-identical base rendering"
+    );
+}
+
+fn presented_pointer_integration_relief(pressed: bool, background: Color) -> PointerImageRelief {
+    let light = Color::rgb(0.95, 0.95, 0.95);
+    let dark = Color::rgb(0.08, 0.08, 0.08);
+    let (top_left, bottom_right) = if pressed {
+        (dark, light)
+    } else {
+        (light, dark)
+    };
+    PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        2.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(background, 4.0, 1.0),
+    )
+}
+
+fn presented_pointer_integration_image_frame() -> FrameGlyphBuffer {
+    let background = Color::rgb(0.05, 0.06, 0.07);
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.presentation_id = PresentationId::new(502);
+    frame.background = background;
+    frame.add_image(
+        neomacs_display_protocol::ImageId::new(77),
+        24.0,
+        20.0,
+        24.0,
+        24.0,
+    );
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                FrameRect::new(20.0, 16.0, 32.0, 32.0).unwrap(),
+                Some(neomacs_display_protocol::InteractionId::new(3)),
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![PresentedPaintSpan::new(
+                    PresentedPrimitiveKind::Image,
+                    0,
+                    1,
+                    FrameRect::new(24.0, 20.0, 24.0, 24.0).unwrap(),
+                )],
+                PointerDrawMode::ImageRelief(presented_pointer_integration_relief(
+                    false, background,
+                )),
+                PointerDrawMode::ImageRelief(presented_pointer_integration_relief(
+                    true, background,
+                )),
+            )],
+        )
+        .unwrap();
+    frame
+}
+
+fn pixel_luma(pixel: [u8; 4]) -> u16 {
+    u16::from(pixel[0]) + u16::from(pixel[1]) + u16::from(pixel[2])
+}
+
+#[test]
+fn presented_pointer_integration_image_relief_flips_edge_polarity_without_moving_content() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let pixels = [255_u8, 40, 180, 80].repeat(16 * 16);
+    h.renderer
+        .load_image_argb32_with_id(77, &pixels, 16, 16, 16 * 4);
+    let decode_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < decode_deadline {
+        h.renderer.process_pending_images();
+        if h.renderer.is_image_ready(77) {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    assert!(h.renderer.is_image_ready(77), "test image must decode");
+    let frame = presented_pointer_integration_image_frame();
+    let render = |h: &mut Harness, selection| {
+        h.renderer.render_frame_glyphs(
+            &h.view,
+            &frame,
+            &mut h.atlas,
+            W,
+            H,
+            false,
+            None,
+            (36.0, 32.0),
+            None,
+            selection,
+            None,
+        );
+        read_back(h)
+    };
+    let selection = |phase| {
+        Some(PointerAppearanceSelection::new(
+            PointerAppearanceId::try_from(0usize).unwrap(),
+            phase,
+        ))
+    };
+
+    let base = render(&mut h, None);
+    let raised = render(&mut h, selection(PointerAppearancePhase::Hover));
+    let sunken = render(&mut h, selection(PointerAppearancePhase::Pressed));
+    let restored = render(&mut h, None);
+
+    // GNU's thick-edge correction paints the outermost top/left pixel with
+    // the opposite shade, so sample the inner pixel of each 2px edge.
+    let raised_top = pixel_luma(px(&raised, 36, 21));
+    let raised_bottom = pixel_luma(px(&raised, 36, 42));
+    let sunken_top = pixel_luma(px(&sunken, 36, 21));
+    let sunken_bottom = pixel_luma(px(&sunken, 36, 42));
+    assert!(
+        raised_top > raised_bottom,
+        "raised top edge must be lighter than bottom: {raised_top} <= {raised_bottom}"
+    );
+    assert!(
+        sunken_top < sunken_bottom,
+        "sunken top edge must be darker than bottom: {sunken_top} >= {sunken_bottom}"
+    );
+    assert_eq!(
+        px(&raised, 36, 32),
+        px(&base, 36, 32),
+        "relief must not move or recolor interior image content"
+    );
+    assert_eq!(px(&sunken, 36, 32), px(&base, 36, 32));
+    assert_eq!(
+        restored, base,
+        "leaving restores byte-identical base pixels"
+    );
 }
 
 // Stage 4 core invariant: compositing (static-scene-without-cursor) + blit +

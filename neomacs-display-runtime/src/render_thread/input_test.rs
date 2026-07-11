@@ -10,8 +10,9 @@ use crate::render_thread::state::{
 use neomacs_display_protocol::frame_chrome::InteractionId;
 use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::{
-    FaceId, FrameRect, PointerAppearanceId,
-    PointerAppearancePhase as ProtocolPointerAppearancePhase, PointerDrawMode, PresentedPaintSpan,
+    Face, FaceId, FrameRect, ImageId, PointerAppearanceId,
+    PointerAppearancePhase as ProtocolPointerAppearancePhase, PointerDrawMode, PointerImageRelief,
+    PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan,
     PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
 };
 use winit::keyboard::{Key, NamedKey, SmolStr};
@@ -77,6 +78,235 @@ fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKe
         PresentationId::new(presentation),
         PointerAppearanceId::try_from(appearance).expect("appearance id"),
     )
+}
+
+fn presented_pointer_integration_relief(pressed: bool) -> PointerImageRelief {
+    let light = Color::new(0.85, 0.85, 0.85, 1.0);
+    let dark = Color::new(0.25, 0.25, 0.25, 1.0);
+    let (top_left, bottom_right) = if pressed {
+        (dark, light)
+    } else {
+        (light, dark)
+    };
+    PointerImageRelief::new(
+        top_left,
+        bottom_right,
+        1.0,
+        PointerReliefMargins::new(0.0, 0.0, 0.0, 0.0),
+        PointerReliefEdges::new(true, true, true, true),
+        PointerReliefCornerErase::new(Color::BLACK, 4.0, 1.0),
+    )
+}
+
+fn presented_pointer_integration_frame(presentation: u64) -> FrameGlyphBuffer {
+    let mut frame = FrameGlyphBuffer::with_size(140.0, 24.0);
+    frame.presentation_id = PresentationId::new(presentation);
+    frame
+        .faces
+        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
+    let mut hover = Face::new(FaceId::new(9));
+    hover.background = Color::rgb(0.8, 0.2, 0.1);
+    frame.faces.insert(FaceId::new(9), hover);
+    frame.add_char('T', 0.0, 0.0, 96.0, 24.0, 18.0, false);
+    frame.add_image(ImageId::new(1), 104.0, 4.0, 16.0, 16.0);
+    frame
+        .install_presented_pointer(
+            vec![
+                PresentedPointerRegion::new(
+                    FrameRect::new(0.0, 0.0, 80.0, 24.0).unwrap(),
+                    Some(InteractionId::new(1)),
+                    Some(PointerAppearanceId::try_from(0usize).unwrap()),
+                ),
+                PresentedPointerRegion::new(
+                    FrameRect::new(80.0, 0.0, 16.0, 24.0).unwrap(),
+                    Some(InteractionId::new(2)),
+                    Some(PointerAppearanceId::try_from(0usize).unwrap()),
+                ),
+                PresentedPointerRegion::new(
+                    FrameRect::new(100.0, 0.0, 24.0, 24.0).unwrap(),
+                    Some(InteractionId::new(3)),
+                    Some(PointerAppearanceId::try_from(1usize).unwrap()),
+                ),
+            ],
+            vec![
+                PresentedPointerAppearance::new(
+                    vec![PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Glyph,
+                        0,
+                        1,
+                        FrameRect::new(0.0, 0.0, 96.0, 24.0).unwrap(),
+                    )],
+                    PointerDrawMode::Face(FaceId::new(9)),
+                    PointerDrawMode::Face(FaceId::new(9)),
+                ),
+                PresentedPointerAppearance::new(
+                    vec![PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Image,
+                        1,
+                        1,
+                        FrameRect::new(104.0, 4.0, 16.0, 16.0).unwrap(),
+                    )],
+                    PointerDrawMode::ImageRelief(presented_pointer_integration_relief(false)),
+                    PointerDrawMode::ImageRelief(presented_pointer_integration_relief(true)),
+                ),
+            ],
+        )
+        .expect("valid integration pointer map");
+    frame
+}
+
+#[test]
+fn presented_pointer_integration_published_frame_drives_hover_press_leave_and_staleness() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(presented_pointer_integration_frame(70)), None);
+    render.set_dirty(false);
+
+    assert!(render.update_presented_pointer_motion(Some((0x42, 84.0, 10.0))));
+    let frame = render.compositor.current_frame.as_ref().unwrap();
+    let close = render.pointer_appearance.active().unwrap();
+    let close_selection = close.selection_for(frame).expect("current selection");
+    assert_eq!(close_selection.appearance().get(), 0);
+    assert_eq!(
+        frame
+            .presented_pointer()
+            .appearance(close_selection.appearance())
+            .unwrap()
+            .hover(),
+        PointerDrawMode::Face(FaceId::new(9)),
+        "the close hit activates the whole-tab face"
+    );
+    assert!(render.compositor.dirty);
+
+    render.set_dirty(false);
+    assert!(
+        !render.update_presented_pointer_motion(Some((0x42, 20.0, 10.0))),
+        "moving from close to body stays in the same whole-tab appearance"
+    );
+    assert!(!render.compositor.dirty);
+
+    assert!(render.update_presented_pointer_motion(Some((0x42, 110.0, 10.0))));
+    {
+        let frame = render.compositor.current_frame.as_ref().unwrap();
+        let plus_hover = render
+            .pointer_appearance
+            .active()
+            .unwrap()
+            .selection_for(frame)
+            .unwrap();
+        let plus = frame
+            .presented_pointer()
+            .appearance(plus_hover.appearance())
+            .unwrap();
+        assert_eq!(plus_hover.phase(), ProtocolPointerAppearancePhase::Hover);
+        assert_eq!(
+            plus.hover(),
+            PointerDrawMode::ImageRelief(presented_pointer_integration_relief(false))
+        );
+    }
+
+    assert!(render.update_presented_pointer_button(Some((0x42, 110.0, 10.0)), true));
+    let frame = render.compositor.current_frame.as_ref().unwrap();
+    let plus_pressed = render
+        .pointer_appearance
+        .active()
+        .unwrap()
+        .selection_for(frame)
+        .unwrap();
+    let plus = frame
+        .presented_pointer()
+        .appearance(plus_pressed.appearance())
+        .unwrap();
+    assert_eq!(
+        plus_pressed.phase(),
+        ProtocolPointerAppearancePhase::Pressed
+    );
+    assert_eq!(
+        plus.pressed(),
+        PointerDrawMode::ImageRelief(presented_pointer_integration_relief(true))
+    );
+    assert!(render.update_presented_pointer_button(Some((0x42, 110.0, 10.0)), false));
+
+    assert!(render.update_presented_pointer_motion(None));
+    assert_eq!(render.pointer_appearance.active(), None);
+    let retired = close;
+    render.set_current_frame(Some(presented_pointer_integration_frame(71)), None);
+    assert_eq!(
+        retired.selection_for(render.compositor.current_frame.as_ref().unwrap()),
+        None,
+        "a selection from the old presentation cannot paint the replacement"
+    );
+}
+
+#[test]
+fn presented_pointer_integration_root_and_child_use_the_published_target_snapshot() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    render.set_current_frame(Some(presented_pointer_integration_frame(80)), None);
+    let mut child = presented_pointer_integration_frame(81);
+    child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
+    child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
+    render.update_child_frame(child);
+
+    assert!(render.update_presented_pointer_motion(Some((0x99, 110.0, 10.0))));
+    assert_eq!(
+        render.pointer_appearance.active().unwrap().presentation(),
+        PresentationId::new(81)
+    );
+    assert!(render.update_presented_pointer_motion(Some((0x42, 20.0, 10.0))));
+    assert_eq!(
+        render.pointer_appearance.active().unwrap().presentation(),
+        PresentationId::new(80)
+    );
+}
+
+#[test]
+fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() {
+    let mut app = make_test_app(140, 24, 1.0);
+    let Some(render) = ensure_primary_frame(&mut app) else {
+        return;
+    };
+    render.set_emacs_frame_id(0x42);
+    render.set_current_frame(Some(presented_pointer_integration_frame(90)), None);
+    let window = app.frame_windows.primary_window_mut().unwrap();
+
+    let close = RenderApp::capture_tab_bar_press(window, 84.0, 10.0).unwrap();
+    let close_release = RenderApp::take_tab_bar_release_events(&mut window.render, 84.0, 10.0);
+    let add = RenderApp::capture_tab_bar_press(window, 110.0, 10.0).unwrap();
+    let add_release = RenderApp::take_tab_bar_release_events(&mut window.render, 110.0, 10.0);
+
+    assert!(matches!(
+        close,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
+            interaction: 2,
+            pressed: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        close_release.as_slice(),
+        [crate::thread_comm::InputEvent::PresentedPointer {
+            interaction: 2,
+            pressed: false,
+            ..
+        }]
+    ));
+    assert!(matches!(
+        add,
+        crate::thread_comm::InputEvent::PresentedPointer {
+            presentation: 90,
+            interaction: 3,
+            pressed: true,
+            ..
+        }
+    ));
+    assert!(matches!(
+        add_release.as_slice(),
+        [crate::thread_comm::InputEvent::PresentedPointer {
+            interaction: 3,
+            pressed: false,
+            ..
+        }]
+    ));
 }
 
 #[test]

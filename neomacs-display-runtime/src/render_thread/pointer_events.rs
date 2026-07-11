@@ -291,7 +291,7 @@ impl RenderApp {
         }
     }
 
-    fn capture_tab_bar_press(
+    pub(super) fn capture_tab_bar_press(
         window_state: &mut GuiFrameWindowState,
         x: f32,
         y: f32,
@@ -407,27 +407,16 @@ impl RenderApp {
                 let y = window_state.render.mouse_pos.1;
                 let pointer_owner = Self::pointer_owner(window_state, x, y);
                 if button == MouseButton::Left {
-                    let appearance = if window_state.render.pointer_inside {
+                    let target = if window_state.render.pointer_inside {
                         pointer_owner
                             .target()
-                            .and_then(|(local_x, local_y, target_frame_id)| {
-                                window_state
-                                    .render
-                                    .presented_pointer_hit(target_frame_id, local_x, local_y)
-                                    .and_then(|hit| hit.appearance_key())
-                            })
+                            .map(|(x, y, frame_id)| (frame_id, x, y))
                     } else {
                         None
                     };
-                    let mut visual_changed =
-                        window_state.render.pointer_appearance.hover(appearance);
-                    visual_changed |= match state {
-                        ElementState::Pressed => window_state.render.pointer_appearance.press(),
-                        ElementState::Released => window_state.render.pointer_appearance.release(),
-                    };
-                    if visual_changed {
-                        window_state.render.mark_dirty();
-                    }
+                    window_state
+                        .render
+                        .update_presented_pointer_button(target, state == ElementState::Pressed);
                 }
                 let popup_was_open = window_state.render.overlays.popup_menu.is_some();
                 if !popup_was_open && state == ElementState::Pressed && button == MouseButton::Left
@@ -1056,13 +1045,12 @@ impl RenderApp {
 
             let (ev_x, ev_y, target_fid) =
                 Self::pointer_target_for_frame_window(window_state, lx, ly);
-            let appearance = pointer_owner.target().and_then(|(x, y, frame_id)| {
-                window_state
-                    .render
-                    .presented_pointer_hit(frame_id, x, y)
-                    .and_then(|hit| hit.appearance_key())
-            });
-            dirty |= window_state.render.pointer_appearance.hover(appearance);
+            let appearance_target = pointer_owner
+                .target()
+                .map(|(x, y, frame_id)| (frame_id, x, y));
+            dirty |= window_state
+                .render
+                .update_presented_pointer_motion(appearance_target);
             if dirty {
                 window_state.render.mark_dirty();
             }
