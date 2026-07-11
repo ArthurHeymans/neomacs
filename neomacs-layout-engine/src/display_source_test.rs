@@ -336,6 +336,9 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
                 width: 64.0,
                 height: 32.0,
                 ascent: 32.0,
+                horizontal_margin: 0.0,
+                vertical_margin: 0.0,
+                opaque_background: None,
             }))
         } else {
             None

@@ -329,6 +329,9 @@ fn display_replacement_property_accepts_only_matching_media_replacements() {
         width: 10.0,
         height: 20.0,
         ascent: 20.0,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
     });
     let video = DisplayMediaReplacement::video(DisplayVideoItem {
         video_id: 2,

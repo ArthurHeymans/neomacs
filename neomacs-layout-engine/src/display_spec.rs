@@ -54,6 +54,14 @@ pub(crate) struct DisplayImageLayout {
     pub(crate) request: ImageResolveRequest,
     pub(crate) scale: f32,
     pub(crate) ascent: DisplayImageAscentPolicy,
+    pub(crate) margin: DisplayImageMargin,
+    pub(crate) opaque_background: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DisplayImageMargin {
+    pub(crate) horizontal: f32,
+    pub(crate) vertical: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,8 +165,10 @@ pub(crate) fn parse_display_image_layout(
     let mut max_height = 0u32;
     let mut scale = 1.0f32;
     let mut ascent = DisplayImageAscentPolicy::default();
+    let mut margin = DisplayImageMargin::default();
     let mut fg_color = default_fg;
     let mut bg_color = default_bg;
+    let mut opaque_background = None;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -187,11 +197,17 @@ pub(crate) fn parse_display_image_layout(
             Some(ImageSpecKey::Ascent) => {
                 ascent = parse_image_ascent(value).unwrap_or(ascent);
             }
+            Some(ImageSpecKey::Margin) => {
+                margin = parse_image_margin(value).unwrap_or(margin);
+            }
             Some(ImageSpecKey::Foreground) => {
                 fg_color = parse_image_color_pixel(value).unwrap_or(fg_color);
             }
             Some(ImageSpecKey::Background) => {
-                bg_color = parse_image_color_pixel(value).unwrap_or(bg_color);
+                if let Some(pixel) = parse_image_color_pixel(value) {
+                    bg_color = pixel;
+                    opaque_background = Some(pixel);
+                }
             }
             _ => {}
         }
@@ -208,6 +224,30 @@ pub(crate) fn parse_display_image_layout(
         },
         scale,
         ascent,
+        margin,
+        opaque_background,
+    })
+}
+
+fn parse_image_margin(value: Value) -> Option<DisplayImageMargin> {
+    let component = |value: Value| {
+        value
+            .as_int()
+            .filter(|value| *value >= 0)
+            .map(|value| value as f32)
+    };
+    if let Some(margin) = component(value) {
+        return Some(DisplayImageMargin {
+            horizontal: margin,
+            vertical: margin,
+        });
+    }
+    if !value.is_cons() {
+        return None;
+    }
+    Some(DisplayImageMargin {
+        horizontal: component(value.cons_car())?,
+        vertical: component(value.cons_cdr())?,
     })
 }
 
@@ -582,6 +622,67 @@ mod tests {
         assert_eq!(
             parsed_image_ascent(Some(Value::make_float(75.0))),
             DisplayImageAscentPolicy::Percent(50.0)
+        );
+    }
+
+    #[test]
+    fn image_margin_preserves_gnu_scalar_and_pair_geometry() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let scalar = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("margin"),
+            Value::fixnum(2),
+        ]);
+        let pair = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("margin"),
+            Value::cons(Value::fixnum(3), Value::fixnum(4)),
+        ]);
+
+        assert_eq!(
+            parse_display_image_layout(&scalar, 0, 0).unwrap().margin,
+            DisplayImageMargin {
+                horizontal: 2.0,
+                vertical: 2.0,
+            }
+        );
+        assert_eq!(
+            parse_display_image_layout(&pair, 0, 0).unwrap().margin,
+            DisplayImageMargin {
+                horizontal: 3.0,
+                vertical: 4.0,
+            }
+        );
+    }
+
+    #[test]
+    fn image_background_retains_only_an_explicit_opaque_color() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let explicit = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("background"),
+            Value::string("#123456"),
+        ]);
+
+        assert_eq!(
+            parse_display_image_layout(&explicit, 0, 0)
+                .unwrap()
+                .opaque_background,
+            Some(0x12_34_56)
+        );
+        assert_eq!(
+            parse_display_image_layout(&image_spec(None), 0, 0)
+                .unwrap()
+                .opaque_background,
+            None
         );
     }
 

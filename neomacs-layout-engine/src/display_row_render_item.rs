@@ -8,13 +8,21 @@ use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 impl DisplayMediaReplacement {
     fn pending_media(self, start: DisplayRowPosition) -> PendingDisplayRowMedia {
+        let (horizontal_margin, vertical_margin) = match self.kind {
+            crate::display_item::DisplayMediaReplacementKind::Image {
+                horizontal_margin,
+                vertical_margin,
+                ..
+            } => (horizontal_margin, vertical_margin),
+            _ => (0.0, 0.0),
+        };
         PendingDisplayRowMedia {
             kind: self.kind.into(),
-            x: start.x_px(),
+            x: start.x_px() + horizontal_margin,
             col: start.col().min(usize::from(u16::MAX)) as u16,
-            width: self.width,
-            height: self.height,
-            ascent: self.ascent,
+            width: self.width - 2.0 * horizontal_margin,
+            height: self.height - 2.0 * vertical_margin,
+            ascent: self.ascent - vertical_margin,
         }
     }
 }
@@ -109,6 +117,51 @@ fn clipped_display_item_remainder(
             })
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::display_item::{DisplayImageItem, DisplayMediaReplacementKind};
+
+    #[test]
+    fn image_margin_expands_the_slot_but_keeps_media_bounds_on_image_content() {
+        let replacement = DisplayMediaReplacement::image(DisplayImageItem {
+            image_id: 7,
+            width: 20.0,
+            height: 10.0,
+            ascent: 8.0,
+            horizontal_margin: 3.0,
+            vertical_margin: 2.0,
+            opaque_background: Some(0x12_34_56),
+        });
+        assert_eq!(replacement.width, 26.0);
+        assert_eq!(replacement.height, 14.0);
+        assert_eq!(replacement.ascent, 10.0);
+
+        let medium = replacement
+            .pending_media(DisplayRowPosition::new(11.0, 4))
+            .place_on_baseline(30.0);
+        assert_eq!(
+            (medium.x, medium.y, medium.width, medium.height),
+            (14.0, 22.0, 20.0, 10.0)
+        );
+        assert_eq!(
+            medium.kind,
+            crate::display_row_render_state::RenderedDisplayRowMediaKind::Image {
+                image_id: 7,
+                opaque_background: Some(0x12_34_56),
+            }
+        );
+        assert!(matches!(
+            replacement.kind,
+            DisplayMediaReplacementKind::Image {
+                horizontal_margin: 3.0,
+                vertical_margin: 2.0,
+                ..
+            }
+        ));
     }
 }
 

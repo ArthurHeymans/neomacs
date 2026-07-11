@@ -626,6 +626,9 @@ pub(crate) struct DisplayImageItem {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
+    pub(crate) horizontal_margin: f32,
+    pub(crate) vertical_margin: f32,
+    pub(crate) opaque_background: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -656,6 +659,9 @@ pub(crate) struct DisplayMediaReplacement {
 pub(crate) enum DisplayMediaReplacementKind {
     Image {
         image_id: u32,
+        horizontal_margin: f32,
+        vertical_margin: f32,
+        opaque_background: Option<u32>,
     },
     Video {
         video_id: u32,
@@ -682,13 +688,18 @@ impl DisplayMediaReplacement {
     }
 
     pub(crate) fn image(image: DisplayImageItem) -> Self {
+        let horizontal_margin = display_replacement_margin(image.horizontal_margin);
+        let vertical_margin = display_replacement_margin(image.vertical_margin);
         Self {
             kind: DisplayMediaReplacementKind::Image {
                 image_id: image.image_id.max(0) as u32,
+                horizontal_margin,
+                vertical_margin,
+                opaque_background: image.opaque_background,
             },
-            width: display_replacement_dimension(image.width),
-            height: display_replacement_dimension(image.height),
-            ascent: display_replacement_ascent(image.ascent),
+            width: display_replacement_dimension(image.width) + 2.0 * horizontal_margin,
+            height: display_replacement_dimension(image.height) + 2.0 * vertical_margin,
+            ascent: display_replacement_ascent(image.ascent) + vertical_margin,
         }
     }
 
@@ -722,6 +733,14 @@ fn display_replacement_dimension(value: f32) -> f32 {
         value.max(1.0)
     } else {
         1.0
+    }
+}
+
+fn display_replacement_margin(value: f32) -> f32 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
     }
 }
 

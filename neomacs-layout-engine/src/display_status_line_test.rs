@@ -3,10 +3,13 @@ use crate::display_item::DisplaySourcePosition;
 use crate::display_row::DisplayRowFace;
 use crate::display_row_builder::DisplayRowGlyphSlot;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
-use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
+use crate::display_row_render_state::{
+    DisplayRowOutputProgress, RenderedDisplayRow, RenderedDisplayRowMedia,
+    RenderedDisplayRowMediaKind,
+};
 use neomacs_display_protocol::frame_chrome::ChromeAction;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
 use neomacs_display_protocol::{
     Color, FaceId, FrameGlyphBuffer, FrameRect, ImageId, PointerDrawMode, PointerImageRelief,
     PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
@@ -252,12 +255,14 @@ fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
             caption: Value::string("ab"),
             key: Value::symbol("tab-1"),
             binding: Value::symbol("tab-bar-select-tab"),
+            enabled: true,
             char_range: 0..2,
         },
         TabBarSourceItem {
             caption: Value::string("cd"),
             key: Value::symbol("add-tab"),
             binding: Value::symbol("tab-bar-new-tab"),
+            enabled: true,
             char_range: 2..4,
         },
     ];
@@ -311,14 +316,7 @@ fn test_tab_pointer_relief(raised: bool) -> PointerImageRelief {
 
 #[test]
 fn tab_bar_pointer_appearance_resolves_gnu_pgtk_relief_parameters() {
-    let style = gnu_tab_bar_pointer_appearance_style(
-        FaceId::new(33),
-        0x00808080,
-        0x00112233,
-        3.0,
-        2.0,
-        4.0,
-    );
+    let style = gnu_tab_bar_pointer_appearance_style(0x00808080, 0x00112233, 3.0, 2.0, 4.0);
     let raised = style.raised;
     let sunken = style.sunken;
 
@@ -340,15 +338,81 @@ fn tab_bar_pointer_appearance_resolves_gnu_pgtk_relief_parameters() {
 }
 
 #[test]
-fn tab_bar_pointer_appearance_preserves_configured_zero_relief() {
-    let style = gnu_tab_bar_pointer_appearance_style(
-        FaceId::new(33),
-        0x00808080,
-        0x00112233,
-        1.0,
-        1.0,
-        0.0,
+fn image_relief_background_uses_gnu_box_image_face_precedence() {
+    assert_eq!(
+        gnu_image_relief_background(Some(Color::RED), Some(0x00_22_33_44), Color::BLUE),
+        0x00_ff_00_00,
+        "a face box supplies GNU's shadow color source first",
     );
+    assert_eq!(
+        gnu_image_relief_background(None, Some(0x00_22_33_44), Color::BLUE),
+        0x00_22_33_44,
+        "an opaque image background wins when the face has no box shadow source",
+    );
+    assert_eq!(
+        gnu_image_relief_background(None, None, Color::BLUE),
+        0x00_00_00_ff,
+        "transparent images fall back to the glyph face background",
+    );
+}
+
+#[test]
+fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
+    let face_background = FaceId::new(40);
+    let face_box = FaceId::new(41);
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.glyphs[GlyphArea::Text.index()] = vec![
+        Glyph::char(' ', face_background, 0),
+        Glyph::char(' ', face_box, 1),
+        Glyph::char(' ', face_background, 2),
+    ];
+    let mut background = neomacs_display_protocol::face::Face::default();
+    background.id = face_background;
+    background.background = Color::BLUE;
+    let mut boxed = background.clone();
+    boxed.id = face_box;
+    boxed.box_color = Some(Color::RED);
+    let media = |col, opaque_background| RenderedDisplayRowMedia {
+        kind: RenderedDisplayRowMediaKind::Image {
+            image_id: u32::from(col),
+            opaque_background,
+        },
+        x: f32::from(col) * 8.0,
+        y: 0.0,
+        col,
+        width: 8.0,
+        height: 8.0,
+    };
+    let rendered = RenderedDisplayRow::new(
+        row,
+        DisplayRowOutputProgress::new(24.0, 3, 0.0, 18.0),
+        Vec::new(),
+        vec![background, boxed],
+        vec![
+            media(0, Some(0x12_34_56)),
+            media(1, Some(0x22_33_44)),
+            media(2, None),
+        ],
+    );
+
+    let styles = tab_bar_image_relief_styles(&rendered, 0, 0xaa_bb_cc, 2.0, 3.0, 1.0);
+    assert_eq!(
+        styles[0].1,
+        gnu_tab_bar_pointer_appearance_style(0x12_34_56, 0xaa_bb_cc, 2.0, 3.0, 1.0)
+    );
+    assert_eq!(
+        styles[1].1,
+        gnu_tab_bar_pointer_appearance_style(0xff_00_00, 0xaa_bb_cc, 2.0, 3.0, 1.0)
+    );
+    assert_eq!(
+        styles[2].1,
+        gnu_tab_bar_pointer_appearance_style(0x00_00_ff, 0xaa_bb_cc, 2.0, 3.0, 1.0)
+    );
+}
+
+#[test]
+fn tab_bar_pointer_appearance_preserves_configured_zero_relief() {
+    let style = gnu_tab_bar_pointer_appearance_style(0x00808080, 0x00112233, 1.0, 1.0, 0.0);
 
     assert_eq!(style.raised.thickness(), 0.0);
     assert_eq!(style.sunken.thickness(), 0.0);
@@ -439,6 +503,7 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
         caption,
         key: Value::symbol("tab-1"),
         binding: Value::symbol("tab-bar-select-tab"),
+        enabled: true,
         char_range: 0..2,
     }];
     let highlight = FaceId::new(33);
@@ -450,10 +515,11 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
         &items,
         18.0,
         TabBarPointerAppearanceStyle::new(
-            highlight,
             test_tab_pointer_relief(true),
             test_tab_pointer_relief(false),
         ),
+        &[],
+        &[(Value::symbol("tab-bar-tab-highlight"), highlight)],
     );
     let mut frame = tab_pointer_test_frame(highlight);
     plan.install_into(&mut frame, FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
@@ -468,6 +534,19 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
         .appearance(body.appearance().unwrap())
         .unwrap();
     assert_eq!(appearance.paint_spans().len(), 2);
+    assert!(
+        appearance
+            .paint_spans()
+            .iter()
+            .all(|span| span.kind() == PresentedPrimitiveKind::Glyph),
+        "GNU DRAW_MOUSE_FACE applies the whole-tab face to the replacement image's backing glyph; the close image pixels remain the normal image",
+    );
+    assert!(
+        frame
+            .glyphs
+            .iter()
+            .any(|glyph| matches!(glyph, FrameGlyph::Image { .. }))
+    );
     assert_eq!(appearance.hover(), PointerDrawMode::Face(highlight));
     assert_eq!(appearance.pressed(), PointerDrawMode::Face(highlight));
 }
@@ -495,6 +574,7 @@ fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief()
         caption,
         key: Value::symbol("add-tab"),
         binding: Value::symbol("tab-bar-new-tab"),
+        enabled: true,
         char_range: 0..1,
     }];
     let raised = test_tab_pointer_relief(true);
@@ -507,7 +587,9 @@ fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief()
         caption,
         &items,
         18.0,
-        TabBarPointerAppearanceStyle::new(highlight, raised, sunken),
+        TabBarPointerAppearanceStyle::new(raised, sunken),
+        &[],
+        &[],
     );
     let mut frame = tab_pointer_test_frame(highlight);
     plan.install_into(&mut frame, FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
@@ -559,11 +641,13 @@ fn built_tab_bar_preserves_concatenated_caption_ranges() {
                 caption: Value::string("ab"),
                 key: Value::symbol("tab-1"),
                 binding: Value::symbol("ignore"),
+                enabled: true,
             },
             TabBarDisplayEntry {
                 caption: Value::string("cde"),
                 key: Value::symbol("add-tab"),
                 binding: Value::symbol("tab-bar-new-tab"),
+                enabled: true,
             },
         ],
     };
@@ -660,7 +744,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
 
 #[test]
 fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
-    let _eval = Context::new();
+    let mut eval = Context::new();
     let keymap = Value::list(vec![
         KeymapMarker::Keymap.symbol_value(),
         Value::list(vec![
@@ -675,6 +759,8 @@ fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
                 KeymapMarker::MenuItem.symbol_value(),
                 Value::string("Two"),
                 Value::symbol("select-two"),
+                Value::keyword(":enable"),
+                Value::NIL,
             ]),
         ),
         Value::list(vec![KeymapMarker::Keymap.symbol_value()]),
@@ -685,7 +771,7 @@ fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
         ]),
     ]);
 
-    let source = TabBarDisplaySource::from_keymap(keymap).expect("tab-bar source");
+    let source = TabBarDisplaySource::from_keymap(&mut eval, keymap).expect("tab-bar source");
 
     assert_eq!(
         source
@@ -711,6 +797,141 @@ fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
             .collect::<Vec<_>>(),
         vec![Value::symbol("select-one"), Value::symbol("select-two")]
     );
+    assert_eq!(
+        source
+            .entries
+            .iter()
+            .map(|entry| entry.enabled)
+            .collect::<Vec<_>>(),
+        vec![true, false]
+    );
+}
+
+#[test]
+fn tab_bar_pointer_appearance_uses_each_effective_mouse_face_and_skips_invalid_face() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let presentation = eval.begin_interaction_presentation();
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(24.0, 3, 0.0, 18.0),
+        vec![
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 8.0, 1),
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 1, 1), 8.0, 1, 8.0, 1),
+            DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 2, 2), 16.0, 2, 8.0, 1),
+        ],
+        Vec::new(),
+        Vec::new(),
+    );
+    let text = Value::string_with_text_properties(
+        "abc",
+        vec![
+            neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![Value::symbol("mouse-face"), Value::symbol("custom-a")]),
+            },
+            neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![Value::symbol("mouse-face"), Value::symbol("custom-b")]),
+            },
+            neovm_core::emacs_core::value::StringTextPropertyRun {
+                start: 2,
+                end: 3,
+                plist: Value::list(vec![Value::symbol("mouse-face"), Value::fixnum(99)]),
+            },
+        ],
+    );
+    let item = TabBarSourceItem {
+        caption: text,
+        key: Value::symbol("tab-1"),
+        binding: Value::symbol("ignore"),
+        char_range: 0..3,
+        enabled: true,
+    };
+    let face_a = FaceId::new(40);
+    let face_b = FaceId::new(41);
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &rendered,
+        text,
+        &[item],
+        18.0,
+        TabBarPointerAppearanceStyle::new(
+            test_tab_pointer_relief(true),
+            test_tab_pointer_relief(false),
+        ),
+        &[],
+        &[
+            (Value::symbol("custom-a"), face_a),
+            (Value::symbol("custom-b"), face_b),
+        ],
+    );
+    let source = plan
+        .into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+        .unwrap();
+
+    assert_eq!(source.appearances().len(), 2);
+    assert_eq!(
+        source.appearances()[0].hover(),
+        PointerDrawMode::Face(face_a)
+    );
+    assert_eq!(
+        source.appearances()[1].hover(),
+        PointerDrawMode::Face(face_b)
+    );
+    assert!(source.regions()[2].appearance().is_none());
+    assert!(source.regions()[2].interaction().is_some());
+}
+
+#[test]
+fn disabled_tab_bar_item_publishes_no_pointer_behavior() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let rendered = RenderedDisplayRow::new(
+        GlyphRow::new(GlyphRowRole::TabBar),
+        DisplayRowOutputProgress::new(8.0, 1, 0.0, 18.0),
+        vec![DisplayRowGlyphSlot::new(
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+            0.0,
+            0,
+            8.0,
+            1,
+        )],
+        Vec::new(),
+        Vec::new(),
+    );
+    let text = Value::string("x");
+    let item = TabBarSourceItem {
+        caption: text,
+        key: Value::symbol("add-tab"),
+        binding: Value::symbol("tab-bar-new-tab"),
+        char_range: 0..1,
+        enabled: false,
+    };
+    let presentation = eval.begin_interaction_presentation();
+    let plan = tab_bar_presented_pointer_plan(
+        &mut eval,
+        presentation,
+        &rendered,
+        text,
+        &[item],
+        18.0,
+        TabBarPointerAppearanceStyle::new(
+            test_tab_pointer_relief(true),
+            test_tab_pointer_relief(false),
+        ),
+        &[],
+        &[],
+    );
+    assert!(plan.hit_regions().is_empty());
+    assert!(
+        plan.into_source_map(FrameRect::new(0.0, 0.0, 80.0, 18.0).unwrap())
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -722,11 +943,13 @@ fn tab_bar_display_source_builds_concat_text_and_preserves_items() {
                 caption: Value::string("One"),
                 key: Value::symbol("tab-1"),
                 binding: Value::symbol("ignore"),
+                enabled: true,
             },
             TabBarDisplayEntry {
                 caption: Value::string("Two"),
                 key: Value::symbol("tab-2"),
                 binding: Value::symbol("ignore"),
+                enabled: true,
             },
         ],
     };

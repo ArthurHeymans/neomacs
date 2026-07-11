@@ -69,6 +69,9 @@ fn display_item_inline_media_slots_are_source_neutral() {
             width: 64.0,
             height: 32.0,
             ascent: 32.0,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
         })),
     );
     let video = DisplayItem::new(
@@ -99,6 +102,9 @@ fn display_item_inline_media_slots_are_source_neutral() {
             width: 64.0,
             height: 32.0,
             ascent: 32.0,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
         }))
     );
     assert_eq!(

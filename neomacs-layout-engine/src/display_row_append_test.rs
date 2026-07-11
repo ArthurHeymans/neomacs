@@ -10351,6 +10351,9 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
         width: 64.0,
         height: 10.0,
         ascent: 10.0,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
     });
 
     let ordinary = DisplayReplacementMediaSourceItem::new(
@@ -10436,6 +10439,9 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
             width: 64.0,
             height: 10.0,
             ascent: 10.0,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
         }),
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),
@@ -11055,6 +11061,9 @@ fn display_replacement_append_context_installs_image_replacements() {
             width: 64.0,
             height: 32.0,
             ascent: 32.0,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
         }),
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),

@@ -260,7 +260,7 @@ fn image_relief_flips_light_and_dark_edges_inside_unchanged_quad() {
 }
 
 #[test]
-fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection() {
+fn image_relief_expands_outward_by_resolved_margins_and_does_not_edge_a_clipped_subsection() {
     let top_left = Color::RED;
     let bottom_right = Color::BLUE;
     let spec = PointerImageRelief::new(
@@ -276,15 +276,15 @@ fn image_relief_honors_resolved_geometry_and_does_not_edge_a_clipped_subsection(
         .into_iter()
         .collect::<Vec<_>>();
     assert_eq!(edges.len(), 3);
-    assert_eq!(edges[0].bounds(), (35.0, 22.0, 2.0, 18.0));
+    assert_eq!(edges[0].bounds(), (41.0, 18.0, 2.0, 30.0));
     assert_eq!(edges[0].color(), bottom_right);
-    assert_eq!(edges[1].bounds(), (11.0, 22.0, 26.0, 2.0));
+    assert_eq!(edges[1].bounds(), (9.0, 18.0, 34.0, 2.0));
     assert_eq!(
         edges[1].corners(),
-        [[11.0, 22.0], [37.0, 22.0], [35.0, 24.0], [11.0, 24.0]]
+        [[9.0, 18.0], [43.0, 18.0], [41.0, 20.0], [9.0, 20.0]]
     );
     assert_eq!(edges[1].color(), top_left);
-    assert_eq!(edges[2].bounds(), (11.0, 22.0, 26.0, 1.0));
+    assert_eq!(edges[2].bounds(), (9.0, 18.0, 34.0, 1.0));
     assert_eq!(edges[2].color(), bottom_right);
 
     let vertical_only = PointerImageRelief::new(

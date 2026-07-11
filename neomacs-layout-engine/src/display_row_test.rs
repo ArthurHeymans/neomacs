@@ -1652,7 +1652,10 @@ fn render_lisp_string_row_centers_image_on_text_centerline() {
     assert_eq!(
         rendered.media(),
         vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Image { image_id: 42 },
+            kind: RenderedDisplayRowMediaKind::Image {
+                image_id: 42,
+                opaque_background: None,
+            },
             x: 8.0,
             y: 5.0,
             col: 1,
@@ -1687,7 +1690,10 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
     assert_eq!(
         rendered.media(),
         vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Image { image_id: 42 },
+            kind: RenderedDisplayRowMediaKind::Image {
+                image_id: 42,
+                opaque_background: None,
+            },
             x: 8.0,
             y: 4.0,
             col: 1,
@@ -3666,7 +3672,10 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
             Vec::new(),
             vec![face],
             vec![RenderedDisplayRowMedia {
-                kind: RenderedDisplayRowMediaKind::Image { image_id: 77 },
+                kind: RenderedDisplayRowMediaKind::Image {
+                    image_id: 77,
+                    opaque_background: None,
+                },
                 x: 0.0,
                 y: 0.0,
                 col: 0,

@@ -10,7 +10,7 @@ use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     ResizeMiniWindowsMode, ScratchGcRootScope, TabBarPresentedPointerPlan, build_tab_bar_display,
     gnu_tab_bar_pointer_appearance_style, max_mini_window_lines_from_value,
-    tab_bar_presented_pointer_plan,
+    tab_bar_effective_mouse_faces, tab_bar_image_relief_styles, tab_bar_presented_pointer_plan,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
@@ -1656,28 +1656,41 @@ impl LayoutEngine {
         let FrameTabBarDisplayRowRender::Measured(measured) = rendered_tab_bar else {
             return None;
         };
-        let mut highlight_face = face_resolver.resolve_named_face("tab-bar-tab-highlight");
-        let highlight_face_id = if highlight_face.face_id == BasicFaceId::SENTINEL {
-            face_ids.allocate()
-        } else {
-            FaceId::new(highlight_face.face_id)
-        };
-        highlight_face.face_id = highlight_face_id.get();
-        let realized_highlight = DisplayRowFaceRealizer::new(&mut self.font_metrics).realize_face(
-            highlight_face_id,
-            &highlight_face,
-            metrics.char_width(),
-            metrics.ascent(),
-            metrics.row_height(),
-        );
-        self.frame_output
-            .install_pointer_face(highlight_face_id, realized_highlight.render_face());
+        let effective_mouse_faces =
+            tab_bar_effective_mouse_faces(evaluator, measured.rendered(), tab_bar.text);
+        let mut realized_mouse_faces = Vec::new();
+        for value in effective_mouse_faces {
+            let Some(mut resolved) = face_resolver.resolve_face_value_over(&tab_bar_face, &value)
+            else {
+                continue;
+            };
+            let face_id = face_ids.allocate();
+            resolved.face_id = face_id.get();
+            resolved.lisp_name = value.as_symbol_name().map(str::to_owned);
+            let realized = DisplayRowFaceRealizer::new(&mut self.font_metrics).realize_face(
+                face_id,
+                &resolved,
+                metrics.char_width(),
+                metrics.ascent(),
+                metrics.row_height(),
+            );
+            self.frame_output
+                .install_pointer_face(face_id, realized.render_face());
+            realized_mouse_faces.push((value, face_id));
+        }
         face_ids.finish_into(&mut self.frame_face_id_counter);
         let actual_tab_bar_height = measured.bounds().height;
         let (horizontal_margin, vertical_margin, thickness) =
             tab_bar_button_relief_geometry(evaluator);
         let pointer_style = gnu_tab_bar_pointer_appearance_style(
-            highlight_face_id,
+            tab_bar_face.bg,
+            frame_params.background,
+            horizontal_margin,
+            vertical_margin,
+            thickness,
+        );
+        let image_styles = tab_bar_image_relief_styles(
+            measured.rendered(),
             tab_bar_face.bg,
             frame_params.background,
             horizontal_margin,
@@ -1692,6 +1705,8 @@ impl LayoutEngine {
             &tab_bar.source_items,
             actual_tab_bar_height,
             pointer_style,
+            &image_styles,
+            &realized_mouse_faces,
         );
         let hit_regions = pointer_plan.hit_regions().to_vec();
         self.frame_output.add_frame_chrome_band(

@@ -33,7 +33,9 @@ use crate::display_row_measured_state::{
 };
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
-use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
+use crate::display_row_render_state::{
+    DisplayRowRenderIntoRowResult, RenderedDisplayRow, RenderedDisplayRowMediaKind,
+};
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
@@ -55,7 +57,7 @@ use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
-use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
+use neovm_core::emacs_core::keymap::{KeymapMarker, MenuItemProperty, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
 use neovm_core::window::{FrameId, WindowId};
@@ -1091,7 +1093,7 @@ pub(crate) fn eval_status_line_format_value(
     }
 }
 
-fn tab_bar_menu_item(entry: Value) -> Option<(Value, Value, Value)> {
+fn tab_bar_menu_item(entry: Value) -> Option<(Value, Value, Value, Value)> {
     if let Some(items) = list_to_vec(&entry)
         && items
             .get(1)
@@ -1099,9 +1101,14 @@ fn tab_bar_menu_item(entry: Value) -> Option<(Value, Value, Value)> {
     {
         let caption = *items.get(2)?;
         let binding = *items.get(3)?;
-        return caption
-            .is_string()
-            .then_some((*items.first()?, caption, binding));
+        return caption.is_string().then(|| {
+            (
+                *items.first().expect("checked item key"),
+                caption,
+                binding,
+                Value::list(items[4..].to_vec()),
+            )
+        });
     }
 
     if !entry.is_cons() {
@@ -1117,9 +1124,29 @@ fn tab_bar_menu_item(entry: Value) -> Option<(Value, Value, Value)> {
     }
     let caption = *items.get(1)?;
     let binding = *items.get(2)?;
-    caption
-        .is_string()
-        .then_some((entry.cons_car(), caption, binding))
+    caption.is_string().then(|| {
+        (
+            entry.cons_car(),
+            caption,
+            binding,
+            Value::list(items[3..].to_vec()),
+        )
+    })
+}
+
+fn tab_bar_item_enabled(evaluator: &mut Context, plist: Value) -> bool {
+    let Some(items) = list_to_vec(&plist) else {
+        return true;
+    };
+    items
+        .chunks_exact(2)
+        .find(|pair| MenuItemProperty::Enable.is_value(pair[0]))
+        .map(|pair| {
+            evaluator
+                .eval_form(pair[1])
+                .is_ok_and(|value| !value.is_nil())
+        })
+        .unwrap_or(true)
 }
 
 #[derive(Clone)]
@@ -1128,6 +1155,7 @@ pub(crate) struct TabBarSourceItem {
     pub(crate) key: Value,
     pub(crate) binding: Value,
     pub(crate) char_range: Range<usize>,
+    pub(crate) enabled: bool,
 }
 
 pub(crate) struct BuiltTabBar {
@@ -1152,7 +1180,7 @@ impl TabBarDisplayBuildRequest {
 
         let restore = TabBarDisplaySelectionRestore::activate(evaluator, FrameId(self.frame_id))?;
         let result = Self::make_keymap(evaluator)
-            .and_then(TabBarDisplaySource::from_keymap)
+            .and_then(|keymap| TabBarDisplaySource::from_keymap(evaluator, keymap))
             .and_then(|source| source.into_built_tab_bar(evaluator));
         if let Some(tab_bar) = &result {
             gc_roots.root(tab_bar.text);
@@ -1223,10 +1251,11 @@ struct TabBarDisplayEntry {
     caption: Value,
     key: Value,
     binding: Value,
+    enabled: bool,
 }
 
 impl TabBarDisplaySource {
-    fn from_keymap(keymap: Value) -> Option<Self> {
+    fn from_keymap(evaluator: &mut Context, keymap: Value) -> Option<Self> {
         let keymap_entries = list_to_vec(&keymap)?;
         let mut display_entries = Vec::new();
         for (index, entry) in keymap_entries.iter().enumerate() {
@@ -1238,11 +1267,12 @@ impl TabBarDisplaySource {
                 break;
             }
 
-            if let Some((key, caption, binding)) = tab_bar_menu_item(*entry) {
+            if let Some((key, caption, binding, plist)) = tab_bar_menu_item(*entry) {
                 display_entries.push(TabBarDisplayEntry {
                     caption,
                     key,
                     binding,
+                    enabled: tab_bar_item_enabled(evaluator, plist),
                 });
             }
         }
@@ -1275,6 +1305,7 @@ impl TabBarDisplaySource {
                 key: entry.key,
                 binding: entry.binding,
                 char_range,
+                enabled: entry.enabled,
             })
             .collect();
         let mut concat_form = Vec::with_capacity(self.entries.len() + 1);
@@ -1313,6 +1344,24 @@ fn tab_bar_mouse_face_at(evaluator: &mut Context, text: Value, char_index: usize
         .unwrap_or(Value::NIL)
 }
 
+pub(crate) fn tab_bar_effective_mouse_faces(
+    evaluator: &mut Context,
+    rendered: &RenderedDisplayRow,
+    text: Value,
+) -> Vec<Value> {
+    let mut faces = Vec::new();
+    for slot in rendered.source_slots() {
+        let Some(char_index) = slot.source().lisp_string_char_index() else {
+            continue;
+        };
+        let face = tab_bar_mouse_face_at(evaluator, text, char_index);
+        if !face.is_nil() && !faces.contains(&face) {
+            faces.push(face);
+        }
+    }
+    faces
+}
+
 fn tab_bar_posn_string(
     evaluator: &mut Context,
     item: &TabBarSourceItem,
@@ -1336,22 +1385,13 @@ fn tab_bar_posn_string(
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TabBarPointerAppearanceStyle {
-    mouse_face: FaceId,
     raised: PointerImageRelief,
     sunken: PointerImageRelief,
 }
 
 impl TabBarPointerAppearanceStyle {
-    pub(crate) const fn new(
-        mouse_face: FaceId,
-        raised: PointerImageRelief,
-        sunken: PointerImageRelief,
-    ) -> Self {
-        Self {
-            mouse_face,
-            raised,
-            sunken,
-        }
+    pub(crate) const fn new(raised: PointerImageRelief, sunken: PointerImageRelief) -> Self {
+        Self { raised, sunken }
     }
 }
 
@@ -1389,7 +1429,6 @@ fn gnu_relief_color(background: u32, factor: f64, delta: u16) -> Color {
 }
 
 pub(crate) fn gnu_tab_bar_pointer_appearance_style(
-    mouse_face: FaceId,
     relief_background: u32,
     frame_background: u32,
     horizontal_margin: f32,
@@ -1411,10 +1450,72 @@ pub(crate) fn gnu_tab_bar_pointer_appearance_style(
         1.0,
     );
     TabBarPointerAppearanceStyle::new(
-        mouse_face,
         PointerImageRelief::new(light, dark, thickness, margins, edges, corner_erase),
         PointerImageRelief::new(dark, light, thickness, margins, edges, corner_erase),
     )
+}
+
+fn protocol_color_pixel(color: Color) -> u32 {
+    let color = color.linear_to_srgb();
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u32;
+    (channel(color.r) << 16) | (channel(color.g) << 8) | channel(color.b)
+}
+
+pub(crate) fn gnu_image_relief_background(
+    box_shadow: Option<Color>,
+    opaque_image_background: Option<u32>,
+    glyph_face_background: Color,
+) -> u32 {
+    box_shadow
+        .map(protocol_color_pixel)
+        .or(opaque_image_background)
+        .unwrap_or_else(|| protocol_color_pixel(glyph_face_background))
+}
+
+pub(crate) fn tab_bar_image_relief_styles(
+    rendered: &RenderedDisplayRow,
+    fallback_background: u32,
+    frame_background: u32,
+    horizontal_margin: f32,
+    vertical_margin: f32,
+    thickness: f32,
+) -> Vec<(u16, TabBarPointerAppearanceStyle)> {
+    rendered
+        .media()
+        .iter()
+        .filter_map(|medium| {
+            let RenderedDisplayRowMediaKind::Image {
+                opaque_background, ..
+            } = medium.kind
+            else {
+                return None;
+            };
+            let face = rendered.row().glyphs[GlyphArea::Text.index()]
+                .get(usize::from(medium.col))
+                .and_then(|glyph| {
+                    rendered
+                        .faces()
+                        .iter()
+                        .find(|face| face.id == glyph.face_id)
+                });
+            let background = gnu_image_relief_background(
+                face.and_then(|face| face.box_color),
+                opaque_background,
+                face.map(|face| face.background)
+                    .unwrap_or_else(|| Color::from_pixel(fallback_background)),
+            );
+            Some((
+                medium.col,
+                gnu_tab_bar_pointer_appearance_style(
+                    background,
+                    frame_background,
+                    horizontal_margin,
+                    vertical_margin,
+                    thickness,
+                ),
+            ))
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -1572,6 +1673,8 @@ pub(crate) fn tab_bar_presented_pointer_plan(
     items: &[TabBarSourceItem],
     height: f32,
     style: TabBarPointerAppearanceStyle,
+    image_styles: &[(u16, TabBarPointerAppearanceStyle)],
+    mouse_faces: &[(Value, FaceId)],
 ) -> TabBarPresentedPointerPlan {
     let mut targets: HashMap<(usize, bool), u32> = HashMap::new();
     let mut runs = Vec::new();
@@ -1591,6 +1694,10 @@ pub(crate) fn tab_bar_presented_pointer_plan(
         else {
             continue;
         };
+        if !item.enabled {
+            last_mouse_face = None;
+            continue;
+        }
         let close = tab_bar_close_at(evaluator, text, char_index);
         let interaction = if let Some(interaction) = targets.get(&(item_index, close)).copied() {
             interaction
@@ -1612,6 +1719,25 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             .expect("rendered tab source slots have valid geometry");
         let mouse_face = tab_bar_mouse_face_at(evaluator, text, char_index);
         let appearance = if !mouse_face.is_nil() {
+            let Some((_, mouse_face_id)) =
+                mouse_faces.iter().find(|(value, _)| *value == mouse_face)
+            else {
+                last_mouse_face = None;
+                runs.push(TabBarPointerRunPlan {
+                    local_bounds,
+                    col: u16::try_from(slot.col()).unwrap_or(u16::MAX),
+                    interaction: InteractionId::new(interaction),
+                    appearance: None,
+                });
+                hit_regions.push(ChromeHitRegion::new(
+                    BandRect::new(slot.x_px(), 0.0, slot.width_px(), height)
+                        .expect("rendered tab source slots have valid geometry"),
+                    ChromeAction::Presented {
+                        interaction: InteractionId::new(interaction),
+                    },
+                ));
+                continue;
+            };
             let identity = if let Some((previous_item, previous_char, previous_face, identity)) =
                 last_mouse_face
                 && previous_item == item_index
@@ -1628,8 +1754,8 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             Some(TabBarPointerAppearancePlan {
                 identity,
                 kind: TabBarPointerPaintKind::Face,
-                hover: PointerDrawMode::Face(style.mouse_face),
-                pressed: PointerDrawMode::Face(style.mouse_face),
+                hover: PointerDrawMode::Face(*mouse_face_id),
+                pressed: PointerDrawMode::Face(*mouse_face_id),
             })
         } else if item.key.as_symbol_name() == Some("add-tab") {
             last_mouse_face = None;
@@ -1638,6 +1764,10 @@ pub(crate) fn tab_bar_presented_pointer_plan(
                 next_appearance += 1;
                 identity
             });
+            let style = image_styles
+                .iter()
+                .find_map(|(col, style)| (*col == slot.col() as u16).then_some(*style))
+                .unwrap_or(style);
             Some(TabBarPointerAppearancePlan {
                 identity,
                 kind: TabBarPointerPaintKind::Image,

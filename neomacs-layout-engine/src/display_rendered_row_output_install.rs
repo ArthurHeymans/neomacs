@@ -54,7 +54,7 @@ pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeD
                 col: medium.col,
             });
             match medium.kind {
-                RenderedDisplayRowMediaKind::Image { image_id } => ChromeMedia::Image {
+                RenderedDisplayRowMediaKind::Image { image_id, .. } => ChromeMedia::Image {
                     local_bounds,
                     image_id: ImageId::new(image_id),
                     slot_id,
@@ -215,7 +215,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
             target.slot_id,
         );
         match medium.kind {
-            RenderedDisplayRowMediaKind::Image { image_id } => {
+            RenderedDisplayRowMediaKind::Image { image_id, .. } => {
                 builder.install_output_media(OutputMediaInstallRequest::image(
                     target,
                     ImageId::new(image_id),

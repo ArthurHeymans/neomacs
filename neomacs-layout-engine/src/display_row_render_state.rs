@@ -198,6 +198,7 @@ impl PendingDisplayRowMedia {
 pub(crate) enum RenderedDisplayRowMediaKind {
     Image {
         image_id: u32,
+        opaque_background: Option<u32>,
     },
     Video {
         video_id: u32,
@@ -416,7 +417,14 @@ pub(crate) fn display_row_progress(
 impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
     fn from(kind: DisplayMediaReplacementKind) -> Self {
         match kind {
-            DisplayMediaReplacementKind::Image { image_id } => Self::Image { image_id },
+            DisplayMediaReplacementKind::Image {
+                image_id,
+                opaque_background,
+                ..
+            } => Self::Image {
+                image_id,
+                opaque_background,
+            },
             DisplayMediaReplacementKind::Video {
                 video_id,
                 loop_count,

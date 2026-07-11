@@ -757,6 +757,9 @@ fn resolve_image_display_property(
             params.fallback_metrics.row_height(),
             params.fallback_metrics.ascent(),
         ),
+        horizontal_margin: spec.margin.horizontal,
+        vertical_margin: spec.margin.vertical,
+        opaque_background: spec.opaque_background,
     }))
 }
 

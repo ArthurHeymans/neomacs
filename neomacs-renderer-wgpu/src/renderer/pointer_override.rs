@@ -713,7 +713,7 @@ impl ReliefEdge {
     }
 }
 
-/// GNU pgtk relief inside the original image rectangle. Side rectangles draw
+/// GNU pgtk relief outside the original image content rectangle. Side rectangles draw
 /// first; horizontal edges then select the top-right and bottom-left corner
 /// pixels. Top tapers only into a right edge and bottom only out of a left
 /// edge. Thick relief finishes with the dark one-pixel top/left outer lines.
@@ -728,10 +728,10 @@ pub(super) fn relief_edges(
         return None;
     }
     let margins = relief.margins();
-    let x = x + margins.left();
-    let y = y + margins.top();
-    let width = width - margins.left() - margins.right();
-    let height = height - margins.top() - margins.bottom();
+    let x = x - margins.left();
+    let y = y - margins.top();
+    let width = width + margins.left() + margins.right();
+    let height = height + margins.top() + margins.bottom();
     if width <= 0.0 || height <= 0.0 {
         return None;
     }
