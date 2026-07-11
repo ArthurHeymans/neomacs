@@ -97,10 +97,7 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let effective_clip = ctx
-                    .params
-                    .pointer_override
-                    .image_clip(glyph_index, clip_rect.as_ref());
+                let effective_clip = clip_rect.clone();
                 let (
                     draw_x,
                     draw_y,
@@ -210,10 +207,20 @@ impl WgpuRenderer {
                             override_paint.mode(),
                         )
                     {
+                        let relief_start = relief_vertices.len();
                         for edge in edges {
                             let (x, y, width, height) = edge.bounds();
                             self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
                         }
+                        let relief_clip = ctx
+                            .params
+                            .pointer_override
+                            .image_clip(glyph_index, clip_rect.as_ref());
+                        super::pointer_override::clip_new_rect_vertices(
+                            &mut relief_vertices,
+                            relief_start,
+                            relief_clip.as_ref(),
+                        );
                     }
                 }
             }

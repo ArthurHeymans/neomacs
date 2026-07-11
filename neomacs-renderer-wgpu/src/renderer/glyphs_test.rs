@@ -7,6 +7,38 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
+#[test]
+fn rounded_box_background_suppression_respects_effective_clip() {
+    use crate::renderer::frame_pass::BoxSpan;
+    use neomacs_display_protocol::face::{BoxType, Face};
+    use neomacs_display_protocol::types::Rect;
+    use std::collections::HashMap;
+
+    let face_id = FaceId::new(7);
+    let mut face = Face::new(face_id);
+    face.box_type = BoxType::Line;
+    face.box_line_width = 1;
+    face.box_corner_radius = 4;
+    let faces = HashMap::from([(face_id, face)]);
+    let spans = [BoxSpan {
+        x: 0.0,
+        y: 0.0,
+        width: 30.0,
+        height: 10.0,
+        face_id,
+        row_role: GlyphRowRole::Text,
+        bg: Some(Color::BLACK),
+        clip: Some(Rect::new(10.0, 0.0, 10.0, 10.0)),
+    }];
+
+    assert!(super::WgpuRenderer::overlaps_rounded_box_span(
+        15.0, 5.0, false, &spans, &faces, 1.0,
+    ));
+    assert!(!super::WgpuRenderer::overlaps_rounded_box_span(
+        2.0, 5.0, false, &spans, &faces, 1.0,
+    ));
+}
+
 fn make_cursor(
     slot_id: DisplaySlotId,
     x: f32,

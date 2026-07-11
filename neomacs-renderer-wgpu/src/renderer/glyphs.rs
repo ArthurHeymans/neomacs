@@ -1650,10 +1650,26 @@ impl WgpuRenderer {
             if !Self::face_has_rounded_box(faces, s.face_id) {
                 return false;
             }
-            gx >= s.x - box_margin - 0.5
-                && gx < s.x + s.width + box_margin + 0.5
-                && gy >= s.y - box_margin - 0.5
-                && gy < s.y + s.height + box_margin + 0.5
+            let span_right = s.x + s.width;
+            let span_bottom = s.y + s.height;
+            let clipped_x = s.x.max(s.clip.as_ref().map_or(s.x, |clip| clip.x));
+            let clipped_y = s.y.max(s.clip.as_ref().map_or(s.y, |clip| clip.y));
+            let clipped_right = span_right.min(
+                s.clip
+                    .as_ref()
+                    .map_or(span_right, |clip| clip.x + clip.width),
+            );
+            let clipped_bottom = span_bottom.min(
+                s.clip
+                    .as_ref()
+                    .map_or(span_bottom, |clip| clip.y + clip.height),
+            );
+            clipped_right > clipped_x
+                && clipped_bottom > clipped_y
+                && gx >= clipped_x - box_margin - 0.5
+                && gx < clipped_right + box_margin + 0.5
+                && gy >= clipped_y - box_margin - 0.5
+                && gy < clipped_bottom + box_margin + 0.5
         })
     }
 

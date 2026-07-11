@@ -36,74 +36,78 @@ impl WgpuRenderer {
             let Some(base_face_id) = glyph.face_id() else {
                 continue;
             };
-            let gface_id = params.pointer_override.face_id(glyph_index, base_face_id);
-            let effective_clip = params
-                .pointer_override
-                .glyph_clip(glyph_index, glyph.clip_rect().as_ref());
             let Some(g_role) = glyph.row_role() else {
                 continue;
             };
+            for paint in params.pointer_override.face_paints(
+                glyph_index,
+                base_face_id,
+                glyph.clip_rect().as_ref(),
+            ) {
+                let gface_id = paint.face_id();
+                let effective_clip = paint.clip();
 
-            // Only include glyphs whose face has box decorations. The box fill
-            // background is the face's background (the value materialization used
-            // to inline on the glyph as `Some(face.background)`).
-            let g_bg = match faces.get(&gface_id) {
-                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
-                    Some(f.background)
-                }
-                _ => continue,
-            };
-
-            // Check if this glyph's face has rounded corners
-            let is_rounded = faces
-                .get(&gface_id)
-                .map(|f| f.box_corner_radius > 0)
-                .unwrap_or(false);
-
-            let merged = if let Some(last) = box_spans.last_mut() {
-                let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
-                let same_role = last.row_role == g_role;
-                let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
-                let same_face = last.face_id == gface_id;
-                let same_clip = last.clip == effective_clip;
-
-                // Merge rules:
-                // - Rounded boxes: only merge same face_id (keep separate boxes)
-                // - Sharp overlay boxes (mode-line): merge across face_ids (continuity)
-                // - Sharp non-overlay boxes (content): only merge same face_id
-                let last_is_rounded = faces
-                    .get(&last.face_id)
-                    .map(|f| f.box_corner_radius > 0)
-                    .unwrap_or(false);
-                let face_ok = if is_rounded || last_is_rounded {
-                    same_face // rounded: strict same-face merge
-                } else if g_role.is_chrome() {
-                    true // sharp overlay: merge across faces (mode-line)
-                } else {
-                    same_face // sharp non-overlay: strict same-face merge
+                // Only include glyphs whose face has box decorations. The box fill
+                // background is the face's background (the value materialization used
+                // to inline on the glyph as `Some(face.background)`).
+                let g_bg = match faces.get(&gface_id) {
+                    Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                        Some(f.background)
+                    }
+                    _ => continue,
                 };
 
-                if same_row && same_role && adjacent && face_ok && same_clip {
-                    last.width = gx + gw - last.x;
-                    true
+                // Check if this glyph's face has rounded corners
+                let is_rounded = faces
+                    .get(&gface_id)
+                    .map(|f| f.box_corner_radius > 0)
+                    .unwrap_or(false);
+
+                let merged = if let Some(last) = box_spans.last_mut() {
+                    let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
+                    let same_role = last.row_role == g_role;
+                    let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
+                    let same_face = last.face_id == gface_id;
+                    let same_clip = last.clip == effective_clip;
+
+                    // Merge rules:
+                    // - Rounded boxes: only merge same face_id (keep separate boxes)
+                    // - Sharp overlay boxes (mode-line): merge across face_ids (continuity)
+                    // - Sharp non-overlay boxes (content): only merge same face_id
+                    let last_is_rounded = faces
+                        .get(&last.face_id)
+                        .map(|f| f.box_corner_radius > 0)
+                        .unwrap_or(false);
+                    let face_ok = if is_rounded || last_is_rounded {
+                        same_face // rounded: strict same-face merge
+                    } else if g_role.is_chrome() {
+                        true // sharp overlay: merge across faces (mode-line)
+                    } else {
+                        same_face // sharp non-overlay: strict same-face merge
+                    };
+
+                    if same_row && same_role && adjacent && face_ok && same_clip {
+                        last.width = gx + gw - last.x;
+                        true
+                    } else {
+                        false
+                    }
                 } else {
                     false
-                }
-            } else {
-                false
-            };
+                };
 
-            if !merged {
-                box_spans.push(BoxSpan {
-                    x: gx,
-                    y: gy,
-                    width: gw,
-                    height: gh,
-                    face_id: gface_id,
-                    row_role: g_role,
-                    bg: g_bg,
-                    clip: effective_clip,
-                });
+                if !merged {
+                    box_spans.push(BoxSpan {
+                        x: gx,
+                        y: gy,
+                        width: gw,
+                        height: gh,
+                        face_id: gface_id,
+                        row_role: g_role,
+                        bg: g_bg,
+                        clip: effective_clip,
+                    });
+                }
             }
         }
         // Helper: test whether a glyph position overlaps any ROUNDED box span.
@@ -208,51 +212,61 @@ impl WgpuRenderer {
                 ..
             } = glyph
                 && !row_role.is_chrome()
-                && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
             {
-                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
-                let effective_clip = params
-                    .pointer_override
-                    .glyph_clip(glyph_index, clip_rect.as_ref());
-                let ya = if has_line_anims {
-                    *y + self.line_y_offset(*x, *y)
-                } else {
-                    *y
-                };
-                let Some((draw_x, draw_y, draw_w, draw_h)) = super::pointer_override::clip_geometry(
-                    *x,
-                    ya,
-                    *width,
-                    *height,
-                    effective_clip.as_ref(),
-                ) else {
-                    continue;
-                };
-                let face = faces.get(&face_id);
-                self.add_face_background_rect(
-                    &mut non_overlay_rect_vertices,
-                    face,
-                    bg,
-                    draw_x,
-                    draw_y,
-                    draw_w,
-                    draw_h,
-                    effective_clip.as_ref(),
-                );
-                // Overlay stipple pattern if present
-                if *stipple_id > 0
-                    && let (Some(fg), Some(pat)) =
-                        (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
+                for paint in
+                    params
+                        .pointer_override
+                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
                 {
-                    self.render_stipple_pattern(
+                    let face_id = paint.face_id();
+                    let effective_clip = paint.clip();
+                    let ya = if has_line_anims {
+                        *y + self.line_y_offset(*x, *y)
+                    } else {
+                        *y
+                    };
+                    let Some((draw_x, draw_y, draw_w, draw_h)) =
+                        super::pointer_override::clip_geometry(
+                            *x,
+                            ya,
+                            *width,
+                            *height,
+                            effective_clip.as_ref(),
+                        )
+                    else {
+                        continue;
+                    };
+                    if Self::overlaps_rounded_box_span(
+                        draw_x, draw_y, false, box_spans, faces, box_margin,
+                    ) {
+                        continue;
+                    }
+                    let face = faces.get(&face_id);
+                    self.add_face_background_rect(
                         &mut non_overlay_rect_vertices,
+                        face,
+                        bg,
                         draw_x,
                         draw_y,
                         draw_w,
                         draw_h,
-                        fg,
-                        pat,
+                        effective_clip.as_ref(),
                     );
+                    // Overlay stipple pattern if present
+                    if *stipple_id > 0
+                        && let (Some(fg), Some(pat)) =
+                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
+                    {
+                        self.render_stipple_pattern(
+                            &mut non_overlay_rect_vertices,
+                            draw_x,
+                            draw_y,
+                            draw_w,
+                            draw_h,
+                            fg,
+                            pat,
+                        );
+                    }
                 }
             }
         }
@@ -271,60 +285,67 @@ impl WgpuRenderer {
             } = glyph
                 && !row_role.is_chrome()
             {
-                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
-                let effective_clip = params
-                    .pointer_override
-                    .glyph_clip(glyph_index, clip_rect.as_ref());
-                // The per-glyph background used to be inlined as
-                // `Some(face.background)` by materialization, so resolving
-                // it from the face reproduces that value exactly.
-                let rf = match bg_face_cache {
-                    Some((id, ref data)) if id == face_id => *data,
-                    _ => {
-                        let data = frame_glyphs.resolved_face(face_id);
-                        bg_face_cache = Some((face_id, data));
-                        data
-                    }
-                };
-                let bg: Option<Color> = Some(rf.bg);
-                let face = faces.get(&face_id);
-                let has_gradient = face
-                    .and_then(|resolved| resolved.background_gradient.as_deref())
-                    .is_some();
-                let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
-                if (bg.is_some() || has_gradient || has_solid_bg)
-                    && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
+                for paint in
+                    params
+                        .pointer_override
+                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
                 {
-                    let ya = if has_line_anims {
-                        *y + self.line_y_offset(*x, *y)
-                    } else {
-                        *y
+                    let face_id = paint.face_id();
+                    let effective_clip = paint.clip();
+                    // The per-glyph background used to be inlined as
+                    // `Some(face.background)` by materialization, so resolving
+                    // it from the face reproduces that value exactly.
+                    let rf = match bg_face_cache {
+                        Some((id, ref data)) if id == face_id => *data,
+                        _ => {
+                            let data = frame_glyphs.resolved_face(face_id);
+                            bg_face_cache = Some((face_id, data));
+                            data
+                        }
                     };
-                    let Some((draw_x, draw_y, draw_w, draw_h)) =
-                        super::pointer_override::clip_geometry(
-                            *x,
-                            ya,
-                            *width,
-                            *height,
+                    let bg: Option<Color> = Some(rf.bg);
+                    let face = faces.get(&face_id);
+                    let has_gradient = face
+                        .and_then(|resolved| resolved.background_gradient.as_deref())
+                        .is_some();
+                    let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
+                    if bg.is_some() || has_gradient || has_solid_bg {
+                        let ya = if has_line_anims {
+                            *y + self.line_y_offset(*x, *y)
+                        } else {
+                            *y
+                        };
+                        let Some((draw_x, draw_y, draw_w, draw_h)) =
+                            super::pointer_override::clip_geometry(
+                                *x,
+                                ya,
+                                *width,
+                                *height,
+                                effective_clip.as_ref(),
+                            )
+                        else {
+                            continue;
+                        };
+                        if Self::overlaps_rounded_box_span(
+                            draw_x, draw_y, false, box_spans, faces, box_margin,
+                        ) {
+                            continue;
+                        }
+                        let fallback = bg.unwrap_or(
+                            face.map(|resolved| resolved.background)
+                                .unwrap_or(Color::TRANSPARENT),
+                        );
+                        self.add_face_background_rect(
+                            &mut non_overlay_rect_vertices,
+                            face,
+                            &fallback,
+                            draw_x,
+                            draw_y,
+                            draw_w,
+                            draw_h,
                             effective_clip.as_ref(),
-                        )
-                    else {
-                        continue;
-                    };
-                    let fallback = bg.unwrap_or(
-                        face.map(|resolved| resolved.background)
-                            .unwrap_or(Color::TRANSPARENT),
-                    );
-                    self.add_face_background_rect(
-                        &mut non_overlay_rect_vertices,
-                        face,
-                        &fallback,
-                        draw_x,
-                        draw_y,
-                        draw_w,
-                        draw_h,
-                        effective_clip.as_ref(),
-                    );
+                        );
+                    }
                 }
             }
         }
@@ -578,45 +599,55 @@ impl WgpuRenderer {
                 ..
             } = glyph
                 && row_role.is_chrome()
-                && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
             {
-                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
-                let effective_clip = params
-                    .pointer_override
-                    .glyph_clip(glyph_index, clip_rect.as_ref());
-                let Some((draw_x, draw_y, draw_w, draw_h)) = super::pointer_override::clip_geometry(
-                    *x,
-                    *y,
-                    *width,
-                    *height,
-                    effective_clip.as_ref(),
-                ) else {
-                    continue;
-                };
-                let face = faces.get(&face_id);
-                self.add_face_background_rect(
-                    &mut overlay_rect_vertices,
-                    face,
-                    bg,
-                    draw_x,
-                    draw_y,
-                    draw_w,
-                    draw_h,
-                    effective_clip.as_ref(),
-                );
-                if *stipple_id > 0
-                    && let (Some(fg), Some(pat)) =
-                        (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
+                for paint in
+                    params
+                        .pointer_override
+                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
                 {
-                    self.render_stipple_pattern(
+                    let face_id = paint.face_id();
+                    let effective_clip = paint.clip();
+                    let Some((draw_x, draw_y, draw_w, draw_h)) =
+                        super::pointer_override::clip_geometry(
+                            *x,
+                            *y,
+                            *width,
+                            *height,
+                            effective_clip.as_ref(),
+                        )
+                    else {
+                        continue;
+                    };
+                    if Self::overlaps_rounded_box_span(
+                        draw_x, draw_y, true, box_spans, faces, box_margin,
+                    ) {
+                        continue;
+                    }
+                    let face = faces.get(&face_id);
+                    self.add_face_background_rect(
                         &mut overlay_rect_vertices,
+                        face,
+                        bg,
                         draw_x,
                         draw_y,
                         draw_w,
                         draw_h,
-                        fg,
-                        pat,
+                        effective_clip.as_ref(),
                     );
+                    if *stipple_id > 0
+                        && let (Some(fg), Some(pat)) =
+                            (stipple_fg, frame_glyphs.stipple_patterns.get(stipple_id))
+                    {
+                        self.render_stipple_pattern(
+                            &mut overlay_rect_vertices,
+                            draw_x,
+                            draw_y,
+                            draw_w,
+                            draw_h,
+                            fg,
+                            pat,
+                        );
+                    }
                 }
             }
         }
@@ -635,53 +666,60 @@ impl WgpuRenderer {
             } = glyph
                 && row_role.is_chrome()
             {
-                let face_id = params.pointer_override.face_id(glyph_index, *face_id);
-                let effective_clip = params
-                    .pointer_override
-                    .glyph_clip(glyph_index, clip_rect.as_ref());
-                // Background was inlined as `Some(face.background)`.
-                let rf = match overlay_bg_face_cache {
-                    Some((id, ref data)) if id == face_id => *data,
-                    _ => {
-                        let data = frame_glyphs.resolved_face(face_id);
-                        overlay_bg_face_cache = Some((face_id, data));
-                        data
-                    }
-                };
-                let bg: Option<Color> = Some(rf.bg);
-                let face = faces.get(&face_id);
-                let has_gradient = face
-                    .and_then(|resolved| resolved.background_gradient.as_deref())
-                    .is_some();
-                let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
-                if (bg.is_some() || has_gradient || has_solid_bg)
-                    && !Self::overlaps_rounded_box_span(*x, *y, true, box_spans, faces, box_margin)
+                for paint in
+                    params
+                        .pointer_override
+                        .face_paints(glyph_index, *face_id, clip_rect.as_ref())
                 {
-                    let Some((draw_x, draw_y, draw_w, draw_h)) =
-                        super::pointer_override::clip_geometry(
-                            *x,
-                            *y,
-                            *width,
-                            *height,
-                            effective_clip.as_ref(),
-                        )
-                    else {
-                        continue;
+                    let face_id = paint.face_id();
+                    let effective_clip = paint.clip();
+                    // Background was inlined as `Some(face.background)`.
+                    let rf = match overlay_bg_face_cache {
+                        Some((id, ref data)) if id == face_id => *data,
+                        _ => {
+                            let data = frame_glyphs.resolved_face(face_id);
+                            overlay_bg_face_cache = Some((face_id, data));
+                            data
+                        }
                     };
-                    let fallback = bg.unwrap_or(
-                        face.map(|resolved| resolved.background)
-                            .unwrap_or(Color::TRANSPARENT),
-                    );
-                    self.add_face_background_rect(
-                        &mut overlay_rect_vertices,
-                        face,
-                        &fallback,
-                        draw_x,
-                        draw_y,
-                        draw_w,
-                        draw_h,
-                        effective_clip.as_ref(),
-                    );
+                    let bg: Option<Color> = Some(rf.bg);
+                    let face = faces.get(&face_id);
+                    let has_gradient = face
+                        .and_then(|resolved| resolved.background_gradient.as_deref())
+                        .is_some();
+                    let has_solid_bg = face.map(|f| f.background.a > f32::EPSILON).unwrap_or(false);
+                    if bg.is_some() || has_gradient || has_solid_bg {
+                        let Some((draw_x, draw_y, draw_w, draw_h)) =
+                            super::pointer_override::clip_geometry(
+                                *x,
+                                *y,
+                                *width,
+                                *height,
+                                effective_clip.as_ref(),
+                            )
+                        else {
+                            continue;
+                        };
+                        if Self::overlaps_rounded_box_span(
+                            draw_x, draw_y, true, box_spans, faces, box_margin,
+                        ) {
+                            continue;
+                        }
+                        let fallback = bg.unwrap_or(
+                            face.map(|resolved| resolved.background)
+                                .unwrap_or(Color::TRANSPARENT),
+                        );
+                        self.add_face_background_rect(
+                            &mut overlay_rect_vertices,
+                            face,
+                            &fallback,
+                            draw_x,
+                            draw_y,
+                            draw_w,
+                            draw_h,
+                            effective_clip.as_ref(),
+                        );
+                    }
                 }
             }
         }

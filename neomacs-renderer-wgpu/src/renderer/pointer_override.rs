@@ -60,6 +60,23 @@ impl<'a> ResolvedGlyphPaint<'a> {
 pub(super) struct PointerOverrideResolver {
     overrides: Vec<Option<(PresentedPrimitiveKind, PrimitivePointerOverride)>>,
     active: bool,
+    frame_bounds: Rect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct FacePaint {
+    face_id: FaceId,
+    clip: Option<Rect>,
+}
+
+impl FacePaint {
+    pub(super) const fn face_id(self) -> FaceId {
+        self.face_id
+    }
+
+    pub(super) const fn clip(self) -> Option<Rect> {
+        self.clip
+    }
 }
 
 impl PointerOverrideResolver {
@@ -99,7 +116,11 @@ impl PointerOverrideResolver {
                 }
             }
         }
-        Self { overrides, active }
+        Self {
+            overrides,
+            active,
+            frame_bounds: Rect::new(0.0, 0.0, frame.width, frame.height),
+        }
     }
 
     pub(super) fn glyph_override(&self, index: usize) -> Option<PrimitivePointerOverride> {
@@ -110,6 +131,7 @@ impl PointerOverrideResolver {
         self.primitive_override(PresentedPrimitiveKind::Image, index)
     }
 
+    #[cfg(test)]
     pub(super) fn face_id(&self, index: usize, base: FaceId) -> FaceId {
         match self
             .glyph_override(index)
@@ -118,6 +140,52 @@ impl PointerOverrideResolver {
             Some(PointerDrawMode::Face(face)) => face,
             _ => base,
         }
+    }
+
+    /// Replacement paint plan for a face-backed primitive. Base paint covers
+    /// only the complement of the transient override; the alternate face is
+    /// last and covers exactly the effective override clip.
+    pub(super) fn face_paints(
+        &self,
+        index: usize,
+        base_face: FaceId,
+        original_clip: Option<&Rect>,
+    ) -> Vec<FacePaint> {
+        let Some(override_paint) = self.glyph_override(index) else {
+            return vec![FacePaint {
+                face_id: base_face,
+                clip: original_clip.cloned(),
+            }];
+        };
+        let PointerDrawMode::Face(override_face) = override_paint.mode() else {
+            return vec![FacePaint {
+                face_id: base_face,
+                clip: original_clip.cloned(),
+            }];
+        };
+        let domain = original_clip
+            .cloned()
+            .unwrap_or_else(|| self.frame_bounds.clone());
+        let raw = override_paint.clip();
+        let raw = Rect::new(raw.x(), raw.y(), raw.width(), raw.height());
+        let Some(cut) = intersect_rect(&domain, &raw) else {
+            return vec![FacePaint {
+                face_id: base_face,
+                clip: original_clip.cloned(),
+            }];
+        };
+        let mut paints = rect_complement(&domain, &cut)
+            .into_iter()
+            .map(|clip| FacePaint {
+                face_id: base_face,
+                clip: Some(clip),
+            })
+            .collect::<Vec<_>>();
+        paints.push(FacePaint {
+            face_id: override_face,
+            clip: Some(cut),
+        });
+        paints
     }
 
     #[cfg(test)]
@@ -149,6 +217,7 @@ impl PointerOverrideResolver {
         self.active
     }
 
+    #[cfg(test)]
     pub(super) fn glyph_clip(&self, index: usize, base: Option<&Rect>) -> Option<Rect> {
         self.effective_clip(PresentedPrimitiveKind::Glyph, index, base)
     }
@@ -201,6 +270,42 @@ fn intersect_rect(left: &Rect, right: &Rect) -> Option<Rect> {
         width: right_edge - x,
         height: bottom - y,
     })
+}
+
+fn rect_complement(domain: &Rect, cut: &Rect) -> Vec<Rect> {
+    let mut out = Vec::with_capacity(4);
+    let domain_right = domain.x + domain.width;
+    let domain_bottom = domain.y + domain.height;
+    let cut_right = cut.x + cut.width;
+    let cut_bottom = cut.y + cut.height;
+    if cut.y > domain.y {
+        out.push(Rect::new(
+            domain.x,
+            domain.y,
+            domain.width,
+            cut.y - domain.y,
+        ));
+    }
+    if cut_bottom < domain_bottom {
+        out.push(Rect::new(
+            domain.x,
+            cut_bottom,
+            domain.width,
+            domain_bottom - cut_bottom,
+        ));
+    }
+    if cut.x > domain.x {
+        out.push(Rect::new(domain.x, cut.y, cut.x - domain.x, cut.height));
+    }
+    if cut_right < domain_right {
+        out.push(Rect::new(
+            cut_right,
+            cut.y,
+            domain_right - cut_right,
+            cut.height,
+        ));
+    }
+    out
 }
 
 pub(super) fn clip_geometry(

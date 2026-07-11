@@ -291,3 +291,33 @@ fn shifted_overstrike_is_reclipped_with_uv_interpolation() {
     assert!(reclipped.iter().all(|v| v.position[0] <= 18.0));
     assert!(reclipped.iter().any(|v| v.tex_coords[0] < 1.0));
 }
+
+#[test]
+fn partial_face_override_replaces_inside_clip_and_keeps_base_only_in_complement() {
+    let frame = frame_with_glyph_appearance(
+        PointerDrawMode::Face(FaceId::new(2)),
+        PointerDrawMode::Face(FaceId::new(2)),
+    );
+    let resolver =
+        PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
+    let paints = resolver.face_paints(0, FaceId::new(0), frame.glyphs[0].clip_rect().as_ref());
+
+    assert_eq!(paints.last().unwrap().face_id(), FaceId::new(2));
+    assert_eq!(
+        paints.last().unwrap().clip().unwrap(),
+        neomacs_display_protocol::Rect::new(14.0, 5.0, 14.0, 17.0)
+    );
+    assert!(
+        paints[..paints.len() - 1]
+            .iter()
+            .all(|paint| paint.face_id() == FaceId::new(0))
+    );
+    let override_clip = paints.last().unwrap().clip().unwrap();
+    assert!(paints[..paints.len() - 1].iter().all(|paint| {
+        let clip = paint.clip().unwrap();
+        clip.x + clip.width <= override_clip.x
+            || clip.x >= override_clip.x + override_clip.width
+            || clip.y + clip.height <= override_clip.y
+            || clip.y >= override_clip.y + override_clip.height
+    }));
+}

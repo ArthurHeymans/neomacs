@@ -295,37 +295,40 @@ impl WgpuRenderer {
                     clip_rect,
                     ..
                 } => {
-                    let face_id = pointer_override.face_id(glyph_index, *face_id);
-                    let bg = frame.resolved_face(face_id).bg;
-                    let effective_clip =
-                        pointer_override.glyph_clip(glyph_index, clip_rect.as_ref());
-                    let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
-                        clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
-                    else {
-                        continue;
-                    };
-                    self.add_rect(
-                        &mut bg_vertices,
-                        draw_x + offset_x,
-                        draw_y + offset_y,
-                        draw_width,
-                        draw_height,
-                        &bg,
-                    );
-                    // Stipple pattern overlay
-                    if *stipple_id > 0
-                        && let (Some(fg), Some(pat)) =
-                            (stipple_fg, frame.stipple_patterns.get(stipple_id))
+                    for paint in
+                        pointer_override.face_paints(glyph_index, *face_id, clip_rect.as_ref())
                     {
-                        self.render_stipple_pattern(
+                        let face_id = paint.face_id();
+                        let bg = frame.resolved_face(face_id).bg;
+                        let effective_clip = paint.clip();
+                        let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
+                            clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
+                        else {
+                            continue;
+                        };
+                        self.add_rect(
                             &mut bg_vertices,
                             draw_x + offset_x,
                             draw_y + offset_y,
                             draw_width,
                             draw_height,
-                            fg,
-                            pat,
+                            &bg,
                         );
+                        // Stipple pattern overlay
+                        if *stipple_id > 0
+                            && let (Some(fg), Some(pat)) =
+                                (stipple_fg, frame.stipple_patterns.get(stipple_id))
+                        {
+                            self.render_stipple_pattern(
+                                &mut bg_vertices,
+                                draw_x + offset_x,
+                                draw_y + offset_y,
+                                draw_width,
+                                draw_height,
+                                fg,
+                                pat,
+                            );
+                        }
                     }
                 }
                 FrameGlyph::Char {
@@ -339,23 +342,26 @@ impl WgpuRenderer {
                 } => {
                     // Per-glyph background was inlined as `Some(face.background)`;
                     // resolve it from the face table for the same value.
-                    let face_id = pointer_override.face_id(glyph_index, *face_id);
-                    let bg_color = frame.resolved_face(face_id).bg;
-                    let effective_clip =
-                        pointer_override.glyph_clip(glyph_index, clip_rect.as_ref());
-                    let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
-                        clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
-                    else {
-                        continue;
-                    };
-                    self.add_rect(
-                        &mut bg_vertices,
-                        draw_x + offset_x,
-                        draw_y + offset_y,
-                        draw_width,
-                        draw_height,
-                        &bg_color,
-                    );
+                    for paint in
+                        pointer_override.face_paints(glyph_index, *face_id, clip_rect.as_ref())
+                    {
+                        let face_id = paint.face_id();
+                        let bg_color = frame.resolved_face(face_id).bg;
+                        let effective_clip = paint.clip();
+                        let Some((draw_x, draw_y, draw_width, draw_height, ..)) =
+                            clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
+                        else {
+                            continue;
+                        };
+                        self.add_rect(
+                            &mut bg_vertices,
+                            draw_x + offset_x,
+                            draw_y + offset_y,
+                            draw_width,
+                            draw_height,
+                            &bg_color,
+                        );
+                    }
                 }
                 _ => {}
             }
@@ -559,266 +565,268 @@ impl WgpuRenderer {
                 // Resolve the face-derived attributes (fg/bg/font_size/overstrike)
                 // that used to be inlined on the glyph. A one-entry cache reuses
                 // the resolve across runs of glyphs sharing a face.
-                let face_id = pointer_override.face_id(glyph_index, *face_id);
-                let rf = match text_face_cache {
-                    Some((id, ref data)) if id == face_id => *data,
-                    _ => {
-                        let data = frame.resolved_face(face_id);
-                        text_face_cache = Some((face_id, data));
-                        data
-                    }
-                };
-                let fg = &rf.fg;
-                let bg: Option<Color> = Some(rf.bg);
-                let font_size = rf.font_size;
-                let overstrike = rf.overstrike;
-
-                let face = faces.get(&face_id);
-
-                // Decompose physical-pixel positions into integer + subpixel bin.
-                // The bin is baked into the rasterized bitmap by swash for subpixel
-                // accuracy; vertex positions stay on integer pixels (no Linear blur).
-                let sf = self.scale_factor;
-                let phys_x = (*x + offset_x) * sf;
-                let baseline_y = *baseline + offset_y;
-                let phys_y = baseline_y * sf;
-                let (x_int, x_bin) = SubpixelBin::new(phys_x);
-                let (y_int, y_bin) = SubpixelBin::new(phys_y);
-                let font_identity = glyph_font_identity(face);
-
-                let subpixel_request = if enable_subpixel {
-                    SubpixelRequest::Enabled
-                } else {
-                    SubpixelRequest::Disabled
-                };
-                let handle_opt = if let Some(text) = composed {
-                    stats.text_glyphs += 1;
-                    stats.composed_glyphs += 1;
-                    seen_composed_keys.insert(ComposedGlyphKey {
-                        text: text.clone(),
-                        face_id,
-                        font_size_bits: font_size.to_bits(),
-                        font_identity,
-                        x_bin,
-                        y_bin,
-                    });
-                    glyph_atlas.get_or_create_composed_atlas(
-                        &self.device,
-                        &self.queue,
-                        text,
-                        face_id,
-                        font_size.to_bits(),
-                        face,
-                        x_bin,
-                        y_bin,
-                        subpixel_request,
-                    )
-                } else {
-                    stats.text_glyphs += 1;
-                    let key = GlyphKey {
-                        charcode: *ch as u32,
-                        face_id,
-                        font_size_bits: font_size.to_bits(),
-                        font_identity,
-                        x_bin,
-                        y_bin,
+                for paint in pointer_override.face_paints(glyph_index, *face_id, clip_rect.as_ref())
+                {
+                    let face_id = paint.face_id();
+                    let rf = match text_face_cache {
+                        Some((id, ref data)) if id == face_id => *data,
+                        _ => {
+                            let data = frame.resolved_face(face_id);
+                            text_face_cache = Some((face_id, data));
+                            data
+                        }
                     };
-                    seen_single_keys.insert(key.clone());
-                    glyph_atlas.get_or_create_atlas(
-                        &self.device,
-                        &self.queue,
-                        &key,
-                        face,
-                        subpixel_request,
-                    )
-                };
+                    let fg = &rf.fg;
+                    let bg: Option<Color> = Some(rf.bg);
+                    let font_size = rf.font_size;
+                    let overstrike = rf.overstrike;
 
-                if let Some(handle) = handle_opt {
-                    let entry = handle.entry;
-                    let metrics = entry.metrics();
-                    let uv = entry.uv();
-                    let content_rect = entry.rect();
-                    let base_u_min = uv.min()[0];
-                    let base_u_max = uv.max()[0];
-                    let base_v_min = uv.min()[1];
-                    let base_v_max = uv.max()[1];
-                    let base_glyph_x = (x_int as f32 + metrics.bearing_x) / sf;
-                    let base_glyph_y = (y_int as f32 - metrics.bearing_y) / sf;
-                    let base_glyph_w = content_rect.width() as f32 / sf;
-                    let base_glyph_h = content_rect.height() as f32 / sf;
-                    let effective_clip = pointer_override
-                        .glyph_clip(glyph_index, clip_rect.as_ref())
-                        .map(|clip| Rect {
+                    let face = faces.get(&face_id);
+
+                    // Decompose physical-pixel positions into integer + subpixel bin.
+                    // The bin is baked into the rasterized bitmap by swash for subpixel
+                    // accuracy; vertex positions stay on integer pixels (no Linear blur).
+                    let sf = self.scale_factor;
+                    let phys_x = (*x + offset_x) * sf;
+                    let baseline_y = *baseline + offset_y;
+                    let phys_y = baseline_y * sf;
+                    let (x_int, x_bin) = SubpixelBin::new(phys_x);
+                    let (y_int, y_bin) = SubpixelBin::new(phys_y);
+                    let font_identity = glyph_font_identity(face);
+
+                    let subpixel_request = if enable_subpixel {
+                        SubpixelRequest::Enabled
+                    } else {
+                        SubpixelRequest::Disabled
+                    };
+                    let handle_opt = if let Some(text) = composed {
+                        stats.text_glyphs += 1;
+                        stats.composed_glyphs += 1;
+                        seen_composed_keys.insert(ComposedGlyphKey {
+                            text: text.clone(),
+                            face_id,
+                            font_size_bits: font_size.to_bits(),
+                            font_identity,
+                            x_bin,
+                            y_bin,
+                        });
+                        glyph_atlas.get_or_create_composed_atlas(
+                            &self.device,
+                            &self.queue,
+                            text,
+                            face_id,
+                            font_size.to_bits(),
+                            face,
+                            x_bin,
+                            y_bin,
+                            subpixel_request,
+                        )
+                    } else {
+                        stats.text_glyphs += 1;
+                        let key = GlyphKey {
+                            charcode: *ch as u32,
+                            face_id,
+                            font_size_bits: font_size.to_bits(),
+                            font_identity,
+                            x_bin,
+                            y_bin,
+                        };
+                        seen_single_keys.insert(key.clone());
+                        glyph_atlas.get_or_create_atlas(
+                            &self.device,
+                            &self.queue,
+                            &key,
+                            face,
+                            subpixel_request,
+                        )
+                    };
+
+                    if let Some(handle) = handle_opt {
+                        let entry = handle.entry;
+                        let metrics = entry.metrics();
+                        let uv = entry.uv();
+                        let content_rect = entry.rect();
+                        let base_u_min = uv.min()[0];
+                        let base_u_max = uv.max()[0];
+                        let base_v_min = uv.min()[1];
+                        let base_v_max = uv.max()[1];
+                        let base_glyph_x = (x_int as f32 + metrics.bearing_x) / sf;
+                        let base_glyph_y = (y_int as f32 - metrics.bearing_y) / sf;
+                        let base_glyph_w = content_rect.width() as f32 / sf;
+                        let base_glyph_h = content_rect.height() as f32 / sf;
+                        let effective_clip = paint.clip().map(|clip| Rect {
                             x: clip.x + offset_x,
                             y: clip.y + offset_y,
                             width: clip.width,
                             height: clip.height,
                         });
-                    let Some((glyph_x, glyph_y, glyph_w, glyph_h, u0, u1, v0, v1)) =
-                        clipped_media_rect(
-                            base_glyph_x,
-                            base_glyph_y,
-                            base_glyph_w,
-                            base_glyph_h,
-                            effective_clip.as_ref(),
-                        )
-                    else {
-                        continue;
-                    };
-                    let tex_u_min = base_u_min + (base_u_max - base_u_min) * u0;
-                    let tex_u_max = base_u_min + (base_u_max - base_u_min) * u1;
-                    let tex_v_min = base_v_min + (base_v_max - base_v_min) * v0;
-                    let tex_v_max = base_v_min + (base_v_max - base_v_min) * v1;
+                        let Some((glyph_x, glyph_y, glyph_w, glyph_h, u0, u1, v0, v1)) =
+                            clipped_media_rect(
+                                base_glyph_x,
+                                base_glyph_y,
+                                base_glyph_w,
+                                base_glyph_h,
+                                effective_clip.as_ref(),
+                            )
+                        else {
+                            continue;
+                        };
+                        let tex_u_min = base_u_min + (base_u_max - base_u_min) * u0;
+                        let tex_u_max = base_u_min + (base_u_max - base_u_min) * u1;
+                        let tex_v_min = base_v_min + (base_v_max - base_v_min) * v0;
+                        let tex_v_max = base_v_min + (base_v_max - base_v_min) * v1;
 
-                    let mut effective_fg = *fg;
-                    let mut effective_bg = bg
-                        .or_else(|| face.map(|resolved| resolved.background))
-                        .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
-                    if cursor_visible
-                        && let Some(cursor) = frame.active_cursor()
-                        && matches!(cursor.style, CursorStyle::FilledBox)
-                        && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
-                    {
-                        effective_fg = cursor.cursor_fg;
-                        effective_bg = cursor.color;
-                    }
+                        let mut effective_fg = *fg;
+                        let mut effective_bg = bg
+                            .or_else(|| face.map(|resolved| resolved.background))
+                            .unwrap_or(Color::rgb(1.0, 1.0, 1.0));
+                        if cursor_visible
+                            && let Some(cursor) = frame.active_cursor()
+                            && matches!(cursor.style, CursorStyle::FilledBox)
+                            && glyph.slot_id().is_some_and(|slot| slot == cursor.slot_id)
+                        {
+                            effective_fg = cursor.cursor_fg;
+                            effective_bg = cursor.color;
+                        }
 
-                    let is_color = matches!(entry, AnyAtlasEntry::Color(_));
-                    let color = if is_color {
-                        [1.0, 1.0, 1.0, 1.0]
-                    } else {
-                        [
-                            effective_fg.r,
-                            effective_fg.g,
-                            effective_fg.b,
-                            effective_fg.a,
-                        ]
-                    };
-                    let subpixel_fg = subpixel_foreground_color(effective_bg, effective_fg, 1.0);
-                    let subpixel_bg = subpixel_background_color(effective_bg);
-
-                    let vertices = [
-                        GlyphVertex {
-                            position: [glyph_x, glyph_y],
-                            tex_coords: [tex_u_min, tex_v_min],
-                            color,
-                        },
-                        GlyphVertex {
-                            position: [glyph_x + glyph_w, glyph_y],
-                            tex_coords: [tex_u_max, tex_v_min],
-                            color,
-                        },
-                        GlyphVertex {
-                            position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                            tex_coords: [tex_u_max, tex_v_max],
-                            color,
-                        },
-                        GlyphVertex {
-                            position: [glyph_x, glyph_y],
-                            tex_coords: [tex_u_min, tex_v_min],
-                            color,
-                        },
-                        GlyphVertex {
-                            position: [glyph_x + glyph_w, glyph_y + glyph_h],
-                            tex_coords: [tex_u_max, tex_v_max],
-                            color,
-                        },
-                        GlyphVertex {
-                            position: [glyph_x, glyph_y + glyph_h],
-                            tex_coords: [tex_u_min, tex_v_max],
-                            color,
-                        },
-                    ];
-
-                    let overstrike_vertices = if overstrike {
-                        let ox = 1.0 / sf;
-                        super::pointer_override::clip_glyph_quad(
+                        let is_color = matches!(entry, AnyAtlasEntry::Color(_));
+                        let color = if is_color {
+                            [1.0, 1.0, 1.0, 1.0]
+                        } else {
                             [
-                                GlyphVertex {
-                                    position: [glyph_x + ox, glyph_y],
-                                    tex_coords: [tex_u_min, tex_v_min],
-                                    color,
-                                },
-                                GlyphVertex {
-                                    position: [glyph_x + ox + glyph_w, glyph_y],
-                                    tex_coords: [tex_u_max, tex_v_min],
-                                    color,
-                                },
-                                GlyphVertex {
-                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                    tex_coords: [tex_u_max, tex_v_max],
-                                    color,
-                                },
-                                GlyphVertex {
-                                    position: [glyph_x + ox, glyph_y],
-                                    tex_coords: [tex_u_min, tex_v_min],
-                                    color,
-                                },
-                                GlyphVertex {
-                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                    tex_coords: [tex_u_max, tex_v_max],
-                                    color,
-                                },
-                                GlyphVertex {
-                                    position: [glyph_x + ox, glyph_y + glyph_h],
-                                    tex_coords: [tex_u_min, tex_v_max],
-                                    color,
-                                },
-                            ],
-                            effective_clip.as_ref(),
-                        )
-                    } else {
-                        None
-                    };
+                                effective_fg.r,
+                                effective_fg.g,
+                                effective_fg.b,
+                                effective_fg.a,
+                            ]
+                        };
+                        let subpixel_fg =
+                            subpixel_foreground_color(effective_bg, effective_fg, 1.0);
+                        let subpixel_bg = subpixel_background_color(effective_bg);
 
-                    let subpixel_vertices = build_subpixel_vertices(
-                        glyph_x,
-                        glyph_y,
-                        glyph_w,
-                        glyph_h,
-                        tex_u_min,
-                        tex_u_max,
-                        tex_v_min,
-                        tex_v_max,
-                        subpixel_fg,
-                        subpixel_bg,
-                    );
+                        let vertices = [
+                            GlyphVertex {
+                                position: [glyph_x, glyph_y],
+                                tex_coords: [tex_u_min, tex_v_min],
+                                color,
+                            },
+                            GlyphVertex {
+                                position: [glyph_x + glyph_w, glyph_y],
+                                tex_coords: [tex_u_max, tex_v_min],
+                                color,
+                            },
+                            GlyphVertex {
+                                position: [glyph_x + glyph_w, glyph_y + glyph_h],
+                                tex_coords: [tex_u_max, tex_v_max],
+                                color,
+                            },
+                            GlyphVertex {
+                                position: [glyph_x, glyph_y],
+                                tex_coords: [tex_u_min, tex_v_min],
+                                color,
+                            },
+                            GlyphVertex {
+                                position: [glyph_x + glyph_w, glyph_y + glyph_h],
+                                tex_coords: [tex_u_max, tex_v_max],
+                                color,
+                            },
+                            GlyphVertex {
+                                position: [glyph_x, glyph_y + glyph_h],
+                                tex_coords: [tex_u_min, tex_v_max],
+                                color,
+                            },
+                        ];
 
-                    let overstrike_subpixel_vertices = if overstrike {
-                        let ox = 1.0 / sf;
-                        super::pointer_override::clip_subpixel_quad(
-                            build_subpixel_vertices(
-                                glyph_x + ox,
-                                glyph_y,
-                                glyph_w,
-                                glyph_h,
-                                tex_u_min,
-                                tex_u_max,
-                                tex_v_min,
-                                tex_v_max,
-                                subpixel_fg,
-                                subpixel_bg,
-                            ),
-                            effective_clip.as_ref(),
-                        )
-                    } else {
-                        None
-                    };
+                        let overstrike_vertices = if overstrike {
+                            let ox = 1.0 / sf;
+                            super::pointer_override::clip_glyph_quad(
+                                [
+                                    GlyphVertex {
+                                        position: [glyph_x + ox, glyph_y],
+                                        tex_coords: [tex_u_min, tex_v_min],
+                                        color,
+                                    },
+                                    GlyphVertex {
+                                        position: [glyph_x + ox + glyph_w, glyph_y],
+                                        tex_coords: [tex_u_max, tex_v_min],
+                                        color,
+                                    },
+                                    GlyphVertex {
+                                        position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                        tex_coords: [tex_u_max, tex_v_max],
+                                        color,
+                                    },
+                                    GlyphVertex {
+                                        position: [glyph_x + ox, glyph_y],
+                                        tex_coords: [tex_u_min, tex_v_min],
+                                        color,
+                                    },
+                                    GlyphVertex {
+                                        position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                        tex_coords: [tex_u_max, tex_v_max],
+                                        color,
+                                    },
+                                    GlyphVertex {
+                                        position: [glyph_x + ox, glyph_y + glyph_h],
+                                        tex_coords: [tex_u_min, tex_v_max],
+                                        color,
+                                    },
+                                ],
+                                effective_clip.as_ref(),
+                            )
+                        } else {
+                            None
+                        };
 
-                    if is_color {
-                        color_data.push((entry, vertices));
-                        if let Some(ov) = overstrike_vertices {
-                            color_data.push((entry, ov));
-                        }
-                    } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
-                        subpixel_data.push((entry, subpixel_vertices));
-                        if let Some(ov) = overstrike_subpixel_vertices {
-                            subpixel_data.push((entry, ov));
-                        }
-                    } else {
-                        mask_data.push((entry, vertices));
-                        if let Some(ov) = overstrike_vertices {
-                            mask_data.push((entry, ov));
+                        let subpixel_vertices = build_subpixel_vertices(
+                            glyph_x,
+                            glyph_y,
+                            glyph_w,
+                            glyph_h,
+                            tex_u_min,
+                            tex_u_max,
+                            tex_v_min,
+                            tex_v_max,
+                            subpixel_fg,
+                            subpixel_bg,
+                        );
+
+                        let overstrike_subpixel_vertices = if overstrike {
+                            let ox = 1.0 / sf;
+                            super::pointer_override::clip_subpixel_quad(
+                                build_subpixel_vertices(
+                                    glyph_x + ox,
+                                    glyph_y,
+                                    glyph_w,
+                                    glyph_h,
+                                    tex_u_min,
+                                    tex_u_max,
+                                    tex_v_min,
+                                    tex_v_max,
+                                    subpixel_fg,
+                                    subpixel_bg,
+                                ),
+                                effective_clip.as_ref(),
+                            )
+                        } else {
+                            None
+                        };
+
+                        if is_color {
+                            color_data.push((entry, vertices));
+                            if let Some(ov) = overstrike_vertices {
+                                color_data.push((entry, ov));
+                            }
+                        } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
+                            subpixel_data.push((entry, subpixel_vertices));
+                            if let Some(ov) = overstrike_subpixel_vertices {
+                                subpixel_data.push((entry, ov));
+                            }
+                        } else {
+                            mask_data.push((entry, vertices));
+                            if let Some(ov) = overstrike_vertices {
+                                mask_data.push((entry, ov));
+                            }
                         }
                     }
                 }
@@ -840,180 +848,181 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let face_id = pointer_override.face_id(glyph_index, *face_id);
-                let effective_clip = pointer_override
-                    .glyph_clip(glyph_index, clip_rect.as_ref())
-                    .map(|clip| Rect {
+                for paint in pointer_override.face_paints(glyph_index, *face_id, clip_rect.as_ref())
+                {
+                    let face_id = paint.face_id();
+                    let effective_clip = paint.clip().map(|clip| Rect {
                         x: clip.x + offset_x,
                         y: clip.y + offset_y,
                         width: clip.width,
                         height: clip.height,
                     });
-                let decoration_start = decoration_vertices.len();
-                let rf = match deco_face_cache {
-                    Some((id, ref data)) if id == face_id => *data,
-                    _ => {
-                        let data = frame.resolved_face(face_id);
-                        deco_face_cache = Some((face_id, data));
-                        data
-                    }
-                };
-                let fg = &rf.fg;
-                let underline = &rf.underline;
-                let underline_color = &rf.underline_color;
-                let strike_through = &rf.strike_through;
-                let strike_through_color = &rf.strike_through_color;
-                let overline = &rf.overline;
-                let overline_color = &rf.overline_color;
-
-                let gx = *x + offset_x;
-                let gy = *y + offset_y;
-                let baseline_y = *baseline + offset_y;
-
-                // Per-face font metrics for underline positioning
-                let (ul_pos, ul_thick) = frame
-                    .faces
-                    .get(&face_id)
-                    .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
-                    .unwrap_or((1.0, 1.0));
-
-                // Underline
-                if *underline != UnderlineStyle::None {
-                    let ul_color = underline_color.as_ref().unwrap_or(fg);
-                    let ul_y = baseline_y + ul_pos;
-                    let line_thickness = ul_thick.max(1.0);
-
-                    match *underline {
-                        UnderlineStyle::Line => {
-                            // Single solid line
-                            self.add_rect(
-                                &mut decoration_vertices,
-                                gx,
-                                ul_y,
-                                *width,
-                                line_thickness,
-                                ul_color,
-                            );
+                    let decoration_start = decoration_vertices.len();
+                    let rf = match deco_face_cache {
+                        Some((id, ref data)) if id == face_id => *data,
+                        _ => {
+                            let data = frame.resolved_face(face_id);
+                            deco_face_cache = Some((face_id, data));
+                            data
                         }
-                        UnderlineStyle::Wave => {
-                            // Wave underline
-                            let amplitude: f32 = 2.0;
-                            let wavelength: f32 = 8.0;
-                            let seg_w: f32 = 1.0;
-                            let mut cx = gx;
-                            while cx < gx + *width {
-                                let sw = seg_w.min(gx + *width - cx);
-                                let phase = (cx - gx) * std::f32::consts::TAU / wavelength;
-                                let wave_offset = phase.sin() * amplitude;
+                    };
+                    let fg = &rf.fg;
+                    let underline = &rf.underline;
+                    let underline_color = &rf.underline_color;
+                    let strike_through = &rf.strike_through;
+                    let strike_through_color = &rf.strike_through_color;
+                    let overline = &rf.overline;
+                    let overline_color = &rf.overline_color;
+
+                    let gx = *x + offset_x;
+                    let gy = *y + offset_y;
+                    let baseline_y = *baseline + offset_y;
+
+                    // Per-face font metrics for underline positioning
+                    let (ul_pos, ul_thick) = frame
+                        .faces
+                        .get(&face_id)
+                        .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
+                        .unwrap_or((1.0, 1.0));
+
+                    // Underline
+                    if *underline != UnderlineStyle::None {
+                        let ul_color = underline_color.as_ref().unwrap_or(fg);
+                        let ul_y = baseline_y + ul_pos;
+                        let line_thickness = ul_thick.max(1.0);
+
+                        match *underline {
+                            UnderlineStyle::Line => {
+                                // Single solid line
                                 self.add_rect(
                                     &mut decoration_vertices,
-                                    cx,
-                                    ul_y + wave_offset,
-                                    sw,
-                                    line_thickness,
-                                    ul_color,
-                                );
-                                cx += seg_w;
-                            }
-                        }
-                        UnderlineStyle::Double => {
-                            // Double line
-                            self.add_rect(
-                                &mut decoration_vertices,
-                                gx,
-                                ul_y,
-                                *width,
-                                line_thickness,
-                                ul_color,
-                            );
-                            self.add_rect(
-                                &mut decoration_vertices,
-                                gx,
-                                ul_y + line_thickness + 1.0,
-                                *width,
-                                line_thickness,
-                                ul_color,
-                            );
-                        }
-                        UnderlineStyle::Dotted => {
-                            // Dotted
-                            let mut cx = gx;
-                            while cx < gx + *width {
-                                let dw = line_thickness.min(gx + *width - cx);
-                                self.add_rect(
-                                    &mut decoration_vertices,
-                                    cx,
+                                    gx,
                                     ul_y,
-                                    dw,
+                                    *width,
                                     line_thickness,
                                     ul_color,
                                 );
-                                cx += line_thickness + 2.0;
                             }
-                        }
-                        UnderlineStyle::Dashed => {
-                            // Dashed
-                            let mut cx = gx;
-                            while cx < gx + *width {
-                                let dw = 4.0_f32.min(gx + *width - cx);
+                            UnderlineStyle::Wave => {
+                                // Wave underline
+                                let amplitude: f32 = 2.0;
+                                let wavelength: f32 = 8.0;
+                                let seg_w: f32 = 1.0;
+                                let mut cx = gx;
+                                while cx < gx + *width {
+                                    let sw = seg_w.min(gx + *width - cx);
+                                    let phase = (cx - gx) * std::f32::consts::TAU / wavelength;
+                                    let wave_offset = phase.sin() * amplitude;
+                                    self.add_rect(
+                                        &mut decoration_vertices,
+                                        cx,
+                                        ul_y + wave_offset,
+                                        sw,
+                                        line_thickness,
+                                        ul_color,
+                                    );
+                                    cx += seg_w;
+                                }
+                            }
+                            UnderlineStyle::Double => {
+                                // Double line
                                 self.add_rect(
                                     &mut decoration_vertices,
-                                    cx,
+                                    gx,
                                     ul_y,
-                                    dw,
+                                    *width,
                                     line_thickness,
                                     ul_color,
                                 );
-                                cx += 7.0;
+                                self.add_rect(
+                                    &mut decoration_vertices,
+                                    gx,
+                                    ul_y + line_thickness + 1.0,
+                                    *width,
+                                    line_thickness,
+                                    ul_color,
+                                );
+                            }
+                            UnderlineStyle::Dotted => {
+                                // Dotted
+                                let mut cx = gx;
+                                while cx < gx + *width {
+                                    let dw = line_thickness.min(gx + *width - cx);
+                                    self.add_rect(
+                                        &mut decoration_vertices,
+                                        cx,
+                                        ul_y,
+                                        dw,
+                                        line_thickness,
+                                        ul_color,
+                                    );
+                                    cx += line_thickness + 2.0;
+                                }
+                            }
+                            UnderlineStyle::Dashed => {
+                                // Dashed
+                                let mut cx = gx;
+                                while cx < gx + *width {
+                                    let dw = 4.0_f32.min(gx + *width - cx);
+                                    self.add_rect(
+                                        &mut decoration_vertices,
+                                        cx,
+                                        ul_y,
+                                        dw,
+                                        line_thickness,
+                                        ul_color,
+                                    );
+                                    cx += 7.0;
+                                }
+                            }
+                            // None reaches here only for an out-of-range code (the
+                            // `*underline > 0` guard excludes a real None): fall back
+                            // to a single solid line.
+                            UnderlineStyle::None => {
+                                self.add_rect(
+                                    &mut decoration_vertices,
+                                    gx,
+                                    ul_y,
+                                    *width,
+                                    line_thickness,
+                                    ul_color,
+                                );
                             }
                         }
-                        // None reaches here only for an out-of-range code (the
-                        // `*underline > 0` guard excludes a real None): fall back
-                        // to a single solid line.
-                        UnderlineStyle::None => {
-                            self.add_rect(
-                                &mut decoration_vertices,
-                                gx,
-                                ul_y,
-                                *width,
-                                line_thickness,
-                                ul_color,
-                            );
-                        }
                     }
-                }
 
-                // Overline
-                if *overline {
-                    let ol_color = overline_color.as_ref().unwrap_or(fg);
-                    self.add_rect(
+                    // Overline
+                    if *overline {
+                        let ol_color = overline_color.as_ref().unwrap_or(fg);
+                        self.add_rect(
+                            &mut decoration_vertices,
+                            gx,
+                            gy,
+                            *width,
+                            ul_thick.max(1.0),
+                            ol_color,
+                        );
+                    }
+
+                    // Strikethrough
+                    if *strike_through {
+                        let st_color = strike_through_color.as_ref().unwrap_or(fg);
+                        let st_y = baseline_y - *ascent / 3.0;
+                        self.add_rect(
+                            &mut decoration_vertices,
+                            gx,
+                            st_y,
+                            *width,
+                            ul_thick.max(1.0),
+                            st_color,
+                        );
+                    }
+                    super::pointer_override::clip_new_rect_vertices(
                         &mut decoration_vertices,
-                        gx,
-                        gy,
-                        *width,
-                        ul_thick.max(1.0),
-                        ol_color,
+                        decoration_start,
+                        effective_clip.as_ref(),
                     );
                 }
-
-                // Strikethrough
-                if *strike_through {
-                    let st_color = strike_through_color.as_ref().unwrap_or(fg);
-                    let st_y = baseline_y - *ascent / 3.0;
-                    self.add_rect(
-                        &mut decoration_vertices,
-                        gx,
-                        st_y,
-                        *width,
-                        ul_thick.max(1.0),
-                        st_color,
-                    );
-                }
-                super::pointer_override::clip_new_rect_vertices(
-                    &mut decoration_vertices,
-                    decoration_start,
-                    effective_clip.as_ref(),
-                );
             }
         }
         for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
@@ -1028,34 +1037,34 @@ impl WgpuRenderer {
             else {
                 continue;
             };
-            let face_id = pointer_override.face_id(glyph_index, *face_id);
-            let Some(face) = frame.faces.get(&face_id) else {
-                continue;
-            };
-            let effective_clip = pointer_override
-                .glyph_clip(glyph_index, clip_rect.as_ref())
-                .map(|clip| Rect {
+            for paint in pointer_override.face_paints(glyph_index, *face_id, clip_rect.as_ref()) {
+                let face_id = paint.face_id();
+                let Some(face) = frame.faces.get(&face_id) else {
+                    continue;
+                };
+                let effective_clip = paint.clip().map(|clip| Rect {
                     x: clip.x + offset_x,
                     y: clip.y + offset_y,
                     width: clip.width,
                     height: clip.height,
                 });
-            let decoration_start = decoration_vertices.len();
-            for rect in stretch_decoration_rects(face, *x + offset_x, *y + offset_y, *width) {
-                self.add_rect(
+                let decoration_start = decoration_vertices.len();
+                for rect in stretch_decoration_rects(face, *x + offset_x, *y + offset_y, *width) {
+                    self.add_rect(
+                        &mut decoration_vertices,
+                        rect.x,
+                        rect.y,
+                        rect.width,
+                        rect.height,
+                        &rect.color,
+                    );
+                }
+                super::pointer_override::clip_new_rect_vertices(
                     &mut decoration_vertices,
-                    rect.x,
-                    rect.y,
-                    rect.width,
-                    rect.height,
-                    &rect.color,
+                    decoration_start,
+                    effective_clip.as_ref(),
                 );
             }
-            super::pointer_override::clip_new_rect_vertices(
-                &mut decoration_vertices,
-                decoration_start,
-                effective_clip.as_ref(),
-            );
         }
 
         // --- Step 4: Box borders (sharp and rounded, from merged spans) ---
@@ -1539,8 +1548,7 @@ impl WgpuRenderer {
                 } = glyph
                     && self.caches.image.get(image_id.get()).is_some()
                 {
-                    let effective_clip =
-                        pointer_override.image_clip(glyph_index, clip_rect.as_ref());
+                    let effective_clip = clip_rect.clone();
                     let Some((draw_x, draw_y, draw_width, draw_height, u0, u1, v0, v1)) =
                         clipped_media_rect(*x, *y, *width, *height, effective_clip.as_ref())
                     else {
@@ -1578,10 +1586,24 @@ impl WgpuRenderer {
                             paint.mode(),
                         )
                     {
+                        let relief_start = relief_vertices.len();
                         for edge in edges {
                             let (x, y, width, height) = edge.bounds();
                             self.add_rect(&mut relief_vertices, x, y, width, height, &edge.color());
                         }
+                        let relief_clip = pointer_override
+                            .image_clip(glyph_index, clip_rect.as_ref())
+                            .map(|clip| Rect {
+                                x: clip.x + offset_x,
+                                y: clip.y + offset_y,
+                                width: clip.width,
+                                height: clip.height,
+                            });
+                        super::pointer_override::clip_new_rect_vertices(
+                            &mut relief_vertices,
+                            relief_start,
+                            relief_clip.as_ref(),
+                        );
                     }
                 }
             }
@@ -1813,51 +1835,54 @@ impl WgpuRenderer {
                 } => (*x, *y, *width, *height, *face_id),
                 _ => continue,
             };
-            let gface_id = pointer_override.face_id(glyph_index, base_face_id);
-            let effective_clip =
-                pointer_override.glyph_clip(glyph_index, glyph.clip_rect().as_ref());
+            for paint in
+                pointer_override.face_paints(glyph_index, base_face_id, glyph.clip_rect().as_ref())
+            {
+                let gface_id = paint.face_id();
+                let effective_clip = paint.clip();
 
-            // Only include glyphs whose face has box decorations. The box fill
-            // background is the face's background (the value materialization used
-            // to inline on the glyph as `Some(face.background)`).
-            let g_bg = match faces.get(&gface_id) {
-                Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
-                    Some(f.background)
-                }
-                _ => continue,
-            };
+                // Only include glyphs whose face has box decorations. The box fill
+                // background is the face's background (the value materialization used
+                // to inline on the glyph as `Some(face.background)`).
+                let g_bg = match faces.get(&gface_id) {
+                    Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                        Some(f.background)
+                    }
+                    _ => continue,
+                };
 
-            let merged = if let Some(last) = box_spans.last_mut() {
-                let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
-                let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
-                // Strict same-face merge for every span. The frame-glyph path
-                // additionally merges sharp overlay (mode-line) spans across
-                // faces, but this child-frame content path draws no
-                // overlay-distinct rows (row_role is ignored throughout), so
-                // that rule does not apply here.
-                let same_face = last.face_id == gface_id;
-                let same_clip = last.clip == effective_clip;
+                let merged = if let Some(last) = box_spans.last_mut() {
+                    let same_row = (last.y - gy).abs() < 0.5 && (last.height - gh).abs() < 0.5;
+                    let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
+                    // Strict same-face merge for every span. The frame-glyph path
+                    // additionally merges sharp overlay (mode-line) spans across
+                    // faces, but this child-frame content path draws no
+                    // overlay-distinct rows (row_role is ignored throughout), so
+                    // that rule does not apply here.
+                    let same_face = last.face_id == gface_id;
+                    let same_clip = last.clip == effective_clip;
 
-                if same_row && adjacent && same_face && same_clip {
-                    last.width = gx + gw - last.x;
-                    true
+                    if same_row && adjacent && same_face && same_clip {
+                        last.width = gx + gw - last.x;
+                        true
+                    } else {
+                        false
+                    }
                 } else {
                     false
-                }
-            } else {
-                false
-            };
+                };
 
-            if !merged {
-                box_spans.push(BoxSpan {
-                    x: gx,
-                    y: gy,
-                    width: gw,
-                    height: gh,
-                    face_id: gface_id,
-                    bg: g_bg,
-                    clip: effective_clip,
-                });
+                if !merged {
+                    box_spans.push(BoxSpan {
+                        x: gx,
+                        y: gy,
+                        width: gw,
+                        height: gh,
+                        face_id: gface_id,
+                        bg: g_bg,
+                        clip: effective_clip,
+                    });
+                }
             }
         }
 
