@@ -48,7 +48,7 @@ use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_chrome::{
     BandRect, ChromeAction, ChromeHitRegion, InteractionId,
 };
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 use neomacs_display_protocol::{
     FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
@@ -1510,6 +1510,25 @@ pub(crate) fn gnu_image_relief_background(
         .unwrap_or_else(|| protocol_color_pixel(glyph_face_background))
 }
 
+fn glyph_at_visual_column(row: &GlyphRow, target_col: u16) -> Option<&Glyph> {
+    let mut col = 0u16;
+    for glyph in &row.glyphs[GlyphArea::Text.index()] {
+        if glyph.padding {
+            continue;
+        }
+        if col == target_col {
+            return Some(glyph);
+        }
+        let width = match glyph.glyph_type {
+            GlyphType::Stretch { width_cols } => width_cols,
+            _ if glyph.wide => 2,
+            _ => 1,
+        };
+        col = col.saturating_add(width);
+    }
+    None
+}
+
 pub(crate) fn tab_bar_image_relief_styles(
     rendered: &RenderedDisplayRow,
     fallback_background: u32,
@@ -1528,8 +1547,7 @@ pub(crate) fn tab_bar_image_relief_styles(
             else {
                 return None;
             };
-            let face = rendered.row().glyphs[GlyphArea::Text.index()]
-                .get(usize::from(medium.col))
+            let face = glyph_at_visual_column(rendered.row(), medium.col)
                 .and_then(|glyph| {
                     rendered
                         .faces()

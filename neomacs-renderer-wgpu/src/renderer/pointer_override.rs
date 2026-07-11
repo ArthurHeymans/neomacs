@@ -198,14 +198,26 @@ impl PointerOverrideResolver {
         let PointerDrawMode::Face(override_face) = override_paint.mode() else {
             return PrimitivePaintPlan::one(base);
         };
-        let domain = original_clip
-            .and_then(|clip| intersect_rect(&primitive_bounds, clip))
-            .unwrap_or(primitive_bounds);
+        let domain = match original_clip {
+            Some(clip) => {
+                let Some(domain) = intersect_rect(&primitive_bounds, clip) else {
+                    return PrimitivePaintPlan::one(base);
+                };
+                domain
+            }
+            None => primitive_bounds,
+        };
         let raw = override_paint.clip();
         let raw = Rect::new(raw.x(), raw.y(), raw.width(), raw.height());
-        let semantic_clip = original_clip
-            .and_then(|clip| intersect_rect(clip, &raw))
-            .unwrap_or(raw);
+        let semantic_clip = match original_clip {
+            Some(clip) => {
+                let Some(semantic_clip) = intersect_rect(clip, &raw) else {
+                    return PrimitivePaintPlan::one(base);
+                };
+                semantic_clip
+            }
+            None => raw,
+        };
         let Some(cut) = intersect_rect(&domain, &semantic_clip) else {
             return PrimitivePaintPlan::one(base);
         };

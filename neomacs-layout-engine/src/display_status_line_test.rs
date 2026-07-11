@@ -411,6 +411,50 @@ fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
 }
 
 #[test]
+fn tab_bar_image_relief_uses_glyph_at_visual_column_after_wide_stretch() {
+    let fallback_face = FaceId::new(50);
+    let image_face = FaceId::new(51);
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.glyphs[GlyphArea::Text.index()] = vec![
+        Glyph::stretch(3, fallback_face),
+        Glyph::char(' ', image_face, 1),
+    ];
+
+    let mut fallback = neomacs_display_protocol::face::Face::default();
+    fallback.id = fallback_face;
+    fallback.background = Color::BLUE;
+    let mut image = fallback.clone();
+    image.id = image_face;
+    image.box_color = Some(Color::RED);
+
+    let rendered = RenderedDisplayRow::new(
+        row,
+        DisplayRowOutputProgress::new(32.0, 4, 0.0, 18.0),
+        Vec::new(),
+        vec![fallback, image],
+        vec![RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Image {
+                image_id: 1,
+                opaque_background: None,
+            },
+            x: 24.0,
+            y: 0.0,
+            col: 3,
+            width: 8.0,
+            height: 8.0,
+        }],
+    );
+
+    let styles = tab_bar_image_relief_styles(&rendered, 0, 0xaa_bb_cc, 1.0, 1.0, 1.0);
+
+    assert_eq!(styles.len(), 1);
+    assert_eq!(
+        styles[0].1,
+        gnu_tab_bar_pointer_appearance_style(0xff_00_00, 0xaa_bb_cc, 1.0, 1.0, 1.0)
+    );
+}
+
+#[test]
 fn tab_bar_pointer_appearance_preserves_configured_zero_relief() {
     let style = gnu_tab_bar_pointer_appearance_style(0x00808080, 0x00112233, 1.0, 1.0, 0.0);
 

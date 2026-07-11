@@ -671,6 +671,32 @@ fn partial_face_override_replaces_inside_clip_and_keeps_base_only_in_complement(
 }
 
 #[test]
+fn disjoint_authoritative_clip_never_reveals_pointer_override() {
+    let frame = frame_with_glyph_appearance(
+        PointerDrawMode::Face(FaceId::new(2)),
+        PointerDrawMode::Face(FaceId::new(2)),
+    );
+    let resolver =
+        PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
+    let primitive = neomacs_display_protocol::Rect::new(10.0, 5.0, 20.0, 17.0);
+    let authoritative_clip = neomacs_display_protocol::Rect::new(40.0, 5.0, 5.0, 17.0);
+
+    let paints = resolver
+        .face_paints(
+            0,
+            FaceId::new(0),
+            primitive,
+            Some(&authoritative_clip),
+        )
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    assert_eq!(paints.len(), 1);
+    assert_eq!(paints[0].face_id(), FaceId::new(0));
+    assert_eq!(paints[0].clip(), Some(authoritative_clip));
+}
+
+#[test]
 fn complement_clips_do_not_reanchor_gradient_or_stipple_paint_coordinates() {
     let frame = frame_with_glyph_appearance(
         PointerDrawMode::Face(FaceId::new(2)),
