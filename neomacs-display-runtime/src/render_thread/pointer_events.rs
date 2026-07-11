@@ -183,10 +183,12 @@ impl RenderApp {
         window_state: &GuiFrameWindowState,
         x: f32,
         y: f32,
-    ) -> Option<u32> {
+    ) -> Option<(u64, u32)> {
         let frame = window_state.render.compositor.current_frame.as_ref()?;
         match frame_chrome_hit(frame, x, y)?.0 {
-            ChromeAction::SelectTab { index } => Some(*index),
+            ChromeAction::Presented { interaction } => {
+                Some((frame.presentation_id.get(), interaction.get()))
+            }
             _ => None,
         }
     }
@@ -381,15 +383,20 @@ impl RenderApp {
                                 .chrome
                                 .interaction
                                 .tab_bar_press_captured = true;
-                            if let Some(idx) =
+                            if let Some((presentation, interaction)) =
                                 Self::frame_window_tab_bar_hit_test(window_state, x, y)
                             {
                                 window_state
                                     .render
                                     .chrome
-                                    .press_with_popup(&ChromePress::TabBar(idx));
-                                event = Some(InputEvent::TabBarClick {
-                                    index: idx as i32,
+                                    .press_with_popup(&ChromePress::TabBar(interaction));
+                                event = Some(InputEvent::PresentedPointer {
+                                    presentation,
+                                    interaction,
+                                    pressed: true,
+                                    button: 1,
+                                    x,
+                                    y,
                                     emacs_frame_id: window_state.render.emacs_frame_id,
                                 });
                             }
@@ -574,13 +581,20 @@ impl RenderApp {
                             .chrome
                             .interaction
                             .tab_bar_press_captured = true;
-                        if let Some(idx) = Self::frame_window_tab_bar_hit_test(window_state, x, y) {
+                        if let Some((presentation, interaction)) =
+                            Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                        {
                             window_state
                                 .render
                                 .chrome
-                                .press_with_popup(&ChromePress::TabBar(idx));
-                            event = Some(InputEvent::TabBarClick {
-                                index: idx as i32,
+                                .press_with_popup(&ChromePress::TabBar(interaction));
+                            event = Some(InputEvent::PresentedPointer {
+                                presentation,
+                                interaction,
+                                pressed: true,
+                                button: 1,
+                                x,
+                                y,
                                 emacs_frame_id: window_state.render.emacs_frame_id,
                             });
                             window_state.render.mark_dirty();
@@ -643,6 +657,24 @@ impl RenderApp {
                             .toolbar_pressed
                             .is_some())
                 {
+                    if window_state
+                        .render
+                        .chrome
+                        .interaction
+                        .tab_bar_press_captured
+                        && let Some((presentation, interaction)) =
+                            Self::frame_window_tab_bar_hit_test(window_state, x, y)
+                    {
+                        event = Some(InputEvent::PresentedPointer {
+                            presentation,
+                            interaction,
+                            pressed: false,
+                            button: 1,
+                            x,
+                            y,
+                            emacs_frame_id: window_state.render.emacs_frame_id,
+                        });
+                    }
                     window_state.render.clear_all_chrome_pressed();
                     handled_chrome = true;
                 }
@@ -881,7 +913,8 @@ impl RenderApp {
 
             let old_tab_hover = window_state.render.chrome.interaction.tab_bar_hovered;
             window_state.render.chrome.interaction.tab_bar_hovered =
-                Self::frame_window_tab_bar_hit_test(window_state, lx, ly);
+                Self::frame_window_tab_bar_hit_test(window_state, lx, ly)
+                    .map(|(_, interaction)| interaction);
             dirty |= window_state.render.chrome.interaction.tab_bar_hovered != old_tab_hover;
 
             let old_toolbar_hover = window_state.render.chrome.interaction.toolbar_hovered;

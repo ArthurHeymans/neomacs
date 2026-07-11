@@ -753,6 +753,8 @@ pub enum WindowEffectHint {
 /// each frame by the C-side matrix walker. No incremental state management needed.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FrameGlyphBuffer {
+    /// Evaluator interaction snapshot paired with these exact pixels.
+    pub presentation_id: crate::frame_chrome::PresentationId,
     /// Frame dimensions
     pub width: f32,
     pub height: f32,
@@ -1004,6 +1006,7 @@ impl FrameGlyphBuffer {
 
     pub fn new() -> Self {
         Self {
+            presentation_id: crate::frame_chrome::PresentationId::default(),
             width: 0.0,
             height: 0.0,
             char_width: 8.0,

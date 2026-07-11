@@ -1643,6 +1643,11 @@ fn render_lisp_string_row_centers_image_on_text_centerline() {
 
     assert_eq!(stretch.pixel_height, 16.0);
     assert_eq!(stretch.pixel_ascent, 13.0);
+    assert_eq!(
+        rendered.source_slots()[1].source().lisp_string_char_index(),
+        Some(1)
+    );
+    assert_eq!(rendered.source_slots()[1].width_px(), 16.0);
     assert_eq!(rendered.row().pixel_y + rendered.row().ascent_px, 18.0);
     assert_eq!(
         rendered.media(),

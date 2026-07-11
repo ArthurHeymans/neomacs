@@ -1,6 +1,17 @@
 use super::*;
 use crate::face::Face;
+use crate::frame_chrome::PresentationId;
 use crate::frame_glyphs::{DisplaySlotId, PhysCursor};
+
+#[test]
+fn frame_display_state_carries_the_interaction_presentation_that_matches_its_pixels() {
+    let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
+    state.presentation_id = PresentationId::new(23);
+
+    let materialized = state.materialize();
+
+    assert_eq!(materialized.presentation_id, PresentationId::new(23));
+}
 
 #[test]
 fn glyph_type_kind_codes_match_gnu_glyph_type() {
@@ -1398,7 +1409,9 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
             )
             .with_hit_regions(vec![ChromeHitRegion::new(
                 BandRect::new(0.0, 0.0, 24.0, 18.0).expect("local hit bounds"),
-                ChromeAction::SelectTab { index: 0 },
+                ChromeAction::Presented {
+                    interaction: crate::frame_chrome::InteractionId::new(0),
+                },
             )]),
         ],
     )

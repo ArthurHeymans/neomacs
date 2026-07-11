@@ -10,7 +10,7 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_chrome::{
-    ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameSize,
+    ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameSize, PresentationId,
 };
 use neomacs_display_protocol::frame_glyphs::{
     GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint, WindowTransitionKind,
@@ -61,6 +61,7 @@ pub(crate) struct FrameOutputIdentity {
 pub(crate) struct FrameOutputOwner {
     builder: DisplayOutputBuilder,
     pending_frame_chrome: Vec<ChromeBandRequest>,
+    presentation_id: PresentationId,
 }
 
 pub(crate) struct FrameOutputTarget<'a> {
@@ -77,6 +78,7 @@ impl FrameOutputOwner {
         Self {
             builder: DisplayOutputBuilder::new(),
             pending_frame_chrome: Vec::new(),
+            presentation_id: PresentationId::default(),
         }
     }
 
@@ -100,11 +102,18 @@ impl FrameOutputOwner {
         &mut self,
         frame_params: &FrameParams,
     ) -> Result<FrameDisplayState, ChromeLayoutError> {
-        self.session().finish(frame_params)
+        let presentation_id = self.presentation_id;
+        let mut state = self.session().finish(frame_params)?;
+        state.presentation_id = presentation_id;
+        Ok(state)
     }
 
     pub(crate) fn add_frame_chrome_band(&mut self, request: ChromeBandRequest) {
         self.pending_frame_chrome.push(request);
+    }
+
+    pub(crate) fn set_presentation_id(&mut self, presentation: u64) {
+        self.presentation_id = PresentationId::new(presentation);
     }
 
     pub(crate) fn render_frame_tab_bar_row(

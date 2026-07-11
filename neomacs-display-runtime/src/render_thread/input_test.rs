@@ -2,6 +2,8 @@ use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
+use neomacs_display_protocol::frame_chrome::InteractionId;
+use neomacs_display_protocol::frame_chrome::PresentationId;
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
 
@@ -169,9 +171,12 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
     )
     .with_hit_regions(vec![ChromeHitRegion::new(
         BandRect::new(8.0, 0.0, 80.0, 18.0).expect("tab bounds"),
-        ChromeAction::SelectTab { index: 0 },
+        ChromeAction::Presented {
+            interaction: InteractionId::new(4),
+        },
     )]);
     let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.presentation_id = PresentationId::new(9);
     frame.frame_chrome = FrameChrome::layout(
         FrameSize::new(800.0, 600.0).expect("frame size"),
         vec![
@@ -197,8 +202,8 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
     ));
     assert!(matches!(
         frame_chrome_hit(&frame, 20.0, 56.0),
-        Some((ChromeAction::SelectTab { index: 0 }, bounds))
-            if bounds.y() == 52.0
+        Some((ChromeAction::Presented { interaction }, bounds))
+            if interaction.get() == 4 && bounds.y() == 52.0
     ));
     let mut app = make_test_app(800, 600, 1.0);
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {
@@ -207,7 +212,7 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
     primary_frame.compositor.current_frame = Some(frame);
     assert_eq!(app.toolbar_y_origin(), 18.0);
     assert_eq!(app.toolbar_hit_test(20.0, 30.0), Some(0));
-    assert_eq!(app.tab_bar_hit_test(20.0, 56.0), Some(0));
+    assert_eq!(app.tab_bar_hit_test(20.0, 56.0), Some((9, 4)));
     let hit = app.menu_bar_hit_test(20.0, 10.0).expect("menu hit");
     assert_eq!(hit.index, 0);
     assert_eq!(hit.key, "file");

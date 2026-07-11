@@ -6,7 +6,7 @@
 
 **Architecture:** The display protocol owns immutable frame-chrome bands. Each band has one absolute `FrameRect`; display rows, media, item rectangles, and hit regions are band-local. The layout engine builds semantic content and stacks bands once, while GUI and TTY adapters project that authoritative result without recalculating geometry.
 
-**Tech Stack:** Rust 2024, serde display protocol, Neomacs layout engine, wgpu renderer, TTY RIF, cargo test, proptest.
+**Tech Stack:** Rust 2024, serde display protocol, Neomacs layout engine, wgpu renderer, TTY RIF, cargo nextest run, proptest.
 
 **Design reference:** `docs/plans/2026-07-11-frame-chrome-design.md`
 
@@ -59,7 +59,7 @@ Add a proptest asserting ordered, in-frame, non-overlapping output for generated
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol frame_chrome --lib
+cargo nextest run -p neomacs-display-protocol frame_chrome --lib
 ```
 
 Expected: compilation fails because `frame_chrome` and its types do not exist.
@@ -79,7 +79,7 @@ pub struct ChromeBandId(u32);
 pub enum ChromeAction {
     OpenMenu { index: u32, key: String },
     InvokeToolBarItem { index: u32 },
-    SelectTab { index: u32 },
+    Presented { interaction: InteractionId },
 }
 
 pub struct ChromeHitRegion {
@@ -108,7 +108,7 @@ Add `proptest.workspace = true` under protocol dev-dependencies and export the m
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol frame_chrome --lib
+cargo nextest run -p neomacs-display-protocol frame_chrome --lib
 ```
 
 Expected: all frame-chrome unit and property tests pass.
@@ -151,7 +151,7 @@ This is the automated form of the `/tmp/debug.txt` failure: `104.0` must never a
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol frame_chrome_materializes_nonzero_tab_origin_once --lib
+cargo nextest run -p neomacs-display-protocol frame_chrome_materializes_nonzero_tab_origin_once --lib
 ```
 
 Expected: failure because bands do not yet contain materializable content.
@@ -199,8 +199,8 @@ Do not call `absolute_output_row()` anywhere in this path.
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol frame_chrome --lib
-cargo test -p neomacs-display-protocol frame_chrome_materializes_nonzero_tab_origin_once --lib
+cargo nextest run -p neomacs-display-protocol frame_chrome --lib
+cargo nextest run -p neomacs-display-protocol frame_chrome_materializes_nonzero_tab_origin_once --lib
 ```
 
 Expected: pass, with every tab output at `y = 52`.
@@ -233,18 +233,23 @@ Test that menu, toolbar, compact, and tab builders return content with band-loca
 assert_eq!(menu.items()[0].bounds().y(), 0.0);
 assert_eq!(menu.items()[0].action(), &ChromeAction::OpenMenu { /* exact key */ });
 assert_eq!(tool.items()[0].action(), &ChromeAction::InvokeToolBarItem { index: 0 });
-assert_eq!(tab.hit_regions()[0].action(), &ChromeAction::SelectTab { index: 0 });
+assert!(matches!(tab.hit_regions()[0].action(), ChromeAction::Presented { .. }));
 ```
 
-For tabs, retain each caption's source character range before concatenation. Use `RenderedDisplayRow::source_slots()` to reduce the rendered slots for that range into exact `[min_x, max_x)` bounds. This replaces the runtime's `label.len() * char_width` approximation and supports proportional faces and display properties.
+For tabs, retain each caption's key, binding, value, and source character range
+before concatenation. Use `RenderedDisplayRow::source_slots()` to produce
+contiguous semantic runs, resolving `close-tab` at the exact source character.
+Register GNU-shaped evaluator targets and publish only opaque interaction
+references. This supports proportional faces, replacement images, the plus
+item, and custom bindings without moving Lisp policy into the renderer.
 
 **Step 2: Run tests and verify they fail**
 
 Run:
 
 ```bash
-cargo test -p neomacs-layout-engine gui_chrome --lib
-cargo test -p neomacs-layout-engine tab_bar_hit_regions_follow_rendered_caption_bounds --lib
+cargo nextest run -p neomacs-layout-engine gui_chrome --lib
+cargo nextest run -p neomacs-layout-engine tab_bar_hit_regions_follow_rendered_caption_bounds --lib
 ```
 
 Expected: failures because builders currently return bare items and tab caption ranges are discarded.
@@ -264,8 +269,8 @@ Use the frame's resolved font metrics for menu labels. Derive toolbar icon size/
 Run:
 
 ```bash
-cargo test -p neomacs-layout-engine gui_chrome --lib
-cargo test -p neomacs-layout-engine tab_bar --lib
+cargo nextest run -p neomacs-layout-engine gui_chrome --lib
+cargo nextest run -p neomacs-layout-engine tab_bar --lib
 ```
 
 Expected: pass.
@@ -304,8 +309,8 @@ Add the compact policy case: `CompactBar`, `TabBar`, with no menu/tool bands.
 Run:
 
 ```bash
-cargo test -p neomacs-layout-engine layout_frame_rust_publishes_authoritative_frame_chrome --lib
-cargo test -p neomacs-layout-engine layout_frame_rust_tab_bar_nonzero_origin_materializes_once --lib
+cargo nextest run -p neomacs-layout-engine layout_frame_rust_publishes_authoritative_frame_chrome --lib
+cargo nextest run -p neomacs-layout-engine layout_frame_rust_tab_bar_nonzero_origin_materializes_once --lib
 ```
 
 Expected: fail because `FrameOutputOwner` still owns separate rows and tab metadata and `engine.rs` appends GUI states after finishing output.
@@ -332,8 +337,8 @@ If chrome layout fails, return a typed frame-layout failure to the publication c
 Run:
 
 ```bash
-cargo test -p neomacs-layout-engine frame_chrome --lib
-cargo test -p neomacs-layout-engine tab_bar --lib
+cargo nextest run -p neomacs-layout-engine frame_chrome --lib
+cargo nextest run -p neomacs-layout-engine tab_bar --lib
 ```
 
 Expected: pass.
@@ -370,8 +375,8 @@ Include an assertion that toolbar origin comes from `ToolBar` band bounds and is
 Run:
 
 ```bash
-cargo test -p neomacs-display-runtime frame_chrome --lib
-cargo test -p neomacs-renderer-wgpu frame_chrome --lib
+cargo nextest run -p neomacs-display-runtime frame_chrome --lib
+cargo nextest run -p neomacs-renderer-wgpu frame_chrome --lib
 ```
 
 Expected: fail because ingestion and rendering still store and pass separate overlay states.
@@ -389,8 +394,8 @@ Expected: fail because ingestion and rendering still store and pass separate ove
 Run:
 
 ```bash
-cargo test -p neomacs-display-runtime render_thread --lib
-cargo test -p neomacs-renderer-wgpu --lib
+cargo nextest run -p neomacs-display-runtime render_thread --lib
+cargo nextest run -p neomacs-renderer-wgpu --lib
 ```
 
 Expected: pass.
@@ -421,7 +426,7 @@ git commit -m "refactor(display): render authoritative frame chrome bands"
 Create a frame with nonzero-Y menu, tool, and tab bands. Assert:
 
 ```rust
-assert_eq!(chrome.hit_test(FramePoint::new(20.0, 56.0)), Some(&ChromeAction::SelectTab { index: 0 }));
+assert!(matches!(chrome.hit_test(FramePoint::new(20.0, 56.0)), Some(ChromeAction::Presented { .. })));
 assert_eq!(chrome.hit_test(FramePoint::new(20.0, 30.0)), Some(&ChromeAction::InvokeToolBarItem { index: 0 }));
 ```
 
@@ -432,7 +437,7 @@ Test hover, press, release, and popup anchoring against the same absolute hit re
 Run:
 
 ```bash
-cargo test -p neomacs-display-runtime chrome_hit --lib
+cargo nextest run -p neomacs-display-runtime chrome_hit --lib
 ```
 
 Expected: fail because input still has independent label/icon width calculations and feature-specific Y checks.
@@ -464,7 +469,7 @@ Keep interaction visual state typed by action kind, but key it by semantic index
 Run:
 
 ```bash
-cargo test -p neomacs-display-runtime render_thread --lib
+cargo nextest run -p neomacs-display-runtime render_thread --lib
 ```
 
 Expected: pass.
@@ -503,7 +508,7 @@ Build the same semantic `FrameChrome` used by GUI tests and assert TTY output:
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol tty_frame_chrome --lib
+cargo nextest run -p neomacs-display-protocol tty_frame_chrome --lib
 ```
 
 Expected: fail because `TtyRif` still reads `menu_bar` and `frame_chrome_rows` independently.
@@ -523,8 +528,8 @@ In `TtyRif::rasterize`, iterate `state.frame_chrome.bands()`:
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol tty --lib
-cargo test -p neomacs-layout-engine tty_menu_bar --lib
+cargo nextest run -p neomacs-display-protocol tty --lib
+cargo nextest run -p neomacs-layout-engine tty_menu_bar --lib
 ```
 
 Expected: pass.
@@ -572,14 +577,16 @@ Remove:
 
 Keep only `frame_chrome` as the frame-bar protocol interface.
 
-**Step 2: Bump and test the serialized protocol**
+**Step 2: Replace and test the serialized protocol**
 
-Change `PROTOCOL_VERSION` from `1` to `2`. Update serialization tests to assert old snapshots are rejected and the new `frame_chrome` shape round-trips.
+Replace the obsolete serialized fields directly and update round-trip tests for
+the new `frame_chrome` shape. Neomacs does not maintain an internal protocol
+version or compatibility path for obsolete pre-release snapshots.
 
 Run:
 
 ```bash
-cargo test -p neomacs-display-protocol --lib
+cargo nextest run -p neomacs-display-protocol --lib
 ```
 
 Expected: pass.
@@ -590,7 +597,7 @@ Run:
 
 ```bash
 cargo fmt --all -- --check
-cargo test -p neomacs-display-protocol -p neomacs-layout-engine \
+cargo nextest run -p neomacs-display-protocol -p neomacs-layout-engine \
   -p neomacs-display-runtime -p neomacs-renderer-wgpu --lib
 ```
 
@@ -670,7 +677,7 @@ Run:
 cargo fmt --all -- --check
 cargo clippy -p neomacs-display-protocol -p neomacs-layout-engine \
   -p neomacs-display-runtime -p neomacs-renderer-wgpu --all-targets -- -D warnings
-cargo test -p neomacs-display-protocol -p neomacs-layout-engine \
+cargo nextest run -p neomacs-display-protocol -p neomacs-layout-engine \
   -p neomacs-display-runtime -p neomacs-renderer-wgpu
 ```
 

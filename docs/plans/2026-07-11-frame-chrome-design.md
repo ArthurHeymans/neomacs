@@ -154,7 +154,8 @@ The GUI adapter produces frame-positioned glyphs, images, fills, and hit regions
 
 ## Interaction model
 
-Hit regions are band-local and live beside their content:
+Hit regions are band-local and live beside their content. Geometry does not
+encode Emacs policy:
 
 ```rust
 pub struct ChromeHitRegion {
@@ -163,15 +164,42 @@ pub struct ChromeHitRegion {
 }
 
 pub enum ChromeAction {
-    SelectTab { tab: TabId },
     OpenMenu { menu: MenuId },
     InvokeToolBarItem { item: ToolBarItemId },
+    Presented { interaction: InteractionId },
 }
 ```
 
-Materialization translates visual content and hit regions through the same band origin. The render thread receives semantic actions and does not infer them from glyph columns or duplicate item geometry.
+The initial `SelectTab` design proved too shallow. GNU tab-bar clicks depend
+on the exact displayed caption, key, binding, and whether the clicked source
+character carries `close-tab`; a tab ordinal cannot represent the plus button
+or custom items. The implemented tab-bar action is therefore an opaque,
+snapshot-scoped capability:
 
-Stable semantic identifiers replace positional indexes where identity must survive filtering or layout changes.
+```rust
+ChromeAction::Presented {
+    interaction: InteractionId,
+}
+```
+
+The evaluator retains and GC-traces the corresponding GNU-shaped
+`(CAPTION . 0)` value. The caption has `menu-item = (KEY BINDING CLOSE-P)`.
+The runtime only hit-tests geometry. It pairs the region's `interaction` with
+the enclosing immutable frame's `presentation_id` and reports that reference
+plus pointer phase. Keeping the presentation only on the frame prevents a hit
+region from disagreeing with the pixels that contain it; existing Lisp decides
+whether to select, close, or invoke a binding.
+
+Rendered source slots, including replacement-image slots, are reduced into
+contiguous semantic runs. A close image and the body of the same tab therefore
+have different interaction references even though they belong to one item.
+Geometry and the interaction table share a `PresentationId` and are retired
+together after the renderer replaces the frame.
+
+Materialization translates visual content and hit regions through the same band origin. The render thread receives opaque interaction identity for Lisp-owned behavior and does not infer it from glyph columns or duplicate item geometry.
+
+Opaque presentation references replace positional indexes where Lisp identity
+must survive filtering, redisplay, or an event already in transit.
 
 ## Invariants and errors
 
@@ -183,7 +211,7 @@ Construction enforces these invariants:
 - All band content and hit regions are local to that band.
 - Every hit region is clipped to its owning band.
 - Compact presentation and separate menu/tool presentation are mutually exclusive.
-- Semantic item identity does not depend on glyph column numbers.
+- Semantic item identity does not depend on glyph column numbers or the live keymap at click time.
 - Visuals and hit regions undergo the same coordinate translation.
 
 Disabled or empty bands are omitted and are not errors. Invalid geometry returns a typed error:
@@ -239,7 +267,7 @@ Adapter tests cover conversion only: GUI coordinates remain pixels, while TTY ba
 3. Move menu, tool, and compact bars behind the same layout interface while retaining their typed content.
 4. Switch render-thread interaction to materialized `ChromeAction` hit regions.
 5. Implement the TTY adapter over the same band layout.
-6. Replace the old protocol fields with `frame_chrome` and bump the protocol version.
+6. Replace the old protocol fields directly; Neomacs does not maintain compatibility with obsolete internal display messages.
 7. Delete renderer-owned stacking, duplicate height accumulation, `FrameTabBarState`, and ambiguous absolute-row construction.
 8. Replace shallow tests with interface and adapter tests.
 

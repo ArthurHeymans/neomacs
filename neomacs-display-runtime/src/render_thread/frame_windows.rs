@@ -756,6 +756,37 @@ impl GuiFrameRenderState {
         removed
     }
 
+    pub(super) fn displayed_presentations(&self) -> HashSet<u64> {
+        let mut presentations = HashSet::new();
+        if let Some(presentation) = self
+            .compositor
+            .current_frame
+            .as_ref()
+            .map(|frame| frame.presentation_id.get())
+            .filter(|presentation| *presentation != 0)
+        {
+            presentations.insert(presentation);
+        }
+        presentations.extend(
+            self.compositor
+                .child_frames
+                .frames
+                .values()
+                .map(|entry| entry.frame.presentation_id.get())
+                .filter(|presentation| *presentation != 0),
+        );
+        presentations
+    }
+
+    pub(super) fn child_presentation(&self, frame_id: u64) -> Option<u64> {
+        self.compositor
+            .child_frames
+            .frames
+            .get(&frame_id)
+            .map(|entry| entry.frame.presentation_id.get())
+            .filter(|presentation| *presentation != 0)
+    }
+
     pub(super) fn show_child_frame(&mut self, frame_id: u64) -> bool {
         let changed = self.compositor.hidden_child_frames.remove(&frame_id);
         tracing::info!(frame_id, changed, "child_frame_lifecycle: compositor_show");

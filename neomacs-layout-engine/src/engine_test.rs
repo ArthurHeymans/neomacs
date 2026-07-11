@@ -13773,6 +13773,51 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
 
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("tab-bar display state");
+    assert_ne!(state.presentation_id.get(), 0);
+    let presented_targets = state
+        .frame_chrome
+        .band(FrameChromeKind::TabBar)
+        .expect("tab-bar band")
+        .hit_regions()
+        .iter()
+        .map(|region| match region.action() {
+            neomacs_display_protocol::frame_chrome::ChromeAction::Presented { interaction } => {
+                (state.presentation_id.get(), interaction.get())
+            }
+            action => panic!("tab-bar hit leaked renderer policy: {action:?}"),
+        })
+        .collect::<Vec<_>>();
+    assert!(!presented_targets.is_empty());
+    assert!(presented_targets.iter().all(|(presentation, interaction)| {
+        eval.resolve_presented_mouse_target(*presentation, *interaction)
+            .is_some_and(|target| target.posn_string.is_cons())
+    }));
+    let semantics = presented_targets
+        .iter()
+        .filter_map(|(presentation, interaction)| {
+            let target = eval.resolve_presented_mouse_target(*presentation, *interaction)?;
+            let caption = target.posn_string.cons_car();
+            let menu_item = eval
+                .eval_form(Value::list(vec![
+                    Value::symbol("get-text-property"),
+                    Value::fixnum(0),
+                    Value::list(vec![Value::symbol("quote"), Value::symbol("menu-item")]),
+                    Value::list(vec![Value::symbol("quote"), caption]),
+                ]))
+                .ok()?;
+            neovm_core::emacs_core::value::list_to_vec(&menu_item)
+        })
+        .collect::<Vec<_>>();
+    assert!(semantics.iter().any(|item| {
+        item.first().and_then(|value| value.as_symbol_name()) == Some("add-tab")
+            && item.get(1).and_then(|value| value.as_symbol_name()) == Some("tab-bar-new-tab")
+    }));
+    assert!(semantics.iter().any(|item| item.get(2) == Some(&Value::T)));
+
     let tab_bar_text = engine
         .last_frame_display_state
         .as_ref()

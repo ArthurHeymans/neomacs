@@ -164,9 +164,9 @@ impl RenderApp {
         .map_or(0.0, |bounds| bounds.y())
     }
 
-    /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.
+    /// Hit-test a tab-bar presentation target.
     #[cfg(test)]
-    pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
+    pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<(u64, u32)> {
         let frame = self
             .frame_windows
             .primary_window()?
@@ -175,7 +175,9 @@ impl RenderApp {
             .current_frame
             .as_ref()?;
         match frame_chrome_hit(frame, x, y)?.0 {
-            ChromeAction::SelectTab { index } => Some(*index),
+            ChromeAction::Presented { interaction } => {
+                Some((frame.presentation_id.get(), interaction.get()))
+            }
             _ => None,
         }
     }

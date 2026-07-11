@@ -1,7 +1,7 @@
 //! Window and chrome render commands.
 
 use super::RenderApp;
-use crate::thread_comm::WindowCommand;
+use crate::thread_comm::{InputEvent, WindowCommand};
 use winit::dpi::PhysicalPosition;
 use winit::window::{CursorIcon, UserAttentionType};
 
@@ -203,6 +203,15 @@ impl RenderApp {
             WindowCommand::DestroyWindow { frame } => {
                 let emacs_frame_id = frame.raw_id();
                 tracing::info!("DestroyWindow request: frame_id=0x{:x}", emacs_frame_id);
+                let presentations = self
+                    .frame_windows
+                    .get(emacs_frame_id)
+                    .map(|window| window.render.displayed_presentations())
+                    .unwrap_or_default();
+                for presentation in presentations {
+                    self.comms
+                        .send_input(InputEvent::PresentationRetired { presentation });
+                }
                 if self.frame_windows.is_primary_frame_id(emacs_frame_id) {
                     self.frame_windows.take_primary_window();
                     self.frame_windows.clear_primary_mapping();
@@ -228,8 +237,18 @@ impl RenderApp {
                     frame_id,
                     "child_frame_lifecycle: render_thread_remove_command"
                 );
+                let mut presentations = std::collections::HashSet::new();
+                self.frame_windows.for_each_top_level_window(|window| {
+                    if let Some(presentation) = window.render.child_presentation(frame_id) {
+                        presentations.insert(presentation);
+                    }
+                });
                 self.frame_windows
                     .remove_child_frame_from_top_level_windows(frame_id);
+                for presentation in presentations {
+                    self.comms
+                        .send_input(InputEvent::PresentationRetired { presentation });
+                }
             }
             WindowCommand::ScrollBlit { .. } => {
                 // handled above in dispatch, here as exhaustive match

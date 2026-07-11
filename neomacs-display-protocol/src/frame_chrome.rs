@@ -137,11 +137,45 @@ impl ChromeBandId {
     }
 }
 
+/// Identifies the immutable evaluator presentation that produced a frame.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct PresentationId(u64);
+
+impl PresentationId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Opaque evaluator-owned meaning for one interactive region in a presentation.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct InteractionId(u32);
+
+impl InteractionId {
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ChromeAction {
     OpenMenu { index: u32, key: String },
     InvokeToolBarItem { index: u32 },
-    SelectTab { index: u32 },
+    Presented { interaction: InteractionId },
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]

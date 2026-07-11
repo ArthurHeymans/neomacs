@@ -40,18 +40,21 @@ use crate::font_metrics::FontMetricsService;
 use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
-use neomacs_display_protocol::frame_chrome::{BandRect, ChromeAction, ChromeHitRegion};
+use neomacs_display_protocol::frame_chrome::{
+    BandRect, ChromeAction, ChromeHitRegion, InteractionId,
+};
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
-use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
+use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
 use neovm_core::window::{FrameId, WindowId};
+use std::collections::HashMap;
 use std::ops::Range;
 use strum::{EnumString, IntoStaticStr};
 
@@ -1083,14 +1086,17 @@ pub(crate) fn eval_status_line_format_value(
     }
 }
 
-fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
+fn tab_bar_menu_item(entry: Value) -> Option<(Value, Value, Value)> {
     if let Some(items) = list_to_vec(&entry)
         && items
             .get(1)
             .is_some_and(|value| KeymapMarker::MenuItem.is_value(*value))
     {
         let caption = *items.get(2)?;
-        return caption.is_string().then_some(caption);
+        let binding = *items.get(3)?;
+        return caption
+            .is_string()
+            .then_some((*items.first()?, caption, binding));
     }
 
     if !entry.is_cons() {
@@ -1105,13 +1111,23 @@ fn tab_bar_menu_item_caption(entry: Value) -> Option<Value> {
         return None;
     }
     let caption = *items.get(1)?;
-    caption.is_string().then_some(caption)
+    let binding = *items.get(2)?;
+    caption
+        .is_string()
+        .then_some((entry.cons_car(), caption, binding))
+}
+
+#[derive(Clone)]
+pub(crate) struct TabBarSourceItem {
+    pub(crate) caption: Value,
+    pub(crate) key: Value,
+    pub(crate) binding: Value,
+    pub(crate) char_range: Range<usize>,
 }
 
 pub(crate) struct BuiltTabBar {
     pub(crate) text: Value,
-    pub(crate) items: Vec<TabBarItem>,
-    pub(crate) item_char_ranges: Vec<Range<usize>>,
+    pub(crate) source_items: Vec<TabBarSourceItem>,
 }
 
 struct TabBarDisplayBuildRequest {
@@ -1135,6 +1151,11 @@ impl TabBarDisplayBuildRequest {
             .and_then(|source| source.into_built_tab_bar(evaluator));
         if let Some(tab_bar) = &result {
             gc_roots.root(tab_bar.text);
+            for item in &tab_bar.source_items {
+                gc_roots.root(item.caption);
+                gc_roots.root(item.key);
+                gc_roots.root(item.binding);
+            }
         }
         restore.apply(evaluator);
         result
@@ -1190,16 +1211,20 @@ impl TabBarDisplaySelectionRestore {
 }
 
 struct TabBarDisplaySource {
-    captions: Vec<Value>,
-    items: Vec<TabBarItem>,
+    entries: Vec<TabBarDisplayEntry>,
+}
+
+struct TabBarDisplayEntry {
+    caption: Value,
+    key: Value,
+    binding: Value,
 }
 
 impl TabBarDisplaySource {
     fn from_keymap(keymap: Value) -> Option<Self> {
-        let entries = list_to_vec(&keymap)?;
-        let mut captions = Vec::new();
-        let mut items = Vec::new();
-        for (index, entry) in entries.iter().enumerate() {
+        let keymap_entries = list_to_vec(&keymap)?;
+        let mut display_entries = Vec::new();
+        for (index, entry) in keymap_entries.iter().enumerate() {
             if index == 0 && KeymapMarker::Keymap.is_value(*entry) {
                 continue;
             }
@@ -1208,29 +1233,27 @@ impl TabBarDisplaySource {
                 break;
             }
 
-            if let Some(caption) = tab_bar_menu_item_caption(*entry) {
-                let label = caption.as_runtime_string_owned().unwrap_or_default();
-                captions.push(caption);
-                items.push(TabBarItem {
-                    index: items.len() as u32,
-                    label,
-                    help: String::new(),
-                    enabled: true,
-                    selected: false,
-                    is_separator: false,
+            if let Some((key, caption, binding)) = tab_bar_menu_item(*entry) {
+                display_entries.push(TabBarDisplayEntry {
+                    caption,
+                    key,
+                    binding,
                 });
             }
         }
-        (!captions.is_empty()).then_some(Self { captions, items })
+        (!display_entries.is_empty()).then_some(Self {
+            entries: display_entries,
+        })
     }
 
     fn into_built_tab_bar(self, evaluator: &mut Context) -> Option<BuiltTabBar> {
         let mut char_start = 0usize;
-        let item_char_ranges = self
-            .captions
+        let item_char_ranges: Vec<_> = self
+            .entries
             .iter()
-            .map(|caption| {
-                let char_len = caption
+            .map(|entry| {
+                let char_len = entry
+                    .caption
                     .as_runtime_string_owned()
                     .map_or(0, |caption| caption.chars().count());
                 let range = char_start..char_start + char_len;
@@ -1238,48 +1261,123 @@ impl TabBarDisplaySource {
                 range
             })
             .collect();
-        let mut concat_form = Vec::with_capacity(self.captions.len() + 1);
+        let source_items = self
+            .entries
+            .iter()
+            .zip(item_char_ranges.iter().cloned())
+            .map(|(entry, char_range)| TabBarSourceItem {
+                caption: entry.caption,
+                key: entry.key,
+                binding: entry.binding,
+                char_range,
+            })
+            .collect();
+        let mut concat_form = Vec::with_capacity(self.entries.len() + 1);
         concat_form.push(Value::symbol("concat"));
-        concat_form.extend(self.captions);
+        concat_form.extend(self.entries.iter().map(|entry| entry.caption));
         let text = evaluator.eval_form(Value::list(concat_form)).ok()?;
         text.as_runtime_string_owned()
             .is_some_and(|text| !text.is_empty())
-            .then_some(BuiltTabBar {
-                text,
-                items: self.items,
-                item_char_ranges,
-            })
+            .then_some(BuiltTabBar { text, source_items })
     }
 }
 
-pub(crate) fn tab_bar_hit_regions_for_rendered_captions(
+fn quoted(value: Value) -> Value {
+    Value::list(vec![Value::symbol("quote"), value])
+}
+
+fn tab_bar_close_at(evaluator: &mut Context, text: Value, char_index: usize) -> bool {
+    evaluator
+        .eval_form(Value::list(vec![
+            Value::symbol("get-text-property"),
+            Value::fixnum(char_index as i64),
+            quoted(Value::symbol("close-tab")),
+            quoted(text),
+        ]))
+        .is_ok_and(|value| !value.is_nil())
+}
+
+fn tab_bar_posn_string(
+    evaluator: &mut Context,
+    item: &TabBarSourceItem,
+    close: bool,
+) -> Option<Value> {
+    let menu_item = Value::list(vec![
+        item.key,
+        item.binding,
+        if close { Value::T } else { Value::NIL },
+    ]);
+    let caption = evaluator
+        .eval_form(Value::list(vec![
+            Value::symbol("propertize"),
+            Value::list(vec![Value::symbol("copy-sequence"), quoted(item.caption)]),
+            quoted(Value::symbol("menu-item")),
+            quoted(menu_item),
+        ]))
+        .ok()?;
+    Some(Value::cons(caption, Value::fixnum(0)))
+}
+
+pub(crate) fn tab_bar_presented_hit_regions(
+    evaluator: &mut Context,
+    presentation: u64,
     rendered: &RenderedDisplayRow,
-    items: &[TabBarItem],
-    item_char_ranges: &[Range<usize>],
+    text: Value,
+    items: &[TabBarSourceItem],
     height: f32,
 ) -> Vec<ChromeHitRegion> {
-    items
-        .iter()
-        .zip(item_char_ranges)
-        .filter_map(|(item, range)| {
-            let mut left = f32::INFINITY;
-            let mut right = f32::NEG_INFINITY;
-            for slot in rendered.source_slots() {
-                let Some(char_index) = slot.source().lisp_string_char_index() else {
-                    continue;
-                };
-                if range.contains(&char_index) {
-                    left = left.min(slot.x_px());
-                    right = right.max(slot.x_px() + slot.width_px());
-                }
-            }
-            (left.is_finite() && right.is_finite() && right > left).then(|| {
-                ChromeHitRegion::new(
-                    BandRect::new(left, 0.0, right - left, height)
-                        .expect("rendered tab caption bounds are valid"),
-                    ChromeAction::SelectTab { index: item.index },
-                )
-            })
+    let mut targets: HashMap<(usize, bool), u32> = HashMap::new();
+    let mut runs: Vec<(f32, f32, ChromeAction)> = Vec::new();
+
+    for slot in rendered.source_slots() {
+        let Some(char_index) = slot.source().lisp_string_char_index() else {
+            continue;
+        };
+        let Some((item_index, item)) = items
+            .iter()
+            .enumerate()
+            .find(|(_, item)| item.char_range.contains(&char_index))
+        else {
+            continue;
+        };
+        let close = tab_bar_close_at(evaluator, text, char_index);
+        let interaction = if let Some(interaction) = targets.get(&(item_index, close)).copied() {
+            interaction
+        } else {
+            let Some(posn_string) = tab_bar_posn_string(evaluator, item, close) else {
+                continue;
+            };
+            let interaction = evaluator.register_presented_mouse_target(
+                presentation,
+                PresentedMouseTarget {
+                    area: PresentedMouseArea::TabBar,
+                    posn_string,
+                },
+            );
+            targets.insert((item_index, close), interaction);
+            interaction
+        };
+        let action = ChromeAction::Presented {
+            interaction: InteractionId::new(interaction),
+        };
+        let left = slot.x_px();
+        let right = left + slot.width_px();
+        if let Some((_, run_right, run_action)) = runs.last_mut()
+            && *run_action == action
+            && (*run_right - left).abs() <= f32::EPSILON
+        {
+            *run_right = right;
+        } else {
+            runs.push((left, right, action));
+        }
+    }
+
+    runs.into_iter()
+        .filter_map(|(left, right, action)| {
+            Some(ChromeHitRegion::new(
+                BandRect::new(left, 0.0, right - left, height).ok()?,
+                action,
+            ))
         })
         .collect()
 }

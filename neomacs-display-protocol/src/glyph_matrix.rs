@@ -10,7 +10,7 @@
 
 use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
-use super::frame_chrome::{ChromeMedia, FrameChrome, FrameChromeContent};
+use super::frame_chrome::{ChromeMedia, FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
     GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
@@ -664,6 +664,8 @@ pub struct ScrollBarItem {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameDisplayState {
+    /// Evaluator interaction snapshot paired with these exact pixels.
+    pub presentation_id: PresentationId,
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Authoritative frame-level chrome bands.
     pub frame_chrome: FrameChrome,
@@ -732,6 +734,7 @@ pub struct FrameDisplayState {
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
+            presentation_id: PresentationId::default(),
             window_matrices: Vec::new(),
             frame_chrome: FrameChrome::default(),
             frame_cols,
@@ -1003,6 +1006,7 @@ impl FrameDisplayState {
     /// borders, cursors, etc.).
     pub fn materialize(&self) -> FrameGlyphBuffer {
         let mut buf = FrameGlyphBuffer::with_size(self.frame_pixel_width, self.frame_pixel_height);
+        buf.presentation_id = self.presentation_id;
         buf.char_width = self.char_width;
         buf.char_height = self.char_height;
         buf.font_pixel_size = self.font_pixel_size;

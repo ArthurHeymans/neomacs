@@ -21,6 +21,79 @@ use crate::heap_types::LispString;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
+/// Lisp mouse area retained by an immutable displayed presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentedMouseArea {
+    TabBar,
+}
+
+/// Evaluator-owned meaning for one opaque renderer interaction id.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PresentedMouseTarget {
+    pub area: PresentedMouseArea,
+    pub posn_string: Value,
+}
+
+#[derive(Default)]
+struct InteractionPresentation {
+    targets: Vec<PresentedMouseTarget>,
+}
+
+/// Retains the Lisp meaning paired with immutable displayed frame snapshots.
+pub struct PresentedInteractions {
+    next_presentation: u64,
+    presentations: HashMap<u64, InteractionPresentation>,
+}
+
+impl Default for PresentedInteractions {
+    fn default() -> Self {
+        Self {
+            next_presentation: 1,
+            presentations: HashMap::new(),
+        }
+    }
+}
+
+impl PresentedInteractions {
+    pub fn begin(&mut self) -> u64 {
+        let id = self.next_presentation;
+        self.next_presentation = self.next_presentation.saturating_add(1);
+        id
+    }
+
+    pub fn register_mouse_target(
+        &mut self,
+        presentation: u64,
+        target: PresentedMouseTarget,
+    ) -> u32 {
+        let presentation = self.presentations.entry(presentation).or_default();
+        let id = u32::try_from(presentation.targets.len())
+            .expect("interaction presentation exceeds u32 target capacity");
+        presentation.targets.push(target);
+        id
+    }
+
+    pub fn resolve(&self, presentation: u64, interaction: u32) -> Option<PresentedMouseTarget> {
+        self.presentations
+            .get(&presentation)?
+            .targets
+            .get(interaction as usize)
+            .copied()
+    }
+
+    pub fn retire(&mut self, presentation: u64) {
+        self.presentations.remove(&presentation);
+    }
+}
+
+impl crate::gc_trace::GcTrace for PresentedInteractions {
+    fn trace_roots(&self, roots: &mut Vec<Value>) {
+        for presentation in self.presentations.values() {
+            roots.extend(presentation.targets.iter().map(|target| target.posn_string));
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Key events
 // ---------------------------------------------------------------------------
@@ -813,15 +886,26 @@ pub enum InputEvent {
         modifiers: Modifiers,
         target_frame_id: u64,
     },
+    /// A display dependency changed and evaluator layout must be republished.
+    LayoutInvalidated,
     /// Popup menu selection.  The display layer reports the selected
     /// zero-based item index; -1 means the menu was cancelled.
     MenuSelection { index: i32 },
     /// Tool-bar item click.  The display layer reports the zero-based
     /// index in the current rendered tool-bar item vector.
     ToolBarClick { index: i32, emacs_frame_id: u64 },
-    /// Tab-bar item click.  The display layer reports the zero-based
-    /// index in the current rendered tab-bar item vector.
-    TabBarClick { index: i32, emacs_frame_id: u64 },
+    /// Pointer observation resolved against the immutable displayed presentation.
+    PresentedPointer {
+        presentation: u64,
+        interaction: u32,
+        pressed: bool,
+        button: u8,
+        x: f32,
+        y: f32,
+        emacs_frame_id: u64,
+    },
+    /// Renderer no longer displays or generates hits for this presentation.
+    PresentationRetired { presentation: u64 },
     /// Menu-bar item click.  `key` is the exact rendered top-level menu key;
     /// x/y and anchor fields are geometry for legacy Lisp and native popup
     /// placement.
@@ -1694,6 +1778,8 @@ impl crate::gc_trace::GcTrace for KeyboardRuntime {
 pub struct CommandLoop {
     /// Keyboard-local runtime state.
     pub keyboard: KeyboardRuntime,
+    /// Lisp meanings paired with immutable displayed frame presentations.
+    pub presented_interactions: PresentedInteractions,
     /// Current prefix argument.
     pub prefix_arg: PrefixArg,
     /// Whether we are in a recursive edit.
@@ -1725,6 +1811,7 @@ impl CommandLoop {
     pub fn new() -> Self {
         Self {
             keyboard: KeyboardRuntime::new(),
+            presented_interactions: PresentedInteractions::default(),
             prefix_arg: PrefixArg::None,
             recursive_depth: 0,
             running: false,
@@ -1874,6 +1961,7 @@ impl Default for CommandLoop {
 impl crate::gc_trace::GcTrace for CommandLoop {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         self.keyboard.trace_roots(roots);
+        self.presented_interactions.trace_roots(roots);
     }
 }
 
@@ -2205,6 +2293,36 @@ enum QueuedReadCharEvent {
 }
 
 impl crate::emacs_core::eval::Context {
+    pub fn begin_interaction_presentation(&mut self) -> u64 {
+        self.command_loop.presented_interactions.begin()
+    }
+
+    pub fn register_presented_mouse_target(
+        &mut self,
+        presentation: u64,
+        target: PresentedMouseTarget,
+    ) -> u32 {
+        self.command_loop
+            .presented_interactions
+            .register_mouse_target(presentation, target)
+    }
+
+    pub fn resolve_presented_mouse_target(
+        &self,
+        presentation: u64,
+        interaction: u32,
+    ) -> Option<PresentedMouseTarget> {
+        self.command_loop
+            .presented_interactions
+            .resolve(presentation, interaction)
+    }
+
+    pub fn retire_interaction_presentation(&mut self, presentation: u64) {
+        self.command_loop
+            .presented_interactions
+            .retire(presentation);
+    }
+
     fn restore_delayed_selection_event(&mut self, delayed_selection_event: &mut Option<Value>) {
         if let Some(event) = delayed_selection_event.take() {
             self.command_loop
@@ -3918,6 +4036,13 @@ impl crate::emacs_core::eval::Context {
                 self.accumulate_pixel_scroll(target_frame_id, delta_y);
                 Ok(None)
             }
+            InputEvent::LayoutInvalidated => {
+                // This is an internal redisplay wakeup, not a Lisp keyboard event.
+                // Invalidate the signature explicitly: asset metrics live outside the
+                // evaluator state summarized by RedisplaySignature.
+                self.invalidate_redisplay();
+                Ok(None)
+            }
             InputEvent::MenuSelection { index } => {
                 let event = Value::list(vec![
                     Value::symbol("menu-selection"),
@@ -3940,24 +4065,60 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
-            InputEvent::TabBarClick {
-                index,
+            InputEvent::PresentedPointer {
+                presentation,
+                interaction,
+                pressed,
+                button,
+                x,
+                y,
                 emacs_frame_id,
             } => {
-                let Some(event) = self.chrome_mouse_click_event(
-                    "tab-bar",
-                    index,
-                    index as f32,
-                    0.0,
-                    None,
-                    0.0,
-                    0.0,
-                    emacs_frame_id,
-                ) else {
+                let Some(target) = self.resolve_presented_mouse_target(presentation, interaction)
+                else {
                     return Ok(None);
                 };
+                let Some(frame_id) = self.event_frame_id(emacs_frame_id) else {
+                    return Ok(None);
+                };
+                if self.frames.get(frame_id).is_none() || button == 0 {
+                    return Ok(None);
+                }
+                let area = match target.area {
+                    PresentedMouseArea::TabBar => "tab-bar",
+                };
+                let position = Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+                    window_or_frame: Value::make_frame(frame_id.0),
+                    area: Some(area),
+                    x: x.round() as i64,
+                    y: y.round() as i64,
+                    metrics: MousePosnMetrics {
+                        point: None,
+                        col: None,
+                        row: None,
+                        width: None,
+                        height: None,
+                        anchor_x: None,
+                        anchor_y: None,
+                    },
+                });
+                let Some(mut position_parts) = crate::emacs_core::value::list_to_vec(&position)
+                else {
+                    return Ok(None);
+                };
+                position_parts[4] = target.posn_string;
+                let symbol = if pressed {
+                    format!("down-mouse-{button}")
+                } else {
+                    format!("mouse-{button}")
+                };
+                let event = Value::list(vec![Value::symbol(&symbol), Value::list(position_parts)]);
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
+            }
+            InputEvent::PresentationRetired { presentation } => {
+                self.retire_interaction_presentation(presentation);
+                Ok(None)
             }
             InputEvent::MenuBarClick {
                 index,

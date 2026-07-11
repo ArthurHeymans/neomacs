@@ -1,7 +1,7 @@
 use crate::frame_chrome::{
     BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion,
     ChromeLayoutError, ChromeMedia, FrameChrome, FrameChromeContent, FrameChromeKind, FrameRect,
-    FrameSize, MenuBarContent,
+    FrameSize, InteractionId, MenuBarContent,
 };
 use crate::frame_glyphs::GlyphRowRole;
 use crate::glyph_matrix::GlyphRow;
@@ -165,7 +165,9 @@ fn frame_chrome_layout_rejects_hit_regions_outside_their_band() {
     let request = ChromeBandRequest::empty(FrameChromeKind::TabBar, 18.0).with_hit_regions(vec![
         ChromeHitRegion::new(
             BandRect::new(610.0, 0.0, 20.0, 18.0).expect("valid local rect"),
-            ChromeAction::SelectTab { index: 0 },
+            ChromeAction::Presented {
+                interaction: InteractionId::new(0),
+            },
         ),
     ]);
 
@@ -176,6 +178,32 @@ fn frame_chrome_layout_rejects_hit_regions_outside_their_band() {
     .expect_err("hit region exceeds its band");
 
     assert_eq!(error, ChromeLayoutError::ContentExceedsBand);
+}
+
+#[test]
+fn tab_bar_hit_regions_publish_only_snapshot_scoped_interaction_references() {
+    let interaction = InteractionId::new(7);
+    let action = ChromeAction::Presented { interaction };
+
+    let chrome = FrameChrome::layout(
+        FrameSize::new(100.0, 18.0).expect("valid frame"),
+        vec![
+            ChromeBandRequest::empty(FrameChromeKind::TabBar, 18.0).with_hit_regions(vec![
+                ChromeHitRegion::new(
+                    BandRect::new(0.0, 0.0, 20.0, 18.0).expect("valid hit bounds"),
+                    action.clone(),
+                ),
+            ]),
+        ],
+    )
+    .expect("valid chrome");
+
+    let published = chrome
+        .band(FrameChromeKind::TabBar)
+        .expect("tab band")
+        .hit_regions()[0]
+        .action();
+    assert_eq!(published, &action);
 }
 
 #[test]

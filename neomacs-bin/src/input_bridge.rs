@@ -141,6 +141,7 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }
+        DisplayEvent::ImageDimensionsReady { .. } => Some(KbInputEvent::LayoutInvalidated),
         DisplayEvent::ToolBarClick {
             index,
             emacs_frame_id,
@@ -148,13 +149,28 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             index: *index,
             emacs_frame_id: *emacs_frame_id,
         }),
-        DisplayEvent::TabBarClick {
-            index,
+        DisplayEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed,
+            button,
+            x,
+            y,
             emacs_frame_id,
-        } => Some(KbInputEvent::TabBarClick {
-            index: *index,
+        } => Some(KbInputEvent::PresentedPointer {
+            presentation: *presentation,
+            interaction: *interaction,
+            pressed: *pressed,
+            button: *button,
+            x: *x,
+            y: *y,
             emacs_frame_id: *emacs_frame_id,
         }),
+        DisplayEvent::PresentationRetired { presentation } => {
+            Some(KbInputEvent::PresentationRetired {
+                presentation: *presentation,
+            })
+        }
         DisplayEvent::MenuBarClick {
             index,
             key,

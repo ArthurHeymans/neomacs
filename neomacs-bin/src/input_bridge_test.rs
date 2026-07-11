@@ -23,6 +23,17 @@ fn non_mouse_move_is_included_in_input_bridge_info_logging() {
 }
 
 #[test]
+fn image_dimension_completion_becomes_layout_invalidation_instead_of_being_dropped() {
+    let event = convert_display_event(&DisplayEvent::ImageDimensionsReady {
+        id: 17,
+        width: 16,
+        height: 16,
+    });
+
+    assert!(matches!(event, Some(KbInputEvent::LayoutInvalidated)));
+}
+
+#[test]
 fn key_release_is_dropped_by_core_transport_owner() {
     let display_event = DisplayEvent::Key {
         keysym: keyboard::XK_RETURN,
@@ -137,16 +148,26 @@ fn tool_bar_click_reaches_keyboard_owner() {
 }
 
 #[test]
-fn tab_bar_click_reaches_keyboard_owner() {
-    let display_event = DisplayEvent::TabBarClick {
-        index: 2,
+fn presented_pointer_reaches_keyboard_owner_without_losing_snapshot_or_phase() {
+    let display_event = DisplayEvent::PresentedPointer {
+        presentation: 9,
+        interaction: 2,
+        pressed: false,
+        button: 1,
+        x: 24.0,
+        y: 8.0,
         emacs_frame_id: 42,
     };
     let event = convert_display_event(&display_event);
 
     match event {
-        Some(KbInputEvent::TabBarClick {
-            index: 2,
+        Some(KbInputEvent::PresentedPointer {
+            presentation: 9,
+            interaction: 2,
+            pressed: false,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
             emacs_frame_id: 42,
         }) => {}
         other => panic!("unexpected event: {other:?}"),

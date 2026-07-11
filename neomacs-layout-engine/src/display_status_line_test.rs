@@ -7,7 +7,6 @@ use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayR
 use neomacs_display_protocol::frame_chrome::ChromeAction;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
-use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::face::FaceTable;
 
 #[test]
@@ -219,7 +218,10 @@ fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
 }
 
 #[test]
-fn tab_bar_hit_regions_follow_rendered_caption_bounds() {
+fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
+    let mut eval = Context::new();
+    eval.setup_thread_locals();
+    let presentation = eval.begin_interaction_presentation();
     let slots = vec![
         DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 4.0, 1),
         DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 1, 1), 4.0, 1, 6.0, 1),
@@ -233,32 +235,79 @@ fn tab_bar_hit_regions_follow_rendered_caption_bounds() {
         Vec::new(),
         Vec::new(),
     );
+    let text = Value::string_with_text_properties(
+        "abcd",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![Value::symbol("close-tab"), Value::T]),
+        }],
+    );
     let items = vec![
-        TabBarItem {
-            index: 3,
-            label: "ab".to_string(),
-            help: String::new(),
-            enabled: true,
-            selected: true,
-            is_separator: false,
+        TabBarSourceItem {
+            caption: Value::string("ab"),
+            key: Value::symbol("tab-1"),
+            binding: Value::symbol("tab-bar-select-tab"),
+            char_range: 0..2,
         },
-        TabBarItem {
-            index: 7,
-            label: "cd".to_string(),
-            help: String::new(),
-            enabled: true,
-            selected: false,
-            is_separator: false,
+        TabBarSourceItem {
+            caption: Value::string("cd"),
+            key: Value::symbol("add-tab"),
+            binding: Value::symbol("tab-bar-new-tab"),
+            char_range: 2..4,
         },
     ];
 
-    let regions = tab_bar_hit_regions_for_rendered_captions(&rendered, &items, &[0..2, 2..4], 18.0);
+    let regions =
+        tab_bar_presented_hit_regions(&mut eval, presentation, &rendered, text, &items, 18.0);
 
     assert_eq!(regions[0].local_bounds().raw().x, 0.0);
-    assert_eq!(regions[0].local_bounds().raw().width, 10.0);
-    assert_eq!(regions[0].action(), &ChromeAction::SelectTab { index: 3 });
-    assert_eq!(regions[1].local_bounds().raw().x, 10.0);
-    assert_eq!(regions[1].local_bounds().raw().width, 13.0);
+    assert_eq!(regions[0].local_bounds().raw().width, 4.0);
+    assert_eq!(regions[1].local_bounds().raw().x, 4.0);
+    assert_eq!(regions[1].local_bounds().raw().width, 6.0);
+    assert_eq!(regions[2].local_bounds().raw().x, 10.0);
+    assert_eq!(regions[2].local_bounds().raw().width, 13.0);
+
+    let resolve = |region: &ChromeHitRegion| {
+        let ChromeAction::Presented { interaction } = region.action() else {
+            panic!("tab hit must be an opaque presented target")
+        };
+        eval.resolve_presented_mouse_target(presentation, interaction.get())
+            .expect("registered target")
+    };
+    let body = resolve(&regions[0]);
+    let close = resolve(&regions[1]);
+    let add = resolve(&regions[2]);
+    assert_eq!(
+        presented_menu_item(&mut eval, body.posn_string),
+        "(tab-1 tab-bar-select-tab nil)"
+    );
+    assert_eq!(
+        presented_menu_item(&mut eval, close.posn_string),
+        "(tab-1 tab-bar-select-tab t)"
+    );
+    assert_eq!(
+        presented_menu_item(&mut eval, add.posn_string),
+        "(add-tab tab-bar-new-tab nil)"
+    );
+}
+
+fn presented_menu_item(eval: &mut Context, posn_string: Value) -> String {
+    eval.eval_form(Value::list(vec![
+        Value::symbol("prin1-to-string"),
+        Value::list(vec![
+            Value::symbol("get-text-property"),
+            Value::fixnum(0),
+            Value::list(vec![Value::symbol("quote"), Value::symbol("menu-item")]),
+            Value::list(vec![
+                Value::symbol("car"),
+                Value::list(vec![Value::symbol("quote"), posn_string]),
+            ]),
+        ]),
+    ]))
+    .expect("inspect menu-item")
+    .as_runtime_string_owned()
+    .expect("printed menu-item")
 }
 
 #[test]
@@ -266,30 +315,24 @@ fn built_tab_bar_preserves_concatenated_caption_ranges() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
     let source = TabBarDisplaySource {
-        captions: vec![Value::string("ab"), Value::string("cde")],
-        items: vec![
-            TabBarItem {
-                index: 0,
-                label: "ab".to_string(),
-                help: String::new(),
-                enabled: true,
-                selected: true,
-                is_separator: false,
+        entries: vec![
+            TabBarDisplayEntry {
+                caption: Value::string("ab"),
+                key: Value::symbol("tab-1"),
+                binding: Value::symbol("ignore"),
             },
-            TabBarItem {
-                index: 1,
-                label: "cde".to_string(),
-                help: String::new(),
-                enabled: true,
-                selected: false,
-                is_separator: false,
+            TabBarDisplayEntry {
+                caption: Value::string("cde"),
+                key: Value::symbol("add-tab"),
+                binding: Value::symbol("tab-bar-new-tab"),
             },
         ],
     };
 
     let built = source.into_built_tab_bar(&mut eval).expect("built tab bar");
 
-    assert_eq!(built.item_char_ranges, vec![0..2, 2..5]);
+    assert_eq!(built.source_items[0].char_range, 0..2);
+    assert_eq!(built.source_items[1].char_range, 2..5);
 }
 
 /// A mode-line whose text carries a tall `display` element (here a glyph with
@@ -385,12 +428,14 @@ fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
             Value::symbol("current-tab"),
             KeymapMarker::MenuItem.symbol_value(),
             Value::string("One"),
+            Value::symbol("select-one"),
         ]),
         Value::cons(
             Value::symbol("next-tab"),
             Value::list(vec![
                 KeymapMarker::MenuItem.symbol_value(),
                 Value::string("Two"),
+                Value::symbol("select-two"),
             ]),
         ),
         Value::list(vec![KeymapMarker::Keymap.symbol_value()]),
@@ -405,40 +450,44 @@ fn tab_bar_display_source_extracts_menu_items_until_nested_keymap() {
 
     assert_eq!(
         source
-            .captions
+            .entries
             .iter()
-            .map(|caption| caption.as_runtime_string_owned().unwrap())
+            .map(|entry| entry.caption.as_runtime_string_owned().unwrap())
             .collect::<Vec<_>>(),
         vec!["One".to_string(), "Two".to_string()]
     );
-    assert_eq!(source.items.len(), 2);
-    assert_eq!(source.items[0].index, 0);
-    assert_eq!(source.items[0].label, "One");
-    assert_eq!(source.items[1].index, 1);
-    assert_eq!(source.items[1].label, "Two");
+    assert_eq!(
+        source
+            .entries
+            .iter()
+            .map(|entry| entry.key)
+            .collect::<Vec<_>>(),
+        vec![Value::symbol("current-tab"), Value::symbol("next-tab")]
+    );
+    assert_eq!(
+        source
+            .entries
+            .iter()
+            .map(|entry| entry.binding)
+            .collect::<Vec<_>>(),
+        vec![Value::symbol("select-one"), Value::symbol("select-two")]
+    );
 }
 
 #[test]
 fn tab_bar_display_source_builds_concat_text_and_preserves_items() {
     let mut eval = Context::new();
     let source = TabBarDisplaySource {
-        captions: vec![Value::string("One"), Value::string("Two")],
-        items: vec![
-            TabBarItem {
-                index: 0,
-                label: "One".to_string(),
-                help: String::new(),
-                enabled: true,
-                selected: false,
-                is_separator: false,
+        entries: vec![
+            TabBarDisplayEntry {
+                caption: Value::string("One"),
+                key: Value::symbol("tab-1"),
+                binding: Value::symbol("ignore"),
             },
-            TabBarItem {
-                index: 1,
-                label: "Two".to_string(),
-                help: String::new(),
-                enabled: true,
-                selected: false,
-                is_separator: false,
+            TabBarDisplayEntry {
+                caption: Value::string("Two"),
+                key: Value::symbol("tab-2"),
+                binding: Value::symbol("ignore"),
             },
         ],
     };
@@ -449,9 +498,7 @@ fn tab_bar_display_source_builds_concat_text_and_preserves_items() {
         built.text.as_runtime_string_owned().as_deref(),
         Some("OneTwo")
     );
-    assert_eq!(built.items.len(), 2);
-    assert_eq!(built.items[0].label, "One");
-    assert_eq!(built.items[1].label, "Two");
+    assert_eq!(built.source_items.len(), 2);
 }
 
 #[test]

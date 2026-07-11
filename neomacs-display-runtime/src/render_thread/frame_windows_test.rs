@@ -291,6 +291,26 @@ fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
 }
 
 #[test]
+fn displayed_presentations_include_root_and_children_for_atomic_retirement() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    let mut root = make_frame(0x42, 0);
+    root.presentation_id = neomacs_display_protocol::frame_chrome::PresentationId::new(7);
+    render.compositor.current_frame = Some(root);
+    let mut child = make_frame(0x99, 0x42);
+    child.presentation_id = neomacs_display_protocol::frame_chrome::PresentationId::new(8);
+    render.compositor.child_frames.update_frame(child);
+
+    assert_eq!(
+        render.displayed_presentations(),
+        std::collections::HashSet::from([7, 8])
+    );
+    assert_eq!(render.child_presentation(0x99), Some(8));
+}
+
+#[test]
 fn frame_render_state_remove_child_frame_ignores_late_stale_update() {
     let Some(device) = make_test_device() else {
         return;

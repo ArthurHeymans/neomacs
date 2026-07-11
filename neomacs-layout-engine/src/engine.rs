@@ -9,7 +9,7 @@ use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     ChromeRowRenderServices, FrameTabBarDisplayRowRender, FrameTabBarDisplayRowRequest,
     ResizeMiniWindowsMode, ScratchGcRootScope, build_tab_bar_display,
-    max_mini_window_lines_from_value, tab_bar_hit_regions_for_rendered_captions,
+    max_mini_window_lines_from_value, tab_bar_presented_hit_regions,
 };
 use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
@@ -480,6 +480,7 @@ impl LayoutEngine {
                 .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
             (bootstrap.background, frame.font_pixel_size, ws)
         };
+        let presentation_id = evaluator.begin_interaction_presentation();
 
         // Realize the default face before collecting window params so frame and
         // window geometry use the same default metrics GNU Emacs redisplay does.
@@ -548,6 +549,7 @@ impl LayoutEngine {
                     Some(data) => data,
                     None => {
                         tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
+                        evaluator.retire_interaction_presentation(presentation_id);
                         return;
                     }
                 };
@@ -588,6 +590,7 @@ impl LayoutEngine {
             }
 
             self.reset_frame_output_state();
+            self.frame_output.set_presentation_id(presentation_id);
             let mut curr_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo> =
                 std::collections::HashMap::new();
             let default_resolved = face_resolver.default_face();
@@ -634,6 +637,7 @@ impl LayoutEngine {
                     &face_resolver,
                     &frame_params,
                     tab_bar_height,
+                    presentation_id,
                 )
                 && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
                 && !tab_bar_resize_attempted
@@ -988,6 +992,7 @@ impl LayoutEngine {
             Ok(state) => state,
             Err(error) => {
                 tracing::error!(?error, "rejecting invalid frame chrome snapshot");
+                evaluator.retire_interaction_presentation(presentation_id);
                 return;
             }
         };
@@ -1571,6 +1576,7 @@ impl LayoutEngine {
         face_resolver: &super::neovm_bridge::FaceResolver,
         frame_params: &FrameParams,
         tab_bar_height: f32,
+        presentation_id: u64,
     ) -> Option<f32> {
         let gc_roots = ScratchGcRootScope::new();
         let tab_bar = build_tab_bar_display(evaluator, frame_window_id as u64, &gc_roots)?;
@@ -1601,10 +1607,12 @@ impl LayoutEngine {
             return None;
         };
         let actual_tab_bar_height = measured.bounds().height;
-        let hit_regions = tab_bar_hit_regions_for_rendered_captions(
+        let hit_regions = tab_bar_presented_hit_regions(
+            evaluator,
+            presentation_id,
             measured.rendered(),
-            &tab_bar.items,
-            &tab_bar.item_char_ranges,
+            tab_bar.text,
+            &tab_bar.source_items,
             actual_tab_bar_height,
         );
         self.frame_output.add_frame_chrome_band(

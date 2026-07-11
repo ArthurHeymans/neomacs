@@ -4,13 +4,40 @@ use super::RenderApp;
 use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
 use crate::core::types::DisplayFrameId;
 use crate::render_thread::cursor::{CursorConfigSnapshot, CursorTarget};
-use neomacs_display_protocol::frame_chrome::{FrameChrome, FrameChromeContent};
+use neomacs_display_protocol::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
+
+fn retired_presentation(previous: Option<PresentationId>, current: PresentationId) -> Option<u64> {
+    previous
+        .map(PresentationId::get)
+        .filter(|previous| *previous != 0 && *previous != current.get())
+}
 
 struct CursorSyncOutcome {
     target: CursorTarget,
     had_target: bool,
     target_moved: bool,
     old_cursor_rect: (f32, f32, f32, f32),
+}
+
+#[cfg(test)]
+mod presentation_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn replacing_a_presented_frame_retires_only_the_previous_nonzero_generation() {
+        assert_eq!(
+            retired_presentation(Some(PresentationId::new(7)), PresentationId::new(8)),
+            Some(7)
+        );
+        assert_eq!(
+            retired_presentation(Some(PresentationId::new(8)), PresentationId::new(8)),
+            None
+        );
+        assert_eq!(
+            retired_presentation(Some(PresentationId::new(0)), PresentationId::new(8)),
+            None
+        );
+    }
 }
 
 impl RenderApp {
@@ -404,6 +431,7 @@ impl RenderApp {
             }
 
             if parent_id == DisplayFrameId::new(0) {
+                let new_presentation = frame.presentation_id;
                 let routed_to_primary_fallback =
                     self.frame_windows.is_primary_frame_id(frame_id.get());
                 let update_transient_effects = routed_to_primary_fallback;
@@ -411,6 +439,15 @@ impl RenderApp {
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(frame_id.get()) {
+                    let retired = retired_presentation(
+                        window_state
+                            .render
+                            .compositor
+                            .current_frame
+                            .as_ref()
+                            .map(|frame| frame.presentation_id),
+                        new_presentation,
+                    );
                     let cursor_config = self.cursor_defaults.config_snapshot();
                     let cursor_sync = Self::ingest_frame_window_root_frame(
                         window_state,
@@ -429,6 +466,11 @@ impl RenderApp {
                         );
                     } else {
                         window_state.reset_ime_cursor_area();
+                    }
+                    if let Some(presentation) = retired {
+                        self.comms.send_input(
+                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
+                        );
                     }
                     continue;
                 }
@@ -451,6 +493,14 @@ impl RenderApp {
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
                 if let Some(window_state) = self.frame_windows.get_mut(parent_id.get()) {
+                    let old_presentation = window_state
+                        .render
+                        .compositor
+                        .child_frames
+                        .frames
+                        .get(&frame_id.get())
+                        .map(|entry| entry.frame.presentation_id);
+                    let new_presentation = frame.presentation_id;
                     let cursor_config = self.cursor_defaults.config_snapshot();
                     if window_state.render.update_child_frame(frame) {
                         let cursor_sync =
@@ -465,6 +515,15 @@ impl RenderApp {
                                 update_transient_effects,
                             );
                         }
+                        if let Some(presentation) =
+                            retired_presentation(old_presentation, new_presentation)
+                        {
+                            self.comms.send_input(
+                                crate::thread_comm::InputEvent::PresentationRetired {
+                                    presentation,
+                                },
+                            );
+                        }
                     }
                     continue;
                 }
@@ -474,23 +533,52 @@ impl RenderApp {
                 && self.frame_windows.is_primary_frame_id(parent_id.get())
             {
                 if let Some(ws) = self.frame_windows.primary_window_mut() {
-                    ws.render.update_child_frame(frame);
+                    let old_presentation = ws
+                        .render
+                        .compositor
+                        .child_frames
+                        .frames
+                        .get(&frame_id.get())
+                        .map(|entry| entry.frame.presentation_id);
+                    let new_presentation = frame.presentation_id;
+                    if ws.render.update_child_frame(frame)
+                        && let Some(presentation) =
+                            retired_presentation(old_presentation, new_presentation)
+                    {
+                        self.comms.send_input(
+                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
+                        );
+                    }
                 };
             } else if parent_id == DisplayFrameId::new(0)
                 && self.frame_windows.is_primary_frame_id(frame_id.get())
             {
+                let new_presentation = frame.presentation_id;
                 let cursor_config = self.cursor_defaults.config_snapshot();
                 if let Some(primary_frame) = self
                     .frame_windows
                     .primary_window_mut()
                     .map(|ws| &mut ws.render)
                 {
+                    let retired = retired_presentation(
+                        primary_frame
+                            .compositor
+                            .current_frame
+                            .as_ref()
+                            .map(|frame| frame.presentation_id),
+                        new_presentation,
+                    );
                     Self::ingest_top_level_render_frame(
                         primary_frame,
                         frame,
                         row_damage,
                         cursor_config,
                     );
+                    if let Some(presentation) = retired {
+                        self.comms.send_input(
+                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
+                        );
+                    }
                 }
             }
         }

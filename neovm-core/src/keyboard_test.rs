@@ -1,5 +1,109 @@
 use super::*;
 
+#[test]
+fn presented_interactions_retain_exact_posn_string_until_retirement() {
+    let mut interactions = PresentedInteractions::default();
+    let presentation = interactions.begin();
+    let caption = Value::string("tab");
+    let posn_string = Value::cons(caption, Value::fixnum(0));
+    let interaction = interactions.register_mouse_target(
+        presentation,
+        PresentedMouseTarget {
+            area: PresentedMouseArea::TabBar,
+            posn_string,
+        },
+    );
+
+    assert_eq!(
+        interactions.resolve(presentation, interaction),
+        Some(PresentedMouseTarget {
+            area: PresentedMouseArea::TabBar,
+            posn_string,
+        })
+    );
+
+    let mut roots = Vec::new();
+    crate::gc_trace::GcTrace::trace_roots(&interactions, &mut roots);
+    assert!(roots.contains(&posn_string));
+
+    interactions.retire(presentation);
+    assert_eq!(interactions.resolve(presentation, interaction), None);
+}
+
+#[test]
+fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("presented-pointer");
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("presented-pointer", 200, 100, buffer);
+    let presentation = eval.begin_interaction_presentation();
+    let posn_string = Value::cons(Value::string("tab"), Value::fixnum(0));
+    let interaction = eval.register_presented_mouse_target(
+        presentation,
+        PresentedMouseTarget {
+            area: PresentedMouseArea::TabBar,
+            posn_string,
+        },
+    );
+
+    let press = eval
+        .handle_read_char_input_event(InputEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed: true,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
+            emacs_frame_id: frame.0,
+        })
+        .expect("press conversion")
+        .expect("press event");
+    let release = eval
+        .handle_read_char_input_event(InputEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed: false,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
+            emacs_frame_id: frame.0,
+        })
+        .expect("release conversion")
+        .expect("release event");
+
+    let press_parts = crate::emacs_core::value::list_to_vec(&press).expect("press list");
+    let release_parts = crate::emacs_core::value::list_to_vec(&release).expect("release list");
+    assert_eq!(press_parts[0].as_symbol_name(), Some("down-mouse-1"));
+    assert_eq!(release_parts[0].as_symbol_name(), Some("mouse-1"));
+    for event in [press, release] {
+        let parts = crate::emacs_core::value::list_to_vec(&event).expect("mouse event");
+        let position = crate::emacs_core::value::list_to_vec(&parts[1]).expect("position");
+        assert_eq!(position[1].as_symbol_name(), Some("tab-bar"));
+        assert_eq!(position[4], posn_string);
+    }
+}
+
+#[test]
+fn layout_invalidation_forces_redisplay_when_evaluator_signature_is_unchanged() {
+    let redisplays = std::rc::Rc::new(std::cell::Cell::new(0));
+    let observed = std::rc::Rc::clone(&redisplays);
+    let mut eval = crate::emacs_core::Context::new();
+    eval.redisplay_fn = Some(Box::new(move |_| observed.set(observed.get() + 1)));
+
+    eval.redisplay();
+    eval.redisplay();
+    assert_eq!(redisplays.get(), 1, "unchanged redisplay should be skipped");
+
+    assert_eq!(
+        eval.handle_read_char_input_event(InputEvent::LayoutInvalidated)
+            .expect("layout invalidation"),
+        None
+    );
+    eval.redisplay();
+    assert_eq!(redisplays.get(), 2);
+}
+
 fn reset_keyboard_test_terminals() {
     crate::emacs_core::terminal::pure::reset_terminal_thread_locals();
 }
