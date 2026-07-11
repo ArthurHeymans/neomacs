@@ -10,7 +10,6 @@ use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
 };
-use crate::ui_types::TabBarItem;
 use std::collections::HashMap;
 
 pub use crate::cursor::{CursorBarWidth, CursorKind, CursorSpec, CursorStyle};
@@ -606,18 +605,6 @@ pub struct WindowCursor {
     pub active: bool,
 }
 
-/// Frame-level tab bar metadata published alongside rendered glyphs.
-///
-/// Rendering still comes from the tab-bar row glyphs. This metadata exists so
-/// hit-testing can use the same published snapshot instead of a side-channel
-/// runtime command.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct FrameTabBarState {
-    pub items: Vec<TabBarItem>,
-    pub y: f32,
-    pub height: f32,
-}
-
 /// Which fringe a [`FrameGlyph::FringeBitmap`] belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FringeSide {
@@ -826,9 +813,6 @@ pub struct FrameGlyphBuffer {
     /// this profile for that window's cursor and fall back to their global
     /// `EffectsConfig` when the window has no profile.
     pub cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
-
-    /// Frame-level tab bar metadata for hit-testing.
-    pub tab_bar: Option<FrameTabBarState>,
 
     /// Current face context (set before adding char glyphs).
     ///
@@ -1043,7 +1027,6 @@ impl FrameGlyphBuffer {
             effect_hints: Vec::with_capacity(16),
             window_cursors: Vec::with_capacity(8),
             cursor_effects_by_window: HashMap::new(),
-            tab_bar: None,
             current_face_id: FaceId::new(0),
             current_fg: Color::WHITE,
             current_bg: None,
@@ -1080,7 +1063,6 @@ impl FrameGlyphBuffer {
         self.transition_hints.clear();
         self.effect_hints.clear();
         self.window_cursors.clear();
-        self.tab_bar = None;
         self.stipple_patterns.clear();
         self.fringe_bitmaps.clear();
         self.faces.clear();

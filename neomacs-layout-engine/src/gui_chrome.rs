@@ -167,9 +167,13 @@ fn position_tool_bar_items(
         };
         let separator = item.is_separator();
         let index = item.index;
-        if separator {
+        if separator || !item.enabled {
             positioned.push(PositionedChromeItem::decorative(bounds, item));
-            x += TOOL_BAR_SEPARATOR_WIDTH;
+            x += if separator {
+                TOOL_BAR_SEPARATOR_WIDTH
+            } else {
+                item_width + TOOL_BAR_ITEM_SPACING
+            };
         } else {
             positioned.push(PositionedChromeItem::new(
                 bounds,

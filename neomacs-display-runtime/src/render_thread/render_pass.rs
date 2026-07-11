@@ -51,6 +51,8 @@ struct GuiFrameToolBarOverlay<'a> {
     fg: (f32, f32, f32),
     bg: (f32, f32, f32),
     toolbar: &'a ToolbarResources,
+    icon_size: u32,
+    padding: u32,
 }
 
 struct GuiFrameCompactBarOverlay<'a> {
@@ -62,6 +64,8 @@ struct GuiFrameCompactBarOverlay<'a> {
     tool_fg: (f32, f32, f32),
     tool_bg: (f32, f32, f32),
     toolbar: &'a ToolbarResources,
+    icon_size: u32,
+    padding: u32,
 }
 
 struct GuiFrameImeOverlay<'a> {
@@ -184,9 +188,7 @@ impl RenderApp {
             );
         }
 
-        if let Some(menu_bar) = overlays.menu_bar
-            && !menu_bar.items.is_empty()
-        {
+        if let Some(menu_bar) = overlays.menu_bar {
             renderer.render_menu_bar(
                 surface_view,
                 menu_bar.items,
@@ -201,9 +203,7 @@ impl RenderApp {
             );
         }
 
-        if let Some(tool_bar) = overlays.tool_bar
-            && !tool_bar.items.is_empty()
-        {
+        if let Some(tool_bar) = overlays.tool_bar {
             renderer.render_toolbar(
                 surface_view,
                 tool_bar.items,
@@ -213,16 +213,14 @@ impl RenderApp {
                 &tool_bar.toolbar.icon_textures,
                 overlays.chrome_interaction.toolbar_hovered,
                 overlays.chrome_interaction.toolbar_pressed,
-                tool_bar.toolbar.icon_size,
-                tool_bar.toolbar.padding,
+                tool_bar.icon_size,
+                tool_bar.padding,
                 width,
                 height,
             );
         }
 
-        if let Some(compact_bar) = overlays.compact_bar
-            && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
-        {
+        if let Some(compact_bar) = overlays.compact_bar {
             renderer.render_compact_bar(
                 surface_view,
                 compact_bar.menu_items,
@@ -237,8 +235,8 @@ impl RenderApp {
                 overlays.chrome_interaction.compact_bar_menu_active,
                 overlays.chrome_interaction.compact_bar_tool_hovered,
                 overlays.chrome_interaction.compact_bar_tool_pressed,
-                compact_bar.toolbar.icon_size,
-                compact_bar.toolbar.padding,
+                compact_bar.icon_size,
+                compact_bar.padding,
                 glyph_atlas,
                 width,
                 height,
@@ -672,6 +670,8 @@ impl RenderApp {
                     fg: color_rgb_tuple(tool_bar.foreground()),
                     bg: color_rgb_tuple(tool_bar.background()),
                     toolbar,
+                    icon_size: tool_bar.icon_size(),
+                    padding: tool_bar.padding(),
                 }),
                 compact_bar: compact_bar.map(|(bounds, compact_bar)| GuiFrameCompactBarOverlay {
                     menu_items: compact_bar.menu_items(),
@@ -682,6 +682,8 @@ impl RenderApp {
                     tool_fg: color_rgb_tuple(compact_bar.tool_foreground()),
                     tool_bg: color_rgb_tuple(compact_bar.tool_background()),
                     toolbar,
+                    icon_size: compact_bar.icon_size(),
+                    padding: compact_bar.padding(),
                 }),
                 popup_menu: render.overlays.popup_menu.as_ref(),
                 tooltip: render.overlays.tooltip.as_ref(),

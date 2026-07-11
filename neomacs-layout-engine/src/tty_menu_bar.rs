@@ -25,7 +25,12 @@
 
 use std::collections::HashSet;
 
-use neomacs_display_protocol::glyph_matrix::TtyMenuBarItem;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TtyMenuBarItem {
+    pub label: String,
+    pub key: String,
+    pub hpos: u16,
+}
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::keymap::{

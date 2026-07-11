@@ -1659,8 +1659,12 @@ fn realize_frame_char_fonts(
             collect_row(row);
         }
     }
-    for chrome in &state.frame_chrome_rows {
-        collect_row(&chrome.row);
+    for band in state.frame_chrome.bands() {
+        if let neomacs_display_protocol::frame_chrome::FrameChromeContent::DisplayRow(content) =
+            band.content()
+        {
+            collect_row(content.row());
+        }
     }
 
     // Pass 2: resolve and publish. Steady state is one cache-hit per pair.

@@ -197,25 +197,13 @@ impl RenderApp {
             primary.render.compositor.transitions.policy = self.transition_policy;
         }
 
-        let pending_tool_items = self
+        let pending_frame_chrome = self
             .frame_windows
             .primary_window()
-            .map(|ws| &ws.render)
-            .as_ref()
-            .and_then(|frame| frame.chrome.tool_bar.as_ref())
-            .map(|tool_bar| tool_bar.items.clone());
-        let pending_compact_tool_items = self
-            .frame_windows
-            .primary_window()
-            .map(|ws| &ws.render)
-            .as_ref()
-            .and_then(|frame| frame.chrome.compact_bar.as_ref())
-            .map(|compact_bar| compact_bar.tool_items.clone());
-        if let Some(items) = pending_tool_items.as_ref() {
-            self.ensure_toolbar_icon_textures(items);
-        }
-        if let Some(items) = pending_compact_tool_items.as_ref() {
-            self.ensure_toolbar_icon_textures(items);
+            .and_then(|ws| ws.render.compositor.current_frame.as_ref())
+            .map(|frame| frame.frame_chrome.clone());
+        if let Some(frame_chrome) = pending_frame_chrome.as_ref() {
+            self.sync_frame_chrome_assets(frame_chrome);
         }
 
         #[cfg(feature = "wpe-webkit")]

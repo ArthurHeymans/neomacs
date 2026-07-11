@@ -3,11 +3,9 @@ use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::DisplayWindowId;
 use crate::thread_comm::FrameRef;
-use crate::thread_comm::{
-    ThreadComms, ToolBarImageSource, ToolBarItem, ToolBarItemType, UiCommand, WindowCommand,
-};
+use crate::thread_comm::{ThreadComms, UiCommand, WindowCommand};
+use neomacs_display_protocol::PopupMenuItem;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
-use neomacs_display_protocol::{MenuBarItem, PopupMenuItem};
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -352,106 +350,6 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
         app.frame_windows
             .primary_window()
             .and_then(|ws| ws.render.overlays.popup_menu.as_ref())
-            .is_some()
-    );
-    assert!(
-        app.frame_windows
-            .primary_window()
-            .is_some_and(|ws| ws.render.compositor.dirty)
-    );
-}
-
-#[test]
-fn primary_toolbar_command_marks_render_state_dirty() {
-    let mut app = make_test_app();
-    let Some(device) = make_test_device() else {
-        return;
-    };
-    let __render = super::frame_windows::GuiFrameRenderState::new(
-        0,
-        &device,
-        app.frame_windows
-            .primary_window()
-            .map_or(1.0, |ws| ws.scale_factor()),
-        app.frame_windows.fps_enabled,
-    );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() {
-        window_state.render = __render;
-    }
-
-    app.handle_ui(UiCommand::SetToolBar {
-        items: vec![ToolBarItem {
-            index: 7,
-            key: "open".to_string(),
-            image: Some(ToolBarImageSource::File {
-                path: "etc/images/open.xpm".to_string(),
-            }),
-            label: String::new(),
-            help: String::new(),
-            enabled: true,
-            selected: false,
-            item_type: ToolBarItemType::Button,
-            wrap: false,
-        }],
-        height: 34.0,
-        fg_r: 1.0,
-        fg_g: 1.0,
-        fg_b: 1.0,
-        bg_r: 0.0,
-        bg_g: 0.0,
-        bg_b: 0.0,
-    });
-
-    assert!(
-        app.frame_windows
-            .primary_window()
-            .and_then(|ws| ws.render.chrome.tool_bar.as_ref())
-            .is_some()
-    );
-    assert!(
-        app.frame_windows
-            .primary_window()
-            .is_some_and(|ws| ws.render.compositor.dirty)
-    );
-}
-
-#[test]
-fn primary_menubar_command_marks_render_state_dirty() {
-    let mut app = make_test_app();
-    let Some(device) = make_test_device() else {
-        return;
-    };
-    let __render = super::frame_windows::GuiFrameRenderState::new(
-        0,
-        &device,
-        app.frame_windows
-            .primary_window()
-            .map_or(1.0, |ws| ws.scale_factor()),
-        app.frame_windows.fps_enabled,
-    );
-    if let Some(window_state) = app.frame_windows.primary_window_mut() {
-        window_state.render = __render;
-    }
-
-    app.handle_ui(UiCommand::SetMenuBar {
-        items: vec![MenuBarItem {
-            index: 7,
-            label: "File".to_string(),
-            key: "file".to_string(),
-        }],
-        height: 24.0,
-        fg_r: 1.0,
-        fg_g: 1.0,
-        fg_b: 1.0,
-        bg_r: 0.0,
-        bg_g: 0.0,
-        bg_b: 0.0,
-    });
-
-    assert!(
-        app.frame_windows
-            .primary_window()
-            .and_then(|ws| ws.render.chrome.menu_bar.as_ref())
             .is_some()
     );
     assert!(

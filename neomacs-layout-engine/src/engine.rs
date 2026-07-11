@@ -78,9 +78,9 @@ use neomacs_display_protocol::frame_chrome::{
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::frame_glyphs::WindowInfo;
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::DisplayWindowId;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
-use neomacs_display_protocol::types::{DisplayFrameId, DisplayWindowId};
 use neomacs_display_protocol::types::{FaceId, Px};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::WindowDisplaySnapshot;
@@ -1015,116 +1015,6 @@ impl LayoutEngine {
         // FrameGlyphBuffer no longer receives glyph output; the DisplayOutputBuilder
         // is now the sole output path.
 
-        // Populate the frame-level TTY menu bar.  Mirrors GNU
-        // `xdisp.c:prepare_menu_bars` -> `update_menu_bar` -> walking
-        // the active maps' `[menu-bar]` prefix and stashing the result
-        // in `f->menu_bar_items`.  We do the same walk via
-        // `tty_menu_bar::collect_tty_menu_bar_items` and stash the
-        // resulting items on the FrameDisplayState so the TTY rasterizer
-        // (`tty_rif.rs`) can paint them at row 0.
-        //
-        // The GUI render runtime has its own menu-bar pipeline (see
-        // `neomacs-display-runtime::render_thread`) and ignores this
-        // field; we still populate it unconditionally because the
-        // collection cost is small and any future TTY-via-display-state
-        // path benefits.
-        let menu_bar_lines_px = frame_params.menu_bar_height;
-        let char_h = frame_params.char_height.max(1.0);
-        let menu_bar_lines = (menu_bar_lines_px / char_h).round() as u16;
-        if menu_bar_lines > 0 {
-            let items =
-                crate::tty_menu_bar::collect_tty_menu_bar_items_for_frame(evaluator, frame_id);
-            // Resolve the GNU `menu` face once and pass its attributes
-            // through to the TTY rasterizer.  Mirrors how
-            // `display_menu_bar` (`xdisp.c:27444`) initialises its
-            // iterator with `MENU_FACE_ID`: the per-cell face is the
-            // `menu` face for every glyph in the menu-bar row.
-            //
-            // We resolve through `FaceResolver::resolve_named_face`
-            // (the same path mode-line / header-line use), so any user
-            // customisation of the `menu` face via `face-spec-set` is
-            // honoured. The default `menu` face inherits :inverse-video
-            // on TTYs, which gives the highlighted bar visible in GNU
-            // Emacs `-nw`.
-            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new_with_font_sizing(
-                evaluator.face_table(),
-                0x00FFFFFF,
-                0x00000000,
-                frame_params.font_pixel_size,
-                window_system.clone(),
-                self.font_sizing,
-            );
-            let menu_face = menu_face_resolver.resolve_named_face("menu");
-            frame_display_state.menu_bar =
-                Some(neomacs_display_protocol::glyph_matrix::TtyMenuBarState {
-                    items,
-                    lines: menu_bar_lines,
-                    fg: menu_face.fg,
-                    bg: menu_face.bg,
-                    use_default_foreground: menu_face.use_default_foreground,
-                    use_default_background: menu_face.use_default_background,
-                    bold: menu_face.font_weight >= 600,
-                    inverse: menu_face.terminal_inverse_video,
-                });
-        }
-        if frame_display_state.parent_id == DisplayFrameId::new(0) {
-            let menu_face_resolver = crate::neovm_bridge::FaceResolver::new_with_font_sizing(
-                evaluator.face_table(),
-                0x00FFFFFF,
-                0x00000000,
-                frame_params.font_pixel_size,
-                window_system.clone(),
-                self.font_sizing,
-            );
-            // sRGB-space Color (NO linear conversion): the GUI chrome renderer
-            // applies srgb_to_linear itself at draw time, mirroring the
-            // pre-Color tuple contract.
-            let pixel_to_color = |pixel: u32| -> Color {
-                Color::rgb(
-                    ((pixel >> 16) & 0xFF) as f32 / 255.0,
-                    ((pixel >> 8) & 0xFF) as f32 / 255.0,
-                    (pixel & 0xFF) as f32 / 255.0,
-                )
-            };
-
-            if frame_params.menu_bar_height > 0.0 {
-                let menu_face = menu_face_resolver.resolve_named_face_without_inverse_video("menu");
-                frame_display_state.gui_menu_bar =
-                    Some(neomacs_display_protocol::glyph_matrix::GuiMenuBarState {
-                        items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
-                        height: frame_params.menu_bar_height,
-                        fg: pixel_to_color(menu_face.fg),
-                        bg: pixel_to_color(menu_face.bg),
-                    });
-            }
-
-            if frame_params.tool_bar_height > 0.0 {
-                let tool_bar_face = menu_face_resolver.resolve_named_face("tool-bar");
-                frame_display_state.gui_tool_bar =
-                    Some(neomacs_display_protocol::glyph_matrix::GuiToolBarState {
-                        items: collect_gui_tool_bar_items(evaluator),
-                        height: frame_params.tool_bar_height,
-                        fg: pixel_to_color(tool_bar_face.fg),
-                        bg: pixel_to_color(tool_bar_face.bg),
-                    });
-            }
-
-            if frame_params.compact_bar_height > 0.0 {
-                let menu_face = menu_face_resolver.resolve_named_face_without_inverse_video("menu");
-                let tool_bar_face = menu_face_resolver.resolve_named_face("tool-bar");
-                frame_display_state.gui_compact_bar =
-                    Some(neomacs_display_protocol::glyph_matrix::GuiCompactBarState {
-                        menu_items: collect_gui_menu_bar_items_for_frame(evaluator, frame_id),
-                        tool_items: collect_gui_tool_bar_items(evaluator),
-                        height: frame_params.compact_bar_height,
-                        menu_fg: pixel_to_color(menu_face.fg),
-                        menu_bg: pixel_to_color(menu_face.bg),
-                        tool_fg: pixel_to_color(tool_bar_face.fg),
-                        tool_bg: pixel_to_color(tool_bar_face.bg),
-                    });
-            }
-        }
-
         self.last_frame_display_state = Some(frame_display_state);
 
         // --- Incremental-layout commit (Phase 0a) ---
@@ -1672,8 +1562,8 @@ impl LayoutEngine {
     /// - GUI uses `frame->tab_bar_window`
     /// - TTY writes tab-bar rows directly into the frame matrix
     ///
-    /// Neomacs keeps immutable snapshots, so this method records a
-    /// frame-level `FrameChromeRow` that renderers can consume directly.
+    /// Neomacs keeps immutable snapshots, so this method records typed
+    /// frame-chrome content that every renderer can consume directly.
     fn render_frame_tab_bar_rust(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
@@ -1725,12 +1615,6 @@ impl LayoutEngine {
             )
             .with_hit_regions(hit_regions),
         );
-        self.frame_output
-            .set_tab_bar(neomacs_display_protocol::frame_glyphs::FrameTabBarState {
-                items: tab_bar.items,
-                y: 0.0,
-                height: actual_tab_bar_height,
-            });
         Some(actual_tab_bar_height)
     }
 

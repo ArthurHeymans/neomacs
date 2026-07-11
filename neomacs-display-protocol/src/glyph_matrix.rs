@@ -12,14 +12,13 @@ use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_chrome::{ChromeMedia, FrameChrome, FrameChromeContent};
 use super::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FrameTabBarState, FringeBitmapData,
-    FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
-    WindowEffectHint, WindowInfo, WindowTransitionHint,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
+    GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
+    WindowInfo, WindowTransitionHint,
 };
 use super::types::{
     Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
 };
-use super::ui_types::{MenuBarItem, ToolBarItem};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
@@ -548,25 +547,6 @@ pub struct WindowMatrixEntry {
     pub selected: bool,
 }
 
-/// Frame-level chrome row that is not owned by any leaf window.
-///
-/// GNU treats the tab bar specially:
-/// - GUI builds a dedicated `tab_bar_window`
-/// - TTY writes tab-bar rows directly into the frame matrix
-///
-/// Neomacs keeps immutable published display state, so we model the
-/// frame-level tab bar explicitly here instead of smuggling it into the first
-/// leaf window's matrix after layout.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct FrameChromeRow {
-    /// Visual row number in frame matrix space.
-    pub row_index: u32,
-    /// Frame-relative clip rect / origin for this row.
-    pub pixel_bounds: Rect,
-    /// Row contents and row metrics.
-    pub row: GlyphRow,
-}
-
 // ---------------------------------------------------------------------------
 // Non-grid item structs — these mirror FrameGlyph variants for items that
 // don't belong on the character grid (backgrounds, borders, cursors, etc.).
@@ -684,19 +664,8 @@ pub struct ScrollBarItem {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameDisplayState {
-    /// Serialized-protocol version stamp; see [`crate::PROTOCOL_VERSION`].
-    ///
-    /// Always `PROTOCOL_VERSION` for in-process states. Deserialization
-    /// rejects any other value (or a missing field) with an explicit error,
-    /// so stale snapshots/goldens cannot silently skew against the current
-    /// wire layout.
-    #[serde(deserialize_with = "validate_protocol_version")]
-    pub protocol_version: u32,
     pub window_matrices: Vec<WindowMatrixEntry>,
-    /// Frame-level chrome rows that are not owned by any leaf window.
-    pub frame_chrome_rows: Vec<FrameChromeRow>,
-    /// Authoritative frame-level chrome bands. The legacy split fields remain
-    /// only while their consumers migrate to this value.
+    /// Authoritative frame-level chrome bands.
     pub frame_chrome: FrameChrome,
     pub frame_cols: usize,
     pub frame_rows: usize,
@@ -755,126 +724,15 @@ pub struct FrameDisplayState {
     pub stipple_patterns: HashMap<i32, StipplePattern>,
     /// Effect hints for the renderer.
     pub effect_hints: Vec<WindowEffectHint>,
-    /// Frame-level menu bar (TTY only, GNU `display_menu_bar` analog).
-    ///
-    /// `Some` when `(frame-parameter nil 'menu-bar-lines)` > 0 on a TTY
-    /// frame.  Carries the items collected by walking the active
-    /// `[menu-bar]` keymaps (mirroring GNU `keyboard.c:menu_bar_items`).
-    /// The TTY rasterizer paints these into row 0; the GUI runtime has
-    /// its own menu-bar machinery and ignores this field.
-    pub menu_bar: Option<TtyMenuBarState>,
-    /// GUI menu-bar overlay state for the primary frame snapshot.
-    pub gui_menu_bar: Option<GuiMenuBarState>,
-    /// GUI tool-bar overlay state for the primary frame snapshot.
-    pub gui_tool_bar: Option<GuiToolBarState>,
-    /// GUI compact-bar overlay state for the primary frame snapshot.
-    pub gui_compact_bar: Option<GuiCompactBarState>,
-    /// Frame-level tab bar metadata for render-thread hit-testing.
-    pub tab_bar: Option<FrameTabBarState>,
     /// Resolved fringe bitmaps for this frame, keyed by registry index. Each
     /// `GlyphRow::left_fringe_bitmap` references one of these by `bitmap_index`.
     pub fringe_bitmaps: HashMap<u16, FringeBitmapData>,
 }
 
-/// One label entry in the TTY menu bar (one top-level menu like "File").
-///
-/// Mirrors the per-item slot of GNU's `f->menu_bar_items` vector
-/// (4 slots per item: key, string, def, hpos — see
-/// `keyboard.c:menu_bar_items`). We only need the visible label and the
-/// key (for future activation hit-testing); `def` is intentionally not
-/// carried across the display-protocol boundary because the renderer
-/// doesn't need it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct TtyMenuBarItem {
-    /// Display label, e.g. `"File"`.
-    pub label: String,
-    /// Key symbol the user invokes to open this menu, e.g. `file`.
-    pub key: String,
-    /// 0-based screen column where this item starts (filled by layout).
-    pub hpos: u16,
-}
-
-/// Per-frame menu bar state passed from layout to the TTY rasterizer.
-///
-/// Carries the resolved attributes of the GNU `menu` face directly so
-/// the rasterizer doesn't have to look anything up in the per-glyph
-/// `faces` HashMap (which is populated dynamically as text glyphs are
-/// emitted, and may not contain a `menu` entry at all when the menu
-/// bar holds the only references to that face).
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-pub struct TtyMenuBarState {
-    /// Items in display order, left-to-right.
-    pub items: Vec<TtyMenuBarItem>,
-    /// Number of menu-bar lines (today: always 1 on TTY, mirrors
-    /// `FRAME_MENU_BAR_LINES` in GNU).
-    pub lines: u16,
-    /// Foreground RGB pixel (`0x00RRGGBB`) for the `menu` face.
-    pub fg: u32,
-    /// Background RGB pixel (`0x00RRGGBB`) for the `menu` face.
-    pub bg: u32,
-    /// Whether the terminal default foreground should be used.
-    pub use_default_foreground: bool,
-    /// Whether the terminal default background should be used.
-    pub use_default_background: bool,
-    /// Bold attribute from the `menu` face.
-    pub bold: bool,
-    /// Inverse-video attribute from the `menu` face.
-    pub inverse: bool,
-}
-
-/// GUI menu-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GuiMenuBarState {
-    pub items: Vec<MenuBarItem>,
-    pub height: f32,
-    pub fg: Color,
-    pub bg: Color,
-}
-
-/// GUI tool-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GuiToolBarState {
-    pub items: Vec<ToolBarItem>,
-    pub height: f32,
-    pub fg: Color,
-    pub bg: Color,
-}
-
-/// GUI compact-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GuiCompactBarState {
-    pub menu_items: Vec<MenuBarItem>,
-    pub tool_items: Vec<ToolBarItem>,
-    pub height: f32,
-    pub menu_fg: Color,
-    pub menu_bg: Color,
-    pub tool_fg: Color,
-    pub tool_bg: Color,
-}
-
-/// Serde gate for [`FrameDisplayState::protocol_version`]: loading a snapshot
-/// produced by a different protocol version is an explicit error.
-fn validate_protocol_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let version = <u32 as serde::Deserialize>::deserialize(deserializer)?;
-    if version != crate::PROTOCOL_VERSION {
-        return Err(serde::de::Error::custom(format!(
-            "display protocol version mismatch: snapshot has {version}, \
-             this build expects {} — regenerate the snapshot/golden",
-            crate::PROTOCOL_VERSION
-        )));
-    }
-    Ok(version)
-}
-
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
-            protocol_version: crate::PROTOCOL_VERSION,
             window_matrices: Vec::new(),
-            frame_chrome_rows: Vec::new(),
             frame_chrome: FrameChrome::default(),
             frame_cols,
             frame_rows,
@@ -922,11 +780,6 @@ impl FrameDisplayState {
             phys_cursor: None,
             stipple_patterns: HashMap::new(),
             effect_hints: Vec::new(),
-            menu_bar: None,
-            gui_menu_bar: None,
-            gui_tool_bar: None,
-            gui_compact_bar: None,
-            tab_bar: None,
             fringe_bitmaps: HashMap::new(),
         }
     }
@@ -982,7 +835,6 @@ impl FrameDisplayState {
         state.fringe_bitmaps = buf.fringe_bitmaps.clone();
         state.transition_hints = buf.transition_hints.clone();
         state.effect_hints = buf.effect_hints.clone();
-        state.tab_bar = buf.tab_bar.clone();
         // Only non-active (decorative) cursors round-trip into `cursors`; the
         // active entry is reconstructed into `phys_cursor` above.
         state.cursors.extend(
@@ -1197,7 +1049,6 @@ impl FrameDisplayState {
         // Copy transition hints
         buf.transition_hints = self.transition_hints.clone();
         buf.frame_chrome = self.frame_chrome.clone();
-        buf.tab_bar = self.tab_bar.clone();
 
         // --- Materialize all glyphs (backgrounds, grid, borders, images,
         // videos, xwidgets, scroll bars) in the canonical order ---
@@ -1296,20 +1147,6 @@ impl FrameDisplayState {
                     band.bounds(),
                     content.row().role,
                     medium,
-                    &mut push,
-                );
-            }
-        }
-        if self.frame_chrome.bands().is_empty() {
-            for frame_row in &self.frame_chrome_rows {
-                self.for_each_grid_row_glyph(
-                    DisplayWindowId::new(0),
-                    frame_row.row_index,
-                    &frame_row.row,
-                    frame_row.pixel_bounds,
-                    frame_row.pixel_bounds,
-                    self.char_width,
-                    self.char_height,
                     &mut push,
                 );
             }

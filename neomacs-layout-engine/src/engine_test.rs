@@ -33,7 +33,7 @@ use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
-use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
+use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
@@ -3260,9 +3260,11 @@ fn layout_frame_rust_list_wrapped_left_fringe_spec_draws_in_fringe_not_inline() 
 
     // Register a user fringe bitmap (diff-hl does this at load time) so the
     // bitmap symbol resolves to a registry index.
+    eval.eval_str("(define-fringe-bitmap 'fringespec-test-bmp [255 255] nil nil 'center)")
+        .expect("define-fringe-bitmap");
     let bmp_index: u16 = eval
-        .eval_str("(define-fringe-bitmap 'fringespec-test-bmp [255 255] nil nil 'center)")
-        .expect("define-fringe-bitmap")
+        .eval_str("(get 'fringespec-test-bmp 'fringe)")
+        .expect("fringe bitmap index property")
         .as_fixnum()
         .expect("fringe index") as u16;
 
@@ -12399,13 +12401,15 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
         .id();
     // Register the magit fold-arrow bitmap so the fringe spec resolves to a real
     // registry index (first user bitmap => 25).
-    let fringe_index = eval
-        .eval_str(
-            "(define-fringe-bitmap 'magit-fringe-bitmapv \
+    eval.eval_str(
+        "(define-fringe-bitmap 'magit-fringe-bitmapv \
              [#b00000000 #b10000010 #b11000110 #b01101100 #b00111000 #b00010000 \
               #b00000000 #b00000000])",
-        )
-        .expect("define magit fringe bitmap")
+    )
+    .expect("define magit fringe bitmap");
+    let fringe_index = eval
+        .eval_str("(get 'magit-fringe-bitmapv 'fringe)")
+        .expect("magit fringe bitmap index property")
         .as_fixnum()
         .expect("fringe index") as u16;
     // Build the propertized before-string out of band so the `display` property
@@ -13772,14 +13776,13 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let tab_bar_text = engine
         .last_frame_display_state
         .as_ref()
-        .map(|state| {
-            state
-                .frame_chrome_rows
-                .iter()
-                .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
-                .map(|row| glyphs_logical_text(&row.row.glyphs[1]))
-                .collect::<Vec<_>>()
-                .join("")
+        .and_then(|state| {
+            state.frame_chrome.bands().iter().find_map(|band| {
+                let FrameChromeContent::DisplayRow(content) = band.content() else {
+                    return None;
+                };
+                Some(glyphs_logical_text(&content.row().glyphs[1]))
+            })
         })
         .unwrap_or_default();
 
@@ -13790,14 +13793,13 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let tab_bar_glyphs = engine
         .last_frame_display_state
         .as_ref()
-        .map(|state| {
-            state
-                .frame_chrome_rows
-                .iter()
-                .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
-                .flat_map(|row| row.row.glyphs[1].iter())
-                .cloned()
-                .collect::<Vec<_>>()
+        .and_then(|state| {
+            state.frame_chrome.bands().iter().find_map(|band| {
+                let FrameChromeContent::DisplayRow(content) = band.content() else {
+                    return None;
+                };
+                Some(content.row().glyphs[1].clone())
+            })
         })
         .unwrap_or_default();
     assert!(
@@ -13839,7 +13841,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         .unwrap_or(0);
     assert_eq!(
         window_tab_bar_rows, 0,
-        "expected frame tab bar to live in frame_chrome_rows, not in leaf-window matrices"
+        "expected frame tab bar to live in FrameChrome, not in leaf-window matrices"
     );
     // Note: a previous version of this test also asserted
     // `!tab_bar_text.contains("*frame-a-2*")` as a
@@ -13993,11 +13995,9 @@ fn layout_frame_rust_tab_bar_does_not_record_buffer_selection() {
         .last_frame_display_state
         .as_ref()
         .map(|state| {
-            state
-                .frame_chrome_rows
-                .iter()
-                .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
-                .count()
+            usize::from(state.frame_chrome.bands().iter().any(|band| {
+                matches!(band.content(), FrameChromeContent::DisplayRow(content) if content.row().enabled)
+            }))
         })
         .unwrap_or(0);
     assert!(
@@ -14069,28 +14069,34 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
         .last_frame_display_state
         .as_ref()
         .expect("display state");
-    let tab_bar_row = state
-        .frame_chrome_rows
+    let tab_bar_band = state
+        .frame_chrome
+        .band(FrameChromeKind::TabBar)
+        .expect("frame tab-bar band");
+    let FrameChromeContent::DisplayRow(tab_bar_row) = tab_bar_band.content() else {
+        panic!("tab bar display row");
+    };
+    let materialized = state.materialize();
+    let image = materialized
+        .glyphs
         .iter()
-        .find(|row| row.row.enabled && row.row.role == GlyphRowRole::TabBar)
-        .expect("frame tab-bar row");
-    let image = state
-        .images
-        .iter()
-        .find(|image| image.row_role == GlyphRowRole::TabBar)
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Image {
+                    row_role: GlyphRowRole::TabBar,
+                    ..
+                }
+            )
+        })
         .expect("frame tab-bar image side item");
 
-    assert_eq!(image.window_id.get(), 0);
-    assert_eq!(image.image_id.get(), 77);
-    assert_eq!(image.width, 32.0);
-    assert_eq!(image.height, 24.0);
-    assert_eq!(tab_bar_row.row.height_px, 24.0);
-    assert_eq!(tab_bar_row.pixel_bounds.height, 24.0);
-    assert_eq!(image.clip_rect, Some(tab_bar_row.pixel_bounds));
-    assert_eq!(
-        image.slot_id.expect("tab-bar image slot id").row,
-        tab_bar_row.row_index
-    );
+    assert_eq!(image.geometry().expect("image geometry").width, 32.0);
+    assert_eq!(image.geometry().expect("image geometry").height, 24.0);
+    assert_eq!(tab_bar_row.row().height_px, 24.0);
+    assert_eq!(tab_bar_band.bounds().height(), 24.0);
+    assert_eq!(image.clip_rect(), Some(tab_bar_band.bounds().raw()));
+    assert_eq!(image.slot_id().expect("tab-bar image slot id").row, 0);
     let requests = requests.lock().expect("requests lock");
     assert!(
         !requests.is_empty(),
@@ -14158,14 +14164,16 @@ fn layout_frame_rust_shrinks_frame_tab_bar_from_stale_reserved_height() {
         .last_frame_display_state
         .as_ref()
         .expect("display state");
-    let tab_bar_row = state
-        .frame_chrome_rows
-        .iter()
-        .find(|row| row.row.enabled && row.row.role == GlyphRowRole::TabBar)
-        .expect("frame tab-bar row");
+    let tab_bar_band = state
+        .frame_chrome
+        .band(FrameChromeKind::TabBar)
+        .expect("frame tab-bar band");
+    let FrameChromeContent::DisplayRow(tab_bar_row) = tab_bar_band.content() else {
+        panic!("tab bar display row");
+    };
 
-    assert_eq!(tab_bar_row.row.height_px, 24.0);
-    assert_eq!(tab_bar_row.pixel_bounds.height, 24.0);
+    assert_eq!(tab_bar_row.row().height_px, 24.0);
+    assert_eq!(tab_bar_band.bounds().height(), 24.0);
     assert_eq!(
         eval.frame_manager()
             .get(frame_id)
@@ -14173,12 +14181,21 @@ fn layout_frame_rust_shrinks_frame_tab_bar_from_stale_reserved_height() {
             .tab_bar_height,
         24
     );
-    let image = state
-        .images
+    let materialized = state.materialize();
+    let image = materialized
+        .glyphs
         .iter()
-        .find(|image| image.row_role == GlyphRowRole::TabBar)
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Image {
+                    row_role: GlyphRowRole::TabBar,
+                    ..
+                }
+            )
+        })
         .expect("frame tab-bar image side item");
-    assert_eq!(image.clip_rect, Some(tab_bar_row.pixel_bounds));
+    assert_eq!(image.clip_rect(), Some(tab_bar_band.bounds().raw()));
     assert!(
         !requests.lock().expect("requests lock").is_empty(),
         "expected at least one tab-bar image realization request"

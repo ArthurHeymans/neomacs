@@ -1,6 +1,7 @@
 use super::*;
 use crate::types::{FrameParams, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
+use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
     CursorKind, CursorStyle, DisplaySlotId, WindowEffectHint, WindowInfo, WindowTransitionKind,
 };

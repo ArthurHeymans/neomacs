@@ -27,9 +27,6 @@ use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
-use neomacs_display_protocol::glyph_matrix::{
-    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
-};
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
 use neomacs_renderer_wgpu::{
@@ -107,9 +104,6 @@ pub(crate) struct GuiFrameRenderState {
 /// GUI chrome state for a frame window.
 #[derive(Default)]
 pub(crate) struct ChromeState {
-    pub menu_bar: Option<GuiMenuBarState>,
-    pub tool_bar: Option<GuiToolBarState>,
-    pub compact_bar: Option<GuiCompactBarState>,
     pub interaction: GuiChromeInteractionState,
 }
 
@@ -328,21 +322,6 @@ impl GuiFrameRenderState {
 
     pub(super) fn set_tooltip(&mut self, tooltip: Option<TooltipState>) {
         self.overlays.tooltip = tooltip;
-        self.compositor.dirty = true;
-    }
-
-    pub(super) fn set_menu_bar(&mut self, menu_bar: Option<GuiMenuBarState>) {
-        self.chrome.menu_bar = menu_bar;
-        self.compositor.dirty = true;
-    }
-
-    pub(super) fn set_tool_bar(&mut self, tool_bar: Option<GuiToolBarState>) {
-        self.chrome.tool_bar = tool_bar;
-        self.compositor.dirty = true;
-    }
-
-    pub(super) fn set_compact_bar(&mut self, compact_bar: Option<GuiCompactBarState>) {
-        self.chrome.compact_bar = compact_bar;
         self.compositor.dirty = true;
     }
 

@@ -115,11 +115,6 @@ pub fn collect_snapshot_states(
 /// for future metadata without a schema break.
 #[derive(serde::Serialize)]
 struct SnapshotDoc<'a> {
-    /// Serialized display-protocol version; see
-    /// [`neomacs_display_protocol::PROTOCOL_VERSION`]. External consumers can
-    /// gate on this before parsing `frames` (each frame also carries its own
-    /// validated `protocol_version` stamp).
-    protocol_version: u32,
     frames: &'a [FrameDisplayState],
 }
 
@@ -133,11 +128,8 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
     evaluator.frame_snapshot_fn = Some(Box::new(|eval, request| {
         let states = collect_snapshot_states(eval, &request.target)?;
         Ok(match request.format {
-            SnapshotFormat::Json => serde_json::to_string(&SnapshotDoc {
-                protocol_version: neomacs_display_protocol::PROTOCOL_VERSION,
-                frames: &states,
-            })
-            .map_err(|error| format!("frame snapshot JSON serialization failed: {error}"))?,
+            SnapshotFormat::Json => serde_json::to_string(&SnapshotDoc { frames: &states })
+                .map_err(|error| format!("frame snapshot JSON serialization failed: {error}"))?,
             SnapshotFormat::Text => states
                 .iter()
                 .map(|state| state.render_text())

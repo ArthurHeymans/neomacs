@@ -276,17 +276,13 @@ impl Default for ChildFrameStyle {
 }
 
 pub(super) struct ToolbarResources {
-    pub(super) icon_textures: HashMap<ToolBarImageSource, u32>,
-    pub(super) icon_size: u32,
-    pub(super) padding: u32,
+    pub(super) icon_textures: HashMap<(ToolBarImageSource, u32), u32>,
 }
 
 impl Default for ToolbarResources {
     fn default() -> Self {
         Self {
             icon_textures: HashMap::new(),
-            icon_size: 24,
-            padding: 5,
         }
     }
 }

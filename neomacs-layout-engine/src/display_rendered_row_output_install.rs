@@ -24,11 +24,11 @@ pub(crate) fn install_measured_frame_chrome_display_row(
     builder: &mut DisplayOutputBuilder,
     measured: &MeasuredDisplayRow,
 ) {
-    MeasuredFrameChromeRowInstallRequest { measured }.install(builder);
+    MeasuredFrameChromeAssetsInstallRequest { measured }.install(builder);
 }
 
 pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeDisplayRow {
-    let mut row = measured.absolute_output_row();
+    let mut row = measured.frame_chrome_output_row();
     crate::display_row_finalizer::GlyphRowFinalizationContext::new(
         FRAME_CHROME_WINDOW_ID as u64,
         measured.row_index() as usize,
@@ -127,23 +127,23 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
     }
 }
 
-struct MeasuredFrameChromeRowInstallRequest<'a> {
+struct MeasuredFrameChromeAssetsInstallRequest<'a> {
     measured: &'a MeasuredDisplayRow,
 }
 
-impl MeasuredFrameChromeRowInstallRequest<'_> {
+impl MeasuredFrameChromeAssetsInstallRequest<'_> {
     fn install(self, builder: &mut DisplayOutputBuilder) {
         let measured = self.measured;
         let DisplayRowOwner::FrameChrome { kind } = measured.owner() else {
             panic!("window-owned rows must install through window chrome");
         };
         debug_assert!(matches!(kind, FrameChromeKind::TabBar));
-        RenderedDisplayRowAssetsInstall::frame_chrome(
-            measured.rendered(),
-            measured.row_index(),
-            measured.bounds(),
-        )
-        .install(builder);
+        for face in measured.rendered().faces() {
+            builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
+                face.id,
+                face.clone(),
+            ));
+        }
     }
 }
 
@@ -151,7 +151,6 @@ impl MeasuredFrameChromeRowInstallRequest<'_> {
 enum RenderedDisplayRowAssetInstallTarget {
     CurrentWindowRow(usize),
     WindowRow { row_index: u32, bounds: Rect },
-    FrameChrome { row_index: u32, bounds: Rect },
 }
 
 struct RenderedDisplayRowAssetsInstall<'a> {
@@ -192,13 +191,6 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         Self::from_rendered(
             rendered,
             RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds },
-        )
-    }
-
-    fn frame_chrome(rendered: &'a RenderedDisplayRow, row_index: u32, bounds: Rect) -> Self {
-        Self::from_rendered(
-            rendered,
-            RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds },
         )
     }
 
@@ -303,15 +295,6 @@ impl DisplayRowMediaInstallTarget {
                     },
                 }
             }
-            RenderedDisplayRowAssetInstallTarget::FrameChrome { row_index, bounds } => Self {
-                window_id: DisplayWindowId::new(FRAME_CHROME_WINDOW_ID),
-                clip: Some(bounds),
-                slot_id: DisplaySlotId {
-                    window_id: DisplayWindowId::new(FRAME_CHROME_WINDOW_ID),
-                    row: row_index,
-                    col,
-                },
-            },
         }
     }
 }

@@ -352,33 +352,21 @@ impl TtyRif {
             self.rasterize_face_fill(origin_col, origin_row, state, fill);
         }
 
-        if state.frame_chrome.bands().is_empty() {
-            for frame_row in &state.frame_chrome_rows {
-                let char_w = state.char_width.max(1.0);
-                let win_col = origin_col + (frame_row.pixel_bounds.x / char_w) as usize;
-                self.rasterize_glyph_row(
-                    win_col,
-                    origin_row + frame_row.row_index as usize,
-                    &frame_row.row,
-                );
-            }
-        } else {
-            let char_w = state.char_width.max(1.0);
-            let char_h = state.char_height.max(1.0);
-            for band in state.frame_chrome.bands() {
-                let band_col = origin_col + (band.bounds().x() / char_w).round() as usize;
-                let band_row = origin_row + (band.bounds().y() / char_h).round() as usize;
-                match band.content() {
-                    FrameChromeContent::DisplayRow(content) => {
-                        self.rasterize_glyph_row(band_col, band_row, content.row());
-                    }
-                    FrameChromeContent::MenuBar(content) => {
-                        let cols = (band.bounds().width() / char_w).round().max(0.0) as usize;
-                        let rows = (band.bounds().height() / char_h).round().max(1.0) as usize;
-                        self.rasterize_frame_menu_content(content, band_col, band_row, cols, rows);
-                    }
-                    FrameChromeContent::ToolBar(_) | FrameChromeContent::CompactBar(_) => {}
+        let char_w = state.char_width.max(1.0);
+        let char_h = state.char_height.max(1.0);
+        for band in state.frame_chrome.bands() {
+            let band_col = origin_col + (band.bounds().x() / char_w).round() as usize;
+            let band_row = origin_row + (band.bounds().y() / char_h).round() as usize;
+            match band.content() {
+                FrameChromeContent::DisplayRow(content) => {
+                    self.rasterize_glyph_row(band_col, band_row, content.row());
                 }
+                FrameChromeContent::MenuBar(content) => {
+                    let cols = (band.bounds().width() / char_w).round().max(0.0) as usize;
+                    let rows = (band.bounds().height() / char_h).round().max(1.0) as usize;
+                    self.rasterize_frame_menu_content(content, band_col, band_row, cols, rows);
+                }
+                FrameChromeContent::ToolBar(_) | FrameChromeContent::CompactBar(_) => {}
             }
         }
 
@@ -402,19 +390,6 @@ impl TtyRif {
                 // skip terminal rows.
                 self.rasterize_glyph_row(row_col, row_base + row_idx, glyph_row);
             }
-        }
-
-        // Frame-level menu bar.  Mirrors GNU `display_menu_bar`
-        // (`xdisp.c:27444`): the menu bar is independent of any window's
-        // glyph matrix and is drawn at the very top of the frame using
-        // the `menu` face for every cell.  We rasterize it AFTER the
-        // window matrices so the menu bar always wins at row 0..lines-1
-        // (the layout engine has already shifted the root window down to
-        // make room).
-        if state.frame_chrome.bands().is_empty()
-            && let Some(menu_bar) = state.menu_bar.as_ref()
-        {
-            self.rasterize_menu_bar_at(menu_bar, origin_col, origin_row, state.frame_cols);
         }
 
         // GNU's TTY redisplay does not paint a cursor glyph into the
@@ -482,23 +457,16 @@ impl TtyRif {
         }
     }
 
-    /// Paint the TTY menu bar into rows `0..menu_bar.lines`.
+    /// Paint positioned menu items into the published frame-chrome band.
     ///
     /// Layout matches GNU `display_menu_bar`:
     ///
-    /// * One leading space, then each item label followed by one
-    ///   trailing space (so items render as `" File  Edit  Options ..."`
-    ///   when the leading-space-of-the-next-item visually doubles as
-    ///   the trailing space of the previous one — see GNU's
+    /// * Each item label is followed by its published spacing (see GNU's
     ///   `display_string (NULL, string, Qnil, 0, 0, &it, SCHARS (string) + 1, ...)`
     ///   pattern).
     /// * Remainder of the row filled with spaces using the `menu` face,
     ///   matching GNU's `display_string ("", Qnil, ...)` tail call.
-    /// * Items past the visible width are silently truncated; we
-    ///   record `hpos = u16::MAX` for any item that didn't fit, so a
-    ///   future hit-tester can ignore them (mirrors GNU storing the
-    ///   item's column in slot `i+3` and only valid columns being
-    ///   reachable via `tty_menu_activate`).
+    /// * Items past the visible width are silently clipped to the band.
     fn rasterize_frame_menu_content(
         &mut self,
         menu: &crate::frame_chrome::MenuBarContent,
@@ -547,71 +515,6 @@ impl TtyRif {
             if col < width {
                 col += 1;
             }
-        }
-    }
-
-    fn rasterize_menu_bar_at(
-        &mut self,
-        menu_bar: &TtyMenuBarState,
-        origin_col: usize,
-        origin_row: usize,
-        frame_cols: usize,
-    ) {
-        let attrs = CellAttrs {
-            fg: (!menu_bar.use_default_foreground).then(|| rgb_pixel_to_tuple(menu_bar.fg)),
-            bg: (!menu_bar.use_default_background).then(|| rgb_pixel_to_tuple(menu_bar.bg)),
-            bold: menu_bar.bold,
-            italic: false,
-            underline: 0,
-            strikethrough: false,
-            inverse: menu_bar.inverse,
-        };
-
-        let lines = (menu_bar.lines as usize).min(self.desired.height.saturating_sub(origin_row));
-        let width = frame_cols.min(self.desired.width.saturating_sub(origin_col));
-        if lines == 0 || width == 0 {
-            return;
-        }
-
-        // Only line 0 of the menu bar carries items today.  Additional
-        // wrap-rows would be filled with spaces; mirrors GNU which
-        // also displays only the first menu-bar line on TTYs.
-        for row in 0..lines {
-            for col in 0..width {
-                self.desired
-                    .set(origin_row + row, origin_col + col, ' ', attrs, false);
-            }
-        }
-
-        let menu_row = origin_row;
-        let mut col: usize = 0;
-        // GNU starts with the first item at column 0 (no leading
-        // padding); the per-item label is `string + " "` (label plus
-        // exactly one trailing space, see `SCHARS (string) + 1` in
-        // `display_menu_bar`).
-        for item in &menu_bar.items {
-            if col >= width {
-                break;
-            }
-            let item_start = col;
-            let label_end = col + item.label.chars().count();
-            for ch in item.label.chars() {
-                if col >= width {
-                    break;
-                }
-                self.desired
-                    .set(menu_row, origin_col + col, ch, attrs, false);
-                col += 1;
-            }
-            // Trailing space after the label, but only if there's room.
-            // The space itself is part of the item's run so it shares
-            // the menu face attrs (already painted as the row fill).
-            if col < width && col == label_end {
-                col += 1;
-            }
-            // Remember where we placed this item so a future hit-tester
-            // can map screen column back to a key.
-            let _ = item_start;
         }
     }
 

@@ -156,9 +156,9 @@ impl MeasuredDisplayRow {
             .with_height(self.bounds.height)
     }
 
-    pub(crate) fn absolute_output_row(&self) -> GlyphRow {
+    pub(crate) fn frame_chrome_output_row(&self) -> GlyphRow {
         self.rendered
-            .materialize_output_row(self.bounds.y, self.row_height(), self.row_ascent())
+            .materialize_output_row(0.0, self.row_height(), self.row_ascent())
     }
 
     pub(crate) fn window_relative_output_row(&self, window_bounds: Rect) -> GlyphRow {

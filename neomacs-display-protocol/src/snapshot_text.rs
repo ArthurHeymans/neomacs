@@ -30,6 +30,7 @@
 use std::fmt::Write as _;
 
 use crate::face::BasicFaceId;
+use crate::frame_chrome::FrameChromeContent;
 use crate::frame_glyphs::GlyphRowRole;
 use crate::glyph_matrix::{FrameDisplayState, GlyphRow, GlyphType};
 use crate::types::{Color, FaceId};
@@ -65,16 +66,25 @@ impl FrameDisplayState {
             self.frame_pixel_height
         );
 
-        if let Some(menu) = &self.menu_bar {
-            let labels: Vec<&str> = menu.items.iter().map(|item| item.label.as_str()).collect();
-            let _ = writeln!(out, "[menu-bar]|{}", labels.join(" "));
-        }
-
-        for chrome in &self.frame_chrome_rows {
-            let (text, runs) = row_text(&chrome.row);
-            let _ = writeln!(out, "[chrome {}]|{}", chrome.row_index, text);
-            if with_faces {
-                self.write_face_runs(&mut out, &runs);
+        for band in self.frame_chrome.bands() {
+            match band.content() {
+                FrameChromeContent::MenuBar(menu) => {
+                    let labels: Vec<&str> = menu
+                        .items()
+                        .iter()
+                        .map(|item| item.item().label.as_str())
+                        .collect();
+                    let _ = writeln!(out, "[menu-bar]|{}", labels.join(" "));
+                }
+                FrameChromeContent::DisplayRow(content) => {
+                    let (text, runs) = row_text(content.row());
+                    let row_index = (band.bounds().y() / self.char_height.max(1.0)).round() as u32;
+                    let _ = writeln!(out, "[chrome {}]|{}", row_index, text);
+                    if with_faces {
+                        self.write_face_runs(&mut out, &runs);
+                    }
+                }
+                FrameChromeContent::ToolBar(_) | FrameChromeContent::CompactBar(_) => {}
             }
         }
 

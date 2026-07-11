@@ -541,30 +541,6 @@ pub enum UiCommand {
         /// Emacs frame_id of the flashing top-level frame
         frame: FrameRef,
     },
-    /// Set toolbar items (sent each frame when items change)
-    SetToolBar {
-        items: Vec<ToolBarItem>,
-        height: f32,
-        fg_r: f32,
-        fg_g: f32,
-        fg_b: f32,
-        bg_r: f32,
-        bg_g: f32,
-        bg_b: f32,
-    },
-    /// Configure toolbar appearance
-    SetToolBarConfig { icon_size: u32, padding: u32 },
-    /// Set menu bar items (sent each frame when items change)
-    SetMenuBar {
-        items: Vec<MenuBarItem>,
-        height: f32,
-        fg_r: f32,
-        fg_g: f32,
-        fg_b: f32,
-        bg_r: f32,
-        bg_g: f32,
-        bg_b: f32,
-    },
 }
 
 /// Config and styling commands.

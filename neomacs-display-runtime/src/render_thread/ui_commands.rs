@@ -1,48 +1,11 @@
 //! UI overlay, animation, and effect render commands.
 
 use super::{PopupMenuState, RenderApp, TooltipState};
-use crate::core::types::Color;
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
 use neomacs_display_protocol::ToolBarImageSource;
-use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};
-
-const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
-const GNU_TOOL_BAR_BASE_PADDING: f32 = 5.0;
-
-pub(super) fn toolbar_visual_config_for_height(height: f32) -> (u32, u32) {
-    let height_px = if height.is_finite() && height > 0.0 {
-        height.round().max(1.0) as u32
-    } else {
-        GNU_TOOL_BAR_BASE_HEIGHT as u32
-    };
-    let scale = (height_px as f32 / GNU_TOOL_BAR_BASE_HEIGHT).max(0.1);
-    let max_padding = height_px.saturating_sub(1) / 2;
-    let padding = ((GNU_TOOL_BAR_BASE_PADDING * scale).round() as u32).min(max_padding);
-    let icon_size = height_px.saturating_sub(padding.saturating_mul(2)).max(1);
-
-    (icon_size, padding)
-}
 
 impl RenderApp {
-    pub(super) fn set_toolbar_visual_config(&mut self, icon_size: u32, padding: u32) {
-        if self.toolbar.icon_size == icon_size && self.toolbar.padding == padding {
-            return;
-        }
-        self.toolbar.icon_size = icon_size;
-        self.toolbar.padding = padding;
-        for (_name, id) in self.toolbar.icon_textures.drain() {
-            if let Some(renderer) = self.renderer.as_mut() {
-                renderer.free_image(id);
-            }
-        }
-    }
-
-    pub(super) fn sync_toolbar_visual_config_from_height(&mut self, height: f32) {
-        let (icon_size, padding) = toolbar_visual_config_for_height(height);
-        self.set_toolbar_visual_config(icon_size, padding);
-    }
-
-    pub(super) fn ensure_toolbar_icon_textures(&mut self, items: &[ToolBarItem]) {
+    pub(super) fn ensure_toolbar_icon_textures(&mut self, items: &[ToolBarItem], icon_size: u32) {
         for item in items {
             if item.is_separator() {
                 continue;
@@ -50,20 +13,20 @@ impl RenderApp {
             let Some(image) = item.image.as_ref() else {
                 continue;
             };
-            if self.toolbar.icon_textures.contains_key(image) {
+            let key = (image.clone(), icon_size);
+            if self.toolbar.icon_textures.contains_key(&key) {
                 continue;
             }
             let Some(renderer) = self.renderer.as_mut() else {
                 continue;
             };
 
-            let icon_size = self.toolbar.icon_size;
             let id = match image {
                 ToolBarImageSource::File { path } => {
                     renderer.load_image_file(path, icon_size, icon_size, 0, 0)
                 }
             };
-            self.toolbar.icon_textures.insert(image.clone(), id);
+            self.toolbar.icon_textures.insert(key, id);
             tracing::debug!(
                 "Loaded toolbar image '{}' as image_id={}",
                 image.cache_key(),
@@ -236,63 +199,6 @@ impl RenderApp {
                     );
                 }
             }
-            UiCommand::SetToolBar {
-                items,
-                height,
-                fg_r,
-                fg_g,
-                fg_b,
-                bg_r,
-                bg_g,
-                bg_b,
-            } => {
-                self.sync_toolbar_visual_config_from_height(height);
-                self.ensure_toolbar_icon_textures(&items);
-                let tool_bar = GuiToolBarState {
-                    items,
-                    height,
-                    fg: Color::rgb(fg_r, fg_g, fg_b),
-                    bg: Color::rgb(bg_r, bg_g, bg_b),
-                };
-                if let Some(ws) = self.frame_windows.primary_window_mut() {
-                    ws.render.set_tool_bar(Some(tool_bar))
-                };
-            }
-            UiCommand::SetToolBarConfig { icon_size, padding } => {
-                self.set_toolbar_visual_config(icon_size, padding);
-                self.frame_windows.mark_top_level_dirty();
-            }
-            UiCommand::SetMenuBar {
-                items,
-                height,
-                fg_r,
-                fg_g,
-                fg_b,
-                bg_r,
-                bg_g,
-                bg_b,
-            } => {
-                tracing::debug!(
-                    "SetMenuBar: {} items, height={}, fg=({:.3},{:.3},{:.3}), bg=({:.3},{:.3},{:.3})",
-                    items.len(),
-                    height,
-                    fg_r,
-                    fg_g,
-                    fg_b,
-                    bg_r,
-                    bg_g,
-                    bg_b
-                );
-                let menu_bar = GuiMenuBarState {
-                    items,
-                    height,
-                    fg: Color::rgb(fg_r, fg_g, fg_b),
-                    bg: Color::rgb(bg_r, bg_g, bg_b),
-                };
-                if let Some(ws) = self.frame_windows.primary_window_mut() {
-                    ws.render.set_menu_bar(Some(menu_bar))
-                };
-            }
         }
     }
 
@@ -462,20 +368,5 @@ impl RenderApp {
                 self.frame_windows.mark_top_level_dirty();
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::toolbar_visual_config_for_height;
-
-    #[test]
-    fn toolbar_visual_config_matches_gnu_default_geometry() {
-        assert_eq!(toolbar_visual_config_for_height(34.0), (24, 5));
-    }
-
-    #[test]
-    fn toolbar_visual_config_scales_with_frame_pixel_height() {
-        assert_eq!(toolbar_visual_config_for_height(68.0), (48, 10));
     }
 }

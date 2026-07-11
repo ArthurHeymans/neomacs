@@ -3380,7 +3380,7 @@ fn rendered_display_row_materializes_output_row_with_geometry_and_finalization()
 }
 
 #[test]
-fn measured_display_row_materializes_absolute_and_window_relative_output_rows() {
+fn measured_display_row_materializes_frame_chrome_local_and_window_relative_rows() {
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
     row.enabled = true;
     row.height_px = 18.0;
@@ -3401,14 +3401,14 @@ fn measured_display_row_materializes_absolute_and_window_relative_output_rows() 
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
 
-    let absolute = measured.absolute_output_row();
+    let frame_chrome = measured.frame_chrome_output_row();
     let relative = measured.window_relative_output_row(Rect::new(0.0, 16.0, 120.0, 80.0));
 
-    assert_eq!(absolute.pixel_y, 40.0);
+    assert_eq!(frame_chrome.pixel_y, 0.0);
     assert_eq!(relative.pixel_y, 24.0);
-    assert_eq!(absolute.height_px, 18.0);
+    assert_eq!(frame_chrome.height_px, 18.0);
     assert_eq!(relative.height_px, 18.0);
-    assert_eq!(absolute.ascent_px, 13.0);
+    assert_eq!(frame_chrome.ascent_px, 13.0);
     assert_eq!(relative.ascent_px, 13.0);
 }
 

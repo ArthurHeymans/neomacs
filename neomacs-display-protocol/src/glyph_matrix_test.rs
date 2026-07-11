@@ -1594,51 +1594,6 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
 // serde snapshot serialization tests
 // ---------------------------------------------------------------------------
 
-/// Snapshots stamp the protocol version and refuse to load any other
-/// version (or a missing stamp): mismatch is an explicit error, not
-/// silent skew.
-#[test]
-fn frame_display_state_rejects_protocol_version_skew() {
-    let state = state_with_text("versioned");
-    assert_eq!(state.protocol_version, crate::PROTOCOL_VERSION);
-
-    let json = serde_json::to_string(&state).expect("serialize");
-    assert!(
-        json.contains(&format!(
-            r#""protocol_version":{}"#,
-            crate::PROTOCOL_VERSION
-        )),
-        "version stamp must appear in JSON: {json}"
-    );
-
-    // Same version loads.
-    let back: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(back.protocol_version, crate::PROTOCOL_VERSION);
-
-    // A different version is an explicit error mentioning both versions.
-    let skewed = json.replacen(
-        &format!(r#""protocol_version":{}"#, crate::PROTOCOL_VERSION),
-        &format!(r#""protocol_version":{}"#, crate::PROTOCOL_VERSION + 1),
-        1,
-    );
-    let err = serde_json::from_str::<FrameDisplayState>(&skewed)
-        .expect_err("version skew must fail to deserialize");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("display protocol version mismatch"),
-        "unexpected error: {msg}"
-    );
-
-    // A snapshot with no stamp at all is also an explicit error.
-    let stripped = json.replacen(
-        &format!(r#""protocol_version":{},"#, crate::PROTOCOL_VERSION),
-        "",
-        1,
-    );
-    serde_json::from_str::<FrameDisplayState>(&stripped)
-        .expect_err("missing version stamp must fail to deserialize");
-}
-
 /// The frame snapshot contract: serializing the real `FrameDisplayState` must
 /// be lossless (serialize → deserialize → serialize is a fixed point) so the
 /// JSON artifact is a faithful display oracle.

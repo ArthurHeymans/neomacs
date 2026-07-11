@@ -24,6 +24,14 @@ pub(super) fn placed_chrome_item_bounds(
         .raw()
 }
 
+pub(super) fn toolbar_texture_id(
+    icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
+    image: &ToolBarImageSource,
+    icon_size: u32,
+) -> Option<u32> {
+    icon_textures.get(&(image.clone(), icon_size)).copied()
+}
+
 impl WgpuRenderer {
     /// Render a popup menu overlay on top of all content.
     pub fn render_popup_menu(
@@ -2267,7 +2275,7 @@ impl WgpuRenderer {
         menu_bg: (f32, f32, f32),
         tool_fg: (f32, f32, f32),
         _tool_bg: (f32, f32, f32),
-        icon_textures: &HashMap<ToolBarImageSource, u32>,
+        icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
         menu_hovered: Option<u32>,
         menu_active: Option<u32>,
         tool_hovered: Option<u32>,
@@ -2468,7 +2476,7 @@ impl WgpuRenderer {
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
-                    && let Some(&image_id) = icon_textures.get(image)
+                    && let Some(image_id) = toolbar_texture_id(icon_textures, image, icon_size)
                     && let Some(cached) = self.caches.image.get(image_id)
                 {
                     let bg = cached.bind_group.clone();
@@ -2572,7 +2580,7 @@ impl WgpuRenderer {
         band: FrameRect,
         fg: (f32, f32, f32),
         bg: (f32, f32, f32),
-        icon_textures: &HashMap<ToolBarImageSource, u32>,
+        icon_textures: &HashMap<(ToolBarImageSource, u32), u32>,
         hovered: Option<u32>,
         pressed: Option<u32>,
         icon_size: u32,
@@ -2721,7 +2729,7 @@ impl WgpuRenderer {
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
-                    && let Some(&image_id) = icon_textures.get(image)
+                    && let Some(image_id) = toolbar_texture_id(icon_textures, image, icon_size)
                     && let Some(cached) = self.caches.image.get(image_id)
                 {
                     let bg = cached.bind_group.clone();

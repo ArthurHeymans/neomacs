@@ -264,6 +264,17 @@ fn layout_gui_tool_bar_content_uses_one_height_policy() {
             item_type: ToolBarItemType::Separator,
             wrap: false,
         },
+        ToolBarItem {
+            index: 2,
+            key: "disabled".to_string(),
+            image: None,
+            label: "Disabled".to_string(),
+            help: String::new(),
+            enabled: false,
+            selected: false,
+            item_type: ToolBarItemType::Button,
+            wrap: false,
+        },
     ];
     let content = layout_gui_tool_bar_content(items, 200.0, 34.0, Color::WHITE, Color::BLACK);
 
@@ -278,6 +289,7 @@ fn layout_gui_tool_bar_content_uses_one_height_policy() {
         Some(&ChromeAction::InvokeToolBarItem { index: 0 })
     );
     assert_eq!(content.items()[1].action(), None);
+    assert_eq!(content.items()[2].action(), None);
 }
 
 #[test]

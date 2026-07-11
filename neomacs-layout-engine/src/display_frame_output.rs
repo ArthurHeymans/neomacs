@@ -10,14 +10,13 @@ use crate::neovm_bridge::ResolvedFace;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_chrome::{
-    ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameChromeContent, FrameChromeKind,
-    FrameSize,
+    ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameSize,
 };
 use neomacs_display_protocol::frame_glyphs::{
-    FrameTabBarState, GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint,
-    WindowTransitionKind, derive_window_transition_hint,
+    GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint, WindowTransitionKind,
+    derive_window_transition_hint,
 };
-use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, FrameDisplayState, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -61,7 +60,6 @@ pub(crate) struct FrameOutputIdentity {
 
 pub(crate) struct FrameOutputOwner {
     builder: DisplayOutputBuilder,
-    pending_tab_bar: Option<FrameTabBarState>,
     pending_frame_chrome: Vec<ChromeBandRequest>,
 }
 
@@ -69,9 +67,8 @@ pub(crate) struct FrameOutputTarget<'a> {
     builder: &'a mut DisplayOutputBuilder,
 }
 
-struct FrameOutputSession<'builder, 'chrome, 'tab> {
+struct FrameOutputSession<'builder, 'chrome> {
     builder: &'builder mut DisplayOutputBuilder,
-    pending_tab_bar: &'tab mut Option<FrameTabBarState>,
     pending_frame_chrome: &'chrome mut Vec<ChromeBandRequest>,
 }
 
@@ -79,17 +76,12 @@ impl FrameOutputOwner {
     pub(crate) fn new() -> Self {
         Self {
             builder: DisplayOutputBuilder::new(),
-            pending_tab_bar: None,
             pending_frame_chrome: Vec::new(),
         }
     }
 
-    fn session(&mut self) -> FrameOutputSession<'_, '_, '_> {
-        FrameOutputSession::new(
-            &mut self.builder,
-            &mut self.pending_tab_bar,
-            &mut self.pending_frame_chrome,
-        )
+    fn session(&mut self) -> FrameOutputSession<'_, '_> {
+        FrameOutputSession::new(&mut self.builder, &mut self.pending_frame_chrome)
     }
 
     pub(crate) fn text_window_output_target(&mut self) -> TextWindowOutputTarget<'_> {
@@ -109,10 +101,6 @@ impl FrameOutputOwner {
         frame_params: &FrameParams,
     ) -> Result<FrameDisplayState, ChromeLayoutError> {
         self.session().finish(frame_params)
-    }
-
-    pub(crate) fn set_tab_bar(&mut self, tab_bar: FrameTabBarState) {
-        self.pending_tab_bar = Some(tab_bar);
     }
 
     pub(crate) fn add_frame_chrome_band(&mut self, request: ChromeBandRequest) {
@@ -329,22 +317,19 @@ impl<'a> FrameOutputTarget<'a> {
     }
 }
 
-impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
+impl<'builder, 'chrome> FrameOutputSession<'builder, 'chrome> {
     fn new(
         builder: &'builder mut DisplayOutputBuilder,
-        pending_tab_bar: &'tab mut Option<FrameTabBarState>,
         pending_frame_chrome: &'chrome mut Vec<ChromeBandRequest>,
     ) -> Self {
         Self {
             builder,
-            pending_tab_bar,
             pending_frame_chrome,
         }
     }
 
     fn reset(&mut self) {
         self.builder.reset();
-        *self.pending_tab_bar = None;
         self.pending_frame_chrome.clear();
     }
 
@@ -360,61 +345,11 @@ impl<'builder, 'chrome, 'tab> FrameOutputSession<'builder, 'chrome, 'tab> {
             frame_params.width,
             frame_params.height,
         );
-        frame_display_state.tab_bar = self.pending_tab_bar.take();
         frame_display_state.frame_chrome = FrameChrome::layout(
             FrameSize::new(frame_params.width, frame_params.height)?,
             std::mem::take(self.pending_frame_chrome),
         )?;
 
-        frame_display_state.frame_chrome_rows = frame_display_state
-            .frame_chrome
-            .bands()
-            .iter()
-            .filter_map(|band| {
-                let FrameChromeContent::DisplayRow(content) = band.content() else {
-                    return None;
-                };
-                let mut row = content.row().clone();
-                row.pixel_y = band.bounds().y();
-                Some(FrameChromeRow {
-                    row_index: (band.bounds().y() / frame_params.char_height.max(1.0))
-                        .round()
-                        .max(0.0) as u32,
-                    pixel_bounds: band.bounds().raw(),
-                    row,
-                })
-            })
-            .collect();
-
-        // Keep the legacy tab-bar snapshot coherent while consumers migrate.
-        // FrameChrome remains the authority; these fields are derived adapters.
-        if let Some(tab_band) = frame_display_state
-            .frame_chrome
-            .band(FrameChromeKind::TabBar)
-        {
-            let tab_y = tab_band.bounds().y();
-            for image in &mut frame_display_state.images {
-                if image.row_role == GlyphRowRole::TabBar {
-                    image.y += tab_y;
-                    image.clip_rect = Some(tab_band.bounds().raw());
-                }
-            }
-            for video in &mut frame_display_state.videos {
-                if video.row_role == GlyphRowRole::TabBar {
-                    video.y += tab_y;
-                    video.clip_rect = Some(tab_band.bounds().raw());
-                }
-            }
-            for xwidget in &mut frame_display_state.xwidgets {
-                if xwidget.row_role == GlyphRowRole::TabBar {
-                    xwidget.y += tab_y;
-                    xwidget.clip_rect = Some(tab_band.bounds().raw());
-                }
-            }
-            if let Some(tab_bar) = &mut frame_display_state.tab_bar {
-                tab_bar.y = tab_y;
-            }
-        }
         Ok(frame_display_state)
     }
 }

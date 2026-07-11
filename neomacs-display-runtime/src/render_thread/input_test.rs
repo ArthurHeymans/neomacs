@@ -219,24 +219,38 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
 }
 
 #[test]
-fn menu_bar_release_is_consumed_before_generic_mouse_event() {
-    let mut app = make_test_app(800, 600, 1.0);
-    let Some(primary_frame) = ensure_primary_frame(&mut app) else {
-        return;
+fn empty_and_trailing_frame_chrome_space_owns_pointer_input() {
+    use neomacs_display_protocol::frame_chrome::{
+        ChromeBandRequest, CompactBarContent, FrameChrome, FrameChromeContent, FrameChromeKind,
+        FrameSize, MenuBarContent,
     };
-    primary_frame.chrome.interaction.menu_bar_active = Some(12);
 
-    assert!(app.consume_active_menu_bar_release());
-    let interaction = app
-        .frame_windows
-        .primary_window()
-        .expect("primary window")
-        .render
-        .chrome
-        .interaction;
-    assert_eq!(interaction.menu_bar_active, None);
-    assert_eq!(interaction.compact_bar_menu_active, None);
-    assert!(!app.consume_active_menu_bar_release());
+    let mut frame = FrameGlyphBuffer::with_size(200.0, 100.0);
+    frame.frame_chrome = FrameChrome::layout(
+        FrameSize::new(200.0, 100.0).expect("frame size"),
+        vec![ChromeBandRequest::new(
+            FrameChromeKind::CompactBar,
+            20.0,
+            FrameChromeContent::CompactBar(CompactBarContent::empty()),
+        )],
+    )
+    .expect("empty compact band");
+
+    assert!(frame_chrome_owns_pointer(&frame, 190.0, 10.0));
+    assert!(!frame_chrome_owns_pointer(&frame, 190.0, 50.0));
+
+    frame.frame_chrome = FrameChrome::layout(
+        FrameSize::new(200.0, 100.0).expect("frame size"),
+        vec![ChromeBandRequest::new(
+            FrameChromeKind::MenuBar,
+            18.0,
+            FrameChromeContent::MenuBar(MenuBarContent::empty()),
+        )],
+    )
+    .expect("empty menu band");
+
+    assert!(frame_chrome_owns_pointer(&frame, 190.0, 10.0));
+    assert!(!frame_chrome_owns_pointer(&frame, 190.0, 28.0));
 }
 
 // ===================================================================

@@ -5,9 +5,6 @@ use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
 use crate::core::types::DisplayFrameId;
 use crate::render_thread::cursor::{CursorConfigSnapshot, CursorTarget};
 use neomacs_display_protocol::frame_chrome::{FrameChrome, FrameChromeContent};
-use neomacs_display_protocol::glyph_matrix::{
-    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
-};
 
 struct CursorSyncOutcome {
     target: CursorTarget,
@@ -17,54 +14,44 @@ struct CursorSyncOutcome {
 }
 
 impl RenderApp {
-    #[allow(clippy::too_many_arguments)]
     fn ingest_frame_window_root_frame(
         window_state: &mut GuiFrameWindowState,
         frame: crate::core::frame_glyphs::FrameGlyphBuffer,
         row_damage: neomacs_renderer_wgpu::FrameRowDamage,
-        menu_bar: Option<GuiMenuBarState>,
-        tool_bar: Option<GuiToolBarState>,
-        compact_bar: Option<GuiCompactBarState>,
         cursor_config: CursorConfigSnapshot,
     ) -> Option<CursorSyncOutcome> {
-        if menu_bar.is_none() {
-            window_state.render.chrome.interaction.clear_menu_bar();
-        }
-        if tool_bar.is_none() {
-            window_state.render.chrome.interaction.clear_toolbar();
-        }
-        if compact_bar.is_none() {
-            window_state.render.chrome.interaction.clear_compact_bar();
-        }
-        if frame.tab_bar.is_none() {
-            window_state.render.chrome.interaction.clear_tab_bar();
-        }
-
         Self::ingest_top_level_render_frame(
             &mut window_state.render,
             frame,
             row_damage,
-            menu_bar,
-            tool_bar,
-            compact_bar,
             cursor_config,
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn ingest_top_level_render_frame(
         render: &mut GuiFrameRenderState,
         frame: crate::core::frame_glyphs::FrameGlyphBuffer,
         row_damage: neomacs_renderer_wgpu::FrameRowDamage,
-        menu_bar: Option<GuiMenuBarState>,
-        tool_bar: Option<GuiToolBarState>,
-        compact_bar: Option<GuiCompactBarState>,
         cursor_config: CursorConfigSnapshot,
     ) -> Option<CursorSyncOutcome> {
+        use neomacs_display_protocol::frame_chrome::FrameChromeKind;
+        if frame.frame_chrome.band(FrameChromeKind::MenuBar).is_none() {
+            render.chrome.interaction.clear_menu_bar();
+        }
+        if frame.frame_chrome.band(FrameChromeKind::ToolBar).is_none() {
+            render.chrome.interaction.clear_toolbar();
+        }
+        if frame
+            .frame_chrome
+            .band(FrameChromeKind::CompactBar)
+            .is_none()
+        {
+            render.chrome.interaction.clear_compact_bar();
+        }
+        if frame.frame_chrome.band(FrameChromeKind::TabBar).is_none() {
+            render.chrome.interaction.clear_tab_bar();
+        }
         render.cursor.reset_blink();
-        render.set_menu_bar(menu_bar);
-        render.set_tool_bar(tool_bar);
-        render.set_compact_bar(compact_bar);
         render.set_current_frame(Some(frame), Some(row_damage));
         let cursor_sync = Self::sync_render_cursor(render, cursor_config);
         render.sync_visual_cursors_from_current_frame(|cursor| cursor.apply_config(cursor_config));
@@ -203,12 +190,11 @@ impl RenderApp {
         Self::update_frame_window_ime_cursor_area_if_needed(window_state, &cursor_sync.target);
     }
 
-    fn sync_frame_chrome_assets(&mut self, frame_chrome: &FrameChrome) {
+    pub(super) fn sync_frame_chrome_assets(&mut self, frame_chrome: &FrameChrome) {
         for band in frame_chrome.bands() {
-            let (icon_size, padding, items) = match band.content() {
+            let (icon_size, items) = match band.content() {
                 FrameChromeContent::ToolBar(content) => (
                     content.icon_size(),
-                    content.padding(),
                     content
                         .items()
                         .iter()
@@ -217,7 +203,6 @@ impl RenderApp {
                 ),
                 FrameChromeContent::CompactBar(content) => (
                     content.icon_size(),
-                    content.padding(),
                     content
                         .tool_items()
                         .iter()
@@ -226,8 +211,7 @@ impl RenderApp {
                 ),
                 _ => continue,
             };
-            self.set_toolbar_visual_config(icon_size, padding);
-            self.ensure_toolbar_icon_textures(&items);
+            self.ensure_toolbar_icon_textures(&items, icon_size);
         }
     }
 
@@ -237,9 +221,6 @@ impl RenderApp {
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             let frame_id = display_state.frame_id;
             let parent_id = display_state.parent_id;
-            let gui_menu_bar = display_state.gui_menu_bar.clone();
-            let gui_tool_bar = display_state.gui_tool_bar.clone();
-            let gui_compact_bar = display_state.gui_compact_bar.clone();
             self.sync_frame_chrome_assets(&display_state.frame_chrome);
 
             // Materialize FrameDisplayState → FrameGlyphBuffer for the
@@ -435,9 +416,6 @@ impl RenderApp {
                         window_state,
                         frame,
                         row_damage,
-                        gui_menu_bar,
-                        gui_tool_bar,
-                        gui_compact_bar,
                         cursor_config,
                     );
                     if let Some(cursor_sync) = cursor_sync {
@@ -501,44 +479,6 @@ impl RenderApp {
             } else if parent_id == DisplayFrameId::new(0)
                 && self.frame_windows.is_primary_frame_id(frame_id.get())
             {
-                if gui_menu_bar.is_none() {
-                    if let Some(ws) = self.frame_windows.primary_window_mut() {
-                        ws.render
-                            .with_chrome_interaction_mut(|chrome| chrome.clear_menu_bar())
-                    } else {
-                        false
-                    };
-                }
-                if gui_tool_bar.is_none() {
-                    if let Some(ws) = self.frame_windows.primary_window_mut() {
-                        ws.render
-                            .with_chrome_interaction_mut(|chrome| chrome.clear_toolbar())
-                    } else {
-                        false
-                    };
-                }
-                if gui_compact_bar.is_none() {
-                    if let Some(ws) = self.frame_windows.primary_window_mut() {
-                        ws.render
-                            .with_chrome_interaction_mut(|chrome| chrome.clear_compact_bar())
-                    } else {
-                        false
-                    };
-                }
-                if self
-                    .frame_windows
-                    .primary_window()
-                    .and_then(|ws| ws.render.compositor.current_frame.as_ref())
-                    .and_then(|frame| frame.tab_bar.as_ref())
-                    .is_none()
-                {
-                    if let Some(ws) = self.frame_windows.primary_window_mut() {
-                        ws.render
-                            .with_chrome_interaction_mut(|chrome| chrome.clear_tab_bar())
-                    } else {
-                        false
-                    };
-                }
                 let cursor_config = self.cursor_defaults.config_snapshot();
                 if let Some(primary_frame) = self
                     .frame_windows
@@ -549,9 +489,6 @@ impl RenderApp {
                         primary_frame,
                         frame,
                         row_damage,
-                        gui_menu_bar,
-                        gui_tool_bar,
-                        gui_compact_bar,
                         cursor_config,
                     );
                 }

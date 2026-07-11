@@ -108,7 +108,7 @@ impl RenderedDisplayRow {
         self.apply_source_slot_bounds_to(&mut row);
         // Normalize only; the bidi reorder happens once at row install
         // (window chrome via the `Complete` lifecycle, frame chrome via the
-        // finalizer in `MeasuredFrameChromeRowInstallRequest`).
+        // finalizer in `frame_chrome_display_row`).
         glyph_row_writer::normalize_external_row(&mut row);
         row.pixel_y = pixel_y;
         row.height_px = height_px;

@@ -17,6 +17,20 @@ pub(super) fn frame_chrome_hit(
     frame.frame_chrome.hit_test(FramePoint::new(x, y))
 }
 
+pub(super) fn frame_chrome_owns_pointer(
+    frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+    x: f32,
+    y: f32,
+) -> bool {
+    frame.frame_chrome.bands().iter().any(|band| {
+        let bounds = band.bounds();
+        x >= bounds.x()
+            && x < bounds.x() + bounds.width()
+            && y >= bounds.y()
+            && y < bounds.y() + bounds.height()
+    })
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct MenuBarHit {
     pub(super) index: u32,
@@ -127,6 +141,7 @@ impl RenderApp {
     }
 
     /// Hit-test toolbar items. Returns the index of the item under (x, y), or None.
+    #[cfg(test)]
     pub(super) fn toolbar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
         let frame = self
             .frame_windows
@@ -141,6 +156,7 @@ impl RenderApp {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn toolbar_y_origin(&self) -> f32 {
         self.primary_chrome_band_bounds(
             neomacs_display_protocol::frame_chrome::FrameChromeKind::ToolBar,
@@ -148,50 +164,8 @@ impl RenderApp {
         .map_or(0.0, |bounds| bounds.y())
     }
 
-    pub(super) fn menu_bar_height(&self) -> f32 {
-        self.primary_chrome_band_bounds(
-            neomacs_display_protocol::frame_chrome::FrameChromeKind::MenuBar,
-        )
-        .map_or(0.0, |bounds| bounds.height())
-    }
-
-    pub(super) fn tool_bar_height(&self) -> f32 {
-        self.primary_chrome_band_bounds(
-            neomacs_display_protocol::frame_chrome::FrameChromeKind::ToolBar,
-        )
-        .map_or(0.0, |bounds| bounds.height())
-    }
-
-    pub(super) fn compact_bar_height(&self) -> f32 {
-        self.primary_chrome_band_bounds(
-            neomacs_display_protocol::frame_chrome::FrameChromeKind::CompactBar,
-        )
-        .map_or(0.0, |bounds| bounds.height())
-    }
-
-    pub(super) fn tab_bar_y(&self) -> f32 {
-        self.primary_chrome_band_bounds(
-            neomacs_display_protocol::frame_chrome::FrameChromeKind::TabBar,
-        )
-        .map_or(0.0, |bounds| bounds.y())
-    }
-
-    pub(super) fn tab_bar_height(&self) -> f32 {
-        self.primary_chrome_band_bounds(
-            neomacs_display_protocol::frame_chrome::FrameChromeKind::TabBar,
-        )
-        .map_or(0.0, |bounds| bounds.height())
-    }
-
-    pub(super) fn compact_bar_menu_hit_test(&self, x: f32, y: f32) -> Option<MenuBarHit> {
-        self.primary_menu_hit_test(x, y)
-    }
-
-    pub(super) fn compact_bar_tool_hit_test(&self, x: f32, y: f32) -> Option<u32> {
-        self.toolbar_hit_test(x, y)
-    }
-
     /// Hit-test tab bar items. Returns the index of the item under (x, y), or None.
+    #[cfg(test)]
     pub(super) fn tab_bar_hit_test(&self, x: f32, y: f32) -> Option<u32> {
         let frame = self
             .frame_windows
@@ -207,10 +181,12 @@ impl RenderApp {
     }
 
     /// Hit-test menu bar items. Returns the item under (x, y), or None.
+    #[cfg(test)]
     pub(super) fn menu_bar_hit_test(&self, x: f32, _y: f32) -> Option<MenuBarHit> {
         self.primary_menu_hit_test(x, _y)
     }
 
+    #[cfg(test)]
     fn primary_chrome_band_bounds(
         &self,
         kind: neomacs_display_protocol::frame_chrome::FrameChromeKind,
@@ -222,6 +198,7 @@ impl RenderApp {
             .map(|band| band.bounds())
     }
 
+    #[cfg(test)]
     fn primary_menu_hit_test(&self, x: f32, y: f32) -> Option<MenuBarHit> {
         let frame = self
             .frame_windows
@@ -281,6 +258,7 @@ impl RenderApp {
 
     /// Detect if the mouse is on a resize edge of the primary borderless window.
     /// Returns the resize direction if within the border zone, or None.
+    #[cfg(test)]
     pub(super) fn detect_resize_edge(
         &self,
         x: f32,
@@ -343,6 +321,7 @@ impl RenderApp {
 
     /// Check if a point is in the primary custom title bar area.
     /// Returns: 0 = not in title bar, 1 = drag area, 2 = close, 3 = maximize, 4 = minimize
+    #[cfg(test)]
     pub(super) fn titlebar_hit_test(&self, x: f32, y: f32) -> u32 {
         let (logical_width, _) = self
             .frame_windows
