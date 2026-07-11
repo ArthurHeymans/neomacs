@@ -410,6 +410,9 @@ impl RenderApp {
                     };
                     let plan = self.frame_coordinator.begin_frame(sched_id, tick);
                     super::frame_stats::count_plan(&plan.work);
+                    if let Some(renderer) = self.renderer.as_mut() {
+                        renderer.set_frame_sample_time(plan.tick.target_presentation_time);
+                    }
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);
                     }

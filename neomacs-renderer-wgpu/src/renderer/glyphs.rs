@@ -786,14 +786,19 @@ impl WgpuRenderer {
     ) {
         let cycle_color;
         let effective_color = if effects.cursor_color_cycle.enabled && !style.is_hollow() {
-            let elapsed = self.clocks.cursor_color_cycle_start.elapsed().as_secs_f32();
+            // Sampled from the frame's target presentation time, never
+            // advanced per frame; continuation is owned by the frame
+            // coordinator's cursor-color-cycle demand, not latched here.
+            let elapsed = self
+                .frame_sample_time
+                .saturating_duration_since(self.clocks.cursor_color_cycle_start)
+                .as_secs_f32();
             let hue = (elapsed * effects.cursor_color_cycle.speed) % 1.0;
             cycle_color = Self::hsl_to_color(
                 hue,
                 effects.cursor_color_cycle.saturation,
                 effects.cursor_color_cycle.lightness,
             );
-            self.fx.needs_continuous_redraw = true;
             &cycle_color
         } else {
             color

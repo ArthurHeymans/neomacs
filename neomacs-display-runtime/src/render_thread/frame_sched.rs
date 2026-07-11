@@ -121,6 +121,10 @@ pub(crate) enum Cadence {
 pub(crate) enum DemandReason {
     EditorCommit,
     CursorAnimation,
+    /// Infinite ambient compositor-only demand: the cursor color cycle
+    /// (Stage 3 tracer bullet). Distinct from CursorAnimation so its MaxRate
+    /// phase anchor cannot collide with the blink deadline.
+    CursorColorCycle,
     FiniteEffect,
     Transition,
     Video,

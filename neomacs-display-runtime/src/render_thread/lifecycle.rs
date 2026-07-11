@@ -315,6 +315,9 @@ impl RenderApp {
         // top-level window (matching the legacy request targeting).
         let webkit_active = self.has_webkit_needing_redraw();
         let videos_active = self.has_playing_videos();
+        // Stage 3 tracer bullet: the cursor color cycle is explicit infinite
+        // compositor-only demand, not a render-time latch.
+        let cursor_cycle_enabled = self.effects.cursor_color_cycle.enabled;
 
         // Destroyed windows must not keep waking the loop.
         let live: std::collections::HashSet<NativeWindowId> = self
@@ -381,6 +384,32 @@ impl RenderApp {
                 } else {
                     self.frame_coordinator.retract(id, reason);
                 }
+            }
+
+            // Infinite ambient effect: cursor color cycle animates whenever a
+            // cursor exists in a committed frame. Compositor-only demand at
+            // display cadence; the draw path no longer latches continuation.
+            let cursor_cycle_active = cursor_cycle_enabled
+                && window_state.render.cursor.target.is_some()
+                && window_state.render.compositor.current_frame.is_some();
+            if cursor_cycle_active {
+                let cycle_action = self.frame_coordinator.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: Invalidation::CompositeOnly {
+                            layers: LayerMask::CURSOR_EFFECTS,
+                        },
+                        cadence: Cadence::MaxRate(max_rate),
+                        reason: DemandReason::CursorColorCycle,
+                    },
+                    now,
+                );
+                if cycle_action == PacingAction::RequestRedraw {
+                    action = PacingAction::RequestRedraw;
+                }
+            } else {
+                self.frame_coordinator
+                    .retract(id, DemandReason::CursorColorCycle);
             }
 
             match window_state.render.cursor.next_blink_deadline() {

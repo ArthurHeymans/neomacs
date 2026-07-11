@@ -82,6 +82,11 @@ pub struct WgpuRenderer {
     /// Cached per-row text vertex streams for RowDamage-driven reuse
     pub(super) row_reuse: row_reuse::RowReuseCache,
     pub glyph_stats: GlyphRenderStats,
+    /// Absolute time this frame's animation samples target (the frame tick's
+    /// target presentation time). Set by the runtime before each render so
+    /// time-driven effects sample one consistent instant instead of reading
+    /// the wall clock mid-draw.
+    pub(super) frame_sample_time: std::time::Instant,
 }
 
 impl WgpuRenderer {
@@ -959,6 +964,7 @@ impl WgpuRenderer {
             ambient: AmbientClocks::default(),
             row_reuse: row_reuse::RowReuseCache::default(),
             glyph_stats: GlyphRenderStats::new(),
+            frame_sample_time: std::time::Instant::now(),
         }
     }
 
@@ -1082,6 +1088,12 @@ impl WgpuRenderer {
     /// Update the display scale factor (for multi-monitor DPI changes)
     pub fn set_scale_factor(&mut self, scale_factor: f32) {
         self.scale_factor = scale_factor;
+    }
+
+    /// Set the absolute time this frame's animation samples target
+    /// (the frame tick's target presentation time).
+    pub fn set_frame_sample_time(&mut self, at: std::time::Instant) {
+        self.frame_sample_time = at;
     }
 
     /// Get the glyph bind group layout for creating glyph bind groups
