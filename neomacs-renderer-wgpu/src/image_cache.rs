@@ -104,6 +104,15 @@ enum WorkerDecodeOutcome {
     Failed(ImageLoadToken),
 }
 
+impl WorkerDecodeOutcome {
+    fn load(&self) -> ImageLoadToken {
+        match self {
+            Self::Ready(decoded) => decoded.load,
+            Self::Failed(load) => *load,
+        }
+    }
+}
+
 /// A terminal async image decode result accepted for the current load generation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImageDecodeOutcome {
@@ -134,8 +143,16 @@ impl ImageLoadLifecycle {
         ImageLoadToken { id, generation }
     }
 
-    fn accepts(&self, load: ImageLoadToken) -> bool {
-        self.active.get(&load.id) == Some(&load.generation)
+    fn accept(&mut self, load: ImageLoadToken) -> bool {
+        if self.active.get(&load.id) != Some(&load.generation) {
+            return false;
+        }
+        self.active.remove(&load.id);
+        true
+    }
+
+    fn take_current(&mut self, outcome: WorkerDecodeOutcome) -> Option<WorkerDecodeOutcome> {
+        self.accept(outcome.load()).then_some(outcome)
     }
 
     fn free(&mut self, id: u32) {
@@ -1210,22 +1227,24 @@ impl ImageCache {
         let mut completed = Vec::new();
         // Drain decoded images from channel
         while let Ok(outcome) = self.decoded_rx.try_recv() {
+            let Some(outcome) = self.loads.take_current(outcome) else {
+                continue;
+            };
             match outcome {
-                WorkerDecodeOutcome::Ready(decoded) if self.loads.accepts(decoded.load) => {
+                WorkerDecodeOutcome::Ready(decoded) => {
                     completed.push(ImageDecodeOutcome::Ready {
                         id: decoded.load.id,
                         metadata: decoded.metadata,
                     });
                     self.upload_texture(device, queue, decoded);
                 }
-                WorkerDecodeOutcome::Failed(load) if self.loads.accepts(load) => {
+                WorkerDecodeOutcome::Failed(load) => {
                     let error = "image decode failed".to_owned();
                     self.states
                         .insert(load.id, ImageState::Failed(error.clone()));
                     self.pending_dimensions.remove(&load.id);
                     completed.push(ImageDecodeOutcome::Failed { id: load.id, error });
                 }
-                WorkerDecodeOutcome::Ready(_) | WorkerDecodeOutcome::Failed(_) => {}
             }
         }
 

@@ -7,12 +7,42 @@ fn freed_or_replaced_image_loads_reject_late_decode_outcomes() {
 
     let freed = loads.begin(41);
     loads.free(41);
-    assert!(!loads.accepts(freed));
+    assert!(!loads.accept(freed));
 
     let old = loads.begin(42);
     let current = loads.begin(42);
-    assert!(!loads.accepts(old));
-    assert!(loads.accepts(current));
+    assert!(!loads.accept(old));
+    assert!(loads.accept(current));
+    assert!(!loads.accept(current), "a duplicate terminal is stale");
+    let replacement = loads.begin(42);
+    assert!(loads.accept(replacement), "a new generation remains valid");
+    assert!(loads.active.is_empty());
+}
+
+#[test]
+fn ready_and_failed_terminals_consume_their_active_generations() {
+    let mut loads = ImageLoadLifecycle::default();
+    let ready = loads.begin(51);
+    let failed = loads.begin(52);
+
+    let ready =
+        WorkerDecodeOutcome::Ready(ImageCache::decoded_image(ready, 1, 1, vec![0, 0, 0, 255]));
+    assert!(matches!(
+        loads.take_current(ready),
+        Some(WorkerDecodeOutcome::Ready(_))
+    ));
+    assert_eq!(loads.active.len(), 1);
+
+    assert!(matches!(
+        loads.take_current(WorkerDecodeOutcome::Failed(failed)),
+        Some(WorkerDecodeOutcome::Failed(_))
+    ));
+    assert!(loads.active.is_empty());
+    assert!(
+        loads
+            .take_current(WorkerDecodeOutcome::Failed(failed))
+            .is_none()
+    );
 }
 
 fn png_bytes(pixels: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
