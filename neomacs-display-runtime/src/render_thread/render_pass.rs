@@ -18,6 +18,7 @@ use super::transitions::{
 use super::{RenderApp, surface_readback};
 use crate::core::types::DisplayFrameId;
 use crate::thread_comm::{MenuBarItem, ToolBarItem};
+use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameRect, PositionedChromeItem};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRenderer};
 
 /// Flatten a protocol [`Color`] into the legacy `(r, g, b)` tuple the
@@ -28,26 +29,34 @@ fn color_rgb_tuple(color: neomacs_display_protocol::types::Color) -> (f32, f32, 
     (color.r, color.g, color.b)
 }
 
+pub(super) fn frame_chrome_toolbar_bounds(
+    frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+) -> Option<FrameRect> {
+    frame
+        .frame_chrome
+        .band(neomacs_display_protocol::frame_chrome::FrameChromeKind::ToolBar)
+        .map(|band| band.bounds())
+}
+
 struct GuiFrameMenuBarOverlay<'a> {
-    items: &'a [MenuBarItem],
-    height: f32,
+    items: &'a [PositionedChromeItem<MenuBarItem>],
+    bounds: FrameRect,
     fg: (f32, f32, f32),
     bg: (f32, f32, f32),
 }
 
 struct GuiFrameToolBarOverlay<'a> {
-    items: &'a [ToolBarItem],
-    y_origin: f32,
-    height: f32,
+    items: &'a [PositionedChromeItem<ToolBarItem>],
+    bounds: FrameRect,
     fg: (f32, f32, f32),
     bg: (f32, f32, f32),
     toolbar: &'a ToolbarResources,
 }
 
 struct GuiFrameCompactBarOverlay<'a> {
-    menu_items: &'a [MenuBarItem],
-    tool_items: &'a [ToolBarItem],
-    height: f32,
+    menu_items: &'a [PositionedChromeItem<MenuBarItem>],
+    tool_items: &'a [PositionedChromeItem<ToolBarItem>],
+    bounds: FrameRect,
     menu_fg: (f32, f32, f32),
     menu_bg: (f32, f32, f32),
     tool_fg: (f32, f32, f32),
@@ -121,22 +130,6 @@ impl RenderApp {
         }
     }
 
-    fn frame_toolbar_y_origin(
-        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
-        menu_bar_height: f32,
-        compact_bar_height: f32,
-    ) -> f32 {
-        if let Some(tab_bar) = frame
-            .tab_bar
-            .as_ref()
-            .filter(|tab_bar| tab_bar.height > 0.0)
-        {
-            tab_bar.y + tab_bar.height
-        } else {
-            menu_bar_height + compact_bar_height
-        }
-    }
-
     fn frame_ime_preedit_overlay<'a>(
         active: bool,
         text: &'a str,
@@ -192,13 +185,12 @@ impl RenderApp {
         }
 
         if let Some(menu_bar) = overlays.menu_bar
-            && menu_bar.height > 0.0
             && !menu_bar.items.is_empty()
         {
             renderer.render_menu_bar(
                 surface_view,
                 menu_bar.items,
-                menu_bar.height,
+                menu_bar.bounds,
                 menu_bar.fg,
                 menu_bar.bg,
                 overlays.chrome_interaction.menu_bar_hovered,
@@ -210,14 +202,12 @@ impl RenderApp {
         }
 
         if let Some(tool_bar) = overlays.tool_bar
-            && tool_bar.height > 0.0
             && !tool_bar.items.is_empty()
         {
             renderer.render_toolbar(
                 surface_view,
                 tool_bar.items,
-                tool_bar.y_origin,
-                tool_bar.height,
+                tool_bar.bounds,
                 tool_bar.fg,
                 tool_bar.bg,
                 &tool_bar.toolbar.icon_textures,
@@ -231,14 +221,13 @@ impl RenderApp {
         }
 
         if let Some(compact_bar) = overlays.compact_bar
-            && compact_bar.height > 0.0
             && (!compact_bar.menu_items.is_empty() || !compact_bar.tool_items.is_empty())
         {
             renderer.render_compact_bar(
                 surface_view,
                 compact_bar.menu_items,
                 compact_bar.tool_items,
-                compact_bar.height,
+                compact_bar.bounds,
                 compact_bar.menu_fg,
                 compact_bar.menu_bg,
                 compact_bar.tool_fg,
@@ -640,16 +629,25 @@ impl RenderApp {
             scroll_indicators_enabled,
         );
 
-        let menu_bar_height = render
-            .chrome
-            .menu_bar
-            .as_ref()
-            .map_or(0.0, |menu_bar| menu_bar.height);
-        let compact_bar_height = render
-            .chrome
-            .compact_bar
-            .as_ref()
-            .map_or(0.0, |compact_bar| compact_bar.height);
+        let menu_bar = frame.frame_chrome.bands().iter().find_map(|band| {
+            let FrameChromeContent::MenuBar(content) = band.content() else {
+                return None;
+            };
+            Some((band.bounds(), content))
+        });
+        let tool_bar_content = frame.frame_chrome.bands().iter().find_map(|band| {
+            let FrameChromeContent::ToolBar(content) = band.content() else {
+                return None;
+            };
+            Some(content)
+        });
+        let tool_bar = frame_chrome_toolbar_bounds(frame).zip(tool_bar_content);
+        let compact_bar = frame.frame_chrome.bands().iter().find_map(|band| {
+            let FrameChromeContent::CompactBar(content) = band.content() else {
+                return None;
+            };
+            Some((band.bounds(), content))
+        });
         Self::render_frame_chrome_overlays(
             renderer,
             surface_view,
@@ -662,43 +660,28 @@ impl RenderApp {
                     frame.background.b,
                 )),
                 chrome_interaction: render.chrome.interaction,
-                menu_bar: render
-                    .chrome
-                    .menu_bar
-                    .as_ref()
-                    .map(|menu_bar| GuiFrameMenuBarOverlay {
-                        items: &menu_bar.items,
-                        height: menu_bar.height,
-                        fg: color_rgb_tuple(menu_bar.fg),
-                        bg: color_rgb_tuple(menu_bar.bg),
-                    }),
-                tool_bar: render
-                    .chrome
-                    .tool_bar
-                    .as_ref()
-                    .map(|tool_bar| GuiFrameToolBarOverlay {
-                        items: &tool_bar.items,
-                        y_origin: Self::frame_toolbar_y_origin(
-                            frame,
-                            menu_bar_height,
-                            compact_bar_height,
-                        ),
-                        height: tool_bar.height,
-                        fg: color_rgb_tuple(tool_bar.fg),
-                        bg: color_rgb_tuple(tool_bar.bg),
-                        toolbar,
-                    }),
-                compact_bar: render.chrome.compact_bar.as_ref().map(|compact_bar| {
-                    GuiFrameCompactBarOverlay {
-                        menu_items: &compact_bar.menu_items,
-                        tool_items: &compact_bar.tool_items,
-                        height: compact_bar.height,
-                        menu_fg: color_rgb_tuple(compact_bar.menu_fg),
-                        menu_bg: color_rgb_tuple(compact_bar.menu_bg),
-                        tool_fg: color_rgb_tuple(compact_bar.tool_fg),
-                        tool_bg: color_rgb_tuple(compact_bar.tool_bg),
-                        toolbar,
-                    }
+                menu_bar: menu_bar.map(|(bounds, menu_bar)| GuiFrameMenuBarOverlay {
+                    items: menu_bar.items(),
+                    bounds,
+                    fg: color_rgb_tuple(menu_bar.foreground()),
+                    bg: color_rgb_tuple(menu_bar.background()),
+                }),
+                tool_bar: tool_bar.map(|(bounds, tool_bar)| GuiFrameToolBarOverlay {
+                    items: tool_bar.items(),
+                    bounds,
+                    fg: color_rgb_tuple(tool_bar.foreground()),
+                    bg: color_rgb_tuple(tool_bar.background()),
+                    toolbar,
+                }),
+                compact_bar: compact_bar.map(|(bounds, compact_bar)| GuiFrameCompactBarOverlay {
+                    menu_items: compact_bar.menu_items(),
+                    tool_items: compact_bar.tool_items(),
+                    bounds,
+                    menu_fg: color_rgb_tuple(compact_bar.menu_foreground()),
+                    menu_bg: color_rgb_tuple(compact_bar.menu_background()),
+                    tool_fg: color_rgb_tuple(compact_bar.tool_foreground()),
+                    tool_bg: color_rgb_tuple(compact_bar.tool_background()),
+                    toolbar,
                 }),
                 popup_menu: render.overlays.popup_menu.as_ref(),
                 tooltip: render.overlays.tooltip.as_ref(),

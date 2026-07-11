@@ -105,6 +105,37 @@ fn toolbar_item(index: u32) -> ToolBarItem {
 }
 
 #[test]
+fn frame_chrome_toolbar_origin_comes_from_authoritative_band_bounds() {
+    use neomacs_display_protocol::frame_chrome::{
+        ChromeBandRequest, FrameChrome, FrameChromeContent, FrameChromeKind, FrameSize,
+        MenuBarContent, ToolBarContent,
+    };
+
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.frame_chrome = FrameChrome::layout(
+        FrameSize::new(800.0, 600.0).expect("frame size"),
+        vec![
+            ChromeBandRequest::new(
+                FrameChromeKind::MenuBar,
+                19.0,
+                FrameChromeContent::MenuBar(MenuBarContent::empty()),
+            ),
+            ChromeBandRequest::new(
+                FrameChromeKind::ToolBar,
+                41.0,
+                FrameChromeContent::ToolBar(ToolBarContent::empty()),
+            ),
+        ],
+    )
+    .expect("frame chrome");
+
+    let bounds = crate::render_thread::render_pass::frame_chrome_toolbar_bounds(&frame)
+        .expect("toolbar band");
+    assert_eq!(bounds.y(), 19.0);
+    assert_eq!(bounds.height(), 41.0);
+}
+
+#[test]
 fn toolbar_y_origin_stacks_below_menu_bar_without_tab_bar() {
     let mut app = make_test_app(800, 600, 1.0);
     let Some(primary_frame) = ensure_primary_frame(&mut app) else {

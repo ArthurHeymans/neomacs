@@ -335,6 +335,22 @@ impl CompactBarContent {
         &self.tool_items
     }
 
+    pub fn menu_foreground(&self) -> Color {
+        self.menu_foreground
+    }
+
+    pub fn menu_background(&self) -> Color {
+        self.menu_background
+    }
+
+    pub fn tool_foreground(&self) -> Color {
+        self.tool_foreground
+    }
+
+    pub fn tool_background(&self) -> Color {
+        self.tool_background
+    }
+
     pub fn icon_size(&self) -> u32 {
         self.icon_size
     }

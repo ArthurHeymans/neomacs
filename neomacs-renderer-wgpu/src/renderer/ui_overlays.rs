@@ -8,11 +8,21 @@ use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, Uniforms}
 use super::TitleFadeEntry;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
+use neomacs_display_protocol::frame_chrome::{BandRect, FrameRect, PositionedChromeItem};
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem};
 use std::collections::HashMap;
+
+pub(super) fn placed_chrome_item_bounds(
+    band: FrameRect,
+    item: BandRect,
+) -> neomacs_display_protocol::types::Rect {
+    band.place(item)
+        .expect("published frame chrome item must fit its band")
+        .raw()
+}
 
 impl WgpuRenderer {
     /// Render a popup menu overlay on top of all content.
@@ -2079,8 +2089,8 @@ impl WgpuRenderer {
     pub fn render_menu_bar(
         &mut self,
         view: &wgpu::TextureView,
-        items: &[MenuBarItem],
-        menu_bar_height: f32,
+        items: &[PositionedChromeItem<MenuBarItem>],
+        band: FrameRect,
         fg: (f32, f32, f32),
         bg: (f32, f32, f32),
         hovered: Option<u32>,
@@ -2111,17 +2121,17 @@ impl WgpuRenderer {
         // Full menu bar background
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            0.0,
-            logical_w,
-            menu_bar_height,
+            band.x(),
+            band.y(),
+            band.width(),
+            band.height(),
             &bg_color,
         );
 
         // Item hover/active highlights
-        let mut item_x = padding_x;
-        for item in items {
-            let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
+        for positioned in items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
 
             let is_hovered = hovered == Some(item.index);
             let is_active = active == Some(item.index);
@@ -2130,34 +2140,32 @@ impl WgpuRenderer {
                 let c = Color::new(fg.0, fg.1, fg.2, 0.15).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    0.0,
-                    label_width,
-                    menu_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             } else if is_hovered {
                 let c = Color::new(fg.0, fg.1, fg.2, 0.1).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    0.0,
-                    label_width,
-                    menu_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             }
-
-            item_x += label_width;
         }
 
         // Bottom border line
         let border_color = Color::new(fg.0, fg.1, fg.2, 0.15).srgb_to_linear();
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            menu_bar_height - 1.0,
-            logical_w,
+            band.x(),
+            band.bottom() - 1.0,
+            band.width(),
             1.0,
             &border_color,
         );
@@ -2204,11 +2212,12 @@ impl WgpuRenderer {
         };
 
         let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
-        let text_y = (menu_bar_height - font_size) / 2.0;
+        let text_y = band.y() + (band.height() - font_size) / 2.0;
 
-        let mut item_x = padding_x;
-        for item in items {
-            let label_x = item_x + padding_x;
+        for positioned in items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
+            let label_x = bounds.x + padding_x;
             for (ci, ch) in item.label.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
@@ -2233,8 +2242,6 @@ impl WgpuRenderer {
                     ));
                 }
             }
-            let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
-            item_x += label_width;
         }
 
         tracing::trace!(
@@ -2253,9 +2260,9 @@ impl WgpuRenderer {
     pub fn render_compact_bar(
         &mut self,
         view: &wgpu::TextureView,
-        menu_items: &[MenuBarItem],
-        tool_items: &[ToolBarItem],
-        compact_bar_height: f32,
+        menu_items: &[PositionedChromeItem<MenuBarItem>],
+        tool_items: &[PositionedChromeItem<ToolBarItem>],
+        band: FrameRect,
         menu_fg: (f32, f32, f32),
         menu_bg: (f32, f32, f32),
         tool_fg: (f32, f32, f32),
@@ -2289,59 +2296,54 @@ impl WgpuRenderer {
         let font_size_bits = 0.0_f32.to_bits();
         let icon_sz = icon_size as f32;
         let pad = padding as f32;
-        let item_size = icon_sz + pad * 2.0;
-        let separator_width = 12.0_f32;
-        let item_spacing = 2.0_f32;
 
         let mut rect_verts: Vec<RectVertex> = Vec::new();
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            0.0,
-            logical_w,
-            compact_bar_height,
+            band.x(),
+            band.y(),
+            band.width(),
+            band.height(),
             &bg_color,
         );
 
-        let mut menu_x = padding_x;
-        for item in menu_items {
-            let label_width = item.label.len() as f32 * char_width + padding_x * 2.0;
+        for positioned in menu_items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
             let is_hovered = menu_hovered == Some(item.index);
             let is_active = menu_active == Some(item.index);
             if is_active {
                 let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.15).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    menu_x,
-                    0.0,
-                    label_width,
-                    compact_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             } else if is_hovered {
                 let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.1).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    menu_x,
-                    0.0,
-                    label_width,
-                    compact_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             }
-            menu_x += label_width;
         }
-        let tool_x_origin = menu_x + padding_x;
 
-        let mut item_x = tool_x_origin + pad;
-        for item in tool_items {
+        for positioned in tool_items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
             if item.is_separator() {
-                let sep_x = item_x + separator_width / 2.0 - 0.5;
-                let sep_y = pad;
-                let sep_h = compact_bar_height - pad * 2.0;
+                let sep_x = bounds.x + bounds.width / 2.0 - 0.5;
+                let sep_y = bounds.y + pad;
+                let sep_h = (bounds.height - pad * 2.0).max(0.0);
                 let sep_color = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.2).srgb_to_linear();
                 self.add_rect(&mut rect_verts, sep_x, sep_y, 1.0, sep_h, &sep_color);
-                item_x += separator_width;
                 continue;
             }
 
@@ -2351,32 +2353,31 @@ impl WgpuRenderer {
                 let c = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.2).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    0.0,
-                    item_size,
-                    compact_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             } else if is_hovered && item.enabled {
                 let c = Color::new(tool_fg.0, tool_fg.1, tool_fg.2, 0.1).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    0.0,
-                    item_size,
-                    compact_bar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             }
-            item_x += item_size + item_spacing;
         }
 
         let border_color = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 0.15).srgb_to_linear();
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            compact_bar_height - 1.0,
-            logical_w,
+            band.x(),
+            band.bottom() - 1.0,
+            band.width(),
             1.0,
             &border_color,
         );
@@ -2420,11 +2421,12 @@ impl WgpuRenderer {
             let c = Color::new(menu_fg.0, menu_fg.1, menu_fg.2, 1.0).srgb_to_linear();
             [c.r, c.g, c.b, c.a]
         };
-        let text_y = (compact_bar_height - font_size) / 2.0;
+        let text_y = band.y() + (band.height() - font_size) / 2.0;
         let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
-        let mut menu_x = padding_x;
-        for item in menu_items {
-            let label_x = menu_x + padding_x;
+        for positioned in menu_items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
+            let label_x = bounds.x + padding_x;
             for (ci, ch) in item.label.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
@@ -2449,21 +2451,20 @@ impl WgpuRenderer {
                     ));
                 }
             }
-            menu_x += item.label.len() as f32 * char_width + padding_x * 2.0;
         }
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
 
         // --- Pass 3: Tool icons (batched) ---
         let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
-            let mut item_x = tool_x_origin + pad;
-            for item in tool_items {
+            for positioned in tool_items {
+                let item = positioned.item();
+                let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
                 if item.is_separator() {
-                    item_x += separator_width;
                     continue;
                 }
-                let icon_x = item_x + pad;
-                let icon_y = (compact_bar_height - icon_sz) / 2.0;
+                let icon_x = bounds.x + (bounds.width - icon_sz) / 2.0;
+                let icon_y = bounds.y + (bounds.height - icon_sz) / 2.0;
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
@@ -2512,7 +2513,6 @@ impl WgpuRenderer {
                         }
                     }
                 }
-                item_x += item_size + item_spacing;
             }
         }
         if !icon_batches.is_empty() {
@@ -2568,9 +2568,8 @@ impl WgpuRenderer {
     pub fn render_toolbar(
         &mut self,
         view: &wgpu::TextureView,
-        items: &[ToolBarItem],
-        toolbar_y: f32,
-        toolbar_height: f32,
+        items: &[PositionedChromeItem<ToolBarItem>],
+        band: FrameRect,
         fg: (f32, f32, f32),
         bg: (f32, f32, f32),
         icon_textures: &HashMap<ToolBarImageSource, u32>,
@@ -2595,9 +2594,6 @@ impl WgpuRenderer {
         let bg_color = Color::new(bg.0, bg.1, bg.2, 1.0).srgb_to_linear();
         let icon_sz = icon_size as f32;
         let pad = padding as f32;
-        let item_size = icon_sz + pad * 2.0;
-        let separator_width = 12.0_f32;
-        let item_spacing = 2.0_f32;
 
         // --- Pass 1: Background bar + item highlights ---
         let mut rect_verts: Vec<RectVertex> = Vec::new();
@@ -2605,24 +2601,24 @@ impl WgpuRenderer {
         // Full toolbar background
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            toolbar_y,
-            logical_w,
-            toolbar_height,
+            band.x(),
+            band.y(),
+            band.width(),
+            band.height(),
             &bg_color,
         );
 
         // Item backgrounds (hover/pressed states)
-        let mut item_x = pad;
-        for item in items {
+        for positioned in items {
+            let item = positioned.item();
+            let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
             if item.is_separator() {
                 // Draw separator line
-                let sep_x = item_x + separator_width / 2.0 - 0.5;
-                let sep_y = toolbar_y + pad;
-                let sep_h = toolbar_height - pad * 2.0;
+                let sep_x = bounds.x + bounds.width / 2.0 - 0.5;
+                let sep_y = bounds.y + pad;
+                let sep_h = (bounds.height - pad * 2.0).max(0.0);
                 let sep_color = Color::new(fg.0, fg.1, fg.2, 0.2).srgb_to_linear();
                 self.add_rect(&mut rect_verts, sep_x, sep_y, 1.0, sep_h, &sep_color);
-                item_x += separator_width;
                 continue;
             }
 
@@ -2633,20 +2629,20 @@ impl WgpuRenderer {
                 let c = Color::new(fg.0, fg.1, fg.2, 0.2).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    toolbar_y,
-                    item_size,
-                    toolbar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             } else if is_hovered && item.enabled {
                 let c = Color::new(fg.0, fg.1, fg.2, 0.1).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    toolbar_y,
-                    item_size,
-                    toolbar_height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                     &c,
                 );
             }
@@ -2656,24 +2652,22 @@ impl WgpuRenderer {
                 let accent = Color::new(0.3, 0.6, 1.0, 0.8).srgb_to_linear();
                 self.add_rect(
                     &mut rect_verts,
-                    item_x,
-                    toolbar_y + toolbar_height - 2.0,
-                    item_size,
+                    bounds.x,
+                    bounds.y + bounds.height - 2.0,
+                    bounds.width,
                     2.0,
                     &accent,
                 );
             }
-
-            item_x += item_size + item_spacing;
         }
 
         // Bottom border line
         let border_color = Color::new(fg.0, fg.1, fg.2, 0.15).srgb_to_linear();
         self.add_rect(
             &mut rect_verts,
-            0.0,
-            toolbar_y + toolbar_height - 1.0,
-            logical_w,
+            band.x(),
+            band.bottom() - 1.0,
+            band.width(),
             1.0,
             &border_color,
         );
@@ -2716,14 +2710,14 @@ impl WgpuRenderer {
         // --- Pass 2: Icon textures (batched) ---
         let mut icon_batches: Vec<(u32, wgpu::BindGroup, Vec<GlyphVertex>)> = Vec::new();
         {
-            let mut item_x = pad;
-            for item in items {
+            for positioned in items {
+                let item = positioned.item();
+                let bounds = placed_chrome_item_bounds(band, positioned.local_bounds());
                 if item.is_separator() {
-                    item_x += separator_width;
                     continue;
                 }
-                let icon_x = item_x + pad;
-                let icon_y = toolbar_y + (toolbar_height - icon_sz) / 2.0;
+                let icon_x = bounds.x + (bounds.width - icon_sz) / 2.0;
+                let icon_y = bounds.y + (bounds.height - icon_sz) / 2.0;
                 let alpha = if item.enabled { 1.0 } else { 0.4 };
                 let tint = [1.0, 1.0, 1.0, alpha];
                 if let Some(image) = item.image.as_ref()
@@ -2772,7 +2766,6 @@ impl WgpuRenderer {
                         }
                     }
                 }
-                item_x += item_size + item_spacing;
             }
         }
         if !icon_batches.is_empty() {
