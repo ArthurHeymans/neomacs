@@ -1,6 +1,6 @@
 //! Immutable lookup of transient paint overrides for one presented frame.
 
-use super::super::vertex::RectVertex;
+use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use neomacs_display_protocol::Color;
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::{
@@ -283,6 +283,159 @@ pub(super) fn clip_new_rect_vertices(
             },
         ]);
     }
+}
+
+pub(super) fn clip_new_rounded_vertices(
+    vertices: &mut Vec<RoundedRectVertex>,
+    start: usize,
+    clip: Option<&Rect>,
+) {
+    let Some(clip) = clip else { return };
+    let generated: Vec<[RoundedRectVertex; 6]> = vertices[start..]
+        .chunks_exact(6)
+        .filter_map(|chunk| chunk.try_into().ok())
+        .collect();
+    vertices.truncate(start);
+    for quad in generated {
+        let min_x = quad
+            .iter()
+            .map(|v| v.position[0])
+            .fold(f32::INFINITY, f32::min);
+        let min_y = quad
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::INFINITY, f32::min);
+        let max_x = quad
+            .iter()
+            .map(|v| v.position[0])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let max_y = quad
+            .iter()
+            .map(|v| v.position[1])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let Some((x, y, width, height)) =
+            clip_geometry(min_x, min_y, max_x - min_x, max_y - min_y, Some(clip))
+        else {
+            continue;
+        };
+        let template = quad[0];
+        vertices.extend_from_slice(
+            &[
+                [x, y],
+                [x + width, y],
+                [x + width, y + height],
+                [x, y],
+                [x + width, y + height],
+                [x, y + height],
+            ]
+            .map(|position| RoundedRectVertex {
+                position,
+                ..template
+            }),
+        );
+    }
+}
+
+pub(super) fn clip_glyph_quad(
+    quad: [GlyphVertex; 6],
+    clip: Option<&Rect>,
+) -> Option<[GlyphVertex; 6]> {
+    let Some(clip) = clip else { return Some(quad) };
+    let min_x = quad
+        .iter()
+        .map(|v| v.position[0])
+        .fold(f32::INFINITY, f32::min);
+    let min_y = quad
+        .iter()
+        .map(|v| v.position[1])
+        .fold(f32::INFINITY, f32::min);
+    let max_x = quad
+        .iter()
+        .map(|v| v.position[0])
+        .fold(f32::NEG_INFINITY, f32::max);
+    let max_y = quad
+        .iter()
+        .map(|v| v.position[1])
+        .fold(f32::NEG_INFINITY, f32::max);
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    let (x, y, draw_width, draw_height) = clip_geometry(min_x, min_y, width, height, Some(clip))?;
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    let min_u = quad
+        .iter()
+        .map(|v| v.tex_coords[0])
+        .fold(f32::INFINITY, f32::min);
+    let max_u = quad
+        .iter()
+        .map(|v| v.tex_coords[0])
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_v = quad
+        .iter()
+        .map(|v| v.tex_coords[1])
+        .fold(f32::INFINITY, f32::min);
+    let max_v = quad
+        .iter()
+        .map(|v| v.tex_coords[1])
+        .fold(f32::NEG_INFINITY, f32::max);
+    let u0 = min_u + (max_u - min_u) * ((x - min_x) / width);
+    let u1 = min_u + (max_u - min_u) * ((x + draw_width - min_x) / width);
+    let v0 = min_v + (max_v - min_v) * ((y - min_y) / height);
+    let v1 = min_v + (max_v - min_v) * ((y + draw_height - min_y) / height);
+    let color = quad[0].color;
+    Some([
+        GlyphVertex {
+            position: [x, y],
+            tex_coords: [u0, v0],
+            color,
+        },
+        GlyphVertex {
+            position: [x + draw_width, y],
+            tex_coords: [u1, v0],
+            color,
+        },
+        GlyphVertex {
+            position: [x + draw_width, y + draw_height],
+            tex_coords: [u1, v1],
+            color,
+        },
+        GlyphVertex {
+            position: [x, y],
+            tex_coords: [u0, v0],
+            color,
+        },
+        GlyphVertex {
+            position: [x + draw_width, y + draw_height],
+            tex_coords: [u1, v1],
+            color,
+        },
+        GlyphVertex {
+            position: [x, y + draw_height],
+            tex_coords: [u0, v1],
+            color,
+        },
+    ])
+}
+
+pub(super) fn clip_subpixel_quad(
+    quad: [SubpixelGlyphVertex; 6],
+    clip: Option<&Rect>,
+) -> Option<[SubpixelGlyphVertex; 6]> {
+    let glyph_quad = quad.map(|vertex| GlyphVertex {
+        position: vertex.position,
+        tex_coords: vertex.tex_coords,
+        color: vertex.fg_color,
+    });
+    let clipped = clip_glyph_quad(glyph_quad, clip)?;
+    let fg_color = quad[0].fg_color;
+    let bg_color = quad[0].bg_color;
+    Some(clipped.map(|vertex| SubpixelGlyphVertex {
+        position: vertex.position,
+        tex_coords: vertex.tex_coords,
+        fg_color,
+        bg_color,
+    }))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

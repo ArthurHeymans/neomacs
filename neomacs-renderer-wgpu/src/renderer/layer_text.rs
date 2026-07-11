@@ -574,38 +574,41 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                     // a bold font variant is unavailable.
                     let overstrike_vertices = if overstrike {
                         let ox = 1.0 / self.renderer.scale_factor;
-                        Some([
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y],
-                                tex_coords: [tex_u_min, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y],
-                                tex_coords: [tex_u_max, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [tex_u_max, tex_v_max],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y],
-                                tex_coords: [tex_u_min, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [tex_u_max, tex_v_max],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y + glyph_h],
-                                tex_coords: [tex_u_min, tex_v_max],
-                                color,
-                            },
-                        ])
+                        super::pointer_override::clip_glyph_quad(
+                            [
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y],
+                                    tex_coords: [tex_u_min, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y],
+                                    tex_coords: [tex_u_max, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_max, tex_v_max],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y],
+                                    tex_coords: [tex_u_min, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_max, tex_v_max],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_min, tex_v_max],
+                                    color,
+                                },
+                            ],
+                            effective_clip.as_ref(),
+                        )
                     } else {
                         None
                     };
@@ -625,18 +628,21 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
 
                     let overstrike_subpixel_vertices = if overstrike {
                         let ox = 1.0 / self.renderer.scale_factor;
-                        Some(build_subpixel_vertices(
-                            glyph_x + ox,
-                            glyph_y,
-                            glyph_w,
-                            glyph_h,
-                            tex_u_min,
-                            tex_u_max,
-                            tex_v_min,
-                            tex_v_max,
-                            subpixel_fg,
-                            subpixel_bg,
-                        ))
+                        super::pointer_override::clip_subpixel_quad(
+                            build_subpixel_vertices(
+                                glyph_x + ox,
+                                glyph_y,
+                                glyph_w,
+                                glyph_h,
+                                tex_u_min,
+                                tex_u_max,
+                                tex_v_min,
+                                tex_v_max,
+                                subpixel_fg,
+                                subpixel_bg,
+                            ),
+                            effective_clip.as_ref(),
+                        )
                     } else {
                         None
                     };
@@ -1327,6 +1333,7 @@ impl WgpuRenderer {
                     let bw = face.box_line_width as f32;
 
                     if face.box_corner_radius > 0 {
+                        let start = rounded_border_vertices.len();
                         // Rounded border via SDF (with optional fancy style)
                         let radius = (face.box_corner_radius as f32)
                             .min(span.height * 0.45)
@@ -1345,23 +1352,31 @@ impl WgpuRenderer {
                             face.box_border_speed,
                             color2,
                         );
+                        super::pointer_override::clip_new_rounded_vertices(
+                            &mut rounded_border_vertices,
+                            start,
+                            span.clip.as_ref(),
+                        );
                         if face.box_border_style.is_fancy() {
                             self.fx.has_animated_borders = true;
                         }
                     } else {
+                        let start = sharp_border_vertices.len();
                         // Sharp border — for overlay spans (mode-line), suppress
                         // internal left/right borders between adjacent spans for
                         // continuity. For non-overlay spans, always draw all 4 borders.
                         let suppress_internal = span.row_role.is_chrome();
                         let has_left_neighbor = suppress_internal && idx_in_pass > 0 && {
                             let prev = &box_spans[pass_spans[idx_in_pass - 1]];
-                            (prev.y - span.y).abs() < 0.5
+                            prev.clip == span.clip
+                                && (prev.y - span.y).abs() < 0.5
                                 && ((prev.x + prev.width) - span.x).abs() < 1.5
                         };
                         let has_right_neighbor =
                             suppress_internal && idx_in_pass + 1 < pass_spans.len() && {
                                 let next = &box_spans[pass_spans[idx_in_pass + 1]];
-                                (next.y - span.y).abs() < 0.5
+                                next.clip == span.clip
+                                    && (next.y - span.y).abs() < 0.5
                                     && (next.x - (span.x + span.width)).abs() < 1.5
                             };
 
@@ -1440,6 +1455,11 @@ impl WgpuRenderer {
                                 &bottom_right_color,
                             );
                         }
+                        super::pointer_override::clip_new_rect_vertices(
+                            &mut sharp_border_vertices,
+                            start,
+                            span.clip.as_ref(),
+                        );
                     }
                 }
             }

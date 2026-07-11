@@ -1,4 +1,8 @@
-use super::{PointerOverrideResolver, relief_edges};
+use super::{
+    PointerOverrideResolver, clip_glyph_quad, clip_new_rect_vertices, clip_new_rounded_vertices,
+    relief_edges,
+};
+use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex};
 use neomacs_display_protocol::{
     Color, DisplayWindowId, Face, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, GlyphRowRole,
     PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode,
@@ -184,4 +188,106 @@ fn image_relief_flips_light_and_dark_edges_inside_unchanged_quad() {
         after.map(|vertex| (vertex.position, vertex.tex_coords)),
         "relief never changes the image quad",
     );
+}
+
+#[test]
+fn partial_box_clip_contains_sharp_and_rounded_vertices() {
+    let clip = neomacs_display_protocol::Rect::new(12.0, 7.0, 6.0, 5.0);
+    let color = [1.0; 4];
+    let mut sharp = vec![
+        RectVertex {
+            position: [10.0, 5.0],
+            color,
+        },
+        RectVertex {
+            position: [20.0, 5.0],
+            color,
+        },
+        RectVertex {
+            position: [20.0, 15.0],
+            color,
+        },
+        RectVertex {
+            position: [10.0, 5.0],
+            color,
+        },
+        RectVertex {
+            position: [20.0, 15.0],
+            color,
+        },
+        RectVertex {
+            position: [10.0, 15.0],
+            color,
+        },
+    ];
+    clip_new_rect_vertices(&mut sharp, 0, Some(&clip));
+    assert!(sharp.iter().all(|v| (12.0..=18.0).contains(&v.position[0])));
+    assert!(sharp.iter().all(|v| (7.0..=12.0).contains(&v.position[1])));
+
+    let template = RoundedRectVertex {
+        position: [0.0, 0.0],
+        color,
+        rect_min: [10.0, 5.0],
+        rect_max: [20.0, 15.0],
+        params: [1.0, 3.0],
+        style_params: [0.0; 4],
+        color2: color,
+    };
+    let mut rounded = [
+        [10.0, 5.0],
+        [20.0, 5.0],
+        [20.0, 15.0],
+        [10.0, 5.0],
+        [20.0, 15.0],
+        [10.0, 15.0],
+    ]
+    .map(|position| RoundedRectVertex {
+        position,
+        ..template
+    })
+    .to_vec();
+    clip_new_rounded_vertices(&mut rounded, 0, Some(&clip));
+    assert!(
+        rounded
+            .iter()
+            .all(|v| (12.0..=18.0).contains(&v.position[0]))
+    );
+    assert!(
+        rounded
+            .iter()
+            .all(|v| (7.0..=12.0).contains(&v.position[1]))
+    );
+    assert!(
+        rounded
+            .iter()
+            .all(|v| v.rect_min == [10.0, 5.0] && v.rect_max == [20.0, 15.0])
+    );
+}
+
+#[test]
+fn shifted_overstrike_is_reclipped_with_uv_interpolation() {
+    let color = [1.0; 4];
+    let quad = [
+        ([10.0, 5.0], [0.0, 0.0]),
+        ([20.0, 5.0], [1.0, 0.0]),
+        ([20.0, 15.0], [1.0, 1.0]),
+        ([10.0, 5.0], [0.0, 0.0]),
+        ([20.0, 15.0], [1.0, 1.0]),
+        ([10.0, 15.0], [0.0, 1.0]),
+    ]
+    .map(|(position, tex_coords)| GlyphVertex {
+        position,
+        tex_coords,
+        color,
+    });
+    let clip = neomacs_display_protocol::Rect::new(12.0, 5.0, 6.0, 10.0);
+    let base = clip_glyph_quad(quad, Some(&clip)).expect("base clipped");
+    let shifted = base.map(|mut vertex| {
+        vertex.position[0] += 1.0;
+        vertex
+    });
+    let reclipped = clip_glyph_quad(shifted, Some(&clip)).expect("overstrike clipped");
+
+    assert!(reclipped.iter().all(|v| v.position[0] <= 18.0));
+    assert!(reclipped.iter().any(|v| v.tex_coords[0] < 1.0));
 }

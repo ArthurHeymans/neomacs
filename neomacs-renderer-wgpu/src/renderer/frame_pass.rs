@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, GlyphRowRole};
-use neomacs_display_protocol::types::{AnimatedCursor, Color};
+use neomacs_display_protocol::types::{AnimatedCursor, Color, Rect};
 
 use super::super::vertex::RectVertex;
 use super::pointer_override::PointerOverrideResolver;
@@ -61,6 +61,7 @@ pub(super) struct BoxSpan {
     pub(super) face_id: FaceId,
     pub(super) row_role: GlyphRowRole,
     pub(super) bg: Option<Color>,
+    pub(super) clip: Option<Rect>,
 }
 
 /// All merged box spans of a frame plus the widest rounded-box border width

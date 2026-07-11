@@ -16,7 +16,7 @@ use super::GlyphRenderStats;
 use super::WgpuRenderer;
 use super::layer_media::{MediaQuad, textured_quad_vertices_uv};
 use cosmic_text::SubpixelBin;
-use neomacs_display_protocol::face::{BoxType, UnderlineStyle};
+use neomacs_display_protocol::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
@@ -54,6 +54,93 @@ fn clipped_media_rect(
         (top - y) / height,
         (bottom - y) / height,
     ))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct DecorationRect {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    color: Color,
+}
+
+fn stretch_decoration_rects(face: &Face, x: f32, y: f32, width: f32) -> Vec<DecorationRect> {
+    let mut rects = Vec::new();
+    let fg = face.foreground;
+    let baseline = y + face.font_ascent as f32;
+    let thickness = (face.underline_thickness as f32).max(1.0);
+    let underline_color = face.underline_color.unwrap_or(fg);
+    let mut push = |x, y, width, height, color| {
+        rects.push(DecorationRect {
+            x,
+            y,
+            width,
+            height,
+            color,
+        });
+    };
+    if face.attributes.contains(FaceAttributes::UNDERLINE) {
+        let underline_y = baseline + face.underline_position as f32;
+        match face.underline_style {
+            UnderlineStyle::Line => push(x, underline_y, width, thickness, underline_color),
+            UnderlineStyle::Double => {
+                push(x, underline_y, width, thickness, underline_color);
+                push(
+                    x,
+                    underline_y + thickness + 1.0,
+                    width,
+                    thickness,
+                    underline_color,
+                );
+            }
+            UnderlineStyle::Wave => {
+                let mut cx = x;
+                while cx < x + width {
+                    let segment = 1.0_f32.min(x + width - cx);
+                    let phase = (cx - x) * std::f32::consts::TAU / 8.0;
+                    push(
+                        cx,
+                        underline_y + phase.sin() * 2.0,
+                        segment,
+                        thickness,
+                        underline_color,
+                    );
+                    cx += 1.0;
+                }
+            }
+            UnderlineStyle::Dotted => {
+                let mut cx = x;
+                while cx < x + width {
+                    let segment = thickness.min(x + width - cx);
+                    push(cx, underline_y, segment, thickness, underline_color);
+                    cx += thickness + 2.0;
+                }
+            }
+            UnderlineStyle::Dashed => {
+                let mut cx = x;
+                while cx < x + width {
+                    let segment = 4.0_f32.min(x + width - cx);
+                    push(cx, underline_y, segment, thickness, underline_color);
+                    cx += 7.0;
+                }
+            }
+            UnderlineStyle::None => {}
+        }
+    }
+    if face.attributes.contains(FaceAttributes::OVERLINE) {
+        push(x, y, width, thickness, face.overline_color.unwrap_or(fg));
+    }
+    if face.attributes.contains(FaceAttributes::STRIKE_THROUGH) {
+        push(
+            x,
+            baseline - face.font_ascent as f32 / 3.0,
+            width,
+            thickness,
+            face.strike_through_color.unwrap_or(fg),
+        );
+    }
+    rects
 }
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
@@ -645,38 +732,41 @@ impl WgpuRenderer {
 
                     let overstrike_vertices = if overstrike {
                         let ox = 1.0 / sf;
-                        Some([
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y],
-                                tex_coords: [tex_u_min, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y],
-                                tex_coords: [tex_u_max, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [tex_u_max, tex_v_max],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y],
-                                tex_coords: [tex_u_min, tex_v_min],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
-                                tex_coords: [tex_u_max, tex_v_max],
-                                color,
-                            },
-                            GlyphVertex {
-                                position: [glyph_x + ox, glyph_y + glyph_h],
-                                tex_coords: [tex_u_min, tex_v_max],
-                                color,
-                            },
-                        ])
+                        super::pointer_override::clip_glyph_quad(
+                            [
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y],
+                                    tex_coords: [tex_u_min, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y],
+                                    tex_coords: [tex_u_max, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_max, tex_v_max],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y],
+                                    tex_coords: [tex_u_min, tex_v_min],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox + glyph_w, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_max, tex_v_max],
+                                    color,
+                                },
+                                GlyphVertex {
+                                    position: [glyph_x + ox, glyph_y + glyph_h],
+                                    tex_coords: [tex_u_min, tex_v_max],
+                                    color,
+                                },
+                            ],
+                            effective_clip.as_ref(),
+                        )
                     } else {
                         None
                     };
@@ -696,18 +786,21 @@ impl WgpuRenderer {
 
                     let overstrike_subpixel_vertices = if overstrike {
                         let ox = 1.0 / sf;
-                        Some(build_subpixel_vertices(
-                            glyph_x + ox,
-                            glyph_y,
-                            glyph_w,
-                            glyph_h,
-                            tex_u_min,
-                            tex_u_max,
-                            tex_v_min,
-                            tex_v_max,
-                            subpixel_fg,
-                            subpixel_bg,
-                        ))
+                        super::pointer_override::clip_subpixel_quad(
+                            build_subpixel_vertices(
+                                glyph_x + ox,
+                                glyph_y,
+                                glyph_w,
+                                glyph_h,
+                                tex_u_min,
+                                tex_u_max,
+                                tex_v_min,
+                                tex_v_max,
+                                subpixel_fg,
+                                subpixel_bg,
+                            ),
+                            effective_clip.as_ref(),
+                        )
                     } else {
                         None
                     };
@@ -923,6 +1016,47 @@ impl WgpuRenderer {
                 );
             }
         }
+        for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
+            let FrameGlyph::Stretch {
+                x,
+                y,
+                width,
+                face_id,
+                clip_rect,
+                ..
+            } = glyph
+            else {
+                continue;
+            };
+            let face_id = pointer_override.face_id(glyph_index, *face_id);
+            let Some(face) = frame.faces.get(&face_id) else {
+                continue;
+            };
+            let effective_clip = pointer_override
+                .glyph_clip(glyph_index, clip_rect.as_ref())
+                .map(|clip| Rect {
+                    x: clip.x + offset_x,
+                    y: clip.y + offset_y,
+                    width: clip.width,
+                    height: clip.height,
+                });
+            let decoration_start = decoration_vertices.len();
+            for rect in stretch_decoration_rects(face, *x + offset_x, *y + offset_y, *width) {
+                self.add_rect(
+                    &mut decoration_vertices,
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    rect.height,
+                    &rect.color,
+                );
+            }
+            super::pointer_override::clip_new_rect_vertices(
+                &mut decoration_vertices,
+                decoration_start,
+                effective_clip.as_ref(),
+            );
+        }
 
         // --- Step 4: Box borders (sharp and rounded, from merged spans) ---
         let mut sharp_border_vertices: Vec<RectVertex> = Vec::new();
@@ -931,6 +1065,12 @@ impl WgpuRenderer {
 
         for (idx, span) in box_spans.iter().enumerate() {
             if let Some(face) = faces.get(&span.face_id) {
+                let span_clip = span.clip.map(|clip| Rect {
+                    x: clip.x + offset_x,
+                    y: clip.y + offset_y,
+                    width: clip.width,
+                    height: clip.height,
+                });
                 let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
                 let bw = face.box_line_width as f32;
 
@@ -938,6 +1078,7 @@ impl WgpuRenderer {
                 if face.box_corner_radius > 0
                     && let Some(ref bg_color) = span.bg
                 {
+                    let start = rounded_fill_vertices.len();
                     let radius = (face.box_corner_radius as f32)
                         .min(span.height * 0.45)
                         .min(span.width * 0.45);
@@ -952,10 +1093,16 @@ impl WgpuRenderer {
                         radius,
                         bg_color,
                     );
+                    super::pointer_override::clip_new_rounded_vertices(
+                        &mut rounded_fill_vertices,
+                        start,
+                        span_clip.as_ref(),
+                    );
                 }
 
                 // Box border
                 if face.box_corner_radius > 0 {
+                    let start = rounded_border_vertices.len();
                     let radius = (face.box_corner_radius as f32)
                         .min(span.height * 0.45)
                         .min(span.width * 0.45);
@@ -973,17 +1120,25 @@ impl WgpuRenderer {
                         face.box_border_speed,
                         color2,
                     );
+                    super::pointer_override::clip_new_rounded_vertices(
+                        &mut rounded_border_vertices,
+                        start,
+                        span_clip.as_ref(),
+                    );
                     // Note: animated border flag is set in render_frame_glyphs (glyphs.rs)
                 } else {
+                    let start = sharp_border_vertices.len();
                     // Sharp border — check for neighbor suppression
                     let has_left_neighbor = idx > 0 && {
                         let prev = &box_spans[idx - 1];
-                        (prev.y - span.y).abs() < 0.5
+                        prev.clip == span.clip
+                            && (prev.y - span.y).abs() < 0.5
                             && ((prev.x + prev.width) - span.x).abs() < 1.5
                     };
                     let has_right_neighbor = idx + 1 < box_spans.len() && {
                         let next = &box_spans[idx + 1];
-                        (next.y - span.y).abs() < 0.5
+                        next.clip == span.clip
+                            && (next.y - span.y).abs() < 0.5
                             && (next.x - (span.x + span.width)).abs() < 1.5
                     };
 
@@ -1065,6 +1220,11 @@ impl WgpuRenderer {
                             &bottom_right_color,
                         );
                     }
+                    super::pointer_override::clip_new_rect_vertices(
+                        &mut sharp_border_vertices,
+                        start,
+                        span_clip.as_ref(),
+                    );
                 }
             }
         }
@@ -1654,6 +1814,8 @@ impl WgpuRenderer {
                 _ => continue,
             };
             let gface_id = pointer_override.face_id(glyph_index, base_face_id);
+            let effective_clip =
+                pointer_override.glyph_clip(glyph_index, glyph.clip_rect().as_ref());
 
             // Only include glyphs whose face has box decorations. The box fill
             // background is the face's background (the value materialization used
@@ -1674,8 +1836,9 @@ impl WgpuRenderer {
                 // overlay-distinct rows (row_role is ignored throughout), so
                 // that rule does not apply here.
                 let same_face = last.face_id == gface_id;
+                let same_clip = last.clip == effective_clip;
 
-                if same_row && adjacent && same_face {
+                if same_row && adjacent && same_face && same_clip {
                     last.width = gx + gw - last.x;
                     true
                 } else {
@@ -1693,6 +1856,7 @@ impl WgpuRenderer {
                     height: gh,
                     face_id: gface_id,
                     bg: g_bg,
+                    clip: effective_clip,
                 });
             }
         }
@@ -1713,4 +1877,5 @@ struct BoxSpan {
     height: f32,
     face_id: FaceId,
     bg: Option<Color>,
+    clip: Option<Rect>,
 }

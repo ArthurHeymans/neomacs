@@ -37,6 +37,9 @@ impl WgpuRenderer {
                 continue;
             };
             let gface_id = params.pointer_override.face_id(glyph_index, base_face_id);
+            let effective_clip = params
+                .pointer_override
+                .glyph_clip(glyph_index, glyph.clip_rect().as_ref());
             let Some(g_role) = glyph.row_role() else {
                 continue;
             };
@@ -62,6 +65,7 @@ impl WgpuRenderer {
                 let same_role = last.row_role == g_role;
                 let adjacent = (gx - (last.x + last.width)).abs() < 1.0;
                 let same_face = last.face_id == gface_id;
+                let same_clip = last.clip == effective_clip;
 
                 // Merge rules:
                 // - Rounded boxes: only merge same face_id (keep separate boxes)
@@ -79,7 +83,7 @@ impl WgpuRenderer {
                     same_face // sharp non-overlay: strict same-face merge
                 };
 
-                if same_row && same_role && adjacent && face_ok {
+                if same_row && same_role && adjacent && face_ok && same_clip {
                     last.width = gx + gw - last.x;
                     true
                 } else {
@@ -98,6 +102,7 @@ impl WgpuRenderer {
                     face_id: gface_id,
                     row_role: g_role,
                     bg: g_bg,
+                    clip: effective_clip,
                 });
             }
         }
@@ -732,6 +737,7 @@ impl WgpuRenderer {
                         .min(span.height * 0.45)
                         .min(span.width * 0.45);
                     let fill_bw = span.height.max(span.width);
+                    let start = overlay_box_fill.len();
                     self.add_rounded_rect(
                         &mut overlay_box_fill,
                         span.x,
@@ -741,6 +747,11 @@ impl WgpuRenderer {
                         fill_bw,
                         radius,
                         bg_color,
+                    );
+                    super::pointer_override::clip_new_rounded_vertices(
+                        &mut overlay_box_fill,
+                        start,
+                        span.clip.as_ref(),
                     );
                 }
             }
