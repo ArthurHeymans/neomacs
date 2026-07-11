@@ -16,8 +16,9 @@ use super::{
     parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
-    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
+    sync_live_gui_frame_titles, sync_selected_gui_chrome_state, wait_for_image_metadata,
 };
+use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
     WindowCommand, WindowFullscreenMode,
@@ -899,12 +900,12 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     let (lock, cvar) = &*image_metadata;
     lock.lock().expect("image dimensions lock").insert(
         image.image_id,
-        ResolvedImageMetadata {
+        ImageDecodeTerminal::Ready(ResolvedImageMetadata {
             width: 25,
             height: 50,
             background: 0x12_34_56,
             background_transparent: false,
-        },
+        }),
     );
     cvar.notify_all();
 
@@ -922,6 +923,95 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
             background_transparent: false,
         })
     );
+}
+
+#[test]
+fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
+    let shared: SharedImageMetadata = Arc::new((
+        Mutex::new(std::collections::HashMap::new()),
+        std::sync::Condvar::new(),
+    ));
+    let publisher = Arc::clone(&shared);
+    let worker = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(10));
+        let (lock, cvar) = &*publisher;
+        lock.lock()
+            .expect("image terminal lock")
+            .insert(77, ImageDecodeTerminal::Failed("bad image".to_owned()));
+        cvar.notify_all();
+    });
+
+    let started = Instant::now();
+    assert_eq!(
+        wait_for_image_metadata(&shared, 77, Duration::from_secs(1)),
+        Some(ImageDecodeTerminal::Failed("bad image".to_owned()))
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(250),
+        "failure should wake the waiter instead of consuming the timeout"
+    );
+    worker.join().expect("publisher thread");
+
+    let cached = Instant::now();
+    assert_eq!(
+        wait_for_image_metadata(&shared, 77, Duration::from_secs(1)),
+        Some(ImageDecodeTerminal::Failed("bad image".to_owned()))
+    );
+    assert!(
+        cached.elapsed() < Duration::from_millis(250),
+        "a terminal failure should be returned from the negative cache"
+    );
+}
+
+#[test]
+fn primary_display_host_resolve_image_returns_cached_decode_failure_promptly() {
+    let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
+    let image_metadata: SharedImageMetadata = Arc::new((
+        Mutex::new(std::collections::HashMap::new()),
+        std::sync::Condvar::new(),
+    ));
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_metadata: Arc::clone(&image_metadata),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = ImageResolveRequest {
+        source: ImageResolveSource::Data(vec![0xde, 0xad]),
+        max_width: 0,
+        max_height: 0,
+        fg_color: 0,
+        bg_color: 0,
+    };
+    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request.clone())
+        .unwrap()
+        .unwrap();
+    let (lock, cvar) = &*image_metadata;
+    lock.lock().unwrap().insert(
+        image.image_id,
+        ImageDecodeTerminal::Failed("image decode failed".to_owned()),
+    );
+    cvar.notify_all();
+
+    for _ in 0..2 {
+        let started = Instant::now();
+        assert_eq!(
+            neovm_core::emacs_core::DisplayHost::resolve_image(&host, request.clone()),
+            Err("image decode failed".to_owned())
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(250),
+            "cached decode failure should not wait for the one-second timeout"
+        );
+    }
 }
 
 #[test]

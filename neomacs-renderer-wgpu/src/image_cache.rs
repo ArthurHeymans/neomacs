@@ -92,16 +92,59 @@ pub struct CachedImage {
 
 /// Decoded image data waiting for GPU upload
 struct DecodedImage {
-    id: u32,
+    load: ImageLoadToken,
     width: u32,
     height: u32,
     data: Vec<u8>, // RGBA
     metadata: ImageMetadata,
 }
 
-enum DecodeOutcome {
+enum WorkerDecodeOutcome {
     Ready(DecodedImage),
-    Failed(u32),
+    Failed(ImageLoadToken),
+}
+
+/// A terminal async image decode result accepted for the current load generation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImageDecodeOutcome {
+    Ready { id: u32, metadata: ImageMetadata },
+    Failed { id: u32, error: String },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ImageLoadToken {
+    id: u32,
+    generation: u64,
+}
+
+#[derive(Default)]
+struct ImageLoadLifecycle {
+    next_generation: u64,
+    active: HashMap<u32, u64>,
+}
+
+impl ImageLoadLifecycle {
+    fn begin(&mut self, id: u32) -> ImageLoadToken {
+        self.next_generation = self
+            .next_generation
+            .checked_add(1)
+            .expect("image load generation exhausted");
+        let generation = self.next_generation;
+        self.active.insert(id, generation);
+        ImageLoadToken { id, generation }
+    }
+
+    fn accepts(&self, load: ImageLoadToken) -> bool {
+        self.active.get(&load.id) == Some(&load.generation)
+    }
+
+    fn free(&mut self, id: u32) {
+        self.active.remove(&id);
+    }
+
+    fn clear(&mut self) {
+        self.active.clear();
+    }
 }
 
 /// Image dimensions (from header)
@@ -130,10 +173,12 @@ pub struct ImageCache {
     textures: HashMap<u32, CachedImage>,
     /// Image states: id -> state
     states: HashMap<u32, ImageState>,
+    /// Identifies the one decode request currently allowed to publish for each ID.
+    loads: ImageLoadLifecycle,
     /// Pending dimensions (before texture is ready)
     pending_dimensions: HashMap<u32, ImageDimensions>,
     /// Channel to receive decoded images
-    decoded_rx: mpsc::Receiver<DecodeOutcome>,
+    decoded_rx: mpsc::Receiver<WorkerDecodeOutcome>,
     /// Channel to send decode requests
     decode_tx: mpsc::Sender<DecodeRequest>,
     /// Bind group layout for image textures
@@ -156,7 +201,7 @@ fn lru_victim(entries: impl Iterator<Item = (u32, u64)>) -> Option<u32> {
 
 /// Request to decode an image
 struct DecodeRequest {
-    id: u32,
+    load: ImageLoadToken,
     source: ImageSource,
     max_width: u32,
     max_height: u32,
@@ -226,7 +271,7 @@ impl ImageCache {
 
         // Create channels for async decoding
         let (decode_tx, decode_rx) = mpsc::channel::<DecodeRequest>();
-        let (decoded_tx, decoded_rx) = mpsc::channel::<DecodeOutcome>();
+        let (decoded_tx, decoded_rx) = mpsc::channel::<WorkerDecodeOutcome>();
 
         // Wrap receiver in Arc<Mutex> for sharing across threads
         let decode_rx = Arc::new(Mutex::new(decode_rx));
@@ -246,6 +291,7 @@ impl ImageCache {
             next_id: AtomicU32::new(1),
             textures: HashMap::new(),
             states: HashMap::new(),
+            loads: ImageLoadLifecycle::default(),
             pending_dimensions: HashMap::new(),
             decoded_rx,
             decode_tx,
@@ -263,11 +309,19 @@ impl ImageCache {
         stamp
     }
 
+    fn begin_load(&mut self, id: u32) -> ImageLoadToken {
+        if let Some(cached) = self.textures.remove(&id) {
+            self.total_memory -= cached.memory_size;
+        }
+        self.pending_dimensions.remove(&id);
+        self.loads.begin(id)
+    }
+
     /// Background decoder thread (pooled version)
     fn decoder_thread_pooled(
         thread_id: usize,
         rx: Arc<Mutex<mpsc::Receiver<DecodeRequest>>>,
-        tx: mpsc::Sender<DecodeOutcome>,
+        tx: mpsc::Sender<WorkerDecodeOutcome>,
     ) {
         tracing::debug!("Decoder thread {} started", thread_id);
         loop {
@@ -279,7 +333,7 @@ impl ImageCache {
 
             match request {
                 Ok(request) => {
-                    tracing::debug!("Thread {} decoding image {}", thread_id, request.id);
+                    tracing::debug!("Thread {} decoding image {}", thread_id, request.load.id);
                     let fg_bg = (request.fg_color, request.bg_color);
                     let result = match request.source {
                         ImageSource::File(path) => {
@@ -317,11 +371,14 @@ impl ImageCache {
                     };
 
                     if let Some((width, height, data)) = result {
-                        let _ = tx.send(DecodeOutcome::Ready(Self::decoded_image(
-                            request.id, width, height, data,
+                        let _ = tx.send(WorkerDecodeOutcome::Ready(Self::decoded_image(
+                            request.load,
+                            width,
+                            height,
+                            data,
                         )));
                     } else {
-                        let _ = tx.send(DecodeOutcome::Failed(request.id));
+                        let _ = tx.send(WorkerDecodeOutcome::Failed(request.load));
                     }
                 }
                 Err(_) => {
@@ -405,13 +462,21 @@ impl ImageCache {
         fg_bg: (u32, u32),
     ) -> Option<DecodedImage> {
         let (width, height, data) = Self::decode_data(data, max_width, max_height, fg_bg)?;
-        Some(Self::decoded_image(0, width, height, data))
+        Some(Self::decoded_image(
+            ImageLoadToken {
+                id: 0,
+                generation: 0,
+            },
+            width,
+            height,
+            data,
+        ))
     }
 
-    fn decoded_image(id: u32, width: u32, height: u32, data: Vec<u8>) -> DecodedImage {
+    fn decoded_image(load: ImageLoadToken, width: u32, height: u32, data: Vec<u8>) -> DecodedImage {
         let metadata = Self::metadata_from_rgba(width, height, &data);
         DecodedImage {
-            id,
+            load,
             width,
             height,
             data,
@@ -791,6 +856,7 @@ impl ImageCache {
         fg_color: u32,
         bg_color: u32,
     ) {
+        let load = self.begin_load(id);
         // Query dimensions first (fast)
         if let Some(dims) = Self::query_data_dimensions(data) {
             let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
@@ -806,7 +872,7 @@ impl ImageCache {
         // Queue for async decode
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
@@ -826,6 +892,7 @@ impl ImageCache {
         fg_color: u32,
         bg_color: u32,
     ) {
+        let load = self.begin_load(id);
         // Query dimensions first (fast)
         if let Some(dims) = Self::query_file_dimensions(path) {
             // Apply max constraints to dimensions
@@ -842,7 +909,7 @@ impl ImageCache {
         // Queue for async decode
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::File(path.to_string()),
             max_width,
             max_height,
@@ -867,6 +934,7 @@ impl ImageCache {
         bg_color: u32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let load = self.begin_load(id);
 
         // Query dimensions first (fast)
         if let Some(dims) = Self::query_data_dimensions(data) {
@@ -883,7 +951,7 @@ impl ImageCache {
         // Queue for async decode
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
@@ -907,6 +975,7 @@ impl ImageCache {
         max_height: u32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
         let (w, h) = Self::constrain_dimensions(width, height, max_width, max_height);
@@ -921,7 +990,7 @@ impl ImageCache {
         // Queue for async conversion
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::RawArgb32 {
                 data: data.to_vec(),
                 width,
@@ -950,6 +1019,7 @@ impl ImageCache {
         max_height: u32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
         let (w, h) = Self::constrain_dimensions(width, height, max_width, max_height);
@@ -964,7 +1034,7 @@ impl ImageCache {
         // Queue for async conversion
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::RawRgb24 {
                 data: data.to_vec(),
                 width,
@@ -989,11 +1059,12 @@ impl ImageCache {
         height: u32,
         stride: u32,
     ) {
+        let load = self.begin_load(id);
         self.pending_dimensions
             .insert(id, ImageDimensions { width, height });
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::RawArgb32 {
                 data: data.to_vec(),
                 width,
@@ -1016,11 +1087,12 @@ impl ImageCache {
         height: u32,
         stride: u32,
     ) {
+        let load = self.begin_load(id);
         self.pending_dimensions
             .insert(id, ImageDimensions { width, height });
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
-            id,
+            load,
             source: ImageSource::RawRgb24 {
                 data: data.to_vec(),
                 width,
@@ -1134,26 +1206,32 @@ impl ImageCache {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Vec<(u32, ImageMetadata)> {
-        let mut ready = Vec::new();
+    ) -> Vec<ImageDecodeOutcome> {
+        let mut completed = Vec::new();
         // Drain decoded images from channel
         while let Ok(outcome) = self.decoded_rx.try_recv() {
             match outcome {
-                DecodeOutcome::Ready(decoded) => {
-                    ready.push((decoded.id, decoded.metadata));
+                WorkerDecodeOutcome::Ready(decoded) if self.loads.accepts(decoded.load) => {
+                    completed.push(ImageDecodeOutcome::Ready {
+                        id: decoded.load.id,
+                        metadata: decoded.metadata,
+                    });
                     self.upload_texture(device, queue, decoded);
                 }
-                DecodeOutcome::Failed(id) => {
+                WorkerDecodeOutcome::Failed(load) if self.loads.accepts(load) => {
+                    let error = "image decode failed".to_owned();
                     self.states
-                        .insert(id, ImageState::Failed("image decode failed".to_owned()));
-                    self.pending_dimensions.remove(&id);
+                        .insert(load.id, ImageState::Failed(error.clone()));
+                    self.pending_dimensions.remove(&load.id);
+                    completed.push(ImageDecodeOutcome::Failed { id: load.id, error });
                 }
+                WorkerDecodeOutcome::Ready(_) | WorkerDecodeOutcome::Failed(_) => {}
             }
         }
 
         // Evict if over memory limit
         self.evict_if_needed();
-        ready
+        completed
     }
 
     /// Upload decoded image to GPU texture
@@ -1219,7 +1297,7 @@ impl ImageCache {
         self.total_memory += memory_size;
 
         self.textures.insert(
-            decoded.id,
+            decoded.load.id,
             CachedImage {
                 texture,
                 view,
@@ -1232,12 +1310,12 @@ impl ImageCache {
             },
         );
 
-        self.states.insert(decoded.id, ImageState::Ready);
-        self.pending_dimensions.remove(&decoded.id);
+        self.states.insert(decoded.load.id, ImageState::Ready);
+        self.pending_dimensions.remove(&decoded.load.id);
 
         tracing::debug!(
             "Uploaded image {} ({}x{}, {}KB)",
-            decoded.id,
+            decoded.load.id,
             decoded.width,
             decoded.height,
             memory_size / 1024
@@ -1305,6 +1383,7 @@ impl ImageCache {
 
     /// Free an image from cache
     pub fn free(&mut self, id: u32) {
+        self.loads.free(id);
         if let Some(cached) = self.textures.remove(&id) {
             self.total_memory -= cached.memory_size;
         }
@@ -1314,6 +1393,7 @@ impl ImageCache {
 
     /// Clear entire cache
     pub fn clear(&mut self) {
+        self.loads.clear();
         self.textures.clear();
         self.states.clear();
         self.pending_dimensions.clear();

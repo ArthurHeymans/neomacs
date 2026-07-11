@@ -1,6 +1,20 @@
 use super::*;
 use std::io::Cursor;
 
+#[test]
+fn freed_or_replaced_image_loads_reject_late_decode_outcomes() {
+    let mut loads = ImageLoadLifecycle::default();
+
+    let freed = loads.begin(41);
+    loads.free(41);
+    assert!(!loads.accepts(freed));
+
+    let old = loads.begin(42);
+    let current = loads.begin(42);
+    assert!(!loads.accepts(old));
+    assert!(loads.accepts(current));
+}
+
 fn png_bytes(pixels: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
     let image = image::RgbaImage::from_raw(width, height, pixels).unwrap();
     let mut bytes = Cursor::new(Vec::new());

@@ -6,6 +6,19 @@ use crate::thread_comm::{AssetCommand, MediaSource};
 #[cfg(feature = "wpe-webkit")]
 use crate::backend::wpe::WpeWebView;
 
+fn clear_image_terminal(shared: &super::SharedImageMetadata, id: u32) {
+    let (lock, cvar) = &**shared;
+    match lock.lock() {
+        Ok(mut images) => {
+            images.remove(&id);
+        }
+        Err(poisoned) => {
+            poisoned.into_inner().remove(&id);
+        }
+    }
+    cvar.notify_all();
+}
+
 impl RenderApp {
     #[cfg(feature = "wpe-webkit")]
     fn remove_primary_floating_webkit(&mut self, id: u32) -> bool {
@@ -33,6 +46,7 @@ impl RenderApp {
                 fg_color,
                 bg_color,
             } => {
+                clear_image_terminal(&self.image_metadata, id);
                 tracing::info!(
                     "Loading image {}: {} (max {}x{})",
                     id,
@@ -56,6 +70,7 @@ impl RenderApp {
                 fg_color,
                 bg_color,
             } => {
+                clear_image_terminal(&self.image_metadata, id);
                 tracing::info!(
                     "Loading image data {}: {} bytes (max {}x{})",
                     id,
@@ -78,6 +93,7 @@ impl RenderApp {
                 height,
                 stride,
             } => {
+                clear_image_terminal(&self.image_metadata, id);
                 tracing::debug!(
                     "Loading ARGB32 image {}: {}x{} stride={}",
                     id,
@@ -96,6 +112,7 @@ impl RenderApp {
                 height,
                 stride,
             } => {
+                clear_image_terminal(&self.image_metadata, id);
                 tracing::debug!(
                     "Loading RGB24 image {}: {}x{} stride={}",
                     id,
@@ -108,6 +125,7 @@ impl RenderApp {
                 }
             }
             AssetCommand::ImageFree { id } => {
+                clear_image_terminal(&self.image_metadata, id);
                 tracing::debug!("Freeing image {}", id);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.free_image(id);
@@ -406,5 +424,53 @@ impl RenderApp {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod image_terminal_tests {
+    use super::*;
+    use neovm_core::emacs_core::eval::ResolvedImageMetadata;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Condvar, Mutex};
+
+    #[test]
+    fn free_or_reload_clears_shared_image_terminal() {
+        let shared: super::super::SharedImageMetadata =
+            Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let (lock, _) = &*shared;
+        lock.lock().unwrap().insert(
+            9,
+            super::super::ImageDecodeTerminal::Failed("old failure".to_owned()),
+        );
+
+        clear_image_terminal(&shared, 9);
+        assert!(!lock.lock().unwrap().contains_key(&9));
+
+        lock.lock().unwrap().insert(
+            9,
+            super::super::ImageDecodeTerminal::Ready(ResolvedImageMetadata {
+                width: 2,
+                height: 3,
+                background: 0,
+                background_transparent: true,
+            }),
+        );
+        clear_image_terminal(&shared, 9);
+        assert!(!lock.lock().unwrap().contains_key(&9));
+
+        lock.lock().unwrap().insert(
+            9,
+            super::super::ImageDecodeTerminal::Ready(ResolvedImageMetadata {
+                width: 5,
+                height: 8,
+                background: 0x12_34_56,
+                background_transparent: false,
+            }),
+        );
+        assert!(matches!(
+            lock.lock().unwrap().get(&9),
+            Some(super::super::ImageDecodeTerminal::Ready(_))
+        ));
     }
 }

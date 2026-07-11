@@ -24,7 +24,13 @@ use super::frame_windows::{
 use crate::backend::wpe::{WpeBackend, WpeWebView};
 
 /// Decoded image facts shared from the render thread to the evaluator.
-pub type SharedImageMetadata = Arc<(Mutex<HashMap<u32, ResolvedImageMetadata>>, Condvar)>;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImageDecodeTerminal {
+    Ready(ResolvedImageMetadata),
+    Failed(String),
+}
+
+pub type SharedImageMetadata = Arc<(Mutex<HashMap<u32, ImageDecodeTerminal>>, Condvar)>;
 
 /// Shared storage for monitor info accessible from both threads.
 /// The Condvar is notified once monitors have been populated.

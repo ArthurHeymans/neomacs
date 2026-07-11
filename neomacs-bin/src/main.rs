@@ -42,8 +42,8 @@ use arboard::Clipboard;
 use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
 use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
-    RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
-    build_render_event_loop, run_render_loop_current_thread,
+    ImageDecodeTerminal, RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata,
+    SharedMonitorInfo, build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, EmacsComms, FrameRef, InputEvent as DisplayInputEvent,
@@ -63,8 +63,8 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ImageResolveRequest,
     ImageResolveSource, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedImage,
-    ResolvedImageMetadata, ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::load::{
     LoadupDumpMode, LoadupStartupSurface, RuntimeImageRole, find_file_in_load_path, get_load_path,
@@ -874,7 +874,7 @@ fn wait_for_image_metadata(
     shared: &SharedImageMetadata,
     id: u32,
     timeout: Duration,
-) -> Option<ResolvedImageMetadata> {
+) -> Option<ImageDecodeTerminal> {
     let (lock, cvar) = &**shared;
     let deadline = Instant::now() + timeout;
     let mut images = match lock.lock() {
@@ -882,8 +882,8 @@ fn wait_for_image_metadata(
         Err(poisoned) => poisoned.into_inner(),
     };
     loop {
-        if let Some(metadata) = images.get(&id).cloned() {
-            return Some(metadata);
+        if let Some(terminal) = images.get(&id).cloned() {
+            return Some(terminal);
         }
         let remaining = deadline.checked_duration_since(Instant::now())?;
         match cvar.wait_timeout(images, remaining) {
@@ -1575,10 +1575,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             None => return Ok(None),
         };
 
-        let Some(metadata) =
+        let Some(terminal) =
             wait_for_image_metadata(&self.image_metadata, image.image_id, Duration::from_secs(1))
         else {
             return Ok(None);
+        };
+        let metadata = match terminal {
+            ImageDecodeTerminal::Ready(metadata) => metadata,
+            ImageDecodeTerminal::Failed(error) => return Err(error),
         };
 
         let resolved = ResolvedImage {
@@ -1610,19 +1614,24 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                     return Ok(Some(image));
                 }
                 let (lock, _) = &*self.image_metadata;
-                let metadata = match lock.lock() {
+                let terminal = match lock.lock() {
                     Ok(images) => images.get(&image.image_id).cloned(),
                     Err(poisoned) => poisoned.into_inner().get(&image.image_id).cloned(),
                 };
-                if let Some(metadata) = metadata {
-                    let updated = ResolvedImage {
-                        image_id: image.image_id,
-                        width: metadata.width,
-                        height: metadata.height,
-                        metadata: Some(metadata),
-                    };
-                    cache.insert(request, updated.clone());
-                    return Ok(Some(updated));
+                if let Some(terminal) = terminal {
+                    match terminal {
+                        ImageDecodeTerminal::Ready(metadata) => {
+                            let updated = ResolvedImage {
+                                image_id: image.image_id,
+                                width: metadata.width,
+                                height: metadata.height,
+                                metadata: Some(metadata),
+                            };
+                            cache.insert(request, updated.clone());
+                            return Ok(Some(updated));
+                        }
+                        ImageDecodeTerminal::Failed(error) => return Err(error),
+                    }
                 }
                 return Ok(Some(image));
             }
