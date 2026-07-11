@@ -50,7 +50,7 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::keymap::{KeymapMarker, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
-use neovm_core::window::WindowId;
+use neovm_core::window::{FrameId, WindowId};
 use strum::{EnumString, IntoStaticStr};
 
 // Instrumentation: count how many times the mode line is *evaluated* (the
@@ -1137,10 +1137,8 @@ impl TabBarDisplayBuildRequest {
             return None;
         }
 
-        let restore = TabBarDisplaySelectionRestore::capture(evaluator, gc_roots);
-        let result = self
-            .select_frame(evaluator)
-            .and_then(|()| Self::make_keymap(evaluator))
+        let restore = TabBarDisplaySelectionRestore::activate(evaluator, FrameId(self.frame_id))?;
+        let result = Self::make_keymap(evaluator)
             .and_then(TabBarDisplaySource::from_keymap)
             .and_then(|source| source.into_built_tab_bar(evaluator));
         if let Some(tab_bar) = &result {
@@ -1148,17 +1146,6 @@ impl TabBarDisplayBuildRequest {
         }
         restore.apply(evaluator);
         result
-    }
-
-    fn select_frame(self, evaluator: &mut Context) -> Option<()> {
-        evaluator
-            .eval_form(Value::list(vec![
-                Value::symbol("select-frame"),
-                Value::make_frame(self.frame_id),
-                Value::NIL,
-            ]))
-            .ok()
-            .map(|_| ())
     }
 
     fn make_keymap(evaluator: &mut Context) -> Option<Value> {
@@ -1169,55 +1156,43 @@ impl TabBarDisplayBuildRequest {
 }
 
 struct TabBarDisplaySelectionRestore {
-    frame: Option<Value>,
-    window: Option<Value>,
+    window_selection: (Option<FrameId>, Option<(FrameId, WindowId)>),
     buffer_id: Option<BufferId>,
 }
 
 impl TabBarDisplaySelectionRestore {
-    fn capture(evaluator: &mut Context, gc_roots: &ScratchGcRootScope) -> Self {
-        let frame = evaluator
-            .eval_form(Value::list(vec![Value::symbol("selected-frame")]))
-            .ok();
-        if let Some(frame) = frame {
-            gc_roots.root(frame);
+    fn activate(evaluator: &mut Context, frame_id: FrameId) -> Option<Self> {
+        let (window_id, target_buffer_id) = {
+            let frame = evaluator.frame_manager().get(frame_id)?;
+            let window = frame.selected_window()?;
+            (window.id(), window.buffer_id()?)
+        };
+        let saved_buffer_id = evaluator.buffer_manager().current_buffer_id();
+        if !evaluator
+            .buffer_manager_mut()
+            .switch_current_unrecorded(target_buffer_id)
+        {
+            return None;
         }
-        let window = evaluator
-            .eval_form(Value::list(vec![Value::symbol("selected-window")]))
-            .ok();
-        if let Some(window) = window {
-            gc_roots.root(window);
-        }
-        let buffer_id = evaluator
-            .buffer_manager()
-            .current_buffer()
-            .map(|buffer| buffer.id());
-        Self {
-            frame,
-            window,
-            buffer_id,
-        }
+        let window_selection = evaluator
+            .frame_manager_mut()
+            .select_window_for_mode_line(window_id);
+        Some(Self {
+            buffer_id: saved_buffer_id,
+            window_selection,
+        })
     }
 
     fn apply(self, evaluator: &mut Context) {
-        if let Some(frame) = self.frame {
-            let _ = evaluator.eval_form(Value::list(vec![
-                Value::symbol("select-frame"),
-                frame,
-                Value::NIL,
-            ]));
-        }
-        if let Some(window) = self.window {
-            let _ = evaluator.eval_form(Value::list(vec![
-                Value::symbol("select-window"),
-                window,
-                Value::NIL,
-            ]));
-        }
+        evaluator
+            .frame_manager_mut()
+            .restore_selected_window_for_mode_line(self.window_selection);
         if let Some(buffer_id) = self.buffer_id
             && evaluator.buffer_manager().get(buffer_id).is_some()
         {
-            evaluator.buffer_manager_mut().set_current(buffer_id);
+            evaluator
+                .buffer_manager_mut()
+                .switch_current_unrecorded(buffer_id);
         }
     }
 }

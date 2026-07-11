@@ -13854,6 +13854,88 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
 }
 
 #[test]
+fn layout_frame_rust_tab_bar_does_not_record_buffer_selection() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-tab-bar-no-record", 1600, 160, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.tab_bar_height = 17;
+    }
+    eval.obarray_mut()
+        .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
+    eval.eval_str(
+        r#"
+          (require 'tab-bar)
+          (setq tab-bar-show 1
+                tab-bar-auto-width nil
+                tab-bar-close-button-show nil)
+          (tab-bar-mode 1)
+          (select-frame layout-target-frame)
+          (switch-to-buffer (get-buffer-create "*tab-no-record-root*"))
+          (tab-bar-new-tab)
+          (switch-to-buffer (get-buffer-create "*tab-no-record-second*"))
+          (tab-bar-select-tab 1)
+          (setq neomacs-layout-buffer-list-hook-count 0)
+          (setq buffer-list-update-hook
+                (list (lambda ()
+                        (setq neomacs-layout-buffer-list-hook-count
+                              (1+ neomacs-layout-buffer-list-hook-count)))))
+        "#,
+    )
+    .expect("configure tab-bar hook counter");
+    eval.eval_str("(select-window (selected-window))")
+        .expect("direct select-window should be callable");
+    let direct_hook_count = eval
+        .eval_str("neomacs-layout-buffer-list-hook-count")
+        .expect("direct hook count")
+        .as_fixnum();
+    assert_eq!(
+        direct_hook_count,
+        Some(1),
+        "test setup should observe recorded select-window through buffer-list-update-hook"
+    );
+    eval.eval_str("(setq neomacs-layout-buffer-list-hook-count 0)")
+        .expect("reset hook count");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let tab_bar_rows = engine
+        .last_frame_display_state
+        .as_ref()
+        .map(|state| {
+            state
+                .frame_chrome_rows
+                .iter()
+                .filter(|row| row.row.role == GlyphRowRole::TabBar && row.row.enabled)
+                .count()
+        })
+        .unwrap_or(0);
+    assert!(
+        tab_bar_rows > 0,
+        "test setup must exercise frame tab-bar rendering"
+    );
+
+    let hook_count = eval
+        .eval_str("neomacs-layout-buffer-list-hook-count")
+        .expect("hook count")
+        .as_fixnum();
+    assert_eq!(
+        hook_count,
+        Some(0),
+        "redisplay tab-bar rendering must not record buffer selection or run buffer-list-update-hook"
+    );
+}
+
+#[test]
 fn layout_frame_rust_installs_frame_tab_bar_image_media() {
     let mut eval =
         create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
