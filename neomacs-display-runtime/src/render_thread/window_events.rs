@@ -444,10 +444,14 @@ impl RenderApp {
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);
                     }
-                    // Stage 2: every tick still renders through the legacy
-                    // path; the plan feeds coordinator bookkeeping and the
-                    // work-class counters until the renderer consumes plans.
-                    let presented = self.render_frame_window(emacs_fid);
+                    // Stage 4: a compositor-only cursor plan enables the
+                    // retained-static fast path (blit the retained scene, draw
+                    // only the cursor). Any stronger work class renders fully.
+                    let cursor_only = matches!(
+                        plan.work,
+                        super::frame_sched::RenderWork::CompositeOnly { .. }
+                    );
+                    let presented = self.render_frame_window_hinted(emacs_fid, cursor_only);
                     let result = if presented {
                         PresentResult::Presented
                     } else {

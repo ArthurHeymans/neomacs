@@ -30,6 +30,12 @@ pub(super) static PLAN_NONE: AtomicU64 = AtomicU64::new(0);
 pub(super) static PLAN_COMPOSITE_ONLY: AtomicU64 = AtomicU64::new(0);
 pub(super) static PLAN_REPAINT_LAYERS: AtomicU64 = AtomicU64::new(0);
 pub(super) static PLAN_REBUILD_SCENE: AtomicU64 = AtomicU64::new(0);
+/// Retained static-scene rebuilds — one per scene generation while the
+/// cursor-only fast path is active (frame scheduling plan, Stage 4).
+pub(super) static RETAINED_STATIC_BUILDS: AtomicU64 = AtomicU64::new(0);
+/// Frames served by the retained-static composite fast path (blit + cursor,
+/// no glyph pipeline).
+pub(super) static COMPOSITE_ONLY_FRAMES: AtomicU64 = AtomicU64::new(0);
 /// Microseconds from the most recently consumed scene commit to its present.
 pub(super) static LAST_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 /// Worst observed commit-to-present latency in microseconds.
@@ -102,6 +108,8 @@ pub(crate) struct FrameSchedSnapshot {
     pub plan_composite_only: u64,
     pub plan_repaint_layers: u64,
     pub plan_rebuild_scene: u64,
+    pub retained_static_builds: u64,
+    pub composite_only_frames: u64,
     pub last_commit_to_present_us: u64,
     pub max_commit_to_present_us: u64,
 }
@@ -118,6 +126,8 @@ pub(crate) fn snapshot() -> FrameSchedSnapshot {
         plan_composite_only: PLAN_COMPOSITE_ONLY.load(Ordering::Relaxed),
         plan_repaint_layers: PLAN_REPAINT_LAYERS.load(Ordering::Relaxed),
         plan_rebuild_scene: PLAN_REBUILD_SCENE.load(Ordering::Relaxed),
+        retained_static_builds: RETAINED_STATIC_BUILDS.load(Ordering::Relaxed),
+        composite_only_frames: COMPOSITE_ONLY_FRAMES.load(Ordering::Relaxed),
         last_commit_to_present_us: LAST_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         max_commit_to_present_us: MAX_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
     }
@@ -158,6 +168,8 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         plan_composite_only = snap.plan_composite_only,
         plan_repaint_layers = snap.plan_repaint_layers,
         plan_rebuild_scene = snap.plan_rebuild_scene,
+        retained_static_builds = snap.retained_static_builds,
+        composite_only_frames = snap.composite_only_frames,
         last_commit_to_present_us = snap.last_commit_to_present_us,
         max_commit_to_present_us = snap.max_commit_to_present_us,
         "frame_sched_stats"

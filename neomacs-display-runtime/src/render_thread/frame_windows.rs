@@ -138,6 +138,47 @@ pub(crate) struct FrameCompositor {
     pub(super) visual_cursors: HashMap<i64, CursorState>,
     pub renderer_effects: RendererFrameEffects,
     pub transitions: TransitionState,
+    /// Retained cursorless static scene for the compositor-only fast path
+    /// (frame scheduling plan, Stage 4). Built lazily from the current frame
+    /// and reused across cursor-only frames; invalidated on any full render.
+    pub(super) retained_static: Option<RetainedStatic>,
+}
+
+/// A cursorless render of the current scene, retained across cursor-only
+/// frames so an ambient cursor effect composites over it instead of
+/// re-running the glyph pipeline. Validity is generation- and size-keyed.
+pub(crate) struct RetainedStatic {
+    #[allow(dead_code)]
+    pub(super) texture: wgpu::Texture,
+    pub(super) view: wgpu::TextureView,
+    /// Image-pipeline bind group for blitting the texture to the surface.
+    pub(super) bind_group: wgpu::BindGroup,
+    /// `current_frame_ingest_seq` this was built from; a new scene commit
+    /// bumps that stamp and invalidates this.
+    pub(super) generation: u64,
+    pub(super) width: u32,
+    pub(super) height: u32,
+}
+
+impl RetainedStatic {
+    pub(super) fn new(
+        texture: wgpu::Texture,
+        view: wgpu::TextureView,
+        bind_group: wgpu::BindGroup,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        Self {
+            texture,
+            view,
+            bind_group,
+            // Sentinel: no valid scene captured yet, forcing a build on the
+            // first fast-path frame.
+            generation: u64::MAX,
+            width,
+            height,
+        }
+    }
 }
 
 impl ChromeState {
@@ -232,6 +273,7 @@ impl GuiFrameRenderState {
                 visual_cursors: HashMap::new(),
                 renderer_effects: RendererFrameEffects::default(),
                 transitions: TransitionState::default(),
+                retained_static: None,
             },
             chrome: ChromeState::default(),
             overlays: OverlayState {
@@ -269,6 +311,7 @@ impl GuiFrameRenderState {
                 visual_cursors: HashMap::new(),
                 renderer_effects: RendererFrameEffects::default(),
                 transitions: TransitionState::default(),
+                retained_static: None,
             },
             chrome: ChromeState::default(),
             overlays: OverlayState {

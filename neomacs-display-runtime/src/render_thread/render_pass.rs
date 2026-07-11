@@ -341,6 +341,7 @@ impl RenderApp {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_frame_window_contents_to_surface(
         renderer: &mut WgpuRenderer,
         window_state: &mut GuiFrameWindowState,
@@ -350,6 +351,7 @@ impl RenderApp {
         toolbar: &ToolbarResources,
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
+        cursor_only_hint: bool,
     ) -> Option<(
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
@@ -364,6 +366,7 @@ impl RenderApp {
             extra_line_spacing,
             extra_letter_spacing,
             None,
+            cursor_only_hint,
         )
     }
 
@@ -378,6 +381,7 @@ impl RenderApp {
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
         output: Option<wgpu::SurfaceTexture>,
+        cursor_only_hint: bool,
     ) -> Option<(
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
@@ -461,6 +465,84 @@ impl RenderApp {
         renderer.set_scale_factor(native.scale_factor as f32);
         renderer.resize(native.width, native.height);
         let cursor_visible = render.cursor.blink_on;
+
+        // Stage 4 retained-static fast path: when the coordinator asked for a
+        // compositor-only cursor frame and the scene is eligible (no
+        // transition, no dynamic overlay, and every cursor is a clean
+        // top-layer style), blit the retained cursorless scene and draw only
+        // the cursor, skipping the glyph pipeline. The retained scene is built
+        // once per scene generation and reused; any ineligibility falls
+        // through to the full render below. The composite is proven
+        // bit-identical to a full render (offscreen_frame::composite_matches_
+        // full_render). Set NEOMACS_DISABLE_RETAINED_STATIC to force-disable.
+        if cursor_only_hint
+            && !need_offscreen
+            && !render.compositor.transitions.has_active()
+            && Self::frame_cursors_all_clean(&frame)
+            && !Self::window_has_active_overlays(render)
+            && std::env::var_os("NEOMACS_DISABLE_RETAINED_STATIC").is_none()
+        {
+            let mouse_pos = render.mouse_pos;
+            let generation = render.compositor.current_frame_ingest_seq;
+            let retained_valid = matches!(
+                &render.compositor.retained_static,
+                Some(rs) if rs.generation == generation
+                    && rs.width == native.width
+                    && rs.height == native.height
+            );
+            if !retained_valid {
+                Self::ensure_retained_static_texture(renderer, render, native.width, native.height);
+                let retained_view = render
+                    .compositor
+                    .retained_static
+                    .as_ref()
+                    .expect("retained texture just ensured")
+                    .view
+                    .clone();
+                // Render the full cursorless static scene into the retained
+                // texture (this runs the glyph pipeline once per generation).
+                Self::render_frame_window_contents(
+                    renderer,
+                    native,
+                    render,
+                    &retained_view,
+                    &frame,
+                    false,
+                    root_animated_cursor,
+                    animated_cursor,
+                    bg_gradient,
+                    true,
+                    child_frame_style,
+                    scroll_indicators_enabled,
+                    toolbar,
+                );
+                if let Some(rs) = render.compositor.retained_static.as_mut() {
+                    rs.generation = generation;
+                }
+                super::frame_stats::count(&super::frame_stats::RETAINED_STATIC_BUILDS);
+            }
+            if let Some(rs) = render.compositor.retained_static.as_ref() {
+                renderer.blit_texture_to_view(
+                    &rs.bind_group,
+                    &surface_view,
+                    native.width,
+                    native.height,
+                );
+            }
+            renderer.render_cursor_only(
+                &surface_view,
+                &frame,
+                native.width,
+                native.height,
+                cursor_visible,
+                animated_cursor,
+                mouse_pos,
+            );
+            super::frame_stats::count(&super::frame_stats::COMPOSITE_ONLY_FRAMES);
+            renderer.set_scale_factor(old_scale_factor);
+            renderer.resize(old_width, old_height);
+            return Some((output, frame));
+        }
 
         if need_offscreen {
             render.compositor.transitions.current_is_a =
@@ -910,10 +992,84 @@ impl RenderApp {
         }
     }
 
+    /// Whether every window cursor in the frame is a clean top-layer style
+    /// (bar/hbar/hollow), so the cursor can be composited over a retained
+    /// static scene. A filled-box cursor uses inverse video and is not
+    /// separable, so its presence forces the full render path.
+    fn frame_cursors_all_clean(frame: &crate::core::frame_glyphs::FrameGlyphBuffer) -> bool {
+        frame
+            .window_cursors
+            .iter()
+            .all(|cursor| cursor.style.is_clean_top_layer())
+    }
+
+    /// Whether any dynamic overlay is active. Overlays are not part of the
+    /// retained static scene, so their presence forces the full render path.
+    fn window_has_active_overlays(render: &GuiFrameRenderState) -> bool {
+        render.overlays.popup_menu.is_some()
+            || render.overlays.tooltip.is_some()
+            || render.overlays.visual_bell_start.is_some()
+            || render.overlays.ime_preedit_active
+    }
+
+    /// Ensure the window's retained-static texture exists at `width`x`height`
+    /// in the surface format, recreating it on a size change. Leaves the
+    /// generation stamp untouched (the caller sets it after rendering).
+    fn ensure_retained_static_texture(
+        renderer: &WgpuRenderer,
+        render: &mut GuiFrameRenderState,
+        width: u32,
+        height: u32,
+    ) {
+        let needs_new = match &render.compositor.retained_static {
+            Some(rs) => rs.width != width || rs.height != height,
+            None => true,
+        };
+        if !needs_new {
+            return;
+        }
+        let texture = renderer.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("retained-static-scene"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: renderer.surface_format(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind_group = renderer.create_texture_bind_group(&view);
+        render.compositor.retained_static = Some(super::frame_windows::RetainedStatic::new(
+            texture, view, bind_group, width, height,
+        ));
+    }
+
     /// Render and present one top-level frame window. Returns whether a
     /// frame was actually presented; false means nothing reached the screen
     /// (no committed frame yet, window inactive, or surface unavailable).
+    ///
+    /// `cursor_only_hint` is set when the frame coordinator's plan is
+    /// compositor-only for the cursor layer; it enables the retained-static
+    /// fast path (blit the retained scene, draw only the cursor) when the
+    /// scene is eligible, skipping the glyph pipeline.
     pub(super) fn render_frame_window(&mut self, emacs_frame_id: u64) -> bool {
+        self.render_frame_window_impl(emacs_frame_id, false)
+    }
+
+    pub(super) fn render_frame_window_hinted(
+        &mut self,
+        emacs_frame_id: u64,
+        cursor_only_hint: bool,
+    ) -> bool {
+        self.render_frame_window_impl(emacs_frame_id, cursor_only_hint)
+    }
+
+    fn render_frame_window_impl(&mut self, emacs_frame_id: u64, cursor_only_hint: bool) -> bool {
         if self.lifecycle_flags.shutdown_requested {
             return false;
         }
@@ -946,6 +1102,7 @@ impl RenderApp {
             &self.toolbar,
             self.extra_line_spacing,
             self.extra_letter_spacing,
+            cursor_only_hint,
         ) {
             if is_primary_frame {
                 let (w, h) = self

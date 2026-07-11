@@ -188,6 +188,17 @@ impl CursorStyle {
     pub fn is_hollow(&self) -> bool {
         matches!(self, Self::Hollow)
     }
+
+    /// Whether this cursor draws purely as a top layer over unchanged text.
+    ///
+    /// Bar, Hbar, and Hollow cursors are drawn on top of otherwise-normal
+    /// glyphs, so they can be composited over a retained static scene. The
+    /// filled box uses inverse video — the glyph under it is redrawn in the
+    /// cursor foreground color during the text pass — so it is not separable
+    /// from the static scene and must go through a full render.
+    pub fn is_clean_top_layer(&self) -> bool {
+        !matches!(self, Self::FilledBox)
+    }
 }
 
 #[cfg(test)]

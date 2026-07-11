@@ -1299,6 +1299,82 @@ impl WgpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
+    /// Draw only the cursor layer onto `view`, preserving existing content
+    /// (`LoadOp::Load`). Used by the retained-scene composite path: the static
+    /// scene is blitted first, then the cursor is drawn on top. Correct only
+    /// for clean top-layer cursor styles (bar/hbar/hollow); the filled-box
+    /// inverse-video cursor is not separable this way and must go through the
+    /// full render (see `CursorStyle::is_clean_top_layer`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_cursor_only(
+        &mut self,
+        view: &wgpu::TextureView,
+        frame_glyphs: &FrameGlyphBuffer,
+        surface_width: u32,
+        surface_height: u32,
+        cursor_visible: bool,
+        animated_cursor: Option<AnimatedCursor>,
+        mouse_pos: (f32, f32),
+    ) {
+        let (logical_w, logical_h) =
+            self.prepare_frame_uniforms(frame_glyphs, surface_width, surface_height);
+        let params = FrameParams {
+            frame_glyphs,
+            faces: &frame_glyphs.faces,
+            cursor_visible,
+            animated_cursor: &animated_cursor,
+            mouse_pos,
+            background_gradient: None,
+            logical_w,
+            logical_h,
+            face_debug_call_id: 0,
+            has_line_anims: false,
+            row_damage: None,
+        };
+        let chrome = self.collect_chrome_layers(&params);
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Cursor-Only Encoder"),
+            });
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Cursor-Only Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            // Filled-box inverse-video parts (cursor_bg, behind-text trail) are
+            // empty for clean cursors; drawing them is a harmless no-op there.
+            self.draw_pre_text_cursor_layers(
+                &mut render_pass,
+                &chrome.cursor_bg,
+                &chrome.behind_text_cursor,
+            );
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &chrome.cursors)
+            {
+                render_pass.set_pipeline(&self.pipelines.rect);
+                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..chrome.cursors.len() as u32, 0..1);
+            }
+        }
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
     fn refresh_frame_animation_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
         // Reset continuous redraw flag (will be set by dim fade or other animations).
         self.fx.needs_continuous_redraw = false;
