@@ -434,6 +434,14 @@ impl GuiFrameRenderState {
         self.compositor.dirty = true;
     }
 
+    pub(super) fn has_presentable_dirty_content(&self) -> bool {
+        self.compositor.dirty && self.compositor.current_frame.is_some()
+    }
+
+    pub(super) fn begin_presentable_render(&mut self) {
+        self.compositor.dirty = false;
+    }
+
     pub(super) fn set_dirty(&mut self, dirty: bool) {
         self.compositor.dirty = dirty;
     }
@@ -1199,6 +1207,10 @@ impl GuiFrameWindowState {
         self.lifecycle.request_redraw();
     }
 
+    pub(super) fn has_presentable_dirty_content(&self) -> bool {
+        self.lifecycle.is_active() && self.render.has_presentable_dirty_content()
+    }
+
     pub fn window(&self) -> Option<&Arc<Window>> {
         self.lifecycle.window()
     }
@@ -1635,10 +1647,10 @@ impl GuiFrameWindowManager {
         });
     }
 
-    pub(super) fn any_top_level_dirty(&self) -> bool {
+    pub(super) fn any_redrawable_top_level_dirty(&self) -> bool {
         self.windows
             .values()
-            .any(|window_state| window_state.render.compositor.dirty)
+            .any(GuiFrameWindowState::has_presentable_dirty_content)
     }
 
     pub(super) fn any_top_level_renderer_effects_need_redraw(&self) -> bool {
@@ -1731,7 +1743,7 @@ impl GuiFrameWindowManager {
 
     pub(super) fn request_redraw_for_dirty_top_level_windows(&self) {
         self.for_each_top_level_window(|window_state| {
-            if window_state.render.compositor.dirty {
+            if window_state.has_presentable_dirty_content() {
                 window_state.request_redraw();
             }
         });

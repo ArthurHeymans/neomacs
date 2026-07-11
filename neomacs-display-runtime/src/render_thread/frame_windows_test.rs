@@ -152,6 +152,55 @@ fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
 }
 
 #[test]
+fn dirty_render_state_without_current_frame_is_not_presentable() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+
+    render.mark_dirty();
+
+    assert!(render.compositor.dirty);
+    assert!(
+        !render.has_presentable_dirty_content(),
+        "redraw scheduling must wait until a glyph frame exists"
+    );
+}
+
+#[test]
+fn dirty_render_state_with_current_frame_is_presentable() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    render.mark_dirty();
+
+    assert!(render.has_presentable_dirty_content());
+}
+
+#[test]
+fn beginning_presentable_render_consumes_dirty_content() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    render.mark_dirty();
+
+    render.begin_presentable_render();
+
+    assert!(!render.compositor.dirty);
+    assert!(!render.has_presentable_dirty_content());
+
+    render.mark_dirty();
+
+    assert!(render.has_presentable_dirty_content());
+}
+
+#[test]
 fn frame_render_state_applies_visual_cursor_animation_rects() {
     let Some(device) = make_test_device() else {
         return;

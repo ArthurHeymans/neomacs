@@ -272,7 +272,7 @@ impl RenderApp {
         self.frame_windows
             .request_redraw_for_dirty_top_level_windows();
 
-        let top_level_dirty = self.frame_windows.any_top_level_dirty();
+        let top_level_dirty = self.frame_windows.any_redrawable_top_level_dirty();
         if top_level_dirty || has_active_content {
             tracing::debug!(
                 top_level_dirty,
@@ -299,7 +299,7 @@ impl RenderApp {
         }
 
         let now = std::time::Instant::now();
-        let top_level_active = self.frame_windows.any_top_level_dirty()
+        let top_level_active = self.frame_windows.any_redrawable_top_level_dirty()
             || self.frame_windows.any_top_level_cursor_animating()
             || self
                 .frame_windows

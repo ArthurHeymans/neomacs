@@ -2224,6 +2224,13 @@ fn default_enabled_fields_match_product_defaults() {
     }
 }
 
+#[test]
+fn default_cursor_color_cycle_is_enabled() {
+    let ec = EffectsConfig::default();
+
+    assert!(ec.cursor_color_cycle.enabled);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Duration-typed fields
 // ═══════════════════════════════════════════════════════════════════

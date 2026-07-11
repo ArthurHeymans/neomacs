@@ -200,6 +200,26 @@ fn destroy_adopted_primary_window_by_real_frame_id_prevents_lifecycle_recreate()
 }
 
 #[test]
+fn pending_dirty_primary_window_is_not_redrawable_active_work() {
+    let mut app = make_test_app();
+    let primary = app.frame_windows.primary_window_mut().unwrap();
+    primary.render.compositor.dirty = true;
+
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .unwrap()
+            .render
+            .compositor
+            .dirty
+    );
+    assert!(
+        !app.frame_windows.any_redrawable_top_level_dirty(),
+        "a pending window has no native surface to receive RedrawRequested"
+    );
+}
+
+#[test]
 fn pre_bootstrap_primary_resize_updates_pending_size() {
     let mut app = make_test_app();
     let geometry_hints = GuiFrameGeometryHints {

@@ -454,6 +454,7 @@ impl RenderApp {
         };
 
         let drained_frame = render.take_current_frame_for_render()?;
+        render.begin_presentable_render();
         frame = drained_frame;
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
