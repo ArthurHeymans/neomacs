@@ -1702,3 +1702,126 @@ fn long_buffer_mouse_face_publishes_one_region_and_one_source_span() {
         GLYPHS as u32
     );
 }
+
+#[test]
+fn buffer_mouse_face_uses_canonical_margin_pen_and_column() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    let pointer = GlyphPointerAppearance {
+        source: GlyphPointerSourceIdentity {
+            kind: GlyphPointerSourceKind::Buffer,
+            source_id: 7,
+            range_start: 0,
+            range_end: 1,
+            property_owner: 0,
+            occurrence: GlyphPointerOccurrenceIdentity::Source,
+        },
+        face_id: FaceId::new(9),
+    };
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.glyphs[GlyphArea::LeftMargin.index()]
+        .push(Glyph::stretch(2, FaceId::new(0)).with_pixel_width(16.0));
+    let mut wide_margin = Glyph::char('界', FaceId::new(0), 0).with_pixel_width(16.0);
+    wide_margin.wide = true;
+    row.glyphs[GlyphArea::LeftMargin.index()].push(wide_margin);
+    let token = row
+        .intern_pointer_appearance(pointer)
+        .expect("pointer token");
+    row.glyphs[GlyphArea::Text.index()].push(Glyph {
+        pointer_appearance: Some(token),
+        ..Glyph::char('x', FaceId::new(0), 0).with_pixel_width(8.0)
+    });
+    row.glyphs[GlyphArea::RightMargin.index()]
+        .push(Glyph::stretch(3, FaceId::new(0)).with_pixel_width(24.0));
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.install_output_face(
+        FaceId::new(9),
+        neomacs_display_protocol::face::Face::default(),
+    );
+    builder.begin_window(3, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    let region = &state.presented_pointer_source.regions()[0];
+    assert_eq!(region.bounds().x(), 32.0);
+    assert_eq!(region.bounds().width(), 8.0);
+    let source_span = &state.presented_pointer_source.appearances()[0].paint_spans()[0];
+    assert_eq!(source_span.slot().col, 4);
+    let materialized = state.materialize();
+    let span = &materialized.presented_pointer().appearances()[0].paint_spans()[0];
+    assert_eq!(span.first(), 2);
+    assert_eq!(span.len(), 1);
+}
+
+#[test]
+fn one_logical_mouse_face_keeps_multiple_face_paint_batches() {
+    use neomacs_display_protocol::PointerDrawMode;
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
+        GlyphPointerSourceKind,
+    };
+
+    let source = GlyphPointerSourceIdentity {
+        kind: GlyphPointerSourceKind::Buffer,
+        source_id: 7,
+        range_start: 0,
+        range_end: 2,
+        property_owner: 0,
+        occurrence: GlyphPointerOccurrenceIdentity::Source,
+    };
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    for (charpos, face_id) in [(0, 9), (1, 10)] {
+        let token = row
+            .intern_pointer_appearance(GlyphPointerAppearance {
+                source,
+                face_id: FaceId::new(face_id),
+            })
+            .expect("pointer token");
+        row.glyphs[GlyphArea::Text.index()].push(Glyph {
+            pointer_appearance: Some(token),
+            ..Glyph::char('x', FaceId::new(face_id), charpos).with_pixel_width(8.0)
+        });
+    }
+
+    let mut builder = DisplayOutputBuilder::new();
+    for face_id in [9, 10] {
+        builder.install_output_face(
+            FaceId::new(face_id),
+            neomacs_display_protocol::face::Face::default(),
+        );
+    }
+    builder.begin_window(3, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
+    builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
+    builder.end_window();
+
+    let state = builder.finish(10, 1, 8.0, 16.0);
+    assert_eq!(state.presented_pointer_source.regions().len(), 1);
+    assert_eq!(state.presented_pointer_source.appearances().len(), 1);
+    let source_spans = state.presented_pointer_source.appearances()[0].paint_spans();
+    assert_eq!(source_spans.len(), 2);
+    assert_eq!(
+        source_spans[0].hover(),
+        Some(PointerDrawMode::Face(FaceId::new(9)))
+    );
+    assert_eq!(
+        source_spans[1].hover(),
+        Some(PointerDrawMode::Face(FaceId::new(10)))
+    );
+
+    let materialized = state.materialize();
+    let spans = materialized.presented_pointer().appearances()[0].paint_spans();
+    assert_eq!(spans.len(), 2);
+    assert_eq!(
+        spans[0].hover(),
+        Some(PointerDrawMode::Face(FaceId::new(9)))
+    );
+    assert_eq!(
+        spans[1].hover(),
+        Some(PointerDrawMode::Face(FaceId::new(10)))
+    );
+}

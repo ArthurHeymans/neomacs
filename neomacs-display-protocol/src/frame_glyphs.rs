@@ -960,11 +960,12 @@ impl FrameGlyphBuffer {
     /// atomically establishes renderer-safe contextual validity before storing.
     pub fn install_presented_pointer_map(
         &mut self,
-        map: crate::presented_pointer::PresentedPointerMap,
+        mut map: crate::presented_pointer::PresentedPointerMap,
     ) -> Result<(), crate::presented_pointer::PresentedPointerMapError> {
         let context =
             crate::presented_pointer::PointerMapValidationContext::from_frame_buffer(self)?;
         map.validate_against(context)?;
+        map.rebuild_damage_index(self);
         self.presented_pointer = map;
         Ok(())
     }

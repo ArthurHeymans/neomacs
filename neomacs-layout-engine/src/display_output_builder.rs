@@ -641,7 +641,7 @@ fn buffer_pointer_source_map(
     }
     builder
         .finish()
-        .unwrap_or_else(|_| neomacs_display_protocol::PresentedPointerSourceMap::empty())
+        .expect("finalized pointer runs must build a valid source map")
 }
 
 #[cfg(test)]

@@ -100,6 +100,45 @@ fn pointer_override_selects_hover_and_pressed_draw_modes() {
 }
 
 #[test]
+fn one_selected_appearance_applies_each_spans_face_mode() {
+    let mut frame = FrameGlyphBuffer::with_size(40.0, 20.0);
+    for face in [FaceId::new(0), FaceId::new(9), FaceId::new(10)] {
+        frame.faces.insert(face, Face::new(face));
+    }
+    frame.add_char('a', 0.0, 0.0, 10.0, 10.0, 8.0, false);
+    frame.add_char('b', 10.0, 0.0, 10.0, 10.0, 8.0, false);
+    let clip = FrameRect::new(0.0, 0.0, 20.0, 10.0).unwrap();
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                clip,
+                None,
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![
+                    PresentedPaintSpan::new(PresentedPrimitiveKind::Glyph, 0, 1, clip).with_modes(
+                        PointerDrawMode::Face(FaceId::new(9)),
+                        PointerDrawMode::Face(FaceId::new(9)),
+                    ),
+                    PresentedPaintSpan::new(PresentedPrimitiveKind::Glyph, 1, 1, clip).with_modes(
+                        PointerDrawMode::Face(FaceId::new(10)),
+                        PointerDrawMode::Face(FaceId::new(10)),
+                    ),
+                ],
+                PointerDrawMode::Face(FaceId::new(9)),
+                PointerDrawMode::Face(FaceId::new(9)),
+            )],
+        )
+        .unwrap();
+
+    let resolver =
+        PointerOverrideResolver::new(&frame, Some(selection(PointerAppearancePhase::Hover)));
+    assert_eq!(resolver.face_id(0, FaceId::new(0)), FaceId::new(9));
+    assert_eq!(resolver.face_id(1, FaceId::new(0)), FaceId::new(10));
+}
+
+#[test]
 fn inactive_primitive_paint_plan_is_fixed_capacity_and_keeps_paint_domain() {
     let mut frame = FrameGlyphBuffer::with_size(40.0, 20.0);
     frame.add_char('x', 4.0, 3.0, 12.0, 10.0, 8.0, false);
@@ -682,12 +721,7 @@ fn disjoint_authoritative_clip_never_reveals_pointer_override() {
     let authoritative_clip = neomacs_display_protocol::Rect::new(40.0, 5.0, 5.0, 17.0);
 
     let paints = resolver
-        .face_paints(
-            0,
-            FaceId::new(0),
-            primitive,
-            Some(&authoritative_clip),
-        )
+        .face_paints(0, FaceId::new(0), primitive, Some(&authoritative_clip))
         .into_iter()
         .collect::<Vec<_>>();
 

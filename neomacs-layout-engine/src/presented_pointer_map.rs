@@ -94,11 +94,6 @@ impl PresentedPointerMapBuilder {
         };
         let mode = PointerDrawMode::Face(appearance.face_id);
         let index = if let Some(&index) = self.positions.get(&key) {
-            if self.appearances[index].mode != mode {
-                self.error
-                    .get_or_insert(PresentedPointerMapBuildError::ConflictingAppearanceModes);
-                return;
-            }
             index
         } else {
             let index = self.appearances.len();
@@ -120,14 +115,28 @@ impl PresentedPointerMapBuilder {
             },
             glyph_len,
             bounds,
-        );
+        )
+        .with_modes(mode, mode);
         let spans = &mut self.appearances[index].paint_spans;
+        if let Some(previous) = spans.last()
+            && previous.slot().window_id == span.slot().window_id
+            && previous.slot().row == span.slot().row
+            && u32::from(span.slot().col) < u32::from(previous.slot().col) + previous.len()
+            && u32::from(previous.slot().col) < u32::from(span.slot().col) + span.len()
+            && (previous.hover() != span.hover() || previous.pressed() != span.pressed())
+        {
+            self.error
+                .get_or_insert(PresentedPointerMapBuildError::ConflictingAppearanceModes);
+            return;
+        }
         if let Some(previous) = spans.last_mut()
             && previous.kind() == span.kind()
             && previous.row_role() == span.row_role()
             && previous.slot().window_id == span.slot().window_id
             && previous.slot().row == span.slot().row
             && u32::from(previous.slot().col) + previous.len() == u32::from(span.slot().col)
+            && previous.hover() == span.hover()
+            && previous.pressed() == span.pressed()
             && let Some(combined) = adjacent_rect(previous.clip(), span.clip())
         {
             *previous = PresentedSourcePaintSpan::new_run(

@@ -130,11 +130,15 @@ impl PointerOverrideResolver {
             && let Some(appearance) = frame.presented_pointer().appearance(selection.appearance())
         {
             overrides.resize(frame.glyphs.len(), None);
-            let mode = match selection.phase() {
-                PointerAppearancePhase::Hover => appearance.hover(),
-                PointerAppearancePhase::Pressed => appearance.pressed(),
-            };
             for span in appearance.paint_spans() {
+                let mode = match selection.phase() {
+                    PointerAppearancePhase::Hover => {
+                        span.hover().unwrap_or_else(|| appearance.hover())
+                    }
+                    PointerAppearancePhase::Pressed => {
+                        span.pressed().unwrap_or_else(|| appearance.pressed())
+                    }
+                };
                 let Ok(first) = usize::try_from(span.first()) else {
                     continue;
                 };

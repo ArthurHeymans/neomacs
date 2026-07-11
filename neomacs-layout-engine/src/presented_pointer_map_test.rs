@@ -83,15 +83,49 @@ fn production_builder_rejects_conflicting_modes_for_one_source() {
     builder.observe_glyph_run(
         DisplayWindowId::new(1),
         GlyphRowRole::Text,
-        1,
+        0,
         0,
         1,
-        rect(0.0, 10.0, 10.0, 10.0),
+        rect(0.0, 0.0, 10.0, 10.0),
         appearance(7, 10),
     );
 
     assert_eq!(
         builder.finish(),
         Err(PresentedPointerMapBuildError::ConflictingAppearanceModes)
+    );
+}
+
+#[test]
+fn production_builder_keeps_mixed_face_batches_in_one_logical_appearance() {
+    let mut builder = PresentedPointerMapBuilder::new();
+    for (col, face) in [(0, 9), (1, 10)] {
+        builder.observe_glyph_run(
+            DisplayWindowId::new(1),
+            GlyphRowRole::Text,
+            0,
+            col,
+            1,
+            rect(f32::from(col) * 10.0, 0.0, 10.0, 10.0),
+            appearance(7, face),
+        );
+    }
+
+    let map = builder.finish().unwrap();
+    assert_eq!(map.regions().len(), 1);
+    assert_eq!(map.appearances().len(), 1);
+    let spans = map.appearances()[0].paint_spans();
+    assert_eq!(spans.len(), 2);
+    assert_eq!(
+        spans[0].hover(),
+        Some(neomacs_display_protocol::PointerDrawMode::Face(
+            FaceId::new(9)
+        ))
+    );
+    assert_eq!(
+        spans[1].hover(),
+        Some(neomacs_display_protocol::PointerDrawMode::Face(
+            FaceId::new(10)
+        ))
     );
 }

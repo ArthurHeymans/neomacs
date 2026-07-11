@@ -90,6 +90,10 @@ pub struct PresentedPaintSpan {
     first: u32,
     len: u32,
     clip: FrameRect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hover: Option<PointerDrawMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pressed: Option<PointerDrawMode>,
 }
 
 impl PresentedPaintSpan {
@@ -100,7 +104,16 @@ impl PresentedPaintSpan {
             first,
             len,
             clip,
+            hover: None,
+            pressed: None,
         }
+    }
+
+    #[must_use]
+    pub const fn with_modes(mut self, hover: PointerDrawMode, pressed: PointerDrawMode) -> Self {
+        self.hover = Some(hover);
+        self.pressed = Some(pressed);
+        self
     }
 
     #[must_use]
@@ -127,6 +140,16 @@ impl PresentedPaintSpan {
     pub const fn clip(&self) -> FrameRect {
         self.clip
     }
+
+    #[must_use]
+    pub const fn hover(&self) -> Option<PointerDrawMode> {
+        self.hover
+    }
+
+    #[must_use]
+    pub const fn pressed(&self) -> Option<PointerDrawMode> {
+        self.pressed
+    }
 }
 
 /// Source-addressed primitive paint resolved during canonical materialization.
@@ -138,6 +161,10 @@ pub struct PresentedSourcePaintSpan {
     #[serde(default = "source_span_default_len")]
     len: u32,
     clip: FrameRect,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hover: Option<PointerDrawMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pressed: Option<PointerDrawMode>,
 }
 
 const fn source_span_default_len() -> u32 {
@@ -158,6 +185,8 @@ impl PresentedSourcePaintSpan {
             slot,
             len: 1,
             clip,
+            hover: None,
+            pressed: None,
         }
     }
 
@@ -175,7 +204,16 @@ impl PresentedSourcePaintSpan {
             slot,
             len,
             clip,
+            hover: None,
+            pressed: None,
         }
+    }
+
+    #[must_use]
+    pub const fn with_modes(mut self, hover: PointerDrawMode, pressed: PointerDrawMode) -> Self {
+        self.hover = Some(hover);
+        self.pressed = Some(pressed);
+        self
     }
 
     #[must_use]
@@ -196,6 +234,16 @@ impl PresentedSourcePaintSpan {
     #[must_use]
     pub const fn len(&self) -> u32 {
         self.len
+    }
+
+    #[must_use]
+    pub const fn hover(&self) -> Option<PointerDrawMode> {
+        self.hover
+    }
+
+    #[must_use]
+    pub const fn pressed(&self) -> Option<PointerDrawMode> {
+        self.pressed
     }
 
     #[must_use]
@@ -381,11 +429,47 @@ pub enum PointerDrawMode {
 }
 
 /// Paint behavior shared by one or more independent interaction regions.
-#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct PresentedPointerAppearance {
     paint_spans: Vec<PresentedPaintSpan>,
     hover: PointerDrawMode,
     pressed: PointerDrawMode,
+    #[serde(skip)]
+    damage_bounds: Option<FrameRect>,
+    #[serde(skip)]
+    damage_rows: Vec<PresentedPointerDamageRow>,
+}
+
+impl PartialEq for PresentedPointerAppearance {
+    fn eq(&self, other: &Self) -> bool {
+        self.paint_spans == other.paint_spans
+            && self.hover == other.hover
+            && self.pressed == other.pressed
+    }
+}
+
+/// One matrix row whose cached vertices can be affected by an appearance.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct PresentedPointerDamageRow {
+    window_id: crate::DisplayWindowId,
+    row: u32,
+}
+
+impl PresentedPointerDamageRow {
+    #[must_use]
+    pub const fn new(window_id: crate::DisplayWindowId, row: u32) -> Self {
+        Self { window_id, row }
+    }
+
+    #[must_use]
+    pub const fn window_id(self) -> crate::DisplayWindowId {
+        self.window_id
+    }
+
+    #[must_use]
+    pub const fn row(self) -> u32 {
+        self.row
+    }
 }
 
 /// One appearance before its source slots become canonical primitive indices.
@@ -433,11 +517,15 @@ impl PresentedPointerAppearance {
         hover: PointerDrawMode,
         pressed: PointerDrawMode,
     ) -> Self {
-        Self {
+        let mut appearance = Self {
             paint_spans,
             hover,
             pressed,
-        }
+            damage_bounds: None,
+            damage_rows: Vec::new(),
+        };
+        appearance.rebuild_damage_bounds();
+        appearance
     }
 
     #[must_use]
@@ -453,6 +541,30 @@ impl PresentedPointerAppearance {
     #[must_use]
     pub const fn pressed(&self) -> PointerDrawMode {
         self.pressed
+    }
+
+    #[must_use]
+    pub fn damage_bounds(&self) -> FrameRect {
+        self.damage_bounds
+            .expect("validated pointer appearance has paint bounds")
+    }
+
+    #[must_use]
+    pub fn damage_rows(&self) -> &[PresentedPointerDamageRow] {
+        &self.damage_rows
+    }
+
+    fn rebuild_damage_bounds(&mut self) {
+        self.damage_bounds = self.paint_spans.iter().map(PresentedPaintSpan::clip).reduce(
+            |left, right| {
+                let x = left.x().min(right.x());
+                let y = left.y().min(right.y());
+                let right_edge = (left.x() + left.width()).max(right.x() + right.width());
+                let bottom = (left.y() + left.height()).max(right.y() + right.height());
+                FrameRect::new(x, y, right_edge - x, bottom - y)
+                    .expect("union of validated pointer clips is valid")
+            },
+        );
     }
 }
 
@@ -628,10 +740,16 @@ impl PresentedPointerSourceMap {
                 if !compatible {
                     return Err(PresentedPointerMapError::PrimitiveKindMismatch);
                 }
-                let next = PresentedPaintSpan::new(source_span.kind, first, len, source_span.clip);
+                let mut next =
+                    PresentedPaintSpan::new(source_span.kind, first, len, source_span.clip);
+                if let (Some(hover), Some(pressed)) = (source_span.hover, source_span.pressed) {
+                    next = next.with_modes(hover, pressed);
+                }
                 if let Some(previous) = paint_spans.last_mut()
                     && previous.kind == next.kind
                     && previous.clip == next.clip
+                    && previous.hover == next.hover
+                    && previous.pressed == next.pressed
                     && previous.first + previous.len == next.first
                 {
                     previous.len = previous
@@ -748,6 +866,7 @@ pub enum PresentedPointerMapError {
     DuplicateSourceIdentity,
     UnknownFace(FaceId),
     InvalidImageRelief,
+    IncompleteSpanModes,
 }
 
 impl std::fmt::Display for PresentedPointerMapError {
@@ -800,6 +919,7 @@ impl PresentedPointerMap {
             row_buckets: Vec::new(),
         };
         map.validate_intrinsic()?;
+        map.rebuild_damage_bounds();
         map.rebuild_hit_index();
         Ok(map)
     }
@@ -820,6 +940,15 @@ impl PresentedPointerMap {
             validate_mode(appearance.hover, context.frame_buffer)?;
             validate_mode(appearance.pressed, context.frame_buffer)?;
             for span in &appearance.paint_spans {
+                if span.hover.is_some() != span.pressed.is_some() {
+                    return Err(PresentedPointerMapError::IncompleteSpanModes);
+                }
+                if let Some(hover) = span.hover {
+                    validate_mode(hover, context.frame_buffer)?;
+                }
+                if let Some(pressed) = span.pressed {
+                    validate_mode(pressed, context.frame_buffer)?;
+                }
                 if !rect_is_within_frame(span.clip, frame) {
                     return Err(PresentedPointerMapError::ClipOutsideFrame);
                 }
@@ -854,6 +983,43 @@ impl PresentedPointerMap {
         Ok(())
     }
 
+    pub(crate) fn rebuild_damage_index(&mut self, frame: &FrameGlyphBuffer) {
+        for appearance in &mut self.appearances {
+            appearance.rebuild_damage_bounds();
+            appearance.damage_rows.clear();
+            for span in &appearance.paint_spans {
+                let first = span.first as usize;
+                let end = first + span.len as usize;
+                for primitive in &frame.glyphs[first..end] {
+                    let slot = match primitive {
+                        FrameGlyph::Char { slot_id, .. }
+                        | FrameGlyph::Stretch { slot_id, .. } => Some(*slot_id),
+                        FrameGlyph::Image {
+                            slot_id: Some(slot_id),
+                            ..
+                        } => Some(*slot_id),
+                        _ => None,
+                    };
+                    if let Some(slot) = slot {
+                        let row = PresentedPointerDamageRow::new(slot.window_id, slot.row);
+                        if !appearance.damage_rows.contains(&row) {
+                            appearance.damage_rows.push(row);
+                        }
+                    }
+                }
+            }
+            appearance.damage_rows.sort_unstable_by_key(|row| {
+                (row.window_id().get(), row.row())
+            });
+        }
+    }
+
+    fn rebuild_damage_bounds(&mut self) {
+        for appearance in &mut self.appearances {
+            appearance.rebuild_damage_bounds();
+        }
+    }
+
     fn validate_intrinsic(&self) -> Result<(), PresentedPointerMapError> {
         for region in &self.regions {
             if !rect_has_valid_geometry(region.bounds) {
@@ -875,6 +1041,9 @@ impl PresentedPointerMap {
                 return Err(PresentedPointerMapError::EmptyAppearance);
             }
             for span in &appearance.paint_spans {
+                if span.hover.is_some() != span.pressed.is_some() {
+                    return Err(PresentedPointerMapError::IncompleteSpanModes);
+                }
                 if span.len == 0 {
                     return Err(PresentedPointerMapError::EmptyPaintSpan);
                 }
@@ -1062,6 +1231,7 @@ impl<'de> serde::Deserialize<'de> for PresentedPointerMap {
             row_buckets: Vec::new(),
         };
         map.validate_intrinsic().map_err(serde::de::Error::custom)?;
+        map.rebuild_damage_bounds();
         map.rebuild_hit_index();
         Ok(map)
     }

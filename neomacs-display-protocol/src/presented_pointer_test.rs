@@ -2,9 +2,9 @@ use crate::{
     Color, FaceId, FrameRect, InteractionId, PointerAppearanceId, PointerAppearancePhase,
     PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
     PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
-    PresentedPointerMap, PresentedPointerMapError, PresentedPointerRegion,
-    PresentedPointerSourceAppearance, PresentedPointerSourceMap, PresentedPrimitiveKind,
-    PresentedSourcePaintSpan,
+    PresentedPointerDamageRow, PresentedPointerMap, PresentedPointerMapError,
+    PresentedPointerRegion, PresentedPointerSourceAppearance, PresentedPointerSourceMap,
+    PresentedPrimitiveKind, PresentedSourcePaintSpan,
 };
 
 #[test]
@@ -18,6 +18,73 @@ fn pointer_appearance_selection_carries_only_renderer_safe_identity_and_phase() 
 
 fn rect(x: f32, y: f32, width: f32, height: f32) -> FrameRect {
     FrameRect::new(x, y, width, height).expect("valid test rectangle")
+}
+
+#[test]
+fn installed_appearance_precomputes_union_bounds_and_unique_rows() {
+    let face_id = FaceId::new(7);
+    let window_id = crate::DisplayWindowId::new(9);
+    let mut frame = crate::FrameGlyphBuffer::with_size(200.0, 100.0);
+    frame.faces.insert(face_id, crate::Face::new(face_id));
+    for (row, y) in [(2, 20.0), (2, 20.0), (4, 40.0)] {
+        frame.glyphs.push(crate::FrameGlyph::Char {
+            window_id,
+            row_role: crate::GlyphRowRole::Text,
+            clip_rect: None,
+            slot_id: crate::DisplaySlotId {
+                window_id,
+                row,
+                col: 0,
+            },
+            bidi_level: 0,
+            char: 'x',
+            composed: None,
+            x: 10.0,
+            y,
+            baseline: y + 8.0,
+            width: 8.0,
+            height: 10.0,
+            ascent: 8.0,
+            face_id,
+        });
+    }
+    frame
+        .install_presented_pointer(
+            vec![PresentedPointerRegion::new(
+                rect(10.0, 20.0, 8.0, 30.0),
+                None,
+                Some(PointerAppearanceId::try_from(0usize).unwrap()),
+            )],
+            vec![PresentedPointerAppearance::new(
+                vec![
+                    PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Glyph,
+                        0,
+                        2,
+                        rect(10.0, 20.0, 8.0, 10.0),
+                    ),
+                    PresentedPaintSpan::new(
+                        PresentedPrimitiveKind::Glyph,
+                        2,
+                        1,
+                        rect(10.0, 40.0, 8.0, 10.0),
+                    ),
+                ],
+                PointerDrawMode::Face(face_id),
+                PointerDrawMode::Face(face_id),
+            )],
+        )
+        .unwrap();
+
+    let appearance = &frame.presented_pointer().appearances()[0];
+    assert_eq!(appearance.damage_bounds(), rect(10.0, 20.0, 8.0, 30.0));
+    assert_eq!(
+        appearance.damage_rows(),
+        &[
+            PresentedPointerDamageRow::new(window_id, 2),
+            PresentedPointerDamageRow::new(window_id, 4),
+        ]
+    );
 }
 
 fn image_relief_mode(pressed: bool) -> PointerDrawMode {

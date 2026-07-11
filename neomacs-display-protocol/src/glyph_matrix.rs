@@ -520,37 +520,39 @@ impl GlyphRow {
             0.0
         };
         let mut col = 0u32;
-        for glyph in &self.glyphs[GlyphArea::Text.index()] {
-            if glyph.padding {
-                continue;
-            }
-            let width = glyph_pixel_width(glyph, char_width);
-            let col_width = match &glyph.glyph_type {
-                GlyphType::Stretch { width_cols } => u32::from(*width_cols),
-                _ if glyph.wide => 2,
-                _ => 1,
-            };
-            if let Some(appearance) = glyph.pointer_appearance {
-                if let Some(previous) = self.pointer_runs.last_mut()
-                    && previous.appearance == appearance
-                    && previous.first_col + previous.col_len == col
-                {
-                    previous.col_len = previous.col_len.saturating_add(col_width);
-                    previous.glyph_len = previous.glyph_len.saturating_add(1);
-                    previous.width += width;
-                } else {
-                    self.pointer_runs.push(GlyphPointerRun {
-                        appearance,
-                        first_col: col,
-                        col_len: col_width,
-                        glyph_len: 1,
-                        x,
-                        width,
-                    });
+        for area in &self.glyphs {
+            for glyph in area {
+                if glyph.padding {
+                    continue;
                 }
+                let width = glyph_pixel_width(glyph, char_width);
+                let col_width = match &glyph.glyph_type {
+                    GlyphType::Stretch { width_cols } => u32::from(*width_cols),
+                    _ if glyph.wide => 2,
+                    _ => 1,
+                };
+                if let Some(appearance) = glyph.pointer_appearance {
+                    if let Some(previous) = self.pointer_runs.last_mut()
+                        && previous.appearance == appearance
+                        && previous.first_col + previous.col_len == col
+                    {
+                        previous.col_len = previous.col_len.saturating_add(col_width);
+                        previous.glyph_len = previous.glyph_len.saturating_add(1);
+                        previous.width += width;
+                    } else {
+                        self.pointer_runs.push(GlyphPointerRun {
+                            appearance,
+                            first_col: col,
+                            col_len: col_width,
+                            glyph_len: 1,
+                            x,
+                            width,
+                        });
+                    }
+                }
+                x += width;
+                col = col.saturating_add(col_width);
             }
-            x += width;
-            col = col.saturating_add(col_width);
         }
     }
 
