@@ -1547,13 +1547,12 @@ pub(crate) fn tab_bar_image_relief_styles(
             else {
                 return None;
             };
-            let face = glyph_at_visual_column(rendered.row(), medium.col)
-                .and_then(|glyph| {
-                    rendered
-                        .faces()
-                        .iter()
-                        .find(|face| face.id == glyph.face_id)
-                });
+            let face = glyph_at_visual_column(rendered.row(), medium.col).and_then(|glyph| {
+                rendered
+                    .faces()
+                    .iter()
+                    .find(|face| face.id == glyph.face_id)
+            });
             let background = gnu_image_relief_background(
                 face.and_then(|face| face.box_color),
                 opaque_background,

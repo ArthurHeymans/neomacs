@@ -555,16 +555,18 @@ impl PresentedPointerAppearance {
     }
 
     fn rebuild_damage_bounds(&mut self) {
-        self.damage_bounds = self.paint_spans.iter().map(PresentedPaintSpan::clip).reduce(
-            |left, right| {
+        self.damage_bounds = self
+            .paint_spans
+            .iter()
+            .map(PresentedPaintSpan::clip)
+            .reduce(|left, right| {
                 let x = left.x().min(right.x());
                 let y = left.y().min(right.y());
                 let right_edge = (left.x() + left.width()).max(right.x() + right.width());
                 let bottom = (left.y() + left.height()).max(right.y() + right.height());
                 FrameRect::new(x, y, right_edge - x, bottom - y)
                     .expect("union of validated pointer clips is valid")
-            },
-        );
+            });
     }
 }
 
@@ -992,8 +994,9 @@ impl PresentedPointerMap {
                 let end = first + span.len as usize;
                 for primitive in &frame.glyphs[first..end] {
                     let slot = match primitive {
-                        FrameGlyph::Char { slot_id, .. }
-                        | FrameGlyph::Stretch { slot_id, .. } => Some(*slot_id),
+                        FrameGlyph::Char { slot_id, .. } | FrameGlyph::Stretch { slot_id, .. } => {
+                            Some(*slot_id)
+                        }
                         FrameGlyph::Image {
                             slot_id: Some(slot_id),
                             ..
@@ -1008,9 +1011,9 @@ impl PresentedPointerMap {
                     }
                 }
             }
-            appearance.damage_rows.sort_unstable_by_key(|row| {
-                (row.window_id().get(), row.row())
-            });
+            appearance
+                .damage_rows
+                .sort_unstable_by_key(|row| (row.window_id().get(), row.row()));
         }
     }
 
