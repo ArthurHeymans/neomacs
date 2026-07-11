@@ -142,7 +142,7 @@ impl PresentedPointerAppearance {
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PresentedPointerRegion {
     bounds: FrameRect,
-    interaction: InteractionId,
+    interaction: Option<InteractionId>,
     appearance: Option<PointerAppearanceId>,
 }
 
@@ -150,7 +150,7 @@ impl PresentedPointerRegion {
     #[must_use]
     pub const fn new(
         bounds: FrameRect,
-        interaction: InteractionId,
+        interaction: Option<InteractionId>,
         appearance: Option<PointerAppearanceId>,
     ) -> Self {
         Self {
@@ -166,7 +166,7 @@ impl PresentedPointerRegion {
     }
 
     #[must_use]
-    pub const fn interaction(&self) -> InteractionId {
+    pub const fn interaction(&self) -> Option<InteractionId> {
         self.interaction
     }
 
@@ -200,6 +200,8 @@ impl<'a> PointerMapValidationContext<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PresentedPointerMapError {
     UnknownAppearance(PointerAppearanceId),
+    MissingRegionBehavior,
+    TooManyAppearances,
     EmptyAppearance,
     EmptyPaintSpan,
     PaintSpanOutOfRange,
@@ -320,6 +322,9 @@ impl PresentedPointerMap {
         for region in &self.regions {
             if !rect_has_valid_geometry(region.bounds) {
                 return Err(PresentedPointerMapError::InvalidRegionGeometry);
+            }
+            if region.interaction.is_none() && region.appearance.is_none() {
+                return Err(PresentedPointerMapError::MissingRegionBehavior);
             }
             if let Some(appearance) = region.appearance
                 && usize::try_from(appearance.get())

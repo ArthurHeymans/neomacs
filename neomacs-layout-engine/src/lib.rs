@@ -110,6 +110,7 @@ pub mod incremental_layout;
 pub mod mock_frame;
 pub mod neovm_bridge;
 pub mod pixel_scroll;
+pub(crate) mod presented_pointer_map;
 pub mod text_shaper;
 pub mod tty_menu_bar;
 pub mod types;

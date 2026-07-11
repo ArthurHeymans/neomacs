@@ -58,12 +58,12 @@ fn presented_pointer_regions_keep_click_meaning_separate_from_shared_appearance(
         vec![
             PresentedPointerRegion::new(
                 rect(0.0, 0.0, 50.0, 20.0),
-                InteractionId::new(10),
+                Some(InteractionId::new(10)),
                 Some(appearance_id),
             ),
             PresentedPointerRegion::new(
                 rect(50.0, 0.0, 10.0, 20.0),
-                InteractionId::new(11),
+                Some(InteractionId::new(11)),
                 Some(appearance_id),
             ),
         ],
@@ -74,8 +74,8 @@ fn presented_pointer_regions_keep_click_meaning_separate_from_shared_appearance(
     let body = map.hit_test(25.0, 10.0).expect("tab body hit");
     let close = map.hit_test(55.0, 10.0).expect("tab close hit");
 
-    assert_eq!(body.interaction(), InteractionId::new(10));
-    assert_eq!(close.interaction(), InteractionId::new(11));
+    assert_eq!(body.interaction(), Some(InteractionId::new(10)));
+    assert_eq!(close.interaction(), Some(InteractionId::new(11)));
     assert_eq!(body.appearance(), close.appearance());
     assert_eq!(
         map.appearance(body.appearance().expect("body appearance")),
@@ -89,7 +89,7 @@ fn presented_pointer_region_can_publish_click_meaning_without_an_appearance() {
         &[],
         vec![PresentedPointerRegion::new(
             rect(0.0, 0.0, 10.0, 10.0),
-            InteractionId::new(12),
+            Some(InteractionId::new(12)),
             None,
         )],
         vec![],
@@ -101,9 +101,49 @@ fn presented_pointer_region_can_publish_click_meaning_without_an_appearance() {
         serde_json::from_str(&json).expect("deserialize click-only map");
     let hit = decoded.hit_test(5.0, 5.0).expect("click-only region hit");
 
-    assert_eq!(hit.interaction(), InteractionId::new(12));
+    assert_eq!(hit.interaction(), Some(InteractionId::new(12)));
     assert_eq!(hit.appearance(), None);
     assert!(decoded.appearances().is_empty());
+}
+
+#[test]
+fn presented_pointer_region_can_publish_visual_appearance_without_click_meaning() {
+    let face_id = FaceId::new(7);
+    let appearance_id = PointerAppearanceId::try_from(0usize).expect("representable id");
+    let map = try_map(
+        &[face_id],
+        vec![PresentedPointerRegion::new(
+            rect(0.0, 0.0, 10.0, 10.0),
+            None,
+            Some(appearance_id),
+        )],
+        vec![appearance(face_id)],
+    )
+    .expect("visual-only region is valid");
+
+    let json = serde_json::to_string(&map).expect("serialize visual-only map");
+    let decoded: PresentedPointerMap =
+        serde_json::from_str(&json).expect("deserialize visual-only map");
+    let hit = decoded.hit_test(5.0, 5.0).expect("visual-only region hit");
+
+    assert_eq!(hit.interaction(), None);
+    assert_eq!(hit.appearance(), Some(appearance_id));
+}
+
+#[test]
+fn presented_pointer_region_rejects_neither_click_nor_visual_meaning() {
+    let error = try_map(
+        &[],
+        vec![PresentedPointerRegion::new(
+            rect(0.0, 0.0, 10.0, 10.0),
+            None,
+            None,
+        )],
+        vec![],
+    )
+    .expect_err("a region with no pointer behavior is invalid");
+
+    assert_eq!(error, PresentedPointerMapError::MissingRegionBehavior);
 }
 
 #[test]
@@ -112,7 +152,7 @@ fn presented_pointer_map_rejects_unknown_appearance_references() {
         &[],
         vec![PresentedPointerRegion::new(
             rect(0.0, 0.0, 10.0, 10.0),
-            InteractionId::new(1),
+            Some(InteractionId::new(1)),
             Some(PointerAppearanceId::try_from(3usize).expect("representable id")),
         )],
         vec![],
@@ -180,7 +220,7 @@ fn presented_pointer_map_rejects_regions_and_clips_outside_the_frame() {
     let face_id = FaceId::new(7);
     let outside_region = PresentedPointerRegion::new(
         rect(90.0, 0.0, 11.0, 10.0),
-        InteractionId::new(1),
+        Some(InteractionId::new(1)),
         Some(PointerAppearanceId::try_from(0usize).unwrap()),
     );
     assert_eq!(
@@ -229,7 +269,7 @@ fn presented_pointer_protocol_values_round_trip_through_serde() {
         &[face_id],
         vec![PresentedPointerRegion::new(
             rect(0.0, 0.0, 10.0, 10.0),
-            InteractionId::new(1),
+            Some(InteractionId::new(1)),
             Some(PointerAppearanceId::try_from(0usize).unwrap()),
         )],
         vec![value],
@@ -243,6 +283,16 @@ fn presented_pointer_protocol_values_round_trip_through_serde() {
 
 #[test]
 fn presented_pointer_map_deserialization_rejects_intrinsically_invalid_data() {
+    let missing_region_behavior = r#"{
+        "regions":[{
+            "bounds":{"x":0.0,"y":0.0,"width":10.0,"height":10.0},
+            "interaction":null,
+            "appearance":null
+        }],
+        "appearances":[]
+    }"#;
+    assert!(serde_json::from_str::<PresentedPointerMap>(missing_region_behavior).is_err());
+
     let unknown_appearance = r#"{
         "regions":[{
             "bounds":{"x":0.0,"y":0.0,"width":10.0,"height":10.0},
@@ -310,12 +360,12 @@ fn presented_pointer_hit_testing_is_half_open_and_stable_for_overlaps() {
     let appearance_id = PointerAppearanceId::try_from(0usize).unwrap();
     let first = PresentedPointerRegion::new(
         rect(10.0, 10.0, 20.0, 10.0),
-        InteractionId::new(1),
+        Some(InteractionId::new(1)),
         Some(appearance_id),
     );
     let overlapping = PresentedPointerRegion::new(
         rect(15.0, 10.0, 20.0, 10.0),
-        InteractionId::new(2),
+        Some(InteractionId::new(2)),
         Some(appearance_id),
     );
     let map = try_map(
@@ -328,7 +378,7 @@ fn presented_pointer_hit_testing_is_half_open_and_stable_for_overlaps() {
     assert_eq!(
         map.hit_test(15.0, 10.0)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(1))
+        Some(Some(InteractionId::new(1)))
     );
     assert!(map.hit_test(9.99, 10.0).is_none());
     assert!(map.hit_test(10.0, 20.0).is_none());
@@ -339,21 +389,21 @@ fn presented_pointer_hit_testing_is_half_open_and_stable_for_overlaps() {
 fn presented_pointer_hit_testing_examines_only_the_selected_y_band() {
     let mut regions = vec![PresentedPointerRegion::new(
         rect(50.0, 20.0, 20.0, 1.0),
-        InteractionId::new(1),
+        Some(InteractionId::new(1)),
         None,
     )];
     for row in 0..50 {
         if row != 20 {
             regions.push(PresentedPointerRegion::new(
                 rect(0.0, row as f32, 10.0, 1.0),
-                InteractionId::new(100 + row),
+                Some(InteractionId::new(100 + row)),
                 None,
             ));
         }
     }
     regions.push(PresentedPointerRegion::new(
         rect(40.0, 20.0, 40.0, 1.0),
-        InteractionId::new(2),
+        Some(InteractionId::new(2)),
         None,
     ));
     let map = try_map(&[], regions, vec![]).unwrap();
@@ -362,7 +412,7 @@ fn presented_pointer_hit_testing_examines_only_the_selected_y_band() {
     assert_eq!(
         map.hit_test(55.0, 20.5)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(1))
+        Some(Some(InteractionId::new(1)))
     );
 }
 
@@ -370,13 +420,13 @@ fn presented_pointer_hit_testing_examines_only_the_selected_y_band() {
 fn presented_pointer_hit_index_stores_each_staggered_region_once() {
     let mut regions = vec![PresentedPointerRegion::new(
         rect(50.0, 0.0, 30.0, 40.0),
-        InteractionId::new(1),
+        Some(InteractionId::new(1)),
         None,
     )];
     for index in 1..100 {
         regions.push(PresentedPointerRegion::new(
             rect(40.0, index as f32 * 0.4, 50.0, 10.0),
-            InteractionId::new(100 + index),
+            Some(InteractionId::new(100 + index)),
             None,
         ));
     }
@@ -386,7 +436,7 @@ fn presented_pointer_hit_index_stores_each_staggered_region_once() {
     assert_eq!(
         map.hit_test(55.0, 20.0)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(1))
+        Some(Some(InteractionId::new(1)))
     );
 
     let wire = serde_json::to_string(&map).unwrap();
@@ -396,7 +446,7 @@ fn presented_pointer_hit_index_stores_each_staggered_region_once() {
         decoded
             .hit_test(55.0, 20.0)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(1))
+        Some(Some(InteractionId::new(1)))
     );
 }
 
@@ -511,7 +561,7 @@ fn frame_glyph_buffer_contextually_validates_deserialized_pointer_maps_before_in
         &[face_id],
         vec![PresentedPointerRegion::new(
             rect(0.0, 0.0, 10.0, 10.0),
-            InteractionId::new(77),
+            Some(InteractionId::new(77)),
             Some(appearance_id),
         )],
         vec![PresentedPointerAppearance::new(
@@ -533,7 +583,7 @@ fn frame_glyph_buffer_contextually_validates_deserialized_pointer_maps_before_in
         .install_presented_pointer(
             vec![PresentedPointerRegion::new(
                 rect(20.0, 0.0, 10.0, 10.0),
-                InteractionId::new(55),
+                Some(InteractionId::new(55)),
                 None,
             )],
             vec![],
@@ -550,7 +600,7 @@ fn frame_glyph_buffer_contextually_validates_deserialized_pointer_maps_before_in
             .presented_pointer()
             .hit_test(25.0, 5.0)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(55))
+        Some(Some(InteractionId::new(55)))
     );
 
     let mut matching = crate::FrameGlyphBuffer::with_size(100.0, 50.0);
@@ -565,7 +615,7 @@ fn frame_glyph_buffer_contextually_validates_deserialized_pointer_maps_before_in
             .presented_pointer()
             .hit_test(5.0, 5.0)
             .map(PresentedPointerRegion::interaction),
-        Some(InteractionId::new(77))
+        Some(Some(InteractionId::new(77)))
     );
 }
 
