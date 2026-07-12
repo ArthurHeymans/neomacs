@@ -15141,6 +15141,38 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
     );
 }
 
+#[test]
+fn cursor_only_reused_mouse_face_is_registered_in_frame_faces() {
+    let text = "click me\n".repeat(40);
+    let (mut eval, frame_id, _buf, _win) = incr_editing_frame(&text, 800, 600);
+    eval.eval_str("(put-text-property 1 6 'mouse-face 'highlight)")
+        .expect("put mouse-face property");
+    let mut engine = LayoutEngine::new();
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("warm display state")
+        .materialize();
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "expected the cursor-only fast path to retain the body"
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("reused display state");
+    assert!(
+        !state.presented_pointer_source.appearances().is_empty(),
+        "expected the retained mouse-face to publish a pointer appearance"
+    );
+    state.materialize();
+}
+
 /// REGRESSION (face-id collision audit, 2026-06-27): the incremental fast paths
 /// install retained body rows VERBATIM carrying prior-frame face_ids, but the
 /// frame faces table is rebuilt from scratch each frame. For a MULTI-FACE

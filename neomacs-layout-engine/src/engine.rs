@@ -1118,14 +1118,12 @@ impl LayoutEngine {
                     let wid = entry.window_id;
                     let mut faces = std::collections::HashMap::new();
                     for row in &entry.matrix.rows {
-                        for area in &row.glyphs {
-                            for g in area {
-                                if let std::collections::hash_map::Entry::Vacant(slot) =
-                                    faces.entry(g.face_id)
-                                    && let Some(face) = frame_state.faces.get(&g.face_id)
-                                {
-                                    slot.insert(face.clone());
-                                }
+                        for face_id in row.referenced_face_ids() {
+                            if let std::collections::hash_map::Entry::Vacant(slot) =
+                                faces.entry(face_id)
+                                && let Some(face) = frame_state.faces.get(&face_id)
+                            {
+                                slot.insert(face.clone());
                             }
                         }
                     }

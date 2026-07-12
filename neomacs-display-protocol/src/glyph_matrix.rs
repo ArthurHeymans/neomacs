@@ -503,6 +503,22 @@ impl GlyphRow {
         &self.pointer_appearances
     }
 
+    /// Every face definition required to replay this row faithfully.
+    ///
+    /// Pointer appearances are render dependencies even when none of the row's
+    /// glyphs use their hover/pressed face as their normal paint face.
+    pub fn referenced_face_ids(&self) -> impl Iterator<Item = FaceId> + '_ {
+        self.glyphs
+            .iter()
+            .flatten()
+            .map(|glyph| glyph.face_id)
+            .chain(
+                self.pointer_appearances
+                    .iter()
+                    .map(|appearance| appearance.face_id),
+            )
+    }
+
     pub fn pointer_runs(&self) -> &[GlyphPointerRun] {
         &self.pointer_runs
     }
