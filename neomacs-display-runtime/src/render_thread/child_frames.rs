@@ -135,26 +135,7 @@ impl ChildFrameManager {
     /// Remove a child frame by ID.
     pub fn remove_frame(&mut self, frame_id: u64) -> bool {
         if self.frames.contains_key(&frame_id) {
-            let mut removed = std::collections::HashSet::from([frame_id]);
-            loop {
-                let descendants = self
-                    .frames
-                    .iter()
-                    .filter_map(|(&id, entry)| {
-                        (!removed.contains(&id)
-                            && entry
-                                .frame
-                                .frame_placement
-                                .parent()
-                                .is_some_and(|parent| removed.contains(&parent.get())))
-                        .then_some(id)
-                    })
-                    .collect::<Vec<_>>();
-                if descendants.is_empty() {
-                    break;
-                }
-                removed.extend(descendants);
-            }
+            let removed = self.subtree_frame_ids(frame_id);
             self.frames.retain(|id, _| !removed.contains(id));
             self.rebuild_presented_scene();
             tracing::info!(
@@ -169,6 +150,39 @@ impl ChildFrameManager {
             );
             false
         }
+    }
+
+    pub fn subtree_frame_ids(&self, frame_id: u64) -> std::collections::HashSet<u64> {
+        let mut subtree = std::collections::HashSet::from([frame_id]);
+        loop {
+            let before = subtree.len();
+            for (&id, entry) in &self.frames {
+                if entry
+                    .frame
+                    .frame_placement
+                    .parent()
+                    .is_some_and(|parent| subtree.contains(&parent.get()))
+                {
+                    subtree.insert(id);
+                }
+            }
+            if subtree.len() == before {
+                return subtree;
+            }
+        }
+    }
+
+    pub fn subtree_presentations(&self, frame_id: u64) -> Vec<u64> {
+        let mut presentations = self
+            .subtree_frame_ids(frame_id)
+            .into_iter()
+            .filter_map(|id| self.frames.get(&id))
+            .map(|entry| entry.frame.presentation_id.get())
+            .filter(|presentation| *presentation != 0)
+            .collect::<Vec<_>>();
+        presentations.sort_unstable();
+        presentations.dedup();
+        presentations
     }
 
     /// Remove child frames not updated in the last `max_age` poll cycles.

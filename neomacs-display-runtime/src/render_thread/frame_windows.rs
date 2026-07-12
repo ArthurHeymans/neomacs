@@ -1160,12 +1160,12 @@ impl GuiFrameRenderState {
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
         let before = self.active_pointer_damage();
-        let removed_presentation = self
-            .compositor
-            .child_frames
-            .frames
-            .get(&frame_id)
-            .map(|entry| entry.frame.presentation_id);
+        let removed_ids = self.compositor.child_frames.subtree_frame_ids(frame_id);
+        let removed_presentations = removed_ids
+            .iter()
+            .filter_map(|id| self.compositor.child_frames.frames.get(id))
+            .map(|entry| entry.frame.presentation_id)
+            .collect::<Vec<_>>();
         self.compositor.hidden_child_frames.insert(frame_id);
         let removed = self.compositor.child_frames.remove_frame(frame_id);
         if removed {
@@ -1180,7 +1180,7 @@ impl GuiFrameRenderState {
         );
         if removed {
             self.compositor.dirty = true;
-            if let Some(presentation) = removed_presentation {
+            for presentation in removed_presentations {
                 if self.pointer_appearance.retire(presentation) {
                     self.record_pointer_paint_transition(before);
                 }
@@ -1189,7 +1189,7 @@ impl GuiFrameRenderState {
         if self
             .cursor
             .target_cloned()
-            .is_some_and(|target| target.frame_id == frame_id)
+            .is_some_and(|target| removed_ids.contains(&target.frame_id))
         {
             self.cursor.clear_target();
             self.overlays.ime_preedit_active = false;
@@ -1222,6 +1222,7 @@ impl GuiFrameRenderState {
         presentations
     }
 
+    #[allow(dead_code)] // direct single-child lookup remains covered by frame_windows tests
     pub(super) fn child_presentation(&self, frame_id: u64) -> Option<u64> {
         self.compositor
             .child_frames
@@ -1229,6 +1230,10 @@ impl GuiFrameRenderState {
             .get(&frame_id)
             .map(|entry| entry.frame.presentation_id.get())
             .filter(|presentation| *presentation != 0)
+    }
+
+    pub(super) fn child_subtree_presentations(&self, frame_id: u64) -> Vec<u64> {
+        self.compositor.child_frames.subtree_presentations(frame_id)
     }
 
     pub(super) fn show_child_frame(&mut self, frame_id: u64) -> bool {
@@ -2098,6 +2103,23 @@ impl GuiFrameWindowManager {
             })
         }?;
         self.windows.get_mut(&owner)
+    }
+
+    pub(super) fn has_presented_frame(&self, frame_id: u64) -> bool {
+        self.windows.values().any(|window| {
+            window
+                .render
+                .compositor
+                .current_frame
+                .as_ref()
+                .is_some_and(|frame| frame.frame_placement.frame().get() == frame_id)
+                || window
+                    .render
+                    .compositor
+                    .child_frames
+                    .frames
+                    .contains_key(&frame_id)
+        })
     }
 
     /// Get a window state by winit WindowId.

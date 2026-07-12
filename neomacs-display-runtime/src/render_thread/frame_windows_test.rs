@@ -368,6 +368,7 @@ fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
         return;
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
     let mut child = make_frame(0x99, 0x42);
     set_parent_offset(&mut child, 10.0, 20.0);
     render.compositor.child_frames.update_frame(child);
@@ -386,7 +387,7 @@ fn displayed_presentations_include_root_and_children_for_atomic_retirement() {
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut root = make_frame(0x42, 0);
     root.presentation_id = neomacs_display_protocol::frame_chrome::PresentationId::new(7);
-    render.compositor.current_frame = Some(root);
+    render.set_current_frame(Some(root), None);
     let mut child = make_frame(0x99, 0x42);
     child.presentation_id = neomacs_display_protocol::frame_chrome::PresentationId::new(8);
     render.compositor.child_frames.update_frame(child);
@@ -576,6 +577,7 @@ fn frame_render_state_remove_child_frame_ignores_late_stale_update() {
         return;
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
     let mut child = make_frame(0x99, 0x42);
     set_parent_offset(&mut child, 10.0, 20.0);
 
@@ -599,6 +601,7 @@ fn frame_render_state_show_child_frame_allows_fresh_update_after_removal() {
         return;
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
     let mut child = make_frame(0x99, 0x42);
     set_parent_offset(&mut child, 10.0, 20.0);
 
@@ -619,6 +622,7 @@ fn frame_render_state_ignores_identical_child_frame_update() {
         return;
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
     let mut child = make_frame(0x99, 0x42);
     set_parent_offset(&mut child, 10.0, 20.0);
 

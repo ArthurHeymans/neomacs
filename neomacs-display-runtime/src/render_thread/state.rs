@@ -669,6 +669,10 @@ pub(super) struct RenderApp {
     pub(super) shared_terminals: crate::terminal::SharedTerminals,
 
     pub(super) frame_windows: GuiFrameWindowManager,
+    /// Latest child snapshots whose immediate ancestry has not been presented
+    /// yet. They are retried transactionally when an ancestor arrives.
+    pub(super) pending_child_frames:
+        HashMap<u64, neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
 
     pub(super) child_frame_style: ChildFrameStyle,
     pub(super) toolbar: ToolbarResources,
@@ -761,6 +765,7 @@ impl RenderApp {
             #[cfg(feature = "neo-term")]
             shared_terminals,
             frame_windows,
+            pending_child_frames: HashMap::new(),
             child_frame_style: ChildFrameStyle::default(),
             toolbar: ToolbarResources::default(),
             scroll_indicators_enabled: false,

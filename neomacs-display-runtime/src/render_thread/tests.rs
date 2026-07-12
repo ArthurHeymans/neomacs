@@ -733,6 +733,7 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
     app.frame_windows.adopt_primary_frame_id(0x42);
 
     let mut root = FrameGlyphBuffer::with_size(800.0, 600.0);
+    root.presentation_id = neomacs_display_protocol::PresentationId::new(40);
     root.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(0x42),
         neomacs_display_protocol::DisplayFrameId::new(0),
@@ -746,6 +747,7 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         1.0,
     );
     let mut parent = FrameGlyphBuffer::with_size(300.0, 200.0);
+    parent.presentation_id = neomacs_display_protocol::PresentationId::new(41);
     parent.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(0x50),
         neomacs_display_protocol::DisplayFrameId::new(0x42),
@@ -759,6 +761,7 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         1.0,
     );
     let mut nested = FrameGlyphBuffer::with_size(120.0, 80.0);
+    nested.presentation_id = neomacs_display_protocol::PresentationId::new(42);
     nested.set_frame_identity(
         neomacs_display_protocol::DisplayFrameId::new(0x51),
         neomacs_display_protocol::DisplayFrameId::new(0x50),
@@ -771,24 +774,108 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         false,
         1.0,
     );
-    for frame in [root, parent, nested] {
-        emacs
-            .frame_tx
-            .send(FrameDisplayState::from_frame_glyph_buffer(&frame))
-            .unwrap();
-    }
+    emacs
+        .frame_tx
+        .send(FrameDisplayState::from_frame_glyph_buffer(&nested))
+        .unwrap();
+    app.poll_frame();
+    assert_eq!(app.pending_child_frames.len(), 1);
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .unwrap()
+            .render
+            .compositor
+            .child_frames
+            .frames
+            .is_empty()
+    );
+    assert!(emacs.input_rx.is_empty());
 
+    emacs
+        .frame_tx
+        .send(FrameDisplayState::from_frame_glyph_buffer(&parent))
+        .unwrap();
+    app.poll_frame();
+    assert_eq!(app.pending_child_frames.len(), 2);
+    assert!(emacs.input_rx.is_empty());
+
+    emacs
+        .frame_tx
+        .send(FrameDisplayState::from_frame_glyph_buffer(&root))
+        .unwrap();
     app.poll_frame();
 
-    let nested = app
-        .frame_windows
-        .primary_window()
-        .unwrap()
-        .render
-        .compositor
-        .child_frames
-        .frames
-        .get(&0x51)
-        .expect("nested child routed to root window");
-    assert_eq!((nested.abs_x, nested.abs_y), (115.0, 92.0));
+    {
+        let window = app.frame_windows.primary_window().unwrap();
+        let nested = window
+            .render
+            .compositor
+            .child_frames
+            .frames
+            .get(&0x51)
+            .expect("nested child routed to root window");
+        assert_eq!((nested.abs_x, nested.abs_y), (115.0, 92.0));
+        assert_eq!(window.render.compositor.child_frames.frames.len(), 2);
+    }
+    assert!(app.pending_child_frames.is_empty());
+    assert!(emacs.input_rx.is_empty());
+
+    let mut cyclic_parent = FrameGlyphBuffer::with_size(300.0, 200.0);
+    cyclic_parent.presentation_id = neomacs_display_protocol::PresentationId::new(43);
+    cyclic_parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(0x50),
+        neomacs_display_protocol::DisplayFrameId::new(0x51),
+        100.0,
+        80.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    emacs
+        .frame_tx
+        .send(FrameDisplayState::from_frame_glyph_buffer(&cyclic_parent))
+        .unwrap();
+    app.poll_frame();
+    assert_eq!(
+        app.frame_windows
+            .primary_window()
+            .unwrap()
+            .render
+            .compositor
+            .child_frames
+            .frames[&0x50]
+            .frame
+            .presentation_id
+            .get(),
+        41,
+        "invalid cycle must preserve the previously coherent scene"
+    );
+
+    app.handle_window(WindowCommand::RemoveChildFrame { frame_id: 0x50 });
+    let mut retired = emacs
+        .input_rx
+        .try_iter()
+        .filter_map(|event| match event {
+            crate::thread_comm::InputEvent::PresentationRetired { presentation } => {
+                Some(presentation)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    retired.sort_unstable();
+    assert_eq!(retired, vec![41, 42]);
+    assert!(
+        app.frame_windows
+            .primary_window()
+            .unwrap()
+            .render
+            .compositor
+            .child_frames
+            .frames
+            .is_empty()
+    );
 }

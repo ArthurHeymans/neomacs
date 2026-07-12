@@ -245,155 +245,177 @@ impl RenderApp {
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
         self.frame_windows.tick_top_level_child_frames();
-        while let Ok(display_state) = self.comms.frame_rx.try_recv() {
-            super::frame_stats::note_scene_commit(std::time::Instant::now());
-            let frame_id = display_state.frame_placement.frame();
-            let parent_id = display_state
-                .frame_placement
-                .parent()
-                .unwrap_or(neomacs_display_protocol::DisplayFrameId::new(0));
-            self.sync_frame_chrome_assets(&display_state.frame_chrome);
-
-            // Materialize FrameDisplayState → FrameGlyphBuffer for the
-            // existing rendering code.  The layout engine populates
-            // the grid and non-grid items; materialize() converts the
-            // grid into pixel-positioned glyphs and appends non-grid items.
-            let frame = display_state.materialize();
-            // Row-damage summary for the renderer's vertex reuse. Built from
-            // exactly this display_state (the one `frame` was materialized
-            // from) so damage and glyphs can never describe different frames.
-            let row_damage =
-                neomacs_renderer_wgpu::FrameRowDamage::from_display_state(&display_state);
-
-            // ── Observation point: inspect what will be rendered ──
-            // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.
-            if std::env::var("NEOMACS_DUMP_FRAME_GLYPHS").as_deref() == Ok("1") {
-                let mut char_count = 0usize;
-                let mut bg_count = 0usize;
-                let mut border_count = 0usize;
-                let mut scrollbar_count = 0usize;
-                let mut image_count = 0usize;
-                let mut stretch_count = 0usize;
-                let mut video_count = 0usize;
-                let mut webkit_count = 0usize;
-                let mut other_count = 0usize;
-                for g in &frame.glyphs {
-                    match g {
-                        crate::core::frame_glyphs::FrameGlyph::Char { .. } => char_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Background { .. } => bg_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Border { .. } => border_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::ScrollBar { .. } => {
-                            scrollbar_count += 1
-                        }
-                        crate::core::frame_glyphs::FrameGlyph::Image { .. } => image_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Stretch { .. } => stretch_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Video { .. } => video_count += 1,
-                        crate::core::frame_glyphs::FrameGlyph::Xwidget { .. } => webkit_count += 1,
-                        _ => other_count += 1,
-                    }
-                }
-                // Role-aware breakdown: reconstruct chrome-row text + Y so we
-                // can tell whether tab-line/header-line glyphs are emitted at
-                // all (and where) vs. silently dropped.
+        let mut queued = std::collections::VecDeque::new();
+        queued.extend(std::mem::take(&mut self.pending_child_frames).into_values());
+        queued.extend(self.comms.frame_rx.try_iter());
+        loop {
+            let mut deferred = std::collections::HashMap::new();
+            let mut made_progress = false;
+            while let Some(display_state) = queued.pop_front() {
+                super::frame_stats::note_scene_commit(std::time::Instant::now());
+                let frame_id = display_state.frame_placement.frame();
+                let parent_id = display_state
+                    .frame_placement
+                    .parent()
+                    .unwrap_or(neomacs_display_protocol::DisplayFrameId::new(0));
+                if parent_id != DisplayFrameId::new(0)
+                    && !self.frame_windows.has_presented_frame(parent_id.get())
                 {
-                    use crate::core::frame_glyphs::FrameGlyph;
-                    let mut per_role: std::collections::HashMap<String, (usize, f32, String)> =
-                        std::collections::HashMap::new();
+                    deferred.insert(frame_id.get(), display_state);
+                    continue;
+                }
+                made_progress = true;
+                self.sync_frame_chrome_assets(&display_state.frame_chrome);
+
+                // Materialize FrameDisplayState → FrameGlyphBuffer for the
+                // existing rendering code.  The layout engine populates
+                // the grid and non-grid items; materialize() converts the
+                // grid into pixel-positioned glyphs and appends non-grid items.
+                let frame = display_state.materialize();
+                // Row-damage summary for the renderer's vertex reuse. Built from
+                // exactly this display_state (the one `frame` was materialized
+                // from) so damage and glyphs can never describe different frames.
+                let row_damage =
+                    neomacs_renderer_wgpu::FrameRowDamage::from_display_state(&display_state);
+
+                // ── Observation point: inspect what will be rendered ──
+                // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.
+                if std::env::var("NEOMACS_DUMP_FRAME_GLYPHS").as_deref() == Ok("1") {
+                    let mut char_count = 0usize;
+                    let mut bg_count = 0usize;
+                    let mut border_count = 0usize;
+                    let mut scrollbar_count = 0usize;
+                    let mut image_count = 0usize;
+                    let mut stretch_count = 0usize;
+                    let mut video_count = 0usize;
+                    let mut webkit_count = 0usize;
+                    let mut other_count = 0usize;
                     for g in &frame.glyphs {
-                        if let FrameGlyph::Char {
-                            row_role,
-                            char: ch,
-                            y,
-                            window_id,
-                            ..
-                        } = g
-                        {
-                            let key = format!("{:?}/win{}", row_role, window_id);
-                            let e = per_role.entry(key).or_insert((0, *y, String::new()));
-                            e.0 += 1;
-                            e.1 = *y;
-                            if e.2.len() < 60 {
-                                e.2.push(*ch);
+                        match g {
+                            crate::core::frame_glyphs::FrameGlyph::Char { .. } => char_count += 1,
+                            crate::core::frame_glyphs::FrameGlyph::Background { .. } => {
+                                bg_count += 1
+                            }
+                            crate::core::frame_glyphs::FrameGlyph::Border { .. } => {
+                                border_count += 1
+                            }
+                            crate::core::frame_glyphs::FrameGlyph::ScrollBar { .. } => {
+                                scrollbar_count += 1
+                            }
+                            crate::core::frame_glyphs::FrameGlyph::Image { .. } => image_count += 1,
+                            crate::core::frame_glyphs::FrameGlyph::Stretch { .. } => {
+                                stretch_count += 1
+                            }
+                            crate::core::frame_glyphs::FrameGlyph::Video { .. } => video_count += 1,
+                            crate::core::frame_glyphs::FrameGlyph::Xwidget { .. } => {
+                                webkit_count += 1
+                            }
+                            _ => other_count += 1,
+                        }
+                    }
+                    // Role-aware breakdown: reconstruct chrome-row text + Y so we
+                    // can tell whether tab-line/header-line glyphs are emitted at
+                    // all (and where) vs. silently dropped.
+                    {
+                        use crate::core::frame_glyphs::FrameGlyph;
+                        let mut per_role: std::collections::HashMap<String, (usize, f32, String)> =
+                            std::collections::HashMap::new();
+                        for g in &frame.glyphs {
+                            if let FrameGlyph::Char {
+                                row_role,
+                                char: ch,
+                                y,
+                                window_id,
+                                ..
+                            } = g
+                            {
+                                let key = format!("{:?}/win{}", row_role, window_id);
+                                let e = per_role.entry(key).or_insert((0, *y, String::new()));
+                                e.0 += 1;
+                                e.1 = *y;
+                                if e.2.len() < 60 {
+                                    e.2.push(*ch);
+                                }
                             }
                         }
-                    }
-                    let mut tabline_total = 0usize;
-                    for (role, (n, _, _)) in &per_role {
-                        if role.starts_with("TabLine") {
-                            tabline_total += n;
+                        let mut tabline_total = 0usize;
+                        for (role, (n, _, _)) in &per_role {
+                            if role.starts_with("TabLine") {
+                                tabline_total += n;
+                            }
                         }
+                        let mut keys: Vec<_> = per_role.keys().cloned().collect();
+                        keys.sort();
+                        for k in keys {
+                            let (n, y, text) = &per_role[&k];
+                            tracing::info!("DUMP_ROLE {k}: {n} chars y={y:.1} text=[{text}]");
+                        }
+                        tracing::info!("DUMP_ROLE tabline_char_total={tabline_total}");
                     }
-                    let mut keys: Vec<_> = per_role.keys().cloned().collect();
-                    keys.sort();
-                    for k in keys {
-                        let (n, y, text) = &per_role[&k];
-                        tracing::info!("DUMP_ROLE {k}: {n} chars y={y:.1} text=[{text}]");
-                    }
-                    tracing::info!("DUMP_ROLE tabline_char_total={tabline_total}");
-                }
-                let cursor_count = frame.window_cursors.len();
-                let active_cursor_count = frame.window_cursors.iter().filter(|c| c.active).count();
-                tracing::info!(
-                    "poll_frame: frame_id={} parent_id={} size={:.0}x{:.0} char={:.1}x{:.1} \
+                    let cursor_count = frame.window_cursors.len();
+                    let active_cursor_count =
+                        frame.window_cursors.iter().filter(|c| c.active).count();
+                    tracing::info!(
+                        "poll_frame: frame_id={} parent_id={} size={:.0}x{:.0} char={:.1}x{:.1} \
                      glyphs={} (char={} bg={} border={} stretch={} scrollbar={} image={} video={} webkit={} other={}) \
                      windows={} window_cursors={} active_cursors={} faces={}",
-                    frame_id,
-                    parent_id,
-                    frame.width,
-                    frame.height,
-                    frame.char_width,
-                    frame.char_height,
-                    frame.glyphs.len(),
-                    char_count,
-                    bg_count,
-                    border_count,
-                    stretch_count,
-                    scrollbar_count,
-                    image_count,
-                    video_count,
-                    webkit_count,
-                    other_count,
-                    frame.window_infos.len(),
-                    cursor_count,
-                    active_cursor_count,
-                    frame.faces.len(),
-                );
-                if let Some(cursor) = frame.active_cursor() {
-                    tracing::info!(
-                        "active_cursor: window_id={} slot=(window_id={},row={},col={}) \
-                         rect=({:.2},{:.2}) {:.2}x{:.2} ascent={:.2} style={:?} color={:?} cursor_fg={:?}",
-                        cursor.window_id.get(),
-                        cursor.slot_id.window_id,
-                        cursor.slot_id.row,
-                        cursor.slot_id.col,
-                        cursor.x,
-                        cursor.y,
-                        cursor.width,
-                        cursor.height,
-                        cursor.ascent,
-                        cursor.style,
-                        cursor.color,
-                        cursor.cursor_fg,
+                        frame_id,
+                        parent_id,
+                        frame.width,
+                        frame.height,
+                        frame.char_width,
+                        frame.char_height,
+                        frame.glyphs.len(),
+                        char_count,
+                        bg_count,
+                        border_count,
+                        stretch_count,
+                        scrollbar_count,
+                        image_count,
+                        video_count,
+                        webkit_count,
+                        other_count,
+                        frame.window_infos.len(),
+                        cursor_count,
+                        active_cursor_count,
+                        frame.faces.len(),
                     );
-                    match frame.slot_glyph(cursor.slot_id) {
-                        Some(slot_glyph) => {
-                            tracing::info!("active_cursor_slot_glyph: {:?}", slot_glyph)
-                        }
-                        None => tracing::warn!(
-                            "active_cursor_slot_glyph: missing slot=(window_id={},row={},col={})",
+                    if let Some(cursor) = frame.active_cursor() {
+                        tracing::info!(
+                            "active_cursor: window_id={} slot=(window_id={},row={},col={}) \
+                         rect=({:.2},{:.2}) {:.2}x{:.2} ascent={:.2} style={:?} color={:?} cursor_fg={:?}",
+                            cursor.window_id.get(),
                             cursor.slot_id.window_id,
                             cursor.slot_id.row,
                             cursor.slot_id.col,
-                        ),
+                            cursor.x,
+                            cursor.y,
+                            cursor.width,
+                            cursor.height,
+                            cursor.ascent,
+                            cursor.style,
+                            cursor.color,
+                            cursor.cursor_fg,
+                        );
+                        match frame.slot_glyph(cursor.slot_id) {
+                            Some(slot_glyph) => {
+                                tracing::info!("active_cursor_slot_glyph: {:?}", slot_glyph)
+                            }
+                            None => tracing::warn!(
+                                "active_cursor_slot_glyph: missing slot=(window_id={},row={},col={})",
+                                cursor.slot_id.window_id,
+                                cursor.slot_id.row,
+                                cursor.slot_id.col,
+                            ),
+                        }
+                        if let Some(effects) = frame.phys_cursor_effects() {
+                            tracing::info!("active_cursor_effects: {:?}", effects);
+                        }
+                    } else {
+                        tracing::info!("active_cursor: none");
                     }
-                    if let Some(effects) = frame.phys_cursor_effects() {
-                        tracing::info!("active_cursor_effects: {:?}", effects);
-                    }
-                } else {
-                    tracing::info!("active_cursor: none");
-                }
-                if !frame.window_cursors.is_empty() {
-                    let all_window_cursors: String = frame
+                    if !frame.window_cursors.is_empty() {
+                        let all_window_cursors: String = frame
                         .window_cursors
                         .iter()
                         .enumerate()
@@ -414,108 +436,51 @@ impl RenderApp {
                                 cursor.color,
                             )
                         });
-                    tracing::info!("window_cursors:\n{}", all_window_cursors);
-                }
-                let all_glyphs: String =
-                    frame
-                        .glyphs
-                        .iter()
-                        .enumerate()
-                        .fold(String::new(), |acc, (i, g)| {
-                            let slot = g.slot_id();
-                            acc + &format!(
-                                "  glyph[{}][r={},c={}]: {:?}\n",
-                                i,
-                                slot.map_or(0, |s| s.row),
-                                slot.map_or(0, |s| s.col),
-                                g
-                            )
-                        });
-                tracing::info!("all_glyphs:\n{}", all_glyphs);
-            }
-
-            if parent_id == DisplayFrameId::new(0) {
-                let new_presentation = frame.presentation_id;
-                let routed_to_primary_fallback =
-                    self.frame_windows.is_primary_frame_id(frame_id.get());
-                let update_transient_effects = routed_to_primary_fallback;
-                let typing_ripple_enabled = self.effects.typing_ripple.enabled;
-                let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
-                let renderer = self.renderer.as_ref();
-                if let Some(window_state) = self.frame_windows.get_mut(frame_id.get()) {
-                    let retired = retired_presentation(
-                        window_state
-                            .render
-                            .compositor
-                            .current_frame
-                            .as_ref()
-                            .map(|frame| frame.presentation_id),
-                        new_presentation,
-                    );
-                    let cursor_config = self.cursor_defaults.config_snapshot();
-                    let cursor_sync = Self::ingest_frame_window_root_frame(
-                        window_state,
-                        frame,
-                        row_damage,
-                        cursor_config,
-                    );
-                    if let Some(cursor_sync) = cursor_sync {
-                        Self::update_frame_window_cursor_side_effects(
-                            renderer,
-                            window_state,
-                            cursor_sync,
-                            typing_ripple_enabled,
-                            cursor_trail_fade_enabled,
-                            update_transient_effects,
-                        );
-                    } else {
-                        window_state.reset_ime_cursor_area();
+                        tracing::info!("window_cursors:\n{}", all_window_cursors);
                     }
-                    if let Some(presentation) = retired.and_then(|presentation| {
-                        window_state
-                            .render
-                            .route_presentation_retirement(presentation)
-                    }) {
-                        self.comms.send_input(
-                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
-                        );
-                    }
-                    continue;
+                    let all_glyphs: String =
+                        frame
+                            .glyphs
+                            .iter()
+                            .enumerate()
+                            .fold(String::new(), |acc, (i, g)| {
+                                let slot = g.slot_id();
+                                acc + &format!(
+                                    "  glyph[{}][r={},c={}]: {:?}\n",
+                                    i,
+                                    slot.map_or(0, |s| s.row),
+                                    slot.map_or(0, |s| s.col),
+                                    g
+                                )
+                            });
+                    tracing::info!("all_glyphs:\n{}", all_glyphs);
                 }
-            }
 
-            if parent_id != DisplayFrameId::new(0) {
-                tracing::debug!(
-                    frame_id = frame_id.get(),
-                    parent_frame_id = parent_id.get(),
-                    width = frame.width,
-                    height = frame.height,
-                    parent_x = frame.frame_placement.outer_in_parent().x(),
-                    parent_y = frame.frame_placement.outer_in_parent().y(),
-                    glyphs = frame.glyphs.len(),
-                    "child_frame_lifecycle: render_thread_child_frame_state_received"
-                );
-                let update_transient_effects =
-                    self.frame_windows.is_primary_frame_id(parent_id.get());
-                let typing_ripple_enabled = self.effects.typing_ripple.enabled;
-                let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
-                let renderer = self.renderer.as_ref();
-                if let Some(window_state) = self
-                    .frame_windows
-                    .get_mut_by_presented_frame(parent_id.get())
-                {
-                    let old_presentation = window_state
-                        .render
-                        .compositor
-                        .child_frames
-                        .frames
-                        .get(&frame_id.get())
-                        .map(|entry| entry.frame.presentation_id);
+                if parent_id == DisplayFrameId::new(0) {
                     let new_presentation = frame.presentation_id;
-                    let cursor_config = self.cursor_defaults.config_snapshot();
-                    if window_state.render.update_child_frame(frame) {
-                        let cursor_sync =
-                            Self::sync_frame_window_cursor(window_state, cursor_config);
+                    let routed_to_primary_fallback =
+                        self.frame_windows.is_primary_frame_id(frame_id.get());
+                    let update_transient_effects = routed_to_primary_fallback;
+                    let typing_ripple_enabled = self.effects.typing_ripple.enabled;
+                    let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
+                    let renderer = self.renderer.as_ref();
+                    if let Some(window_state) = self.frame_windows.get_mut(frame_id.get()) {
+                        let retired = retired_presentation(
+                            window_state
+                                .render
+                                .compositor
+                                .current_frame
+                                .as_ref()
+                                .map(|frame| frame.presentation_id),
+                            new_presentation,
+                        );
+                        let cursor_config = self.cursor_defaults.config_snapshot();
+                        let cursor_sync = Self::ingest_frame_window_root_frame(
+                            window_state,
+                            frame,
+                            row_damage,
+                            cursor_config,
+                        );
                         if let Some(cursor_sync) = cursor_sync {
                             Self::update_frame_window_cursor_side_effects(
                                 renderer,
@@ -525,15 +490,105 @@ impl RenderApp {
                                 cursor_trail_fade_enabled,
                                 update_transient_effects,
                             );
+                        } else {
+                            window_state.reset_ime_cursor_area();
                         }
-                        if let Some(presentation) =
-                            retired_presentation(old_presentation, new_presentation).and_then(
-                                |presentation| {
-                                    window_state
-                                        .render
-                                        .route_presentation_retirement(presentation)
+                        if let Some(presentation) = retired.and_then(|presentation| {
+                            window_state
+                                .render
+                                .route_presentation_retirement(presentation)
+                        }) {
+                            self.comms.send_input(
+                                crate::thread_comm::InputEvent::PresentationRetired {
+                                    presentation,
                                 },
-                            )
+                            );
+                        }
+                        continue;
+                    }
+                }
+
+                if parent_id != DisplayFrameId::new(0) {
+                    tracing::debug!(
+                        frame_id = frame_id.get(),
+                        parent_frame_id = parent_id.get(),
+                        width = frame.width,
+                        height = frame.height,
+                        parent_x = frame.frame_placement.outer_in_parent().x(),
+                        parent_y = frame.frame_placement.outer_in_parent().y(),
+                        glyphs = frame.glyphs.len(),
+                        "child_frame_lifecycle: render_thread_child_frame_state_received"
+                    );
+                    let update_transient_effects =
+                        self.frame_windows.is_primary_frame_id(parent_id.get());
+                    let typing_ripple_enabled = self.effects.typing_ripple.enabled;
+                    let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
+                    let renderer = self.renderer.as_ref();
+                    if let Some(window_state) = self
+                        .frame_windows
+                        .get_mut_by_presented_frame(parent_id.get())
+                    {
+                        let old_presentation = window_state
+                            .render
+                            .compositor
+                            .child_frames
+                            .frames
+                            .get(&frame_id.get())
+                            .map(|entry| entry.frame.presentation_id);
+                        let new_presentation = frame.presentation_id;
+                        let cursor_config = self.cursor_defaults.config_snapshot();
+                        if window_state.render.update_child_frame(frame) {
+                            let cursor_sync =
+                                Self::sync_frame_window_cursor(window_state, cursor_config);
+                            if let Some(cursor_sync) = cursor_sync {
+                                Self::update_frame_window_cursor_side_effects(
+                                    renderer,
+                                    window_state,
+                                    cursor_sync,
+                                    typing_ripple_enabled,
+                                    cursor_trail_fade_enabled,
+                                    update_transient_effects,
+                                );
+                            }
+                            if let Some(presentation) =
+                                retired_presentation(old_presentation, new_presentation).and_then(
+                                    |presentation| {
+                                        window_state
+                                            .render
+                                            .route_presentation_retirement(presentation)
+                                    },
+                                )
+                            {
+                                self.comms.send_input(
+                                    crate::thread_comm::InputEvent::PresentationRetired {
+                                        presentation,
+                                    },
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                }
+
+                if parent_id != DisplayFrameId::new(0)
+                    && self.frame_windows.is_primary_frame_id(parent_id.get())
+                {
+                    if let Some(ws) = self.frame_windows.primary_window_mut() {
+                        let old_presentation = ws
+                            .render
+                            .compositor
+                            .child_frames
+                            .frames
+                            .get(&frame_id.get())
+                            .map(|entry| entry.frame.presentation_id);
+                        let new_presentation = frame.presentation_id;
+                        if ws.render.update_child_frame(frame)
+                            && let Some(presentation) =
+                                retired_presentation(old_presentation, new_presentation).and_then(
+                                    |presentation| {
+                                        ws.render.route_presentation_retirement(presentation)
+                                    },
+                                )
                         {
                             self.comms.send_input(
                                 crate::thread_comm::InputEvent::PresentationRetired {
@@ -541,69 +596,51 @@ impl RenderApp {
                                 },
                             );
                         }
-                    }
-                    continue;
-                }
-            }
-
-            if parent_id != DisplayFrameId::new(0)
-                && self.frame_windows.is_primary_frame_id(parent_id.get())
-            {
-                if let Some(ws) = self.frame_windows.primary_window_mut() {
-                    let old_presentation = ws
-                        .render
-                        .compositor
-                        .child_frames
-                        .frames
-                        .get(&frame_id.get())
-                        .map(|entry| entry.frame.presentation_id);
-                    let new_presentation = frame.presentation_id;
-                    if ws.render.update_child_frame(frame)
-                        && let Some(presentation) =
-                            retired_presentation(old_presentation, new_presentation).and_then(
-                                |presentation| {
-                                    ws.render.route_presentation_retirement(presentation)
-                                },
-                            )
-                    {
-                        self.comms.send_input(
-                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
-                        );
-                    }
-                };
-            } else if parent_id == DisplayFrameId::new(0)
-                && self.frame_windows.is_primary_frame_id(frame_id.get())
-            {
-                let new_presentation = frame.presentation_id;
-                let cursor_config = self.cursor_defaults.config_snapshot();
-                if let Some(primary_frame) = self
-                    .frame_windows
-                    .primary_window_mut()
-                    .map(|ws| &mut ws.render)
+                    };
+                } else if parent_id == DisplayFrameId::new(0)
+                    && self.frame_windows.is_primary_frame_id(frame_id.get())
                 {
-                    let retired = retired_presentation(
-                        primary_frame
-                            .compositor
-                            .current_frame
-                            .as_ref()
-                            .map(|frame| frame.presentation_id),
-                        new_presentation,
-                    );
-                    Self::ingest_top_level_render_frame(
-                        primary_frame,
-                        frame,
-                        row_damage,
-                        cursor_config,
-                    );
-                    if let Some(presentation) = retired.and_then(|presentation| {
-                        primary_frame.route_presentation_retirement(presentation)
-                    }) {
-                        self.comms.send_input(
-                            crate::thread_comm::InputEvent::PresentationRetired { presentation },
+                    let new_presentation = frame.presentation_id;
+                    let cursor_config = self.cursor_defaults.config_snapshot();
+                    if let Some(primary_frame) = self
+                        .frame_windows
+                        .primary_window_mut()
+                        .map(|ws| &mut ws.render)
+                    {
+                        let retired = retired_presentation(
+                            primary_frame
+                                .compositor
+                                .current_frame
+                                .as_ref()
+                                .map(|frame| frame.presentation_id),
+                            new_presentation,
                         );
+                        Self::ingest_top_level_render_frame(
+                            primary_frame,
+                            frame,
+                            row_damage,
+                            cursor_config,
+                        );
+                        if let Some(presentation) = retired.and_then(|presentation| {
+                            primary_frame.route_presentation_retirement(presentation)
+                        }) {
+                            self.comms.send_input(
+                                crate::thread_comm::InputEvent::PresentationRetired {
+                                    presentation,
+                                },
+                            );
+                        }
                     }
                 }
             }
+            if deferred.is_empty() {
+                break;
+            }
+            if !made_progress {
+                self.pending_child_frames = deferred;
+                break;
+            }
+            queued.extend(deferred.into_values());
         }
 
         let cursor_config = self.cursor_defaults.config_snapshot();

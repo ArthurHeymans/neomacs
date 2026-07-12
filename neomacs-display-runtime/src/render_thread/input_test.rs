@@ -705,15 +705,14 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     let mut app = make_test_app(300, 200, 1.0);
     let render = ensure_primary_frame(&mut app).expect("primary render");
     render.set_emacs_frame_id(0x42);
-    render.set_current_frame(
-        Some(presented_pointer_integration_offset_frame(
-            80,
-            300.0,
-            200.0,
-            &[(110.0, 85.0, 20.0, 10.0), (10.0, 5.0, 20.0, 10.0)],
-        )),
-        None,
+    let mut root = presented_pointer_integration_offset_frame(
+        80,
+        300.0,
+        200.0,
+        &[(110.0, 85.0, 20.0, 10.0), (10.0, 5.0, 20.0, 10.0)],
     );
+    set_test_frame_placement(&mut root, 0x42, 0, 0.0, 0.0, 0);
+    render.set_current_frame(Some(root), None);
     let mut lower_child =
         presented_pointer_integration_offset_frame(82, 60.0, 40.0, &[(10.0, 5.0, 20.0, 10.0)]);
     set_test_frame_placement(&mut lower_child, 0x98, 0x42, 100.0, 80.0, 5);
@@ -1412,6 +1411,9 @@ fn topmost_child_blocks_root_chrome_ownership() {
     let mut app = make_test_app(800, 600, 1.0);
     let render = ensure_primary_frame(&mut app).expect("primary render");
     render.set_emacs_frame_id(0x42);
+    let mut root = FrameGlyphBuffer::with_size(800.0, 600.0);
+    set_test_frame_placement(&mut root, 0x42, 0, 0.0, 0.0, 0);
+    render.set_current_frame(Some(root), None);
     let mut child = FrameGlyphBuffer::with_size(100.0, 100.0);
     set_test_frame_placement(&mut child, 0x99, 0x42, 0.0, 40.0, 0);
     render.update_child_frame(child);
