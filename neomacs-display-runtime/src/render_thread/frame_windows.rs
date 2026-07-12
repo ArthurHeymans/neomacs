@@ -26,11 +26,13 @@ use super::x11_hints::apply_window_geometry_hints;
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::FrameGlyph;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
-use neomacs_display_protocol::FrameRect;
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
+use neomacs_display_protocol::{
+    FrameRect, PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery,
+};
 use neomacs_renderer_wgpu::{
     PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
 };
@@ -408,6 +410,31 @@ impl GuiFrameRenderState {
             region.interaction(),
             region.appearance(),
         ))
+    }
+
+    /// Resolve semantic geometry from the exact immutable frame presentation.
+    pub(super) fn presented_region_hit(
+        &self,
+        target_frame_id: u64,
+        presentation: PresentationId,
+        x: f32,
+        y: f32,
+    ) -> Result<Option<PresentedHit>, PresentedHitError> {
+        let frame = if target_frame_id == self.emacs_frame_id {
+            self.compositor.current_frame.as_ref()
+        } else {
+            self.compositor
+                .child_frames
+                .frames
+                .get(&target_frame_id)
+                .map(|entry| &entry.frame)
+        };
+        let Some(frame) = frame else {
+            return Ok(None);
+        };
+        frame
+            .presented_hit_index()
+            .resolve(PresentedHitQuery::new(presentation, x, y))
     }
 
     fn presented_pointer_appearance_at(

@@ -479,6 +479,55 @@ fn replacing_or_removing_a_child_clears_only_its_pointer_appearance() {
 }
 
 #[test]
+fn runtime_semantic_hit_query_uses_target_frame_presentation_and_rejects_stale_ids() {
+    use neomacs_display_protocol::{
+        DisplayWindowId, FrameRect, PresentedHitError, PresentedHitIndex, PresentedHitRegion,
+        PresentedRegionKind, PresentedTextPosition, frame_chrome::PresentationId,
+    };
+
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let presentation = PresentationId::new(7);
+    let window = DisplayWindowId::new(9);
+    let mut root = make_frame(0x42, 0);
+    root.presentation_id = presentation;
+    root.install_presented_hit_index(
+        PresentedHitIndex::from_parts(
+            presentation,
+            vec![PresentedHitRegion::new(
+                Some(window),
+                PresentedRegionKind::TextBody,
+                FrameRect::new(10.0, 20.0, 80.0, 40.0).unwrap(),
+                0,
+            )],
+            vec![PresentedTextPosition::new(
+                window,
+                FrameRect::new(10.0, 20.0, 8.0, 16.0).unwrap(),
+                55,
+                0,
+                0,
+            )],
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    render.set_current_frame(Some(root), None);
+
+    let hit = render
+        .presented_region_hit(0x42, presentation, 12.0, 22.0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.region().kind(), PresentedRegionKind::TextBody);
+    assert_eq!(hit.text_position().unwrap().buffer_position(), 55);
+    assert_eq!(
+        render.presented_region_hit(0x42, PresentationId::new(6), 12.0, 22.0),
+        Err(PresentedHitError::StalePresentation {
+            expected: presentation,
+            requested: PresentationId::new(6),
+        })
+    );
+}
+
+#[test]
 fn frame_render_state_remove_child_frame_ignores_late_stale_update() {
     let Some(device) = make_test_device() else {
         return;
