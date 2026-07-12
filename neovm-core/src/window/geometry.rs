@@ -7,24 +7,40 @@
 use super::{DisplayPointSnapshot, FrameId, LispCharPos1, Rect, WindowDisplaySnapshot, WindowId};
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::num::NonZeroU64;
 
 /// Evaluator-owned identity of one immutable displayed geometry publication.
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct PresentationId(u64);
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct PresentationId(NonZeroU64);
 
 impl PresentationId {
     pub const fn new(value: u64) -> Self {
-        Self(value)
+        match Self::try_new(value) {
+            Some(id) => id,
+            None => panic!("presentation identity must be nonzero"),
+        }
+    }
+
+    pub const fn try_new(value: u64) -> Option<Self> {
+        match NonZeroU64::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
     }
 
     pub const fn get(self) -> u64 {
-        self.0
+        self.0.get()
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentationPublishError {
+    ReusedPresentation(PresentationId),
+}
+
 /// One immutable, presentation-owned publication of all evaluator window geometry.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PresentedGeometry {
     frame: FrameId,
     presentation: PresentationId,
@@ -58,6 +74,211 @@ impl PresentedGeometry {
     pub fn window_geometry(&self, window: WindowId) -> Option<SnapshotWindowGeometry<'_>> {
         SnapshotWindowGeometry::new(self.presentation, self.frame, window, self.window(window)?)
             .ok()
+    }
+
+    /// Resolve one of the closed set of semantic geometry queries against this
+    /// immutable publication.
+    pub fn resolve<Q: GeometryQuery>(&self, query: Q) -> Result<Q::Output<'_>, GeometryQueryError> {
+        if query.presentation() != self.presentation {
+            return Err(GeometryQueryError::StalePresentation {
+                requested: query.presentation(),
+                available: self.presentation,
+            });
+        }
+        query.resolve_presented(self)
+    }
+}
+
+mod query_seal {
+    pub trait Sealed {}
+}
+
+/// A closed semantic request against one immutable geometry publication.
+pub trait GeometryQuery: query_seal::Sealed {
+    type Output<'a>;
+
+    #[doc(hidden)]
+    fn presentation(&self) -> PresentationId;
+
+    #[doc(hidden)]
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GeometryQueryError {
+    StalePresentation {
+        requested: PresentationId,
+        available: PresentationId,
+    },
+    MissingWindow(WindowId),
+    MissingRegion {
+        window: WindowId,
+        region: WindowRegion,
+    },
+    PositionNotVisible {
+        window: WindowId,
+        position: LispCharPos1,
+    },
+    InvalidGeometry(GeometryError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowGeometryQuery {
+    presentation: PresentationId,
+    window: WindowId,
+}
+
+impl WindowGeometryQuery {
+    pub const fn new(presentation: PresentationId, window: WindowId) -> Self {
+        Self {
+            presentation,
+            window,
+        }
+    }
+}
+
+impl query_seal::Sealed for WindowGeometryQuery {}
+
+impl GeometryQuery for WindowGeometryQuery {
+    type Output<'a> = SnapshotWindowGeometry<'a>;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let snapshot = geometry
+            .window(self.window)
+            .ok_or(GeometryQueryError::MissingWindow(self.window))?;
+        SnapshotWindowGeometry::new(geometry.presentation, geometry.frame, self.window, snapshot)
+            .map_err(GeometryQueryError::InvalidGeometry)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WindowRegion {
+    Outer,
+    TextBody,
+    LeftMargin,
+    RightMargin,
+    LeftFringe,
+    RightFringe,
+    LeftScrollBar,
+    RightScrollBar,
+    HorizontalScrollBar,
+    TabLine,
+    HeaderLine,
+    ModeLine,
+    RightDivider,
+    BottomDivider,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowRegionBoundsQuery {
+    presentation: PresentationId,
+    window: WindowId,
+    region: WindowRegion,
+}
+
+impl WindowRegionBoundsQuery {
+    pub const fn new(presentation: PresentationId, window: WindowId, region: WindowRegion) -> Self {
+        Self {
+            presentation,
+            window,
+            region,
+        }
+    }
+}
+
+impl query_seal::Sealed for WindowRegionBoundsQuery {}
+
+impl GeometryQuery for WindowRegionBoundsQuery {
+    type Output<'a> = PixelRect<FrameLogicalSpace>;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let snapshot = geometry
+            .window(self.window)
+            .ok_or(GeometryQueryError::MissingWindow(self.window))?;
+        let regions = &snapshot.regions;
+        let rect = match self.region {
+            WindowRegion::Outer => Some(regions.outer),
+            WindowRegion::TextBody => Some(regions.text_body),
+            WindowRegion::LeftMargin => regions.left_margin,
+            WindowRegion::RightMargin => regions.right_margin,
+            WindowRegion::LeftFringe => regions.left_fringe,
+            WindowRegion::RightFringe => regions.right_fringe,
+            WindowRegion::LeftScrollBar => regions.left_scroll_bar,
+            WindowRegion::RightScrollBar => regions.right_scroll_bar,
+            WindowRegion::HorizontalScrollBar => regions.horizontal_scroll_bar,
+            WindowRegion::TabLine => regions.tab_line,
+            WindowRegion::HeaderLine => regions.header_line,
+            WindowRegion::ModeLine => regions.mode_line,
+            WindowRegion::RightDivider => regions.right_divider,
+            WindowRegion::BottomDivider => regions.bottom_divider,
+        }
+        .ok_or(GeometryQueryError::MissingRegion {
+            window: self.window,
+            region: self.region,
+        })?;
+        PixelRect::from_raw(&rect).map_err(GeometryQueryError::InvalidGeometry)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PositionGeometryQuery {
+    presentation: PresentationId,
+    window: WindowId,
+    position: LispCharPos1,
+}
+
+impl PositionGeometryQuery {
+    pub const fn new(
+        presentation: PresentationId,
+        window: WindowId,
+        position: LispCharPos1,
+    ) -> Self {
+        Self {
+            presentation,
+            window,
+            position,
+        }
+    }
+}
+
+impl query_seal::Sealed for PositionGeometryQuery {}
+
+impl GeometryQuery for PositionGeometryQuery {
+    type Output<'a> = SnapshotPointGeometry;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let window = geometry.resolve(WindowGeometryQuery::new(self.presentation, self.window))?;
+        window
+            .point_for_buffer_pos(self.position)
+            .map_err(GeometryQueryError::InvalidGeometry)?
+            .ok_or(GeometryQueryError::PositionNotVisible {
+                window: self.window,
+                position: self.position,
+            })
     }
 }
 
@@ -300,6 +521,7 @@ impl SnapshotPointGeometry {
 }
 
 /// A borrowed, coordinate-safe view into one immutable presented geometry.
+#[derive(Debug)]
 pub struct SnapshotWindowGeometry<'a> {
     presentation: PresentationId,
     frame: FrameId,

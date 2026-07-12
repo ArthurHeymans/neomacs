@@ -1352,10 +1352,12 @@ impl LayoutEngine {
 
         let snapshots = std::mem::take(&mut self.display_snapshots);
         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-            frame.publish_display_snapshots(
-                neovm_core::window::geometry::PresentationId::new(presentation_id),
-                snapshots,
-            );
+            frame
+                .publish_display_snapshots(
+                    neovm_core::window::geometry::PresentationId::new(presentation_id),
+                    snapshots,
+                )
+                .expect("layout presentation identity is fresh");
         }
         set_frame_hit_data(Some(std::mem::take(&mut self.hit_data)));
     }

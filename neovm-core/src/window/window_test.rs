@@ -74,22 +74,75 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
 }
 
 #[test]
+fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions() {
+    use super::geometry::{
+        GeometryQueryError, PresentationId, PresentedGeometry, WindowGeometryQuery, WindowRegion,
+        WindowRegionBoundsQuery,
+    };
+
+    let window_id = WindowId(11);
+    let presentation = PresentationId::new(41);
+    let publication = PresentedGeometry::new(
+        FrameId(7),
+        presentation,
+        [WindowDisplaySnapshot {
+            window_id,
+            regions: PresentedWindowRegions {
+                outer: Rect::new(144.0, 24.0, 800.0, 600.0),
+                text_body: Rect::new(180.0, 60.0, 700.0, 520.0),
+                left_scroll_bar: Some(Rect::new(144.0, 60.0, 12.0, 520.0)),
+                ..PresentedWindowRegions::default()
+            },
+            text_area_left_offset: 999,
+            header_line_height: 88,
+            tab_line_height: 99,
+            ..WindowDisplaySnapshot::default()
+        }],
+    );
+
+    let error = publication
+        .resolve(WindowGeometryQuery::new(PresentationId::new(40), window_id))
+        .expect_err("stale presentation must not resolve");
+    assert_eq!(
+        error,
+        GeometryQueryError::StalePresentation {
+            requested: PresentationId::new(40),
+            available: presentation,
+        }
+    );
+
+    let body = publication
+        .resolve(WindowRegionBoundsQuery::new(
+            presentation,
+            window_id,
+            WindowRegion::TextBody,
+        ))
+        .expect("explicit body region");
+    assert_eq!(body.origin().x().get(), 180.0);
+    assert_eq!(body.origin().y().get(), 60.0);
+    assert_eq!(body.width().get(), 700.0);
+    assert_eq!(body.height().get(), 520.0);
+}
+
+#[test]
 fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
-    use super::geometry::PresentationId;
+    use super::geometry::{PresentationId, PresentationPublishError};
 
     let mut manager = FrameManager::new();
     let frame_id = manager.create_frame("F1", 800, 600, BufferId(1));
     let frame = manager.get_mut(frame_id).expect("frame");
     let window_id = frame.selected_window;
 
-    frame.publish_display_snapshots(
-        PresentationId::new(41),
-        vec![WindowDisplaySnapshot {
-            window_id,
-            text_area_left_offset: 8,
-            ..WindowDisplaySnapshot::default()
-        }],
-    );
+    frame
+        .publish_display_snapshots(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                text_area_left_offset: 8,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("first presentation");
     assert_eq!(frame.display_presentation(), Some(PresentationId::new(41)));
     assert_eq!(
         frame
@@ -103,20 +156,35 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     assert_eq!(frame.display_presentation(), None);
     assert!(frame.window_display_snapshot(window_id).is_none());
 
-    frame.publish_display_snapshots(
-        PresentationId::new(41),
-        vec![WindowDisplaySnapshot {
-            window_id,
-            ..WindowDisplaySnapshot::default()
-        }],
+    assert_eq!(
+        frame.publish_display_snapshots(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                ..WindowDisplaySnapshot::default()
+            }],
+        ),
+        Err(PresentationPublishError::ReusedPresentation(
+            PresentationId::new(41)
+        ))
     );
 
-    frame.publish_display_snapshots(PresentationId::new(42), Vec::new());
+    frame
+        .publish_display_snapshots(PresentationId::new(42), Vec::new())
+        .expect("newer presentation");
     assert_eq!(frame.display_presentation(), Some(PresentationId::new(42)));
     assert!(frame.window_display_snapshot(window_id).is_none());
 
     frame.set_display_snapshots(Vec::new());
     assert_eq!(frame.display_presentation(), None);
+}
+
+#[test]
+fn presentation_identity_rejects_zero() {
+    use super::geometry::PresentationId;
+
+    assert_eq!(PresentationId::try_new(0), None);
+    assert_eq!(PresentationId::try_new(7).map(PresentationId::get), Some(7));
 }
 
 #[test]

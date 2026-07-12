@@ -1764,6 +1764,12 @@ pub struct Frame {
     /// neomacs-side equivalents — adding the GNU names verbatim is
     /// tracked as future work in the audit's Phase 4 plan.
     presented_geometry: Option<geometry::PresentedGeometry>,
+    /// Compatibility snapshots used by transitional GNU adapters and output
+    /// lifecycle consumers. They are not an authoritative geometry publication.
+    display_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
+    /// Highest presentation identity ever accepted by this frame. This survives
+    /// geometry invalidation so an identity can never acquire a new meaning.
+    last_presentation: Option<geometry::PresentationId>,
     /// Last recorded redisplay state for GNU window change hooks.
     pub(crate) window_hook_record: FrameWindowHookRecord,
     /// GNU `frame-window-state-change` flag.
@@ -1898,6 +1904,8 @@ impl Frame {
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             presented_geometry: None,
+            display_snapshots: HashMap::new(),
+            last_presentation: None,
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -2347,6 +2355,7 @@ impl Frame {
 
         self.root_window.invalidate_display_state();
         self.presented_geometry = None;
+        self.display_snapshots.clear();
     }
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
@@ -2529,20 +2538,35 @@ impl Frame {
         &mut self,
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
-    ) {
-        let snapshots = snapshots
+    ) -> Result<(), geometry::PresentationPublishError> {
+        let snapshots: Vec<_> = snapshots
             .into_iter()
-            .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
-        self.presented_geometry = Some(geometry::PresentedGeometry::new(
-            self.id,
-            presentation,
-            snapshots,
-        ));
+            .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
+            .collect();
+        let candidate = geometry::PresentedGeometry::new(self.id, presentation, snapshots.clone());
+        if self
+            .last_presentation
+            .is_some_and(|last| presentation <= last)
+        {
+            if self.presented_geometry.as_ref() == Some(&candidate) {
+                return Ok(());
+            }
+            return Err(geometry::PresentationPublishError::ReusedPresentation(
+                presentation,
+            ));
+        }
+        self.display_snapshots = snapshots
+            .into_iter()
+            .map(|snapshot| (snapshot.window_id, snapshot))
+            .collect();
+        self.presented_geometry = Some(candidate);
+        self.last_presentation = Some(presentation);
+        Ok(())
     }
 
     pub const fn display_presentation(&self) -> Option<geometry::PresentationId> {
         match &self.presented_geometry {
-            Some(geometry) if geometry.presentation().get() != 0 => Some(geometry.presentation()),
+            Some(geometry) => Some(geometry.presentation()),
             _ => None,
         }
     }
@@ -2581,19 +2605,17 @@ impl Frame {
     pub fn set_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
         // Geometry installed without an owning presentation cannot retain the
         // identity of a previous publication.
-        let snapshots = snapshots
+        self.display_snapshots = snapshots
             .into_iter()
-            .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
-        self.presented_geometry = Some(geometry::PresentedGeometry::new(
-            self.id,
-            geometry::PresentationId::new(0),
-            snapshots,
-        ));
+            .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
+            .map(|snapshot| (snapshot.window_id, snapshot))
+            .collect();
+        self.presented_geometry = None;
     }
 
     /// Last redisplay geometry for WINDOW-ID, if available.
     pub fn window_display_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.presented_geometry.as_ref()?.window(id)
+        self.display_snapshots.get(&id)
     }
 
     pub fn presented_window_geometry(
@@ -2601,9 +2623,7 @@ impl Frame {
         id: WindowId,
     ) -> Option<geometry::SnapshotWindowGeometry<'_>> {
         let presented = self.presented_geometry.as_ref()?;
-        (presented.presentation().get() != 0)
-            .then(|| presented.window_geometry(id))
-            .flatten()
+        presented.window_geometry(id)
     }
 
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
@@ -2613,6 +2633,7 @@ impl Frame {
             .is_some_and(|geometry| geometry.window(id).is_some())
         {
             self.presented_geometry = None;
+            self.display_snapshots.clear();
         }
     }
 
