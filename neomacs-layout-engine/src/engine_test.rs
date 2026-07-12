@@ -1731,6 +1731,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .set_window_system(Some(Value::symbol("neo")));
     eval.eval_str(
         "(progn
+           (insert \"hello\")
            (set-window-margins nil 2 3)
            (set-window-fringes nil 8 10 t)
            (set-window-scroll-bars nil 12 'left 8 'bottom)
@@ -1815,6 +1816,94 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     assert!(main.mode_line().is_some());
     assert!(left.right_divider().is_some());
     assert!(left.bottom_divider().is_some());
+
+    let protocol_presentation =
+        neomacs_display_protocol::PresentationId::new(evaluator_presentation.get());
+    let hit_index = &renderer.presented_hit_index;
+    let selected_regions = match renderer
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("selected renderer window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("selected complete geometry"),
+    };
+    for (kind, bounds) in [
+        (
+            neomacs_display_protocol::PresentedRegionKind::TextBody,
+            Some(selected_regions.text_body),
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::LeftMargin,
+            selected_regions.left_margin,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::RightMargin,
+            selected_regions.right_margin,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::LeftFringe,
+            selected_regions.left_fringe,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::RightFringe,
+            selected_regions.right_fringe,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::LeftScrollBar,
+            selected_regions.left_scroll_bar,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::HorizontalScrollBar,
+            selected_regions.horizontal_scroll_bar,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::TabLine,
+            selected_regions.tab_line,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::HeaderLine,
+            selected_regions.header_line,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::ModeLine,
+            selected_regions.mode_line,
+        ),
+    ] {
+        let bounds = bounds.expect("configured semantic region");
+        let hit = hit_index
+            .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+                protocol_presentation,
+                bounds.x + bounds.width / 2.0,
+                bounds.y + bounds.height / 2.0,
+            ))
+            .expect("current presentation")
+            .expect("region hit");
+        assert_eq!(hit.region().kind(), kind);
+        assert_eq!(
+            hit.region().window().map(|id| id.get()),
+            Some(selected.0 as i64)
+        );
+    }
+    let text_position = hit_index
+        .text_positions()
+        .iter()
+        .find(|position| position.window().get() == selected.0 as i64)
+        .copied()
+        .expect("selected exact text position");
+    let bounds = text_position.bounds();
+    let exact_hit = hit_index
+        .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+            protocol_presentation,
+            bounds.x() + bounds.width() / 2.0,
+            bounds.y() + bounds.height() / 2.0,
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(exact_hit.text_position(), Some(text_position));
+
     let retained_main = first_publication
         .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
             evaluator_presentation,

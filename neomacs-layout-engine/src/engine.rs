@@ -74,22 +74,133 @@ use crate::incremental_layout::{
 };
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{
-    ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
+    ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind, FrameRect,
     TerminalMenuBarStyle,
 };
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
-use neomacs_display_protocol::frame_glyphs::WindowInfo;
+use neomacs_display_protocol::frame_glyphs::{PresentedWindowGeometry, WindowInfo};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::DisplayWindowId;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{FaceId, Px};
+use neomacs_display_protocol::{
+    PresentedHitIndex, PresentedHitRegion, PresentedRegionKind, PresentedTextPosition,
+};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::WindowDisplaySnapshot;
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
+
+fn build_presented_hit_index(
+    state: &neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+    snapshots: &[WindowDisplaySnapshot],
+) -> Result<PresentedHitIndex, neomacs_display_protocol::PresentedHitError> {
+    let mut regions = Vec::new();
+    let mut positions = Vec::new();
+    let mut push_region = |window, kind, rect: neomacs_display_protocol::types::Rect, z_order| {
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            return;
+        }
+        if let Ok(bounds) = FrameRect::new(rect.x, rect.y, rect.width, rect.height) {
+            regions.push(PresentedHitRegion::new(window, kind, bounds, z_order));
+        }
+    };
+
+    for (window_z, info) in state.window_infos.iter().enumerate() {
+        let PresentedWindowGeometry::Complete {
+            regions: window_regions,
+            ..
+        } = info.geometry
+        else {
+            continue;
+        };
+        let base_z = i32::try_from(window_z).unwrap_or(i32::MAX / 100) * 100;
+        let window = Some(info.window_id);
+        push_region(
+            window,
+            PresentedRegionKind::TextBody,
+            window_regions.text_body,
+            base_z,
+        );
+        for (kind, rect) in [
+            (PresentedRegionKind::LeftMargin, window_regions.left_margin),
+            (
+                PresentedRegionKind::RightMargin,
+                window_regions.right_margin,
+            ),
+            (PresentedRegionKind::LeftFringe, window_regions.left_fringe),
+            (
+                PresentedRegionKind::RightFringe,
+                window_regions.right_fringe,
+            ),
+            (
+                PresentedRegionKind::LeftScrollBar,
+                window_regions.left_scroll_bar,
+            ),
+            (
+                PresentedRegionKind::RightScrollBar,
+                window_regions.right_scroll_bar,
+            ),
+            (
+                PresentedRegionKind::HorizontalScrollBar,
+                window_regions.horizontal_scroll_bar,
+            ),
+            (PresentedRegionKind::TabLine, window_regions.tab_line),
+            (PresentedRegionKind::HeaderLine, window_regions.header_line),
+            (PresentedRegionKind::ModeLine, window_regions.mode_line),
+            (
+                PresentedRegionKind::RightDivider,
+                window_regions.right_divider,
+            ),
+            (
+                PresentedRegionKind::BottomDivider,
+                window_regions.bottom_divider,
+            ),
+        ] {
+            if let Some(rect) = rect {
+                push_region(window, kind, rect, base_z + 10);
+            }
+        }
+
+        if let Some(snapshot) = snapshots
+            .iter()
+            .find(|snapshot| snapshot.window_id.0 as i64 == info.window_id.get())
+        {
+            for point in &snapshot.points {
+                let Ok(bounds) = FrameRect::new(
+                    window_regions.text_body.x + point.x as f32,
+                    window_regions.outer.y + point.y as f32,
+                    point.width.max(1) as f32,
+                    point.height.max(1) as f32,
+                ) else {
+                    continue;
+                };
+                positions.push(PresentedTextPosition::new(
+                    info.window_id,
+                    bounds,
+                    point.buffer_pos.as_i64(),
+                    point.row,
+                    point.col,
+                ));
+            }
+        }
+    }
+
+    for band in state.frame_chrome.bands() {
+        let kind = match band.kind() {
+            ProtocolFrameChromeKind::MenuBar => PresentedRegionKind::MenuBar,
+            ProtocolFrameChromeKind::ToolBar => PresentedRegionKind::ToolBar,
+            ProtocolFrameChromeKind::CompactBar => PresentedRegionKind::CompactBar,
+            ProtocolFrameChromeKind::TabBar => PresentedRegionKind::TabBar,
+        };
+        regions.push(PresentedHitRegion::new(None, kind, band.bounds(), i32::MAX));
+    }
+
+    PresentedHitIndex::from_parts(state.presentation_id, regions, positions)
+}
 
 #[cfg(test)]
 #[inline]
@@ -1129,6 +1240,15 @@ impl LayoutEngine {
                     evaluator.retire_interaction_presentation(presentation_id);
                     return;
                 }
+            }
+        }
+
+        match build_presented_hit_index(&frame_display_state, &self.display_snapshots) {
+            Ok(index) => frame_display_state.presented_hit_index = index,
+            Err(error) => {
+                tracing::error!(?error, "rejecting invalid semantic hit snapshot");
+                evaluator.retire_interaction_presentation(presentation_id);
+                return;
             }
         }
 
