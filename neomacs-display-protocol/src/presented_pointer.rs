@@ -337,6 +337,11 @@ impl PresentedHitIndex {
         self.presentation
     }
 
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.regions.is_empty() && self.text_positions.is_empty()
+    }
+
     pub fn resolve(
         &self,
         query: PresentedHitQuery,

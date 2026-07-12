@@ -1305,7 +1305,14 @@ impl FrameDisplayState {
             buf.install_presented_pointer_source_map(&self.presented_pointer_source)
                 .expect("FrameDisplayState pointer map must match its materialized primitives");
         }
-        buf.install_presented_hit_index(self.presented_hit_index.clone())
+        let hit_index = if self.presented_hit_index.is_empty()
+            && self.presented_hit_index.presentation() != self.presentation_id
+        {
+            crate::PresentedHitIndex::empty(self.presentation_id)
+        } else {
+            self.presented_hit_index.clone()
+        };
+        buf.install_presented_hit_index(hit_index)
             .expect("FrameDisplayState hit index must match its presentation");
 
         buf
