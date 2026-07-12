@@ -549,6 +549,15 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
 fn record_text_window_display_range_updates_matching_last_window_info() {
     let mut builder = DisplayOutputBuilder::new();
     builder.add_output_window_info(window_info(41));
+    builder.install_window_metadata(
+        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+            window_id: neomacs_display_protocol::DisplayWindowId::new(41),
+            geometry: neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
+                cell_origin: neomacs_display_protocol::frame_glyphs::PresentedCellOrigin::default(),
+                outer: Rect::new(0.0, 0.0, 80.0, 16.0),
+            },
+        },
+    );
 
     record_text_window_display_range(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -1124,6 +1133,15 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
 
     let mut builder = DisplayOutputBuilder::new();
     builder.add_output_window_info(window_info(41));
+    builder.install_window_metadata(
+        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+            window_id: neomacs_display_protocol::DisplayWindowId::new(41),
+            geometry: neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
+                cell_origin: neomacs_display_protocol::frame_glyphs::PresentedCellOrigin::default(),
+                outer: Rect::new(0.0, 0.0, 80.0, 16.0),
+            },
+        },
+    );
     builder.begin_window(41, 1, 5, Rect::new(0.0, 0.0, 40.0, 20.0), true);
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
     emitter.begin_update(&mut eval);

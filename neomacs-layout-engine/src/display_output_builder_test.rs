@@ -5,6 +5,30 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 
+fn install_test_text_body_hit_index(
+    state: &mut neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+    window_id: i64,
+    bounds: Rect,
+) {
+    state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![neomacs_display_protocol::PresentedHitRegion::new(
+            Some(neomacs_display_protocol::DisplayWindowId::new(window_id)),
+            neomacs_display_protocol::PresentedRegionKind::TextBody,
+            neomacs_display_protocol::FrameRect::new(
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                bounds.height,
+            )
+            .unwrap(),
+            0,
+        )],
+        vec![],
+    )
+    .unwrap();
+}
+
 fn write_char_to_current_row(
     builder: &mut DisplayOutputBuilder,
     ch: char,
@@ -1677,7 +1701,12 @@ fn long_buffer_mouse_face_publishes_one_region_and_one_source_span() {
     );
     builder.end_window();
 
-    let state = builder.finish(GLYPHS, 1, 8.0, 16.0);
+    let mut state = builder.finish(GLYPHS, 1, 8.0, 16.0);
+    install_test_text_body_hit_index(
+        &mut state,
+        3,
+        Rect::new(0.0, 0.0, GLYPHS as f32 * 8.0, 16.0),
+    );
     assert_eq!(
         crate::display_row_finalizer::pointer_run_glyph_visits(),
         GLYPHS,
@@ -1746,7 +1775,8 @@ fn buffer_mouse_face_uses_canonical_margin_pen_and_column() {
     builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
     builder.end_window();
 
-    let state = builder.finish(10, 1, 8.0, 16.0);
+    let mut state = builder.finish(10, 1, 8.0, 16.0);
+    install_test_text_body_hit_index(&mut state, 3, Rect::new(0.0, 0.0, 80.0, 16.0));
     let region = &state.presented_pointer_source.regions()[0];
     assert_eq!(region.bounds().x(), 32.0);
     assert_eq!(region.bounds().width(), 8.0);
@@ -1799,7 +1829,8 @@ fn one_logical_mouse_face_keeps_multiple_face_paint_batches() {
     builder.install_complete_output_row(0, GlyphRowRole::Text, false, row);
     builder.end_window();
 
-    let state = builder.finish(10, 1, 8.0, 16.0);
+    let mut state = builder.finish(10, 1, 8.0, 16.0);
+    install_test_text_body_hit_index(&mut state, 3, Rect::new(0.0, 0.0, 80.0, 16.0));
     assert_eq!(state.presented_pointer_source.regions().len(), 1);
     assert_eq!(state.presented_pointer_source.appearances().len(), 1);
     let source_spans = state.presented_pointer_source.appearances()[0].paint_spans();
