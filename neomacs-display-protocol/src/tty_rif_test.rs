@@ -232,10 +232,19 @@ fn make_grid_state(
     text: &str,
 ) -> FrameDisplayState {
     let mut state = FrameDisplayState::new(cols, rows, 1.0, 1.0);
-    state.frame_id = DisplayFrameId::new(frame_id);
-    state.parent_id = DisplayFrameId::new(parent_id);
-    state.parent_x = parent_x;
-    state.parent_y = parent_y;
+    state.frame_placement = crate::PresentedFramePlacement::new(
+        DisplayFrameId::new(frame_id),
+        state.presentation_id,
+        (parent_id != 0).then(|| DisplayFrameId::new(parent_id)),
+        crate::FrameRect::new(
+            parent_x,
+            parent_y,
+            state.frame_pixel_width,
+            state.frame_pixel_height,
+        )
+        .unwrap(),
+        0,
+    );
     state.background = Color::rgb(0.0, 0.0, 0.0);
 
     let mut matrix = GlyphMatrix::new(rows, cols);

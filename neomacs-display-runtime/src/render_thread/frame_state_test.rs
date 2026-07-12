@@ -122,8 +122,18 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     };
 
     let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);
-    child.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(0x2000);
-    child.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(0);
+    child.set_frame_identity(
+        neomacs_display_protocol::types::DisplayFrameId::new(0x2000),
+        neomacs_display_protocol::types::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        Color::BLACK,
+        false,
+        1.0,
+    );
     child.faces.insert(FaceId::new(8), face(FaceId::new(8)));
     app.frame_windows
         .primary_window_mut()

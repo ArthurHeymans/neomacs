@@ -290,11 +290,12 @@ impl TtyRif {
         self.rasterize_state_at(root, 0, 0, false);
 
         for child in children_bottom_to_top {
-            if child.parent_id != root.frame_id {
+            if child.frame_placement.parent() != Some(root.frame_placement.frame()) {
                 continue;
             }
-            let origin_col = child.parent_x.max(0.0).round() as usize;
-            let origin_row = child.parent_y.max(0.0).round() as usize;
+            let outer = child.frame_placement.outer_in_parent();
+            let origin_col = outer.x().max(0.0).round() as usize;
+            let origin_row = outer.y().max(0.0).round() as usize;
             self.draw_child_border(child, origin_col, origin_row);
             self.rasterize_state_at(child, origin_col, origin_row, true);
         }
@@ -1007,7 +1008,7 @@ impl TtyRif {
         tracing::info!(
             target: "neomacs_display_protocol::tty_rif",
             "tty matrix dump: frame={} origin=({}, {}) windows={}",
-            state.frame_id,
+            state.frame_placement.frame(),
             origin_col,
             origin_row,
             state.window_matrices.len()

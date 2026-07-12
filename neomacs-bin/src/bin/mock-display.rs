@@ -229,8 +229,9 @@ fn scene_for_tty(scene: MockScene) -> FrameDisplayState {
     let mut iter = scene.0.into_iter();
     let mut main = iter.next().expect("Scene must have a main frame");
     for child in iter {
-        let ox = child.parent_x;
-        let oy = child.parent_y;
+        let outer = child.frame_placement.outer_in_parent();
+        let ox = outer.x();
+        let oy = outer.y();
         for mut entry in child.window_matrices {
             entry.pixel_bounds.x += ox;
             entry.pixel_bounds.y += oy;

@@ -59,8 +59,8 @@ fn new_has_correct_defaults() {
     assert_eq!(buf.char_height, 16.0);
     assert_eq!(buf.font_pixel_size, 14.0);
     assert_color_eq(&buf.background, &Color::BLACK);
-    assert_eq!(buf.frame_id.get(), 0);
-    assert_eq!(buf.parent_id.get(), 0);
+    assert_eq!(buf.frame_placement.frame().get(), 0);
+    assert_eq!(buf.frame_placement.parent(), None);
     assert_eq!(buf.background_alpha, 1.0);
     assert!(!buf.no_accept_focus);
 }
@@ -1209,11 +1209,11 @@ fn set_frame_identity_stores_all_fields() {
         0.85,
     );
 
-    assert_eq!(buf.frame_id.get(), 0x100);
-    assert_eq!(buf.parent_id.get(), 0x200);
-    assert_eq!(buf.parent_x, 50.0);
-    assert_eq!(buf.parent_y, 75.0);
-    assert_eq!(buf.z_order, 5);
+    assert_eq!(buf.frame_placement.frame().get(), 0x100);
+    assert_eq!(buf.frame_placement.parent().unwrap().get(), 0x200);
+    assert_eq!(buf.frame_placement.outer_in_parent().x(), 50.0);
+    assert_eq!(buf.frame_placement.outer_in_parent().y(), 75.0);
+    assert_eq!(buf.frame_placement.z_order(), 5);
     assert!(buf.undecorated);
     assert_eq!(buf.border_width, 2.0);
     assert_color_eq(&buf.border_color, &border_color);
@@ -1237,8 +1237,8 @@ fn set_frame_identity_root_frame() {
         1.0,
     );
 
-    assert_eq!(buf.frame_id.get(), 0x100);
-    assert_eq!(buf.parent_id.get(), 0);
+    assert_eq!(buf.frame_placement.frame().get(), 0x100);
+    assert_eq!(buf.frame_placement.parent(), None);
     assert!(!buf.undecorated);
     assert!(!buf.no_accept_focus);
     assert_eq!(buf.background_alpha, 1.0);
@@ -1783,7 +1783,7 @@ fn full_frame_simulation() {
     assert_eq!(buf.window_cursors.len(), 2);
     assert_eq!(buf.window_infos.len(), 2);
     assert!(buf.active_cursor().is_some());
-    assert_eq!(buf.frame_id.get(), 0x1);
+    assert_eq!(buf.frame_placement.frame().get(), 0x1);
     assert_eq!(buf.width, 1920.0);
     assert_eq!(buf.height, 1080.0);
 

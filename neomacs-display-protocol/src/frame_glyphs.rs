@@ -807,7 +807,7 @@ pub struct FrameGlyphBuffer {
     /// Evaluator interaction snapshot paired with these exact pixels.
     pub presentation_id: crate::frame_chrome::PresentationId,
     /// Canonical frame ancestry/placement for this presentation.
-    pub frame_placement: Option<crate::PresentedFramePlacement>,
+    pub frame_placement: crate::PresentedFramePlacement,
     /// Frame dimensions
     pub width: f32,
     pub height: f32,
@@ -821,16 +821,6 @@ pub struct FrameGlyphBuffer {
     /// Frame background color
     pub background: Color,
 
-    // --- Child frame identity (Phase 1) ---
-    /// Frame pointer cast to u64 (0 = root/unset)
-    pub frame_id: DisplayFrameId,
-    /// Parent frame pointer (0 = root frame, no parent)
-    pub parent_id: DisplayFrameId,
-    /// Position relative to parent frame (pixels)
-    pub parent_x: f32,
-    pub parent_y: f32,
-    /// Stacking order among sibling child frames
-    pub z_order: i32,
     /// Whether child-frame decorations are suppressed.
     pub undecorated: bool,
     /// Child frame border width (pixels)
@@ -1148,18 +1138,13 @@ impl FrameGlyphBuffer {
     pub fn new() -> Self {
         Self {
             presentation_id: crate::frame_chrome::PresentationId::default(),
-            frame_placement: None,
+            frame_placement: crate::PresentedFramePlacement::default(),
             width: 0.0,
             height: 0.0,
             char_width: 8.0,
             char_height: 16.0,
             font_pixel_size: 14.0,
             background: Color::BLACK,
-            frame_id: DisplayFrameId::new(0),
-            parent_id: DisplayFrameId::new(0),
-            parent_x: 0.0,
-            parent_y: 0.0,
-            z_order: 0,
             undecorated: false,
             border_width: 0.0,
             border_color: Color::BLACK,
@@ -1257,11 +1242,14 @@ impl FrameGlyphBuffer {
         no_accept_focus: bool,
         background_alpha: f32,
     ) {
-        self.frame_id = frame_id;
-        self.parent_id = parent_id;
-        self.parent_x = parent_x;
-        self.parent_y = parent_y;
-        self.z_order = z_order;
+        self.frame_placement = crate::PresentedFramePlacement::new(
+            frame_id,
+            self.presentation_id,
+            (parent_id.get() != 0).then_some(parent_id),
+            crate::FrameRect::new(parent_x, parent_y, self.width, self.height)
+                .expect("frame identity placement is valid"),
+            z_order,
+        );
         self.undecorated = undecorated;
         self.border_width = border_width;
         self.border_color = border_color;

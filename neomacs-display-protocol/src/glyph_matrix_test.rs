@@ -1,4 +1,5 @@
 use super::*;
+use crate::DisplayFrameId;
 use crate::face::Face;
 use crate::frame_chrome::PresentationId;
 use crate::frame_glyphs::{DisplaySlotId, PhysCursor};
@@ -1036,11 +1037,19 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
 #[test]
 fn materialize_copies_metadata() {
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
-    state.frame_id = DisplayFrameId::new(123);
-    state.parent_id = DisplayFrameId::new(456);
-    state.parent_x = 10.0;
-    state.parent_y = 20.0;
-    state.z_order = 5;
+    state.frame_placement = crate::PresentedFramePlacement::new(
+        DisplayFrameId::new(123),
+        state.presentation_id,
+        Some(DisplayFrameId::new(456)),
+        crate::FrameRect::new(
+            10.0,
+            20.0,
+            state.frame_pixel_width,
+            state.frame_pixel_height,
+        )
+        .unwrap(),
+        5,
+    );
     state.background = Color::BLUE;
 
     let mut face = Face::new(FaceId::new(1));
@@ -1048,11 +1057,11 @@ fn materialize_copies_metadata() {
     state.faces.insert(FaceId::new(1), face);
 
     let buf = state.materialize();
-    assert_eq!(buf.frame_id.get(), 123);
-    assert_eq!(buf.parent_id.get(), 456);
-    assert_eq!(buf.parent_x, 10.0);
-    assert_eq!(buf.parent_y, 20.0);
-    assert_eq!(buf.z_order, 5);
+    assert_eq!(buf.frame_placement.frame().get(), 123);
+    assert_eq!(buf.frame_placement.parent().unwrap().get(), 456);
+    assert_eq!(buf.frame_placement.outer_in_parent().x(), 10.0);
+    assert_eq!(buf.frame_placement.outer_in_parent().y(), 20.0);
+    assert_eq!(buf.frame_placement.z_order(), 5);
     assert_eq!(buf.background, Color::BLUE);
     assert!(buf.faces.contains_key(&FaceId::new(1)));
     assert_eq!(buf.faces[&FaceId::new(1)].foreground, Color::RED);

@@ -16,6 +16,18 @@ pub struct PresentedFramePlacement {
     z_order: i32,
 }
 
+impl Default for PresentedFramePlacement {
+    fn default() -> Self {
+        Self::new(
+            DisplayFrameId::new(0),
+            PresentationId::default(),
+            None,
+            FrameRect::new(0.0, 0.0, 0.0, 0.0).expect("zero placement is valid"),
+            0,
+        )
+    }
+}
+
 impl PresentedFramePlacement {
     #[must_use]
     pub const fn new(

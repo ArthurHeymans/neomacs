@@ -12,7 +12,13 @@ use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 /// a named face, and a physical cursor.
 fn golden_state() -> FrameDisplayState {
     let mut state = FrameDisplayState::new(16, 2, 8.0, 16.0);
-    state.frame_id = DisplayFrameId::new(1);
+    state.frame_placement = crate::PresentedFramePlacement::new(
+        DisplayFrameId::new(1),
+        state.presentation_id,
+        None,
+        crate::FrameRect::new(0.0, 0.0, state.frame_pixel_width, state.frame_pixel_height).unwrap(),
+        0,
+    );
 
     let mut default_face = Face::new(FaceId::new(0));
     default_face.lisp_name = Some("default".to_string());

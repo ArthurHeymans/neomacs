@@ -59,7 +59,7 @@ impl FrameDisplayState {
         let _ = writeln!(
             out,
             "=== frame {}: {}x{} cols {}x{} px ===",
-            self.frame_id,
+            self.frame_placement.frame(),
             self.frame_cols,
             self.frame_rows,
             self.frame_pixel_width,

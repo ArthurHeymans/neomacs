@@ -49,7 +49,10 @@ impl RenderApp {
             .for_each_top_level_window(|window_state| {
                 let compositor = &window_state.render.compositor;
                 if let Some(frame) = compositor.current_frame.as_ref() {
-                    signature.push((frame.frame_id.get(), compositor.current_frame_ingest_seq));
+                    signature.push((
+                        frame.frame_placement.frame().get(),
+                        compositor.current_frame_ingest_seq,
+                    ));
                 }
                 for entry in compositor.child_frames.frames.values() {
                     signature.push((entry.frame_id, entry.ingest_seq));

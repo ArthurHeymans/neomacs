@@ -16,9 +16,7 @@ use super::frame_glyphs::{
     GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint,
 };
-use super::types::{
-    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
-};
+use super::types::{Color, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
@@ -858,7 +856,7 @@ pub struct FrameDisplayState {
     pub presentation_id: PresentationId,
     /// Canonical parent-relative placement paired with this presentation.
     #[serde(default)]
-    pub frame_placement: Option<crate::PresentedFramePlacement>,
+    pub frame_placement: crate::PresentedFramePlacement,
     /// Pointer semantics and transient paints paired with this exact snapshot.
     #[serde(default)]
     pub presented_pointer_source: crate::PresentedPointerSourceMap,
@@ -889,11 +887,6 @@ pub struct FrameDisplayState {
     /// Shaped composed clusters: `face_id → cluster text → resolved glyphs`.
     #[serde(default)]
     pub shaped_clusters: crate::font::ShapedClusterTable,
-    pub frame_id: DisplayFrameId,
-    pub parent_id: DisplayFrameId,
-    pub parent_x: f32,
-    pub parent_y: f32,
-    pub z_order: i32,
     pub undecorated: bool,
     pub border_width: f32,
     pub border_color: Color,
@@ -949,7 +942,7 @@ impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
             presentation_id: PresentationId::default(),
-            frame_placement: None,
+            frame_placement: crate::PresentedFramePlacement::default(),
             presented_pointer_source: crate::PresentedPointerSourceMap::empty(),
             presented_hit_index: crate::PresentedHitIndex::default(),
             window_matrices: Vec::new(),
@@ -971,11 +964,6 @@ impl FrameDisplayState {
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
             shaped_clusters: crate::font::ShapedClusterTable::new(),
-            frame_id: DisplayFrameId::new(0),
-            parent_id: DisplayFrameId::new(0),
-            parent_x: 0.0,
-            parent_y: 0.0,
-            z_order: 0,
             undecorated: false,
             border_width: 0.0,
             border_color: Color {
@@ -1020,11 +1008,6 @@ impl FrameDisplayState {
         state.frame_pixel_height = buf.height;
         state.font_pixel_size = buf.font_pixel_size;
         state.background = buf.background;
-        state.frame_id = buf.frame_id;
-        state.parent_id = buf.parent_id;
-        state.parent_x = buf.parent_x;
-        state.parent_y = buf.parent_y;
-        state.z_order = buf.z_order;
         state.undecorated = buf.undecorated;
         state.border_width = buf.border_width;
         state.border_color = buf.border_color;
@@ -1234,11 +1217,6 @@ impl FrameDisplayState {
         buf.char_height = self.char_height;
         buf.font_pixel_size = self.font_pixel_size;
         buf.background = self.background;
-        buf.frame_id = self.frame_id;
-        buf.parent_id = self.parent_id;
-        buf.parent_x = self.parent_x;
-        buf.parent_y = self.parent_y;
-        buf.z_order = self.z_order;
         buf.undecorated = self.undecorated;
         buf.border_width = self.border_width;
         buf.border_color = self.border_color;

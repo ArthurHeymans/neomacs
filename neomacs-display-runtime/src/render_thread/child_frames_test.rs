@@ -10,10 +10,18 @@ fn make_child_buf(
     z_order: i32,
 ) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(width, height);
-    buf.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(frame_id);
-    buf.parent_x = parent_x;
-    buf.parent_y = parent_y;
-    buf.z_order = z_order;
+    buf.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(frame_id),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        parent_x,
+        parent_y,
+        z_order,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
     buf
 }
 
@@ -108,7 +116,7 @@ fn update_frame_replaces_existing_frame() {
     assert_eq!(entry.abs_y, 40.0);
     assert_eq!(entry.frame.width, 200.0);
     assert_eq!(entry.frame.height, 80.0);
-    assert_eq!(entry.frame.z_order, 2);
+    assert_eq!(entry.frame.frame_placement.z_order(), 2);
 }
 
 #[test]
@@ -148,20 +156,59 @@ fn update_frame_abs_position_from_parent_xy() {
 fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
     let mut mgr = ChildFrameManager::new();
     let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
-    root.frame_id = neomacs_display_protocol::DisplayFrameId::new(10);
     root.presentation_id = neomacs_display_protocol::PresentationId::new(1);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
     mgr.set_root_frame(Some(&root));
     let mut parent = make_child_buf(20, 100.0, 80.0, 120.0, 100.0, 2);
-    parent.parent_id = root.frame_id;
     parent.presentation_id = neomacs_display_protocol::PresentationId::new(2);
+    parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        root.frame_placement.frame(),
+        100.0,
+        80.0,
+        2,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
     mgr.update_frame(parent);
     let mut nested = make_child_buf(30, 15.0, 12.0, 100.0, 80.0, 4);
-    nested.parent_id = neomacs_display_protocol::DisplayFrameId::new(20);
     nested.presentation_id = neomacs_display_protocol::PresentationId::new(3);
+    nested.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        15.0,
+        12.0,
+        4,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
     mgr.update_frame(nested);
 
     let entry = mgr.frames.get(&30).unwrap();
-    assert_eq!((entry.frame.parent_x, entry.frame.parent_y), (15.0, 12.0));
+    assert_eq!(
+        (
+            entry.frame.frame_placement.outer_in_parent().x(),
+            entry.frame.frame_placement.outer_in_parent().y()
+        ),
+        (15.0, 12.0)
+    );
     assert_eq!((entry.abs_x, entry.abs_y), (115.0, 92.0));
     assert_eq!(
         entry.clip_in_root,

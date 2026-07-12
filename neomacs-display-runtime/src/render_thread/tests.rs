@@ -687,8 +687,18 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     };
 
     let mut secondary = FrameGlyphBuffer::with_size(320.0, 240.0);
-    secondary.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(0x2000);
-    secondary.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(0);
+    secondary.set_frame_identity(
+        neomacs_display_protocol::types::DisplayFrameId::new(0x2000),
+        neomacs_display_protocol::types::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::types::Color::BLACK,
+        false,
+        1.0,
+    );
     emacs
         .frame_tx
         .send(FrameDisplayState::from_frame_glyph_buffer(&secondary))

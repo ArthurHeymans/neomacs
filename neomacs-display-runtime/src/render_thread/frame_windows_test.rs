@@ -41,9 +41,30 @@ fn gui_text_input_policy_enables_native_ime_on_window_creation() {
 
 fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     let mut buf = FrameGlyphBuffer::with_size(800.0, 600.0);
-    buf.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(frame_id);
-    buf.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(parent_id);
+    buf.set_frame_identity(
+        neomacs_display_protocol::types::DisplayFrameId::new(frame_id),
+        neomacs_display_protocol::types::DisplayFrameId::new(parent_id),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        Color::BLACK,
+        false,
+        1.0,
+    );
     buf
+}
+
+fn set_parent_offset(frame: &mut FrameGlyphBuffer, x: f32, y: f32) {
+    let placement = frame.frame_placement;
+    frame.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+        placement.frame(),
+        placement.presentation(),
+        placement.parent(),
+        neomacs_display_protocol::FrameRect::new(x, y, frame.width, frame.height).unwrap(),
+        placement.z_order(),
+    );
 }
 
 fn install_pointer_region(
@@ -348,8 +369,7 @@ fn frame_render_state_remove_child_frame_marks_dirty_when_removed() {
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut child = make_frame(0x99, 0x42);
-    child.parent_x = 10.0;
-    child.parent_y = 20.0;
+    set_parent_offset(&mut child, 10.0, 20.0);
     render.compositor.child_frames.update_frame(child);
 
     assert!(render.remove_child_frame(0x99));
@@ -392,8 +412,7 @@ fn presented_pointer_hit_selects_the_displayed_root_or_child_map_in_local_coordi
 
     let mut child = make_frame(0x99, 0x42);
     child.presentation_id = PresentationId::new(22);
-    child.parent_x = 100.0;
-    child.parent_y = 80.0;
+    set_parent_offset(&mut child, 100.0, 80.0);
     install_pointer_region(&mut child, Some(InteractionId::new(5)), false);
     assert!(render.update_child_frame(child));
 
@@ -558,8 +577,7 @@ fn frame_render_state_remove_child_frame_ignores_late_stale_update() {
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut child = make_frame(0x99, 0x42);
-    child.parent_x = 10.0;
-    child.parent_y = 20.0;
+    set_parent_offset(&mut child, 10.0, 20.0);
 
     render.update_child_frame(child.clone());
     assert!(render.compositor.child_frames.frames.contains_key(&0x99));
@@ -582,8 +600,7 @@ fn frame_render_state_show_child_frame_allows_fresh_update_after_removal() {
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut child = make_frame(0x99, 0x42);
-    child.parent_x = 10.0;
-    child.parent_y = 20.0;
+    set_parent_offset(&mut child, 10.0, 20.0);
 
     render.update_child_frame(child.clone());
     assert!(render.remove_child_frame(0x99));
@@ -603,8 +620,7 @@ fn frame_render_state_ignores_identical_child_frame_update() {
     };
     let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
     let mut child = make_frame(0x99, 0x42);
-    child.parent_x = 10.0;
-    child.parent_y = 20.0;
+    set_parent_offset(&mut child, 10.0, 20.0);
 
     assert!(render.update_child_frame(child.clone()));
     render.set_dirty(false);

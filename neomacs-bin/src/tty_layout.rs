@@ -6,7 +6,6 @@
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::tty_rif::TtyRif;
-use neomacs_display_protocol::types::DisplayFrameId;
 use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::emacs_core::value::Value;
@@ -59,9 +58,9 @@ pub fn layout_frame_display_state(
 }
 
 /// Lay out the frames a snapshot request covers — freshest state, on
-/// demand — stamping parent/origin/z-order exactly like `publish_gui_frame`
-/// so the result is the composited screen. Shared by the TTY and GUI
-/// frontends (both use the same thread-local `LAYOUT_ENGINE`).
+/// demand — preserving the canonical parent-relative placement published by
+/// layout. Shared by the TTY and GUI frontends (both use the same thread-local
+/// `LAYOUT_ENGINE`).
 pub fn collect_snapshot_states(
     evaluator: &mut Context,
     target: &neovm_core::emacs_core::xdisp::SnapshotTarget,
@@ -85,18 +84,14 @@ pub fn collect_snapshot_states(
         if !keep {
             continue;
         }
-        let Some(mut state) = layout_frame_display_state(evaluator, node.frame_id) else {
+        let Some(state) = layout_frame_display_state(evaluator, node.frame_id) else {
             continue;
         };
-        state.parent_id = DisplayFrameId::new(node.parent_id.map_or(0, |id| id.0));
-        state.parent_x = node.origin_in_root_x;
-        state.parent_y = node.origin_in_root_y;
-        state.z_order = node.z_order;
         states.push(state);
     }
 
     // A live frame outside the selected frame's tree (another top-level
-    // frame): lay it out directly with root stamps.
+    // frame): lay it out directly with its canonical root placement.
     if states.is_empty()
         && let SnapshotTarget::Frame(id) = target
         && let Some(state) = layout_frame_display_state(evaluator, FrameId(*id))
@@ -144,13 +139,6 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
     }));
 }
 
-fn frame_origin_in_root(evaluator: &Context, frame_id: FrameId) -> (f32, f32) {
-    evaluator
-        .frame_manager()
-        .frame_origin_in_root(frame_id)
-        .unwrap_or((0.0, 0.0))
-}
-
 // ── TTY layout tree and redisplay ─────────────────────────────────────────
 
 pub fn run_tty_layout_tree(
@@ -165,23 +153,16 @@ pub fn run_tty_layout_tree(
         .frame_manager()
         .frames_in_reverse_z_order(root_id, true);
 
-    let mut root_state = layout_frame_display_state(evaluator, root_id)?;
-    root_state.parent_id = DisplayFrameId::new(0);
-    root_state.parent_x = 0.0;
-    root_state.parent_y = 0.0;
+    let root_state = layout_frame_display_state(evaluator, root_id)?;
 
     let mut child_states = Vec::new();
     for frame_id in frame_order {
         if frame_id == root_id {
             continue;
         }
-        let Some(mut state) = layout_frame_display_state(evaluator, frame_id) else {
+        let Some(state) = layout_frame_display_state(evaluator, frame_id) else {
             continue;
         };
-        let (x, y) = frame_origin_in_root(evaluator, frame_id);
-        state.parent_id = root_state.frame_id;
-        state.parent_x = x;
-        state.parent_y = y;
         child_states.push(state);
     }
 

@@ -255,25 +255,14 @@ impl FrameOutputOwner {
         let presentation_id = self.presentation_id;
         let mut state = self.session().finish(frame_params)?;
         state.presentation_id = presentation_id;
-        let parent = (state.parent_id.get() != 0).then_some(state.parent_id);
-        let (x, y) = if parent.is_some() {
-            (state.parent_x, state.parent_y)
-        } else {
-            (0.0, 0.0)
-        };
-        state.frame_placement = Some(neomacs_display_protocol::PresentedFramePlacement::new(
-            state.frame_id,
+        let placement = state.frame_placement;
+        state.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            placement.frame(),
             presentation_id,
-            parent,
-            neomacs_display_protocol::FrameRect::new(
-                x,
-                y,
-                state.frame_pixel_width,
-                state.frame_pixel_height,
-            )
-            .expect("finished frame output has valid placement geometry"),
-            state.z_order,
-        ));
+            placement.parent(),
+            placement.outer_in_parent(),
+            placement.z_order(),
+        );
         Ok(state)
     }
 

@@ -1239,7 +1239,7 @@ impl GuiFrameRenderState {
 
     pub(super) fn update_child_frame(&mut self, frame: FrameGlyphBuffer) -> bool {
         let before = self.active_pointer_damage();
-        let frame_id = frame.frame_id.get();
+        let frame_id = frame.frame_placement.frame().get();
         if self.compositor.hidden_child_frames.contains(&frame_id) {
             tracing::debug!(
                 frame_id,

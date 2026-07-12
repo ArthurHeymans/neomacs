@@ -3798,15 +3798,9 @@ fn publish_gui_frame(
     let mut sent_any = false;
     for node in tree.frames_bottom_to_top {
         let display_state = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
-        let Some(mut display_state) = display_state else {
+        let Some(display_state) = display_state else {
             continue;
         };
-        display_state.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(
-            node.parent_id.map_or(0, |id| id.0),
-        );
-        display_state.parent_x = node.origin_in_root_x;
-        display_state.parent_y = node.origin_in_root_y;
-        display_state.z_order = node.z_order;
         if frame_tx.try_send(display_state).is_ok() {
             sent_any = true;
         }

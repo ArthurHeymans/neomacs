@@ -81,6 +81,23 @@ fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKe
     )
 }
 
+fn set_test_frame_placement(
+    frame: &mut FrameGlyphBuffer,
+    frame_id: u64,
+    parent_id: u64,
+    x: f32,
+    y: f32,
+    z_order: i32,
+) {
+    frame.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+        neomacs_display_protocol::DisplayFrameId::new(frame_id),
+        frame.presentation_id,
+        (parent_id != 0).then(|| neomacs_display_protocol::DisplayFrameId::new(parent_id)),
+        FrameRect::new(x, y, frame.width, frame.height).unwrap(),
+        z_order,
+    );
+}
+
 #[test]
 fn incoherent_presented_observation_drops_the_raw_pointer_event() {
     let expected = PresentationId::new(8);
@@ -699,19 +716,11 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     );
     let mut lower_child =
         presented_pointer_integration_offset_frame(82, 60.0, 40.0, &[(10.0, 5.0, 20.0, 10.0)]);
-    lower_child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x98);
-    lower_child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
-    lower_child.parent_x = 100.0;
-    lower_child.parent_y = 80.0;
-    lower_child.z_order = 5;
+    set_test_frame_placement(&mut lower_child, 0x98, 0x42, 100.0, 80.0, 5);
     render.update_child_frame(lower_child);
     let mut child =
         presented_pointer_integration_offset_frame(81, 60.0, 40.0, &[(10.0, 5.0, 20.0, 10.0)]);
-    child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
-    child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
-    child.parent_x = 100.0;
-    child.parent_y = 80.0;
-    child.z_order = 10;
+    set_test_frame_placement(&mut child, 0x99, 0x42, 100.0, 80.0, 10);
     render.update_child_frame(child);
 
     let window = app.frame_windows.primary_window_mut().unwrap();
@@ -782,11 +791,7 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     assert_eq!(window.render.route_presentation_retirement(81), None);
     window.render.clear_pointer_hover();
     let mut replacement = presented_pointer_integration_frame(83);
-    replacement.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
-    replacement.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
-    replacement.parent_x = 140.0;
-    replacement.parent_y = 120.0;
-    replacement.z_order = 10;
+    set_test_frame_placement(&mut replacement, 0x99, 0x42, 140.0, 120.0, 10);
     window.render.update_child_frame(replacement);
     let child_release = RenderApp::take_presented_release_events(&mut window.render, 200.0, 160.0);
     // Capture pins the press snapshot transform: replacement movement cannot
@@ -1340,10 +1345,7 @@ fn topmost_child_blocks_root_chrome_ownership() {
     let render = ensure_primary_frame(&mut app).expect("primary render");
     render.set_emacs_frame_id(0x42);
     let mut child = FrameGlyphBuffer::with_size(100.0, 100.0);
-    child.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
-    child.parent_id = neomacs_display_protocol::DisplayFrameId::new(0x42);
-    child.parent_x = 0.0;
-    child.parent_y = 40.0;
+    set_test_frame_placement(&mut child, 0x99, 0x42, 0.0, 40.0, 0);
     render.update_child_frame(child);
     let window = app.frame_windows.primary_window().unwrap();
 

@@ -15224,11 +15224,14 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
     let child = &states[1];
 
     // The child carries its OWN identity, not the parent's.
-    assert_eq!(child.frame_id.get(), 100);
-    assert_eq!(child.parent_id.get(), content.frame_id);
-    assert_eq!(child.parent_x, 120.0);
-    assert_eq!(child.parent_y, 48.0);
-    assert_eq!(child.z_order, 1);
+    assert_eq!(child.frame_placement.frame().get(), 100);
+    assert_eq!(
+        child.frame_placement.parent().unwrap().get(),
+        content.frame_id
+    );
+    assert_eq!(child.frame_placement.outer_in_parent().x(), 120.0);
+    assert_eq!(child.frame_placement.outer_in_parent().y(), 48.0);
+    assert_eq!(child.frame_placement.z_order(), 1);
 
     // The child resolves its own face map (not an empty/parent-shared identity).
     assert!(

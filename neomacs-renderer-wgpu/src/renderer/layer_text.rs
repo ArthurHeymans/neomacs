@@ -69,12 +69,12 @@ impl WgpuRenderer {
             );
 
             log_rendered_char_overlaps(
-                ctx.params.frame_glyphs.frame_id.get(),
+                ctx.params.frame_glyphs.frame_placement.frame().get(),
                 if want_overlay { "overlay" } else { "text" },
                 &batches.rendered_char_bounds,
             );
             log_cursor_glyph_alignment(
-                ctx.params.frame_glyphs.frame_id.get(),
+                ctx.params.frame_glyphs.frame_placement.frame().get(),
                 if want_overlay { "overlay" } else { "text" },
                 ctx.params.frame_glyphs,
                 &batches.rendered_char_bounds,
@@ -115,7 +115,7 @@ impl WgpuRenderer {
             );
         }
 
-        let frame_id = frame_glyphs.frame_id.get();
+        let frame_id = frame_glyphs.frame_placement.frame().get();
         let chunks = row_reuse::chunk_text_rows(&frame_glyphs.glyphs, want_overlay, frame_id);
         let window_origins = row_reuse::window_origin_bits(frame_glyphs);
         let cursor_row = frame_glyphs

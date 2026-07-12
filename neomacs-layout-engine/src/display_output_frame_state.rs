@@ -350,11 +350,25 @@ impl OutputFrameBuildState {
         state.effect_hints = self.effect_hints;
         state.background = self.background_color;
         state.font_pixel_size = self.font_pixel_size;
-        state.frame_id = self.frame_id;
-        state.parent_id = self.parent_id;
-        state.parent_x = self.parent_x;
-        state.parent_y = self.parent_y;
-        state.z_order = self.z_order;
+        let parent = (self.parent_id.get() != 0).then_some(self.parent_id);
+        let (x, y) = if parent.is_some() {
+            (self.parent_x, self.parent_y)
+        } else {
+            (0.0, 0.0)
+        };
+        state.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            self.frame_id,
+            state.presentation_id,
+            parent,
+            neomacs_display_protocol::FrameRect::new(
+                x,
+                y,
+                state.frame_pixel_width,
+                state.frame_pixel_height,
+            )
+            .expect("output frame placement is valid"),
+            self.z_order,
+        );
         state.undecorated = self.undecorated;
         state.border_width = self.border_width;
         state.border_color = self.border_color;

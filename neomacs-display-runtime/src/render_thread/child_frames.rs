@@ -48,17 +48,7 @@ impl ChildFrameManager {
     }
 
     pub fn set_root_frame(&mut self, root: Option<&FrameGlyphBuffer>) {
-        self.root = root.map(|root| {
-            root.frame_placement.unwrap_or_else(|| {
-                PresentedFramePlacement::new(
-                    root.frame_id,
-                    root.presentation_id,
-                    None,
-                    FrameRect::new(0.0, 0.0, root.width, root.height).unwrap(),
-                    root.z_order,
-                )
-            })
-        });
+        self.root = root.map(|root| root.frame_placement);
         self.rebuild_presented_scene();
     }
 
@@ -73,10 +63,11 @@ impl ChildFrameManager {
     /// an identical child-frame snapshot still refreshes liveness, but it must
     /// not look like a new frame install to face-cache and dirty-redraw logic.
     pub fn update_frame(&mut self, buf: FrameGlyphBuffer) -> bool {
-        let frame_id = buf.frame_id;
-        let abs_x = buf.parent_x;
-        let abs_y = buf.parent_y;
-        let z_order = buf.z_order;
+        let frame_id = buf.frame_placement.frame();
+        let outer = buf.frame_placement.outer_in_parent();
+        let abs_x = outer.x();
+        let abs_y = outer.y();
+        let z_order = buf.frame_placement.z_order();
         let existing = self.frames.get_mut(&frame_id.get());
 
         let glyph_count = buf.glyphs.len();
@@ -90,7 +81,7 @@ impl ChildFrameManager {
                 abs_y,
                 width = buf.width,
                 height = buf.height,
-                z_order = buf.z_order,
+                z_order,
                 glyphs = glyph_count,
                 "child_frame_lifecycle: render_thread_child_buffer_unchanged"
             );
@@ -104,7 +95,7 @@ impl ChildFrameManager {
             abs_y,
             width = buf.width,
             height = buf.height,
-            z_order = buf.z_order,
+            z_order,
             glyphs = glyph_count,
             existed,
             "child_frame_lifecycle: render_thread_child_buffer"
@@ -224,28 +215,21 @@ impl ChildFrameManager {
         let root_id = self.root.map(|root| root.frame().get());
         let mut placements = self.root.into_iter().collect::<Vec<_>>();
         placements.extend(self.frames.values().map(|entry| {
-            if let Some(placement) = entry.frame.frame_placement {
-                return placement;
-            }
-            let raw_parent = entry.frame.parent_id.get();
-            let parent = if Some(raw_parent) == root_id || child_ids.contains(&raw_parent) {
-                Some(DisplayFrameId::new(raw_parent))
-            } else {
-                None
-            };
-            PresentedFramePlacement::new(
-                entry.frame.frame_id,
-                entry.frame.presentation_id,
-                parent,
-                FrameRect::new(
-                    entry.frame.parent_x,
-                    entry.frame.parent_y,
-                    entry.frame.width,
-                    entry.frame.height,
+            let placement = entry.frame.frame_placement;
+            let raw_parent = placement.parent().map(DisplayFrameId::get);
+            if raw_parent
+                .is_some_and(|parent| Some(parent) != root_id && !child_ids.contains(&parent))
+            {
+                PresentedFramePlacement::new(
+                    placement.frame(),
+                    placement.presentation(),
+                    None,
+                    placement.outer_in_parent(),
+                    placement.z_order(),
                 )
-                .expect("validated child-frame geometry"),
-                entry.frame.z_order,
-            )
+            } else {
+                placement
+            }
         }));
         let Ok(scene) = PresentedFrameScene::from_placements(placements) else {
             tracing::error!("rejecting incoherent child-frame ancestry");
@@ -253,8 +237,8 @@ impl ChildFrameManager {
         };
         for entry in self.frames.values_mut() {
             let Ok(placed) = scene.place(PlaceChildQuery::new(
-                entry.frame.frame_id,
-                entry.frame.presentation_id,
+                entry.frame.frame_placement.frame(),
+                entry.frame.frame_placement.presentation(),
             )) else {
                 continue;
             };

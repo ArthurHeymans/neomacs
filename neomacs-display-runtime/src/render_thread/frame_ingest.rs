@@ -247,8 +247,11 @@ impl RenderApp {
         self.frame_windows.tick_top_level_child_frames();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
             super::frame_stats::note_scene_commit(std::time::Instant::now());
-            let frame_id = display_state.frame_id;
-            let parent_id = display_state.parent_id;
+            let frame_id = display_state.frame_placement.frame();
+            let parent_id = display_state
+                .frame_placement
+                .parent()
+                .unwrap_or(neomacs_display_protocol::DisplayFrameId::new(0));
             self.sync_frame_chrome_assets(&display_state.frame_chrome);
 
             // Materialize FrameDisplayState → FrameGlyphBuffer for the
@@ -487,8 +490,8 @@ impl RenderApp {
                     parent_frame_id = parent_id.get(),
                     width = frame.width,
                     height = frame.height,
-                    parent_x = frame.parent_x,
-                    parent_y = frame.parent_y,
+                    parent_x = frame.frame_placement.outer_in_parent().x(),
+                    parent_y = frame.frame_placement.outer_in_parent().y(),
                     glyphs = frame.glyphs.len(),
                     "child_frame_lifecycle: render_thread_child_frame_state_received"
                 );
