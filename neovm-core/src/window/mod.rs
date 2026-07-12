@@ -2772,16 +2772,48 @@ impl Frame {
         let char_width = self.char_width.max(1.0).round();
         let char_height = self.char_height.max(1.0).round();
         let text_width = (i64::from(width) - self.horizontal_non_text_width()).max(1) as f32;
-        let root_height = self.root_window.bounds().height;
         let cols = (text_width / char_width).floor().max(1.0) as i64;
-        let text_lines = (root_height / char_height).floor().max(1.0) as i64;
-        let total_lines = text_lines.saturating_add(1);
         self.set_parameter(Value::symbol("width"), Value::fixnum(cols));
-        self.set_parameter(Value::symbol("height"), Value::fixnum(total_lines));
-        self.set_parameter(
-            Value::symbol("neovm--frame-text-lines"),
-            Value::fixnum(text_lines),
-        );
+
+        if self.effective_window_system().is_none() && self.parent_frame.as_frame_id().is_none() {
+            // Top-level terminal frame. Mirror GNU frame.c line accounting:
+            // FRAME_TOTAL_LINES is the whole terminal, and the 'height'
+            // parameter is FRAME_LINES = FRAME_TOTAL_LINES - FRAME_MENU_BAR_LINES
+            // - FRAME_TAB_BAR_LINES (the minibuffer is INCLUDED in FRAME_LINES).
+            // Derive the menu/tab reservation from the LINE parameters
+            // (`frame_top_margin`) rather than the transient `menu_bar_height`
+            // pixel cache, which may still be 0 when a resize event lands before
+            // the next redisplay syncs it. Only realized (displayed) chrome
+            // reduces FRAME_LINES; a non-displayed frame (--batch) keeps
+            // FRAME_TOTAL_LINES == FRAME_LINES, matching GNU's batch geometry.
+            let total_terminal_lines = (self.height as f32 / char_height).floor().max(1.0) as i64;
+            let top_margin = if self.displays_chrome {
+                self.frame_top_margin()
+            } else {
+                0
+            };
+            let frame_lines = (total_terminal_lines - top_margin).max(1);
+            let minibuffer_lines = i64::from(self.minibuffer_leaf.is_some());
+            let text_lines = (frame_lines - minibuffer_lines).max(1);
+            self.set_parameter(Value::symbol("height"), Value::fixnum(frame_lines));
+            self.set_parameter(
+                Value::symbol("neovm--frame-total-lines"),
+                Value::fixnum(total_terminal_lines),
+            );
+            self.set_parameter(
+                Value::symbol("neovm--frame-text-lines"),
+                Value::fixnum(text_lines),
+            );
+        } else {
+            let root_height = self.root_window.bounds().height;
+            let text_lines = (root_height / char_height).floor().max(1.0) as i64;
+            let total_lines = text_lines.saturating_add(1);
+            self.set_parameter(Value::symbol("height"), Value::fixnum(total_lines));
+            self.set_parameter(
+                Value::symbol("neovm--frame-text-lines"),
+                Value::fixnum(text_lines),
+            );
+        }
     }
 
     /// Refresh fixed-size constraints from buffers currently displayed in the

@@ -5115,6 +5115,23 @@ fn frame_is_top_level_non_window(frame: &crate::window::Frame) -> bool {
     frame.effective_window_system().is_none() && frame.parent_frame.as_frame_id().is_none()
 }
 
+/// GNU `Fframe_parameters` reports the `height` parameter of a top-level
+/// terminal frame from live geometry as FRAME_LINES (frame.c): the whole
+/// terminal minus the realized menu-bar / tab-bar rows (the minibuffer stays
+/// INCLUDED). `frame.lines()` is FRAME_TOTAL_LINES (the whole terminal), so
+/// subtract the top margin here. Only realized (displayed) chrome reduces the
+/// count; a non-displayed frame (--batch) keeps FRAME_LINES == FRAME_TOTAL_LINES,
+/// matching the batch geometry the oracle pins (frame-total-lines == frame-height).
+fn frame_realized_lines(frame: &crate::window::Frame) -> i64 {
+    let total = frame.lines() as i64;
+    let top_margin = if frame.displays_chrome {
+        frame.frame_top_margin()
+    } else {
+        0
+    };
+    (total - top_margin).max(1)
+}
+
 fn frame_non_text_height_pixels(frame: &crate::window::Frame) -> u32 {
     // GNU frame text size includes the minibuffer window.  Only true frame
     // chrome lives outside the text area for sizing math here.
@@ -5323,14 +5340,27 @@ fn set_top_level_non_window_pixelwise_totals(
 ) {
     let text_width = i64::from(text_width).max(1);
     let text_height = i64::from(text_height).max(1);
-    let total_lines = text_height
-        .saturating_add(i64::from(frame.minibuffer_leaf.is_some()))
-        .min(u32::MAX as i64);
+    // GNU frame.c line accounting: the 'height' parameter is FRAME_LINES (the
+    // text area including the minibuffer, excluding the menu/tab bar rows), and
+    // FRAME_TOTAL_LINES = FRAME_LINES + FRAME_MENU_BAR_LINES + FRAME_TAB_BAR_LINES.
+    // `text_height` here is the text-area line count (menu/tab already excluded).
+    let minibuffer_lines = i64::from(frame.minibuffer_leaf.is_some());
+    let frame_lines = text_height.saturating_add(minibuffer_lines).min(u32::MAX as i64);
+    // Only realized (displayed) chrome adds rows over FRAME_LINES; a
+    // non-displayed frame (--batch) keeps FRAME_TOTAL_LINES == FRAME_LINES,
+    // matching GNU's batch geometry that the oracle pins.
+    let top_margin = if frame.displays_chrome {
+        frame.frame_top_margin()
+    } else {
+        0
+    };
+    let total_lines = frame_lines.saturating_add(top_margin).min(u32::MAX as i64);
 
     frame.set_parameter(
         Value::symbol(FRAME_TOTAL_COLS_PARAM),
         Value::fixnum(text_width),
     );
+    frame.set_parameter(Value::symbol("height"), Value::fixnum(frame_lines));
     frame.set_parameter(
         Value::symbol(FRAME_TOTAL_LINES_PARAM),
         Value::fixnum(total_lines),
@@ -8068,7 +8098,9 @@ fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey)
         // for top-level non-window frames, even after their parameter alist has
         // stored requested size values.
         "width" if frame_is_top_level_non_window(frame) => Value::fixnum(frame.columns() as i64),
-        "height" if frame_is_top_level_non_window(frame) => Value::fixnum(frame.lines() as i64),
+        "height" if frame_is_top_level_non_window(frame) => {
+            Value::fixnum(frame_realized_lines(frame))
+        }
         "width" => frame
             .parameter("width")
             .unwrap_or(Value::fixnum(frame.columns() as i64)),
@@ -8149,7 +8181,7 @@ pub(crate) fn builtin_frame_parameters(
             .unwrap_or(Value::fixnum(frame.columns() as i64))
     };
     let height = if frame_is_top_level_non_window(frame) {
-        Value::fixnum(frame.lines() as i64)
+        Value::fixnum(frame_realized_lines(frame))
     } else {
         frame
             .parameter("height")
