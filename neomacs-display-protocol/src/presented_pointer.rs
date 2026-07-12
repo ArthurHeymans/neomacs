@@ -171,6 +171,10 @@ pub enum PresentedHitError {
     },
     InvalidRegionGeometry,
     InvalidTextPositionGeometry,
+    MissingBodyRow {
+        window: DisplayWindowId,
+        output_row: i64,
+    },
 }
 
 impl std::fmt::Display for PresentedHitError {
@@ -189,6 +193,10 @@ impl std::fmt::Display for PresentedHitError {
             Self::InvalidTextPositionGeometry => {
                 formatter.write_str("invalid text-position geometry")
             }
+            Self::MissingBodyRow { window, output_row } => write!(
+                formatter,
+                "window {window} has no canonical body row for output row {output_row}"
+            ),
         }
     }
 }

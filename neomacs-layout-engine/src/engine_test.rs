@@ -1904,6 +1904,48 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .unwrap();
     assert_eq!(exact_hit.text_position(), Some(text_position));
 
+    let mut snapshots = renderer
+        .window_infos
+        .iter()
+        .filter_map(|info| {
+            frame
+                .window_display_snapshot(neovm_core::window::WindowId(info.window_id.get() as u64))
+                .cloned()
+        })
+        .collect::<Vec<_>>();
+    let poisoned = snapshots
+        .iter_mut()
+        .find(|snapshot| snapshot.window_id == selected)
+        .expect("selected display snapshot");
+    let poisoned_point = poisoned.points.first_mut().expect("visible point");
+    poisoned_point.y = 777;
+    poisoned_point.row = 999;
+    let poisoned_x = poisoned_point.x;
+    poisoned
+        .body_rows
+        .push(neovm_core::window::PresentedBodyRowSnapshot {
+            output_row: 999,
+            body_row: 7,
+            body_y: 3,
+        });
+    assert!(
+        selected_regions.text_body.y > selected_regions.outer.y,
+        "fixture must contain top chrome"
+    );
+    let rebuilt = build_presented_hit_index(renderer, &snapshots).unwrap();
+    let canonical = rebuilt
+        .text_positions()
+        .iter()
+        .find(|position| position.window().get() == selected.0 as i64 && position.row() == 7)
+        .copied()
+        .expect("canonical body position");
+    assert_eq!(
+        canonical.bounds().x(),
+        selected_regions.text_body.x + poisoned_x as f32
+    );
+    assert_eq!(canonical.row(), 7);
+    assert_eq!(canonical.bounds().y(), selected_regions.text_body.y + 3.0);
+
     let retained_main = first_publication
         .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
             evaluator_presentation,

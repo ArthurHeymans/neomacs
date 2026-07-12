@@ -99,13 +99,18 @@ fn build_presented_hit_index(
 ) -> Result<PresentedHitIndex, neomacs_display_protocol::PresentedHitError> {
     let mut regions = Vec::new();
     let mut positions = Vec::new();
-    let mut push_region = |window, kind, rect: neomacs_display_protocol::types::Rect, z_order| {
+    let mut push_region = |window,
+                           kind,
+                           rect: neomacs_display_protocol::types::Rect,
+                           z_order|
+     -> Result<(), neomacs_display_protocol::PresentedHitError> {
         if rect.width <= 0.0 || rect.height <= 0.0 {
-            return;
+            return Ok(());
         }
-        if let Ok(bounds) = FrameRect::new(rect.x, rect.y, rect.width, rect.height) {
-            regions.push(PresentedHitRegion::new(window, kind, bounds, z_order));
-        }
+        let bounds = FrameRect::new(rect.x, rect.y, rect.width, rect.height)
+            .map_err(|_| neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)?;
+        regions.push(PresentedHitRegion::new(window, kind, bounds, z_order));
+        Ok(())
     };
 
     for (window_z, info) in state.window_infos.iter().enumerate() {
@@ -123,7 +128,7 @@ fn build_presented_hit_index(
             PresentedRegionKind::TextBody,
             window_regions.text_body,
             base_z,
-        );
+        )?;
         for (kind, rect) in [
             (PresentedRegionKind::LeftMargin, window_regions.left_margin),
             (
@@ -160,7 +165,7 @@ fn build_presented_hit_index(
             ),
         ] {
             if let Some(rect) = rect {
-                push_region(window, kind, rect, base_z + 10);
+                push_region(window, kind, rect, base_z + 10)?;
             }
         }
 
@@ -169,19 +174,30 @@ fn build_presented_hit_index(
             .find(|snapshot| snapshot.window_id.0 as i64 == info.window_id.get())
         {
             for point in &snapshot.points {
-                let Ok(bounds) = FrameRect::new(
+                let body_row = snapshot
+                    .body_rows
+                    .iter()
+                    .find(|row| row.output_row == point.row)
+                    .ok_or(
+                        neomacs_display_protocol::PresentedHitError::MissingBodyRow {
+                            window: info.window_id,
+                            output_row: point.row,
+                        },
+                    )?;
+                let bounds = FrameRect::new(
                     window_regions.text_body.x + point.x as f32,
-                    window_regions.outer.y + point.y as f32,
+                    window_regions.text_body.y + body_row.body_y as f32,
                     point.width.max(1) as f32,
                     point.height.max(1) as f32,
-                ) else {
-                    continue;
-                };
+                )
+                .map_err(|_| {
+                    neomacs_display_protocol::PresentedHitError::InvalidTextPositionGeometry
+                })?;
                 positions.push(PresentedTextPosition::new(
                     info.window_id,
                     bounds,
                     point.buffer_pos.as_i64(),
-                    point.row,
+                    body_row.body_row,
                     point.col,
                 ));
             }
