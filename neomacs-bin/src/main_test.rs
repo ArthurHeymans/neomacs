@@ -926,6 +926,50 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
 }
 
 #[test]
+fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_metadata: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = ImageResolveRequest {
+        source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
+        max_width: 0,
+        max_height: 24,
+        fg_color: 0,
+        bg_color: 0,
+    };
+
+    neovm_core::emacs_core::DisplayHost::request_image(&host, request)
+        .expect("request image")
+        .expect("image handle");
+
+    let home = std::env::var("HOME").expect("HOME for GNU tilde expansion");
+    let expected = Path::new(&home)
+        .join("Pictures/Pik.png")
+        .to_string_lossy()
+        .into_owned();
+    assert!(matches!(
+        cmd_rx.try_recv().expect("queued image load"),
+        RenderCommand::Asset(AssetCommand::ImageLoadFile { path, .. })
+            if path == expected
+    ));
+}
+
+#[test]
 fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
     let shared: SharedImageMetadata = Arc::new((
         Mutex::new(std::collections::HashMap::new()),

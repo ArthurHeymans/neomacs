@@ -1070,6 +1070,18 @@ fn cursor_effect_u32(args: &[CursorEffectArg], index: usize, default: u32) -> u3
     }
 }
 
+fn normalize_image_file_request(mut request: ImageResolveRequest) -> ImageResolveRequest {
+    let ImageResolveSource::File(path) = &request.source else {
+        return request;
+    };
+    let Some(path) = path.as_utf8_str().filter(|path| path.starts_with('~')) else {
+        return request;
+    };
+    let expanded = neovm_core::emacs_core::fileio::expand_file_name(path, None);
+    request.source = ImageResolveSource::File(LispString::from_utf8(&expanded));
+    request
+}
+
 impl DisplayHost for PrimaryWindowDisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         let title_string = request.title.as_utf8_str().unwrap_or("Neomacs").to_owned();
@@ -1569,6 +1581,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        let request = normalize_image_file_request(request);
         let image = match self.request_image(request.clone())? {
             Some(image) if image.metadata.is_some() => return Ok(Some(image)),
             Some(image) => image,
@@ -1604,6 +1617,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+        let request = normalize_image_file_request(request);
         {
             let mut cache = match self.resolved_images.lock() {
                 Ok(cache) => cache,
