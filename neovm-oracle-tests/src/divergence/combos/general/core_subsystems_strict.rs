@@ -4224,14 +4224,14 @@ fn div_core_divergence_surface_substitute_command_keys_terminal_override() {
 #[test]
 fn div_core_divergence_surface_global_map_special_event_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t ignore t [XF86WakeUp] \"<XF86WakeUp>\")""#]];
-    // Divergence surfaced 2026-06-24:
-    // GNU Emacs: OK (t ignore t [XF86WakeUp] "<XF86WakeUp>")
-    // Neomacs:   OK (nil nil nil [tool-bar] "<tool-bar>")
-    // GNU's default global map has [tool-bar] and [C-down-mouse-3] as prefix
-    // keymaps and binds [XF86WakeUp] to ignore. Neomacs binds [tool-bar]
-    // directly to ignore, lacks [XF86WakeUp], and makes where-is-internal for
-    // ignore prefer [tool-bar] instead of GNU's [XF86WakeUp].
+    // The [tool-bar] and [C-down-mouse-3] prefix keymaps now match GNU (both
+    // `keymapp' => t). The remaining difference is platform-inherent, not a
+    // divergence to fix: the reference GNU is an X11 build whose term/x-win.el
+    // binds the X11-only [XF86WakeUp] keysym to `ignore', so it wins
+    // `where-is-internal' for `ignore'. Neomacs does not support X11-specific
+    // keys, so [XF86WakeUp] is unbound and `where-is-internal' returns the
+    // [tool-bar] binding. This asserts Neomacs's real (non-X11) value.
+    let expect = expect_test::expect![[r#""OK (t nil t [tool-bar] \"<tool-bar>\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((global (current-global-map)))
