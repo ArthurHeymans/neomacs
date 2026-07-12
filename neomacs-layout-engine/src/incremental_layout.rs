@@ -507,9 +507,16 @@ impl RetainedWindowMatrix {
         }
         // Whole-row scroll distance: the body row whose start matches the new
         // window_start. `None` (no match) → partial-row scroll or scroll-up → bail.
+        // Only a row that DISPLAYS buffer text carries a real window_start
+        // position. The trailing past-last-line placeholder row (`!displays_text`)
+        // has the sentinel `start_charpos == 0`, which spuriously matches a
+        // scroll-to-top (`window_start == 0`) — the replay then treats the
+        // placeholder as the new top and emits a phantom leading blank row + a
+        // one-column-clipped first line (the recenter-to-top corruption). Match
+        // only real text rows so scroll-up correctly bails to a full rebuild.
         let s = body
             .iter()
-            .position(|(_, row)| row.start_charpos as i64 == curr.window_start)?;
+            .position(|(_, row)| row.displays_text && row.start_charpos as i64 == curr.window_start)?;
         if s == 0 {
             return None;
         }
@@ -682,11 +689,23 @@ impl RetainedWindowMatrix {
                     let mut row = row.clone();
                     row.cursor_col = None;
                     row.cursor_type = None;
-                    row.start_charpos = (row.start_charpos as i64 + delta) as usize;
-                    row.end_charpos = (row.end_charpos as i64 + delta) as usize;
-                    for area in row.glyphs.iter_mut() {
-                        for g in area.iter_mut() {
-                            g.charpos = (g.charpos as i64 + delta) as usize;
+                    // Only rows that DISPLAY buffer text carry real buffer
+                    // positions that shift with the insert. The trailing
+                    // past-last-line placeholder row (`!displays_text`, e.g. the
+                    // synthetic row after the final newline) has a canonical
+                    // (0,0) charpos that a full rebuild reproduces unchanged;
+                    // shifting it by `delta` turns it into a phantom row at
+                    // pixel_y 0 (start_charpos == delta), which then propagates
+                    // through cursor-only reuse — the yank-pop first-row
+                    // corruption. Leave such placeholder rows' charpos intact so
+                    // the reused matrix stays byte-identical to a full rebuild.
+                    if row.displays_text {
+                        row.start_charpos = (row.start_charpos as i64 + delta) as usize;
+                        row.end_charpos = (row.end_charpos as i64 + delta) as usize;
+                        for area in row.glyphs.iter_mut() {
+                            for g in area.iter_mut() {
+                                g.charpos = (g.charpos as i64 + delta) as usize;
+                            }
                         }
                     }
                     below_indices.insert(idx as i64);

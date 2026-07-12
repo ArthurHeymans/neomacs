@@ -3247,6 +3247,49 @@ fn phase2_scroll_is_pure_scroll() {
     );
 }
 
+/// REGRESSION (recenter-to-top first-row corruption): scroll DOWN so line 1 is
+/// no longer visible, then scroll back to the TOP (window_start charpos 0). The
+/// scroll-up must bail to a full rebuild — NOT spuriously match the trailing
+/// past-last-line placeholder row (start_charpos == 0) and emit a phantom blank
+/// leading row + one-column-clipped first line. The final output must be
+/// byte-identical (role/start/end/pixel_y) to a full rebuild at window_start 1.
+#[test]
+fn scroll_to_top_does_not_match_trailing_placeholder_row() {
+    let line = "recenter line 01\n"; // 17 bytes, like the failing TUI test
+    let text = line.repeat(80);
+    let down_start = 30 * line.len() as i64 + 1; // line 31 at top; line 1 not visible
+
+    // Incremental: warm at top, scroll DOWN, then scroll back to the TOP.
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    scroll_window_to(&mut eval, frame_id, win, buf_id, down_start, 30 * line.len());
+    engine.layout_frame_rust(&mut eval, frame_id);
+    scroll_window_to(&mut eval, frame_id, win, buf_id, 1, 0);
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    // Reference: fresh full rebuild at window_start 1.
+    let (mut eval_ref, frame_ref, _br, _wr) = incr_editing_frame(&text, 800, 600);
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let shape = |t: &BackendLayoutTrace| -> Vec<(GlyphRowRole, usize, usize, u32)> {
+        t.matrix_rows
+            .iter()
+            .map(|r| (r.role, r.start_charpos, r.end_charpos, r.pixel_y_bits))
+            .collect()
+    };
+    assert_eq!(
+        shape(&incremental),
+        shape(&reference),
+        "\nscroll-to-top must match full rebuild, not phantom-shift the first row\n INC={:#?}\n REF={:#?}",
+        shape(&incremental),
+        shape(&reference)
+    );
+}
+
 /// Phase 2 GOLDEN — the pure-scroll output must be BYTE-IDENTICAL to a full
 /// rebuild of the same scrolled state (reused-shifted rows + newly-exposed rows
 /// + re-walked chrome + cursor).
@@ -4116,6 +4159,68 @@ fn layout_frame_rust_lays_out_invisible_text() {
     let trace = layout_trace_with_buffer_setup(text, 360, 180, setup);
 
     assert!(!trace.matrix_rows.is_empty());
+}
+
+#[test]
+fn layout_frame_rust_display_string_newline_terminates_row() {
+    // Regression for the Info *dir* breadcrumbs bug: a `display` string that
+    // ENDS IN A NEWLINE, covering a buffer line plus its terminating newline,
+    // must render its text and then break the row (GNU xdisp.c: a display line
+    // "ends in a newline from a display string"). The bare buffer newline that
+    // follows (an empty line) then produces its own blank row. Without the fix
+    // the display string's '\n' was ignored, the following buffer newline
+    // terminated the display-string row instead, and the blank row was dropped
+    // -- shifting every later row up by one.
+    //
+    // Buffer "AAA\n\nBBB\n": line0 "AAA" (chars 0..3), '\n' at 3, empty line1
+    // ('\n' at 4), "BBB" at 5. The `display` = "X\n" covers "AAA\n" (0..4).
+    let text = "AAA\n\nBBB\n";
+    let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
+        assert!(buffer.put_text_property(
+            0,
+            4,
+            Value::symbol("display"),
+            Value::string("X\n"),
+        ));
+    };
+    let trace = layout_trace_with_buffer_setup(text, 400, 240, setup);
+
+    // Text of each non-mode-line Text row, in display order.
+    let row_texts: Vec<String> = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.enabled)
+        .map(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .filter_map(|glyph| match &glyph.kind {
+                    GlyphKindTrace::Char(ch) | GlyphKindTrace::Glyphless(ch) => Some(ch.to_string()),
+                    GlyphKindTrace::Composite(text) => Some(text.clone()),
+                    _ => None,
+                })
+                .collect::<String>()
+        })
+        .collect();
+
+    let x_row = row_texts
+        .iter()
+        .position(|t| t == "X")
+        .unwrap_or_else(|| panic!("display string row `X` must render, rows={row_texts:?}"));
+    let bbb_row = row_texts
+        .iter()
+        .position(|t| t == "BBB")
+        .unwrap_or_else(|| panic!("buffer text `BBB` must render, rows={row_texts:?}"));
+
+    // The empty buffer line must occupy its own blank row BETWEEN `X` and `BBB`.
+    assert_eq!(
+        bbb_row,
+        x_row + 2,
+        "display-string newline must leave a blank row for the empty buffer line, rows={row_texts:?}"
+    );
+    assert_eq!(
+        row_texts[x_row + 1], "",
+        "the row between `X` and `BBB` must be the blank empty-line row, rows={row_texts:?}"
+    );
 }
 
 #[test]
@@ -15726,6 +15831,54 @@ fn phase3_delete_at_eob_does_not_relay_reused_prefix_from_buffer_start() {
         rendered.matches(";; first scratch line").count(),
         1,
         "localized EOB deletion must not append a second copy of reused prefix rows: {rendered:?}"
+    );
+}
+
+/// REGRESSION (yank-pop first-row corruption): a localized-edit INSERT with the
+/// below-reuse fast path must not shift the charpos of the trailing
+/// past-last-line placeholder row. Insert `delta` chars on a content line that
+/// has real content + a trailing empty line below it; the edit-replay output
+/// must be byte-identical (row role/start/end/pixel_y) to a full rebuild of the
+/// same final state. Before the fix, the trailing row's charpos is shifted by
+/// `delta` (e.g. (0,0) -> (delta,delta)) — a phantom row at pixel_y 0.
+#[test]
+fn edit_below_reuse_does_not_shift_trailing_placeholder_row() {
+    let text = "alpha line\nbeta line\ncharlie line\ndelta line\n";
+    let edit_byte: usize = 12; // inside "charlie" on line 3 (below has "delta line" + EOB)
+
+    let run = |lay_incrementally: bool| -> Vec<(GlyphRowRole, usize, usize, u32, bool, bool)> {
+        let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        if lay_incrementally {
+            engine.layout_frame_rust(&mut eval, frame_id);
+        }
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+            buffer.insert("X");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        selected_window_layout_trace(&eval, &engine, frame_id)
+            .matrix_rows
+            .iter()
+            .map(|r| {
+                (
+                    r.role,
+                    r.start_charpos,
+                    r.end_charpos,
+                    r.pixel_y_bits,
+                    r.displays_text,
+                    r.ends_at_zv,
+                )
+            })
+            .collect()
+    };
+    let incremental = run(true);
+    let reference = run(false);
+    assert_eq!(
+        incremental, reference,
+        "\nedit below-reuse must not corrupt the trailing placeholder row\n INC={:#?}\n REF={:#?}",
+        incremental, reference
     );
 }
 
