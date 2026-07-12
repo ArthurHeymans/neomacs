@@ -4386,6 +4386,13 @@ impl crate::emacs_core::eval::Context {
                 crate::window::WindowId(window.get() as u64),
                 position.buffer_position(),
             )
+        } else if frame.effective_window_system().is_some()
+            && frame.display_presentation().is_some()
+        {
+            // GUI pointer observations are delivered from the renderer's exact
+            // presentation. Missing/mismatched observations must not silently
+            // fall back to mutable live-window arithmetic.
+            return None;
         } else {
             let window_id = frame.window_at(x as f32, y as f32)?;
             let snapshot = frame.window_display_snapshot(window_id)?;
@@ -5156,6 +5163,23 @@ impl crate::emacs_core::eval::Context {
 
         let frame_x = x.round() as i64;
         let frame_y = y.round() as i64;
+        if frame.effective_window_system().is_some() && frame.display_presentation().is_some() {
+            return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+                window_or_frame: Value::make_frame(frame.id.0),
+                area: None,
+                x: frame_x,
+                y: frame_y,
+                metrics: MousePosnMetrics {
+                    point: None,
+                    col: None,
+                    row: None,
+                    width: None,
+                    height: None,
+                    anchor_x: None,
+                    anchor_y: None,
+                },
+            });
+        }
         let frame_height = frame.height as i64;
         let menu_bar_height = frame.menu_bar_height as i64;
         let tool_bar_height = frame.tool_bar_height as i64;

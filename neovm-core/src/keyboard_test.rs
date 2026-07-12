@@ -241,6 +241,30 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
         Some("semantic tip")
     );
     assert_eq!(help[5], Value::fixnum(7));
+
+    eval.command_loop
+        .keyboard
+        .kboard
+        .presented_mouse_observation = None;
+    let event = eval
+        .handle_read_char_input_event(InputEvent::MousePress {
+            button: MouseButton::Left,
+            x: 22.0,
+            y: 12.0,
+            modifiers: Modifiers::none(),
+            target_frame_id: frame_id.0,
+        })
+        .unwrap()
+        .unwrap();
+    let event = crate::emacs_core::value::list_to_vec(&event).unwrap();
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).unwrap();
+    assert_eq!(position[0], Value::make_frame(frame_id.0));
+    assert!(position[1].is_nil());
+    assert!(
+        eval.resolve_text_area_help_echo_event(frame_id, 22, 12)
+            .is_none(),
+        "GUI help must not fall back to poisoned live coordinate arithmetic"
+    );
 }
 
 fn presented_pointer_fixture() -> (crate::emacs_core::Context, crate::window::FrameId, u64, u32) {
