@@ -578,22 +578,6 @@ fn key_event_description_round_trip() {
 }
 
 #[test]
-fn key_event_to_event_int() {
-    crate::test_utils::init_test_tracing();
-    // Plain 'a' = 97
-    let e = KeyEvent::char('a');
-    assert_eq!(e.to_event_int(), 97);
-
-    // C-a = 97 | (1 << 26)
-    let e = KeyEvent::char_with_mods('a', Modifiers::ctrl());
-    assert_eq!(e.to_event_int(), 97 | (1 << 26));
-
-    // RET = 13
-    let e = KeyEvent::named(NamedKey::Return);
-    assert_eq!(e.to_event_int(), 13);
-}
-
-#[test]
 fn prefix_arg_to_value() {
     crate::test_utils::init_test_tracing();
     assert_eq!(PrefixArg::None.to_value(), Value::NIL);

@@ -303,15 +303,15 @@ fn format_key_event_roundtrip() {
 }
 
 #[test]
-fn keyboard_escape_encodes_to_emacs_escape_prefix_char() {
+fn keyboard_escape_encodes_to_emacs_escape_symbol() {
     crate::test_utils::init_test_tracing();
     let event = KeyEvent::from(crate::keyboard::KeyEvent::named(
         crate::keyboard::NamedKey::Escape,
     ));
     assert_eq!(
         key_event_to_emacs_event(&event),
-        Value::fixnum(27),
-        "physical Escape should enter GNU ESC-prefix through event 27"
+        Value::symbol("escape"),
+        "a named GUI Escape must remain distinct from the ASCII ESC character"
     );
 }
 
@@ -328,28 +328,25 @@ fn keyboard_escape_preserves_non_ctrl_modifiers_when_encoded() {
     ));
     assert_eq!(
         key_event_to_emacs_event(&event),
-        Value::fixnum(
-            27 | crate::emacs_core::keyboard::pure::KEY_CHAR_SHIFT
-                | crate::emacs_core::keyboard::pure::KEY_CHAR_HYPER
-        )
+        Value::symbol("H-S-escape")
     );
 }
 
 #[test]
-fn keyboard_return_encodes_to_emacs_carriage_return() {
+fn keyboard_return_encodes_to_emacs_return_symbol() {
     crate::test_utils::init_test_tracing();
     let event = KeyEvent::from(crate::keyboard::KeyEvent::named(
         crate::keyboard::NamedKey::Return,
     ));
     assert_eq!(
         key_event_to_emacs_event(&event),
-        Value::fixnum('\r' as i64),
-        "physical Return should enter GNU RET/C-m through event 13"
+        Value::symbol("return"),
+        "physical Return should retain GNU's named GUI event identity"
     );
 }
 
 #[test]
-fn keyboard_meta_return_encodes_to_emacs_meta_carriage_return() {
+fn keyboard_meta_return_encodes_to_emacs_modified_return_symbol() {
     crate::test_utils::init_test_tracing();
     let event = KeyEvent::from(crate::keyboard::KeyEvent::named_with_mods(
         crate::keyboard::NamedKey::Return,
@@ -357,21 +354,21 @@ fn keyboard_meta_return_encodes_to_emacs_meta_carriage_return() {
     ));
     assert_eq!(
         key_event_to_emacs_event(&event),
-        Value::fixnum(0x08000000 | '\r' as i64),
-        "Meta+Return should be encoded as meta-bit plus RET/C-m"
+        Value::symbol("M-return"),
+        "Meta+Return should retain a modified named GUI event"
     );
 }
 
 #[test]
-fn keyboard_tab_encodes_to_emacs_tab_char() {
+fn keyboard_tab_encodes_to_emacs_tab_symbol() {
     crate::test_utils::init_test_tracing();
     let event = KeyEvent::from(crate::keyboard::KeyEvent::named(
         crate::keyboard::NamedKey::Tab,
     ));
     assert_eq!(
         key_event_to_emacs_event(&event),
-        Value::fixnum('\t' as i64),
-        "physical Tab should enter GNU TAB through event 9"
+        Value::symbol("tab"),
+        "physical Tab should retain GNU's named GUI event identity"
     );
 }
 

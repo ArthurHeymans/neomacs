@@ -2679,6 +2679,234 @@ fn assigning_terminal_translation_maps_updates_keyboard_runtime_owner() {
 }
 
 #[test]
+fn read_key_sequence_prefers_bound_gui_return_before_ascii_fallback() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("return")],
+        Value::symbol("gui-return-command"),
+    )
+    .expect("define symbolic Return binding");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('\r' as i64)],
+        Value::symbol("ascii-ret-command"),
+    )
+    .expect("define ASCII RET binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("return")],
+        Value::vector(vec![Value::fixnum('\r' as i64)]),
+    )
+    .expect("define GNU Return fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Return,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Return");
+
+    assert_eq!(keys, vec![Value::symbol("return")]);
+    assert_eq!(binding, Value::symbol("gui-return-command"));
+}
+
+#[test]
+fn read_key_sequence_prefers_bound_gui_tab_before_ascii_fallback() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("tab")],
+        Value::symbol("gui-tab-command"),
+    )
+    .expect("define symbolic Tab binding");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('\t' as i64)],
+        Value::symbol("ascii-tab-command"),
+    )
+    .expect("define ASCII TAB binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("tab")],
+        Value::vector(vec![Value::fixnum('\t' as i64)]),
+    )
+    .expect("define GNU Tab fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Tab,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Tab");
+
+    assert_eq!(keys, vec![Value::symbol("tab")]);
+    assert_eq!(binding, Value::symbol("gui-tab-command"));
+}
+
+#[test]
+fn read_key_sequence_falls_back_from_unbound_gui_return_to_ascii_ret() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('\r' as i64)],
+        Value::symbol("ascii-ret-command"),
+    )
+    .expect("define ASCII RET binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("return")],
+        Value::vector(vec![Value::fixnum('\r' as i64)]),
+    )
+    .expect("define GNU Return fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Return,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Return");
+
+    assert_eq!(keys, vec![Value::fixnum('\r' as i64)]);
+    assert_eq!(binding, Value::symbol("ascii-ret-command"));
+}
+
+#[test]
+fn read_key_sequence_falls_back_from_unbound_gui_tab_to_ascii_tab() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum('\t' as i64)],
+        Value::symbol("ascii-tab-command"),
+    )
+    .expect("define ASCII TAB binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("tab")],
+        Value::vector(vec![Value::fixnum('\t' as i64)]),
+    )
+    .expect("define GNU Tab fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Tab,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Tab");
+
+    assert_eq!(keys, vec![Value::fixnum('\t' as i64)]);
+    assert_eq!(binding, Value::symbol("ascii-tab-command"));
+}
+
+#[test]
+fn read_key_sequence_prefers_bound_gui_escape_before_ascii_fallback() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::symbol("escape")],
+        Value::symbol("gui-escape-command"),
+    )
+    .expect("define symbolic Escape binding");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum(27)],
+        Value::symbol("ascii-esc-command"),
+    )
+    .expect("define ASCII ESC binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("escape")],
+        Value::vector(vec![Value::fixnum(27)]),
+    )
+    .expect("define GNU Escape fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Escape,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Escape");
+
+    assert_eq!(keys, vec![Value::symbol("escape")]);
+    assert_eq!(binding, Value::symbol("gui-escape-command"));
+}
+
+#[test]
+fn read_key_sequence_falls_back_from_unbound_gui_escape_to_ascii_esc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
+    ev.assign("global-map", global_map);
+
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        global_map,
+        &[Value::fixnum(27)],
+        Value::symbol("ascii-esc-command"),
+    )
+    .expect("define ASCII ESC binding");
+    let local_function_key_map = ev
+        .eval_symbol("local-function-key-map")
+        .expect("local-function-key-map");
+    crate::emacs_core::keymap::list_keymap_define_seq(
+        local_function_key_map,
+        &[Value::symbol("escape")],
+        Value::vector(vec![Value::fixnum(27)]),
+    )
+    .expect("define GNU Escape fallback");
+
+    ev.command_loop.keyboard.pending_input_events.push_back(
+        crate::keyboard::InputEvent::key_press(crate::keyboard::KeyEvent::named(
+            crate::keyboard::NamedKey::Escape,
+        )),
+    );
+
+    let (keys, binding) = ev.read_key_sequence().expect("read GUI Escape");
+
+    assert_eq!(keys, vec![Value::fixnum(27)]);
+    assert_eq!(binding, Value::symbol("ascii-esc-command"));
+}
+
+#[test]
 fn read_key_sequence_function_translation_receives_prompt() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

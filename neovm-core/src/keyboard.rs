@@ -474,21 +474,6 @@ impl KeyEvent {
             }
         }
     }
-
-    /// Convert to Emacs integer event representation.
-    pub fn to_event_int(&self) -> u32 {
-        let base = match &self.key {
-            Key::Char(c) => *c as u32,
-            Key::Named(n) => match n {
-                NamedKey::Return => 13,
-                NamedKey::Tab => 9,
-                NamedKey::Escape => 27,
-                NamedKey::Backspace => 127,
-                _ => 0,
-            },
-        };
-        base | self.modifiers.to_bits()
-    }
 }
 
 // ---------------------------------------------------------------------------

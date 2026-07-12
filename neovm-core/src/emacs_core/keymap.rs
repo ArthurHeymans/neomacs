@@ -159,21 +159,8 @@ impl From<crate::keyboard::KeyEvent> for KeyEvent {
                 alt: false,
             },
             Key::Named(named) => {
-                if matches!(named, NamedKey::Escape) {
-                    return KeyEvent::Char {
-                        code: '\u{1b}',
-                        ctrl: ke.modifiers.ctrl,
-                        meta: ke.modifiers.meta,
-                        shift: ke.modifiers.shift,
-                        super_: ke.modifiers.super_,
-                        hyper: ke.modifiers.hyper,
-                        alt: false,
-                    };
-                }
                 let name = match named {
-                    NamedKey::Escape => {
-                        unreachable!("escape is handled above as a literal ESC char")
-                    }
+                    NamedKey::Escape => "escape",
                     NamedKey::Return => "return",
                     NamedKey::Tab => "tab",
                     NamedKey::Backspace => "backspace",
@@ -2795,32 +2782,6 @@ pub fn key_event_to_emacs_event(event: &KeyEvent) -> Value {
             hyper,
             alt,
         } => {
-            if let Some(base) = match resolve_sym(*name) {
-                "return" => Some('\r' as i64),
-                "tab" => Some('\t' as i64),
-                _ => None,
-            } {
-                let mut bits = base;
-                if *ctrl {
-                    bits |= KEY_CHAR_CTRL;
-                }
-                if *meta {
-                    bits |= KEY_CHAR_META;
-                }
-                if *shift {
-                    bits |= KEY_CHAR_SHIFT;
-                }
-                if *super_ {
-                    bits |= KEY_CHAR_SUPER;
-                }
-                if *hyper {
-                    bits |= KEY_CHAR_HYPER;
-                }
-                if *alt {
-                    bits |= KEY_CHAR_ALT;
-                }
-                return Value::fixnum(bits);
-            }
             let mut prefix = String::new();
             if *alt {
                 prefix.push_str("A-");
