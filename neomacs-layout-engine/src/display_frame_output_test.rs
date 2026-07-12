@@ -587,6 +587,17 @@ fn frame_output_rejects_window_without_installed_geometry() {
 }
 
 #[test]
+#[should_panic(expected = "duplicate output window identity")]
+fn frame_output_rejects_duplicate_window_identity() {
+    let params = window_params();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    for _ in 0..2 {
+        WindowFrameInfoRenderRequest::new(&params, WindowFrameMetadata::default())
+            .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+    }
+}
+
+#[test]
 fn missing_vertical_track_does_not_suppress_horizontal_scroll_bar() {
     let params = window_params();
     let mut info = window_info(&params);

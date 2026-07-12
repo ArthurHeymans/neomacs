@@ -203,6 +203,12 @@ impl OutputFrameBuildState {
             }
             OutputFrameArtifactInstallRequest::ScrollBar(item) => self.scroll_bars.push(item),
             OutputFrameArtifactInstallRequest::WindowInfo(info) => {
+                assert!(
+                    self.window_infos
+                        .iter()
+                        .all(|existing| existing.window_id != info.window_id),
+                    "duplicate output window identity"
+                );
                 self.pending_window_geometry.insert(info.window_id);
                 self.window_infos.push(info);
             }
