@@ -79,7 +79,7 @@ fn display_row_glyph_count(row: &GlyphRow) -> usize {
 
 impl DisplayRowLayout {
     fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
-        DisplayRowTextNaturalAdvancePolicy::new(self.tab_policy.clone(), self.char_width_px)
+        DisplayRowTextNaturalAdvancePolicy::new(self.tab_policy.clone())
     }
 
     fn row_height_px(&self) -> f32 {
@@ -1483,10 +1483,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_tab_at_position(&mut self, face_id: FaceId, position: DisplayRowPosition) {
+        let space_width_px = self.glyph_advance_px(' ', face_id, 1);
         let advance = self
             .layout
             .tab_policy
-            .advance_from(position, self.layout.char_width_px);
+            .advance_from(position, space_width_px);
         let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
         glyph_row_writer::push_stretch_to_area(
             self.row,

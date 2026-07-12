@@ -249,15 +249,11 @@ impl DisplayRowTextNaturalAdvanceRequest {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowTextNaturalAdvancePolicy {
     tab_policy: DisplayTabPolicy,
-    char_width_px: f32,
 }
 
 impl DisplayRowTextNaturalAdvancePolicy {
-    pub(crate) fn new(tab_policy: DisplayTabPolicy, char_width_px: f32) -> Self {
-        Self {
-            tab_policy,
-            char_width_px,
-        }
+    pub(crate) fn new(tab_policy: DisplayTabPolicy) -> Self {
+        Self { tab_policy }
     }
 
     pub(crate) fn resolve_with(
@@ -267,8 +263,9 @@ impl DisplayRowTextNaturalAdvancePolicy {
     ) -> f32 {
         match request.kind {
             DisplayRowTextNaturalAdvanceKind::Tab => {
+                let space_width_px = glyph_advance_px(' ', request.face_id, 1);
                 self.tab_policy
-                    .advance_from(request.position, self.char_width_px)
+                    .advance_from(request.position, space_width_px)
                     .pixel_width
             }
             DisplayRowTextNaturalAdvanceKind::ClusterContinuation => 0.0,
@@ -603,10 +600,7 @@ impl DisplayRowAppendFrame {
     }
 
     pub(crate) fn natural_text_advance_policy(&self) -> DisplayRowTextNaturalAdvancePolicy {
-        DisplayRowTextNaturalAdvancePolicy::new(
-            self.geometry().tab_policy().clone(),
-            self.face_space_width(),
-        )
+        DisplayRowTextNaturalAdvancePolicy::new(self.geometry().tab_policy().clone())
     }
 
     fn right_edge(&self) -> f32 {

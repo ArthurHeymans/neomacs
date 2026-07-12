@@ -713,6 +713,44 @@ fn display_row_builder_emits_tab_as_stretch_to_next_tab_stop() {
 }
 
 #[test]
+fn display_row_builder_tabs_use_realized_face_space_width_after_nerd_icon() {
+    struct NerdIconMeasurer;
+
+    impl DisplayGlyphMeasurer for NerdIconMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            ch: char,
+            _face_id: FaceId,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            match ch {
+                '\u{e6ad}' => Some(9.0),
+                ' ' | 'n' => Some(5.0),
+                _ => None,
+            }
+        }
+    }
+
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::every(1);
+    let mut measurer = NerdIconMeasurer;
+    let mut builder = DisplayRowBuilder::with_glyph_measurer(row_layout, &mut measurer);
+    builder.push_item(text_item("\u{e6ad}\tn"));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+
+    assert_eq!(glyphs[0].pixel_width, 9.0);
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Stretch { width_cols: 2 });
+    assert_eq!(
+        glyphs[1].pixel_width, 6.0,
+        "GNU xdisp computes TAB stops and the minimum-space threshold from the TAB face font's space_width; after a 9px icon with 5px spaces, tab-width 1 advances to x=15"
+    );
+    assert_eq!(glyphs[2].pixel_width, 5.0);
+}
+
+#[test]
 fn display_row_writer_appends_items_to_existing_row_tab_context() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;
