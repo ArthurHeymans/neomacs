@@ -6578,9 +6578,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: wid,
                     regions: crate::window::PresentedWindowRegions {
-                        outer: neomacs_display_protocol::types::Rect::new(
-                            0.0, 0.0, 800.0, 600.0,
-                        ),
+                        outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
                         text_body: neomacs_display_protocol::types::Rect::new(
                             0.0, 22.0, 800.0, 562.0,
                         ),
@@ -6809,7 +6807,10 @@ fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configurati
         let frame = ev.frames.get_mut(frame_id).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
     }
-    assert!(ev.frames.set_window_fringes(window_id, Some(8), Some(0), true, true));
+    assert!(
+        ev.frames
+            .set_window_fringes(window_id, Some(8), Some(0), true, true)
+    );
     assert!(ev.frames.set_window_scroll_bars(
         window_id,
         Some(0),
@@ -6842,9 +6843,7 @@ fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configurati
                 window_id,
                 regions: crate::window::PresentedWindowRegions {
                     outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
-                    text_body: neomacs_display_protocol::types::Rect::new(
-                        8.0, 0.0, 792.0, 584.0,
-                    ),
+                    text_body: neomacs_display_protocol::types::Rect::new(8.0, 0.0, 792.0, 584.0),
                     left_fringe: Some(neomacs_display_protocol::types::Rect::new(
                         0.0, 0.0, 8.0, 584.0,
                     )),
@@ -6858,10 +6857,7 @@ fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configurati
 
     let fringes = super::builtin_window_fringes(&mut ev, vec![]).expect("fringes");
     let scrollbars = super::builtin_window_scroll_bars(&mut ev, vec![]).expect("scrollbars");
-    assert_eq!(
-        crate::emacs_core::print::print_value(&fringes),
-        "(8 0 t t)"
-    );
+    assert_eq!(crate::emacs_core::print::print_value(&fringes), "(8 0 t t)");
     assert_eq!(
         crate::emacs_core::print::print_value(&scrollbars),
         "(0 0 left 0 0 bottom t)"

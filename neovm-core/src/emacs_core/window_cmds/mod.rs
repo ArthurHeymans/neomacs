@@ -3496,26 +3496,25 @@ pub(crate) fn builtin_window_edges(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
 
     if pixelwise {
-        let (left, top, right, bottom) = if let Some(geometry) =
-            presented_gui_window_geometry(frames, fid, wid)?
-        {
-            let rect = if body {
-                geometry.regions().text_body()
+        let (left, top, right, bottom) =
+            if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
+                let rect = if body {
+                    geometry.regions().text_body()
+                } else {
+                    geometry.outer_in_frame()
+                };
+                let origin = rect.origin();
+                (
+                    origin.x().get() as i64,
+                    origin.y().get() as i64,
+                    (origin.x().get() + rect.width().get()) as i64,
+                    (origin.y().get() + rect.height().get()) as i64,
+                )
+            } else if body {
+                tty_batch_window_body_edges_pixels(frames, fid, wid, w)
             } else {
-                geometry.outer_in_frame()
+                window_edges_pixels(w)
             };
-            let origin = rect.origin();
-            (
-                origin.x().get() as i64,
-                origin.y().get() as i64,
-                (origin.x().get() + rect.width().get()) as i64,
-                (origin.y().get() + rect.height().get()) as i64,
-            )
-        } else if body {
-            tty_batch_window_body_edges_pixels(frames, fid, wid, w)
-        } else {
-            window_edges_pixels(w)
-        };
         return Ok(Value::list(vec![
             Value::fixnum(left),
             Value::fixnum(top),
