@@ -5178,7 +5178,7 @@ fn posn_at_x_y_impl(
     {
         return Ok(make_text_area_position(
             wid,
-            exact_metrics_from_point(point),
+            exact_metrics_from_point(&point),
         ));
     }
 

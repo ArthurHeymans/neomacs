@@ -51,7 +51,8 @@ use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot, WindowVisibleBufferSpan,
+    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorSnapshot, WindowDisplaySnapshot,
+    WindowVisibleBufferSpan,
 };
 use std::sync::{Arc, Mutex};
 
@@ -2829,6 +2830,33 @@ fn backend_layout_trace_with_buffer_setup(
 
 fn layout_trace_for_plain_text(text: &str) -> BackendLayoutTrace {
     layout_trace_with_buffer_setup(text, 360, 180, |_, _, _| {})
+}
+
+#[test]
+fn mouse_position_query_resolves_blank_buffer_row() {
+    let trace = layout_trace_for_plain_text("a\n\nb");
+    let blank_row = trace
+        .output_rows
+        .iter()
+        .find(|row| row.row == 1)
+        .expect("layout must publish the blank second row");
+    let blank_row_y = blank_row.y + blank_row.height / 2;
+    assert_eq!(
+        blank_row.start_buffer_pos,
+        Some(LispCharPos1::new(3)),
+        "the blank row must retain its semantic buffer anchor"
+    );
+    let snapshot = WindowDisplaySnapshot {
+        points: trace.points,
+        rows: trace.output_rows,
+        ..WindowDisplaySnapshot::default()
+    };
+
+    let hit = snapshot
+        .point_at_coords(0, blank_row_y)
+        .expect("a blank displayed row must still resolve to its buffer position");
+
+    assert_eq!(hit.buffer_pos, LispCharPos1::new(3));
 }
 
 fn layout_trace_with_buffer_setup(

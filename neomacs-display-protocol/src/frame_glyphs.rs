@@ -1833,10 +1833,13 @@ impl FrameGlyphBuffer {
                         width = slot_width.max(1.0);
                     }
                 }
-                FrameGlyph::Stretch { x: slot_x, .. } => {
-                    // The stretch-cursor width policy is already resolved into
-                    // the fallback width by the layout.
-                    x = *slot_x;
+                FrameGlyph::Stretch { .. } => {
+                    // Layout owns the cursor geometry for stretch slots.  A
+                    // stretch can be a row-wide face extension whose origin is
+                    // the window edge, not the text position represented by the
+                    // slot, so it must not replace the layout-supplied x.  The
+                    // stretch-cursor width policy is likewise already resolved
+                    // into the fallback width by layout.
                 }
                 FrameGlyph::Image {
                     x: slot_x,

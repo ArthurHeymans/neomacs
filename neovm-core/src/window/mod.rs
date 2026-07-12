@@ -1494,7 +1494,7 @@ impl WindowDisplaySnapshot {
     ///
     /// `x` is relative to the text area's left edge. `y` is relative to the
     /// window's top edge, matching GNU Emacs `posn-at-x-y` conventions.
-    pub fn point_at_coords(&self, x: i64, y: i64) -> Option<&DisplayPointSnapshot> {
+    pub fn point_at_coords(&self, x: i64, y: i64) -> Option<DisplayPointSnapshot> {
         let row = self
             .rows
             .iter()
@@ -1506,21 +1506,31 @@ impl WindowDisplaySnapshot {
             .collect();
         row_points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
         let mut row_points = row_points.into_iter();
-        let mut last = row_points.next()?;
+        let Some(mut last) = row_points.next() else {
+            return row.start_buffer_pos.map(|buffer_pos| DisplayPointSnapshot {
+                buffer_pos,
+                x: row.start_x,
+                y: row.y,
+                width: 0,
+                height: row.height.max(1),
+                row: row.row,
+                col: row.start_col,
+            });
+        };
         if x <= last.x {
-            return Some(last);
+            return Some(last.clone());
         }
         for point in row_points {
             let right = last.x.saturating_add(last.width.max(1));
             if x < right {
-                return Some(last);
+                return Some(last.clone());
             }
             if x < point.x {
-                return Some(last);
+                return Some(last.clone());
             }
             last = point;
         }
-        Some(last)
+        Some(last.clone())
     }
 
     /// Row metrics for visual row ROW.

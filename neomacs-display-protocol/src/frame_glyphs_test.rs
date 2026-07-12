@@ -1287,6 +1287,35 @@ fn set_phys_cursor_normalizes_text_slot_geometry() {
 }
 
 #[test]
+fn set_phys_cursor_keeps_empty_row_text_origin_over_extend_stretch() {
+    let mut buf = FrameGlyphBuffer::new();
+    buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    buf.add_stretch(0.0, 52.0, 624.0, 558.0, Color::WHITE, FaceId::new(1), false);
+    let empty_row_slot = buf.glyphs[0]
+        .slot_id()
+        .expect("the extend stretch occupies the empty row's display slot");
+
+    buf.set_phys_cursor(PhysCursor {
+        window_id: DisplayWindowId::new(1),
+        charpos: 3,
+        row: empty_row_slot.row as usize,
+        col: empty_row_slot.col,
+        slot_id: empty_row_slot,
+        x: 8.0,
+        y: 106.0,
+        width: 7.8,
+        height: 18.0,
+        ascent: 14.0,
+        style: CursorStyle::FilledBox,
+        color: Color::BLACK,
+        cursor_fg: Color::WHITE,
+    });
+
+    let cursor = buf.active_cursor().expect("active cursor");
+    assert_eq!(cursor.x, 8.0);
+}
+
+#[test]
 fn set_phys_cursor_stores_info() {
     let mut buf = FrameGlyphBuffer::new();
     let cursor_fg = Color::rgb(0.0, 0.0, 0.0);
