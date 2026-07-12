@@ -2094,6 +2094,10 @@ pub struct Context {
     /// Incremented when any face attribute changes; layout engine uses
     /// this to invalidate its resolved face cache.
     pub face_change_count: u64,
+    /// Source identity for the display-facing `face_table` derived from a
+    /// frame's authoritative Lisp face specifications.  Equal identity means
+    /// redisplay can reuse the table without scanning every face again.
+    materialized_face_table_source: Option<(crate::window::FrameId, u64)>,
     /// Incremented when any display-affecting buffer-local/global variable is
     /// set (truncate-lines, bidi-*, ctl-arrow, buffer-display-table,
     /// buffer-invisibility-spec, fill-column-indicator, overlay-arrow,
@@ -5520,6 +5524,7 @@ impl Context {
             coding_systems: CodingSystemManager::new(),
             face_table: FaceTable::new(),
             face_change_count: 0,
+            materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
             last_redisplay_signature: None,
@@ -5705,6 +5710,7 @@ impl Context {
             coding_systems,
             face_table,
             face_change_count: 0,
+            materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
             last_redisplay_signature: None,
@@ -9421,8 +9427,14 @@ impl Context {
 
     /// Refresh the render-facing face table from this frame's Lisp face
     /// vectors before redisplay.
-    pub fn sync_runtime_faces_for_frame(&mut self, frame_id: crate::window::FrameId) {
+    pub fn sync_runtime_faces_for_frame(&mut self, frame_id: crate::window::FrameId) -> bool {
+        let source = (frame_id, self.face_change_count);
+        if self.materialized_face_table_source == Some(source) {
+            return false;
+        }
         super::font::sync_runtime_face_table_from_frame_lisp_faces(self, frame_id);
+        self.materialized_face_table_source = Some(source);
+        true
     }
 
     /// Set a face attribute and bump the change counter.

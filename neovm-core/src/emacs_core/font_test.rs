@@ -3096,6 +3096,44 @@ fn runtime_face_sync_realizes_default_colors_from_frame_parameters() {
 }
 
 #[test]
+fn redisplay_face_preparation_reuses_generation_until_a_lisp_face_changes() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = Value::make_frame(frame_id.0);
+
+    assert!(
+        eval.sync_runtime_faces_for_frame(frame_id),
+        "the first redisplay preparation must materialize the frame's faces",
+    );
+    assert!(
+        !eval.sync_runtime_faces_for_frame(frame_id),
+        "an unchanged face generation must reuse the derived runtime table",
+    );
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("mode-line"),
+            Value::keyword(":foreground"),
+            Value::string("#c678dd"),
+            frame,
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        eval.sync_runtime_faces_for_frame(frame_id),
+        "a Lisp face mutation must invalidate redisplay's derived table",
+    );
+    assert_eq!(
+        eval.face_table().resolve("mode-line").foreground,
+        Color::from_hex("#c678dd"),
+    );
+}
+
+#[test]
 fn default_face_font_attr_update_refreshes_live_frame_font_state() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
