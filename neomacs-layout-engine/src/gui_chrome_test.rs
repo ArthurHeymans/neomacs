@@ -274,7 +274,8 @@ fn tty_menu_bar_keeps_all_items_with_gnu_one_cell_gutter() {
 
     // Terminal metrics: 1x1 cells, 160-column frame, half-cell padding per side
     // (== one cell of separation, GNU's SCHARS + 1).
-    let content = layout_gui_menu_bar_content(items, 160.0, 1.0, 1.0, 0.5, Color::WHITE, Color::BLACK);
+    let content =
+        layout_gui_menu_bar_content(items, 160.0, 1.0, 1.0, 0.5, Color::WHITE, Color::BLACK);
 
     let kept: Vec<&str> = content
         .items()
