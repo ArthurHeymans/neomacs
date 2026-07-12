@@ -479,9 +479,14 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             .font_metrics
             .as_mut()
             .map(|svc| svc.char_width(ch, &font_family, font_weight, italic, font_size));
-        let cell_floor = measured.is_none()
-            || !self.allow_proportional_advances
-            || crate::fontconfig::family_prefers_monospace(&font_family);
+        // A GUI measurement is the advance of the concrete font selected for
+        // this glyph, which may be a fontset fallback unrelated to the face's
+        // primary ASCII cell.  Do not clamp that realized advance to the
+        // requested family's cell width (e.g. "Symbols Nerd Font Mono" can
+        // resolve a Nerd Font icon through JetBrainsMono).  Logical columns
+        // remain the fallback when measurement is unavailable, and the TTY
+        // path still deliberately quantizes to cells.
+        let cell_floor = measured.is_none() || !self.allow_proportional_advances;
         let min_advance = if cell_floor { column_advance } else { 1.0 };
 
         Some(self.quantization.resolve(
@@ -507,6 +512,28 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         let Some(font_metrics) = self.font_metrics.as_mut() else {
             return DisplayTextRunMeasurement::PerChar;
         };
+
+        // GNU resolves the concrete font range before asking the font driver
+        // for its advance.  A one-character display-string run (the common
+        // shape of Nerd Font icons) therefore must use the per-character
+        // fontset resolver rather than shaping an unresolved compatibility
+        // family name directly.  Keep contextual and multi-character runs on
+        // the run shaper, where ligatures and joining require shared context.
+        let mut chars = text.chars();
+        if let Some(ch) = chars.next()
+            && chars.next().is_none()
+            && !ch.is_ascii()
+            && crate::composition::complex_script(ch).is_none()
+        {
+            let advance = font_metrics.char_width(
+                ch,
+                &face.font_family,
+                face.font_weight,
+                face.italic,
+                face.font_size.max(1.0),
+            );
+            return DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, advance);
+        }
 
         let shaped = font_metrics.shape_run(
             text,

@@ -12043,6 +12043,136 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
 }
 
 #[test]
+fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
+    let mut eval = Context::new();
+    eval.eval_str(r#"(set-fontset-font t '(#xe6ad . #xe6ad) "JetBrainsMono Nerd Font")"#)
+        .expect("install the concrete Nerd Font fallback used by the compatibility alias");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+        buf.set_buffer_local("tab-width", Value::fixnum(1));
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("JetBrainsMono Nerd Font"),
+                    Value::keyword("height"),
+                    Value::make_float(0.75),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 1,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        let after_string = Value::string_with_text_properties(
+            "\u{e6ad}\tn",
+            vec![StringTextPropertyRun {
+                start: 0,
+                end: 1,
+                plist: Value::list(vec![
+                    Value::symbol("face"),
+                    Value::list(vec![
+                        Value::keyword("family"),
+                        Value::string("Symbols Nerd Font Mono"),
+                    ]),
+                ]),
+            }],
+        );
+        let _ =
+            buf.overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), after_string);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-nerd-font-alias-tab", 640, 160, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("text row");
+    let glyphs = &text_row.glyphs[1];
+    let icon_index = glyphs
+        .iter()
+        .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e6ad}' }))
+        .expect("nerd icon glyph");
+    let icon = &glyphs[icon_index];
+    let tab = glyphs
+        .get(icon_index + 1)
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("tab stretch after nerd icon");
+    let icon_face = state.faces.get(&icon.face_id).expect("icon face");
+    let tab_face = state.faces.get(&tab.face_id).expect("tab face");
+    assert_eq!(
+        icon_face.font_family, "Symbols Nerd Font Mono",
+        "test must exercise the Nerd Font compatibility alias"
+    );
+    let mut metrics = FontMetricsService::new();
+    let resolved_icon_advance = metrics.char_width(
+        '\u{e6ad}',
+        &icon_face.font_family,
+        icon_face.font_weight,
+        icon_face.is_italic(),
+        icon_face.font_size,
+    );
+    let resolved_tab_space = metrics.char_width(
+        ' ',
+        &tab_face.font_family,
+        tab_face.font_weight,
+        tab_face.is_italic(),
+        tab_face.font_size,
+    );
+
+    assert!(
+        (icon.pixel_width - resolved_icon_advance).abs() < 0.01,
+        "the frame must publish the concrete fontset glyph advance, not the unresolved compatibility-face cell width; icon={} resolved={} row={glyphs:?}",
+        icon.pixel_width,
+        resolved_icon_advance,
+    );
+    assert!(
+        (tab.pixel_width - resolved_tab_space).abs() < 0.01,
+        "at row start with tab-width 1, GNU places the tab after a one-cell icon at the next realized-font space; tab={} space={} row={glyphs:?}",
+        tab.pixel_width,
+        resolved_tab_space,
+    );
+}
+
+#[test]
 fn layout_frame_rust_overlay_after_string_display_replacement_renders_once() {
     let mut eval = Context::new();
     let buf_id = eval
