@@ -3,10 +3,26 @@ use crate::types::{FrameParams, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorKind, CursorStyle, DisplaySlotId, PresentedWindowRegions, WindowEffectHint, WindowInfo,
-    WindowTransitionKind,
+    CursorKind, CursorStyle, DisplaySlotId, PresentedCellOrigin, PresentedWindowGeometry,
+    PresentedWindowRegions, WindowEffectHint, WindowInfo, WindowTransitionKind,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
+
+fn install_skipped_geometry(
+    builder: &mut crate::display_output_builder::DisplayOutputBuilder,
+    window_id: DisplayWindowId,
+    outer: Rect,
+) {
+    builder.install_window_metadata(
+        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+            window_id,
+            geometry: PresentedWindowGeometry::Skipped {
+                cell_origin: PresentedCellOrigin::default(),
+                outer,
+            },
+        },
+    );
+}
 
 fn window_params() -> WindowParams {
     WindowParams {
@@ -338,6 +354,11 @@ fn window_frame_info_request_emits_background_and_window_info() {
 
     WindowFrameInfoRenderRequest::new(&params, metadata)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+    install_skipped_geometry(
+        &mut builder,
+        DisplayWindowId::new(params.window_id),
+        params.bounds,
+    );
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert_eq!(state.backgrounds.len(), 1);
@@ -360,7 +381,8 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::new();
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder.add_output_window_info(curr);
+    builder.add_output_window_info(curr.clone());
+    install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
 
     WindowFrameInfoEffectsRenderRequest::new(&prev_infos).render_latest_and_apply(
         FrameOutputTarget::from_builder(&mut builder),
@@ -421,7 +443,8 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let info = window_info(&params);
     let mut prev_selected = DisplayWindowId::new(7);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
-    builder.add_output_window_info(info);
+    builder.add_output_window_info(info.clone());
+    install_skipped_geometry(&mut builder, info.window_id, info.bounds);
 
     FrameWindowSwitchHintRenderRequest::new(&mut prev_selected)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -448,8 +471,10 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.set_output_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
-    builder.add_output_window_info(info);
-    builder.add_output_window_info(mini);
+    builder.add_output_window_info(info.clone());
+    builder.add_output_window_info(mini.clone());
+    install_skipped_geometry(&mut builder, info.window_id, info.bounds);
+    install_skipped_geometry(&mut builder, mini.window_id, mini.bounds);
 
     FrameThemeTransitionHintRenderRequest::new(&mut prev_background, 180.0, 140.0)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
