@@ -1999,6 +1999,10 @@ fn initialize_reused_gui_startup_frame(eval: &mut Context, frame_id: FrameId) {
              (frame-parameters neomacs--reused-gui-startup-frame))))
         "#,
     );
+    // The GNU face-finalization loop above mutates authoritative frame-local
+    // Lisp specifications.  Bootstrap chrome is the first consumer of their
+    // derived runtime form, so materialize once at this explicit read seam.
+    eval.sync_runtime_faces_for_frame(frame_id);
     sync_selected_gui_chrome_state(eval);
 }
 
@@ -3239,18 +3243,29 @@ fn bootstrap_buffers(
     // non-interactive `message'-only branch instead of displaying *Backtrace*.
     let initial_tty_frame =
         display.frontend == FrontendKind::Tty && display.interactivity.is_batch();
+    // Preserve the host-selected bootstrap font across GNU face
+    // finalization.  That Lisp pass may update live frame font state while it
+    // computes specifications, but the opening host frame's font and geometry
+    // remain the startup policy inputs until normal user configuration runs.
+    let (bootstrap_font, bootstrap_font_name) = if display.frontend == FrontendKind::Tty {
+        (Value::NIL, Value::string("fixed"))
+    } else {
+        (
+            bootstrap_default_font_parameter(frame_metrics.font_pixel_size),
+            bootstrap_default_font_name(frame_metrics.font_pixel_size),
+        )
+    };
+    let bootstrap_font_snapshot = bootstrap_font
+        .as_vector_data()
+        .map(|items| Value::vector(items.to_vec()))
+        .unwrap_or(bootstrap_font);
+    let bootstrap_root_scope = neovm_core::emacs_core::eval::save_scratch_gc_roots();
+    neovm_core::emacs_core::eval::push_scratch_gc_root(bootstrap_font_snapshot);
+    neovm_core::emacs_core::eval::push_scratch_gc_root(bootstrap_font_name);
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         // Font parameter resolution creates a FontMetricsService which
         // scans the system font database (~500ms). Skip for TTY where
         // font parameters are unused — TTY uses 1x1 character cells.
-        let (default_font, default_font_name) = if display.frontend == FrontendKind::Tty {
-            (Value::NIL, Value::string("fixed"))
-        } else {
-            (
-                bootstrap_default_font_parameter(frame_metrics.font_pixel_size),
-                bootstrap_default_font_name(frame_metrics.font_pixel_size),
-            )
-        };
         // Reused startup frames must be normalized back to GNU's initial-frame
         // surface: generated name (e.g. "F1"), nil title, nil icon-name.
         frame.set_generated_name_value(frame.generated_name_value());
@@ -3279,8 +3294,8 @@ fn bootstrap_buffers(
             frame.remove_parameter(Value::symbol("display-type"));
             frame.remove_parameter(Value::symbol("background-mode"));
         }
-        frame.set_known_parameter(FrameParam::Font, default_font_name);
-        frame.set_parameter(Value::symbol("font-parameter"), default_font);
+        frame.set_known_parameter(FrameParam::Font, bootstrap_font_name);
+        frame.set_parameter(Value::symbol("font-parameter"), bootstrap_font);
         // GNU frame.c: initial frame title is NULL (unset). The %F
         // mode-line construct falls through to frame->name ("F1") when
         // title is unset. Don't set a title here — let %F show the
@@ -3348,10 +3363,22 @@ fn bootstrap_buffers(
     }
 
     if display.window_system_symbol().is_some() {
+        if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+            frame.set_known_parameter(FrameParam::Font, bootstrap_font_name);
+            frame.set_parameter(Value::symbol("font-parameter"), bootstrap_font_snapshot);
+            frame.font_pixel_size = frame_metrics.font_pixel_size;
+            frame.char_width = frame_metrics.char_width;
+            frame.char_height = frame_metrics.char_height;
+        }
         neovm_core::emacs_core::font::seed_live_frame_default_face_from_font_parameter(
             eval, frame_id,
         );
+        // Bootstrap callers inspect the default face and establish initial
+        // geometry before the normal redisplay callback exists.  Materialize
+        // the newly seeded specification once for those consumers.
+        eval.sync_runtime_faces_for_frame(frame_id);
     }
+    neovm_core::emacs_core::eval::restore_scratch_gc_roots(bootstrap_root_scope);
 
     // Fix window geometry: root window takes frame height minus minibuffer.
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {

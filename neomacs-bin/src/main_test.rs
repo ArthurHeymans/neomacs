@@ -23,6 +23,7 @@ use neomacs_display_runtime::thread_comm::{
     AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
     WindowCommand, WindowFullscreenMode,
 };
+use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
@@ -598,13 +599,38 @@ fn bootstrap_buffers_realize_default_face_from_frame_font_parameter() {
     let mut eval = create_bootstrap_evaluator_with_features(BOOTSTRAP_CORE_FEATURES)
         .expect("bootstrap evaluator");
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let expected_family_value = eval
+        .eval_str("(font-get (frame-parameter nil 'font-parameter) :family)")
+        .expect("bootstrap frame font family");
+    let expected_family = expected_family_value
+        .as_utf8_str()
+        .or_else(|| expected_family_value.as_symbol_name())
+        .map(str::to_owned)
+        .expect("font family name");
     let default = eval.face_table().get("default").expect("default face");
     assert_eq!(
         default.family_runtime_string_owned().as_deref(),
-        Some("Hack")
+        Some(expected_family.as_str()),
     );
     assert_eq!(default.weight.map(|weight| weight.css_weight()), Some(400));
     assert_eq!(default.height, Some(FaceHeight::Absolute(100)));
+}
+
+fn assert_selected_frame_matches_materialized_default_metrics(eval: &Context) {
+    let frame = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap");
+    let face = eval.face_table().resolve("default");
+    let family = face
+        .family_runtime_string_owned()
+        .unwrap_or_else(|| "Monospace".to_string());
+    let weight = face.weight.map(|weight| weight.css_weight()).unwrap_or(400);
+    let italic = face.slant.is_some_and(|slant| slant.is_italic());
+    let mut service = FontMetricsService::new();
+    let expected = service.font_metrics(&family, weight, italic, frame.font_pixel_size);
+    assert_eq!(frame.char_width, expected.char_width.max(1.0));
+    assert_eq!(frame.char_height, expected.line_height.max(1.0));
 }
 
 #[test]
@@ -2138,17 +2164,20 @@ fn configure_gnu_startup_state_seeds_command_line_args_left_for_gnu_startup() {
 
 #[test]
 fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
-    let metrics = bootstrap_frame_metrics();
     let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
         .expect("cached bootstrap evaluator");
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    assert_selected_frame_matches_materialized_default_metrics(&eval);
+    let expected_pixel_size = eval
+        .eval_str("(font-get (frame-parameter nil 'font-parameter) :size)")
+        .expect("bootstrap font pixel size")
+        .as_int()
+        .expect("integer bootstrap font pixel size") as f32;
     let frame = eval
         .frame_manager()
         .selected_frame()
         .expect("selected frame after bootstrap");
-    assert_eq!(frame.char_width, metrics.char_width);
-    assert_eq!(frame.char_height, metrics.char_height);
-    assert_eq!(frame.font_pixel_size, metrics.font_pixel_size);
+    assert_eq!(frame.font_pixel_size, expected_pixel_size);
     let font_param = frame
         .parameter("font")
         .expect("bootstrap GUI frame should seed a font frame parameter");
@@ -2159,7 +2188,7 @@ fn bootstrap_buffers_seed_frame_with_renderer_metrics() {
         .expect("minibuffer leaf")
         .bounds()
         .height;
-    assert_eq!(minibuffer_height, metrics.char_height);
+    assert_eq!(minibuffer_height, frame.char_height);
 }
 
 #[test]
@@ -2228,7 +2257,6 @@ fn bootstrap_default_font_name_uses_pixel_size_field() {
 
 #[test]
 fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
-    let metrics = bootstrap_frame_metrics();
     let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
         .expect("cached bootstrap evaluator");
     let old_buffer = eval.buffer_manager_mut().create_buffer("*old*");
@@ -2244,6 +2272,7 @@ fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
     }
 
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    assert_selected_frame_matches_materialized_default_metrics(&eval);
 
     assert_eq!(eval.frame_manager().frame_list().len(), 1);
     let selected = eval
@@ -2259,20 +2288,17 @@ fn bootstrap_buffers_reuses_selected_startup_frame_when_one_already_exists() {
     );
     assert_eq!(selected.name_runtime_string_owned(), "F1");
     assert_eq!(selected.title_runtime_string_owned(), None);
-    assert_eq!(selected.char_width, metrics.char_width);
-    assert_eq!(selected.char_height, metrics.char_height);
     let minibuffer_height = selected
         .minibuffer_leaf
         .as_ref()
         .expect("minibuffer leaf")
         .bounds()
         .height;
-    assert_eq!(minibuffer_height, metrics.char_height);
+    assert_eq!(minibuffer_height, selected.char_height);
 }
 
 #[test]
 fn bootstrap_buffers_reuses_cached_surrogate_frame_when_it_is_the_only_selected_frame() {
-    let metrics = bootstrap_frame_metrics();
     let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
         .expect("cached bootstrap evaluator");
     let old_buffer = eval.buffer_manager_mut().create_buffer("*old*");
@@ -2281,6 +2307,7 @@ fn bootstrap_buffers_reuses_cached_surrogate_frame_when_it_is_the_only_selected_
         .create_frame("F1", 80, 25, old_buffer);
 
     let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    assert_selected_frame_matches_materialized_default_metrics(&eval);
 
     assert_eq!(eval.frame_manager().frame_list().len(), 1);
     let selected = eval
@@ -2294,8 +2321,6 @@ fn bootstrap_buffers_reuses_cached_surrogate_frame_when_it_is_the_only_selected_
         selected.effective_window_system(),
         Some(Value::symbol("neo"))
     );
-    assert_eq!(selected.char_width, metrics.char_width);
-    assert_eq!(selected.char_height, metrics.char_height);
 }
 
 #[test]
