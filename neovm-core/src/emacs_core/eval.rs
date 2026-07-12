@@ -681,12 +681,6 @@ impl GnuTimerTimestamp {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PendingGnuTimer {
-    pub(crate) timer: Value,
-    pub(crate) when: GnuTimerTimestamp,
-}
-
 fn runtime_tail_fingerprint(tail: &[Value]) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -7206,69 +7200,6 @@ impl Context {
         self.restore_executing_kbd_macro_runtime(scope.snapshot);
         self.assign("real-this-command", scope.real_this_command);
         self.run_hook_if_bound("kbd-macro-termination-hook")
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn pending_gnu_timer(timer: Value) -> Option<PendingGnuTimer> {
-        if !timer.is_vector() {
-            return None;
-        };
-
-        let slots = timer.as_vector_data()?.clone();
-        if !(9..=10).contains(&slots.len()) {
-            return None;
-        }
-
-        if !slots[0].is_nil() {
-            return None;
-        }
-
-        if !slots[7].is_nil() {
-            // Idle timers remain on the GNU Lisp path, but NeoVM still does
-            // not track GUI/TTY idleness with GNU's fidelity yet. Avoid
-            // conflating ordinary timer behavior with partial idle semantics.
-            return None;
-        }
-
-        Some(PendingGnuTimer {
-            timer,
-            when: GnuTimerTimestamp {
-                high_seconds: slots[1].as_int()?,
-                low_seconds: slots[2].as_int()?,
-                usecs: slots[3].as_int()?,
-                psecs: slots.get(8).and_then(|v| v.as_int()).unwrap_or(0),
-            },
-        })
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn pending_gnu_idle_timer(timer: Value) -> Option<PendingGnuTimer> {
-        if !timer.is_vector() {
-            return None;
-        };
-
-        let slots = timer.as_vector_data()?.clone();
-        if !(9..=10).contains(&slots.len()) {
-            return None;
-        }
-
-        if !slots[0].is_nil() {
-            return None;
-        }
-
-        if slots[7].is_nil() {
-            return None;
-        }
-
-        Some(PendingGnuTimer {
-            timer,
-            when: GnuTimerTimestamp {
-                high_seconds: slots[1].as_int()?,
-                low_seconds: slots[2].as_int()?,
-                usecs: slots[3].as_int()?,
-                psecs: slots.get(8).and_then(|v| v.as_int()).unwrap_or(0),
-            },
-        })
     }
 
     /// Run a named hook if it is bound and non-nil.

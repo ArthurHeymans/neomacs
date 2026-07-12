@@ -2611,6 +2611,49 @@ fn sync_selected_gui_chrome_state_tracks_gnu_window_system_defaults() {
 }
 
 #[test]
+fn sync_selected_gui_chrome_state_defers_lisp_setup_during_throw_on_input() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
+    eval.eval_str(
+        r#"(progn
+             (setq neo-tool-bar-setup-count 0)
+             (setq-default tool-bar-map '(keymap))
+             (fset 'tool-bar-setup
+                   (lambda ()
+                     (setq neo-tool-bar-setup-count
+                           (1+ neo-tool-bar-setup-count))))
+             (setq throw-on-input 'neo-while-no-input-tag))"#,
+    )
+    .expect("install deferred tool-bar setup probe");
+
+    sync_selected_gui_chrome_state(&mut eval);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("neo-tool-bar-setup-count")
+            .copied()
+            .expect("setup count while throw-on-input is active"),
+        Value::fixnum(0)
+    );
+
+    eval.set_variable("throw-on-input", Value::NIL);
+    sync_selected_gui_chrome_state(&mut eval);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("neo-tool-bar-setup-count")
+            .copied()
+            .expect("setup count after throw-on-input"),
+        Value::fixnum(1)
+    );
+}
+
+#[test]
 fn sync_selected_gui_chrome_state_uses_compact_bar_as_separate_gui_chrome() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

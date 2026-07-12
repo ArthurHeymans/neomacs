@@ -3499,6 +3499,125 @@ fn bootstrap_runtime_command_loop_meta_x_ret_opens_clean_nested_grep_prompt_from
 }
 
 #[test]
+fn bootstrap_runtime_mx_eager_completion_services_printable_input_before_quit() {
+    init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let scratch = eval.buffers.create_buffer("*mx-eager-input-probe*");
+    eval.buffers.set_current(scratch);
+    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    assert!(eval.frames.select_frame(frame_id));
+
+    eval.eval_str(
+        r#"(progn
+             (setq completion-eager-display t)
+             (setq neo-mx-eager-background-count 0
+                   neo-mx-eager-count-at-self-insert nil
+                   neo-mx-self-insert-observed nil)
+             (defun neo-mx-note-eager-background (&rest _)
+               (setq neo-mx-eager-background-count
+                     (1+ neo-mx-eager-background-count)))
+             (advice-add 'completions--background-update
+                         :before #'neo-mx-note-eager-background)
+             (defun neo-mx-note-self-insert ()
+               (when (and (minibufferp)
+                          (equal (minibuffer-contents-no-properties) "f"))
+                 (setq neo-mx-self-insert-observed t
+                       neo-mx-eager-count-at-self-insert
+                       neo-mx-eager-background-count)))
+             (add-hook 'post-self-insert-hook #'neo-mx-note-self-insert)
+             (defun neo-mx-eager-input-exit ()
+               (interactive)
+               (exit-recursive-edit))
+             (global-set-key (kbd "C-c q") #'neo-mx-eager-input-exit))"#,
+    )
+    .expect("enable eager completion and install test exit command");
+
+    let (eager_seen_tx, eager_seen_rx) = std::sync::mpsc::sync_channel(1);
+    let (printable_seen_tx, printable_seen_rx) = std::sync::mpsc::sync_channel(1);
+    eval.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
+        if let Some(text) = eval
+            .buffers
+            .current_buffer()
+            .map(|buffer| buffer.buffer_string())
+        {
+            let eager_background_ran = eval
+                .obarray()
+                .symbol_value("neo-mx-eager-background-count")
+                .and_then(|value| value.as_int())
+                .is_some_and(|count| count > 0);
+            if text.contains("M-x ") && eager_background_ran {
+                let _ = eager_seen_tx.try_send(());
+            }
+            if text.contains("M-x f") {
+                let _ = printable_seen_tx.try_send(());
+            }
+        }
+    }));
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    let notifier = eval.wait_notifier();
+    let sender = std::thread::spawn(move || {
+        let send = |event, tx: &crossbeam_channel::Sender<crate::keyboard::InputEvent>| {
+            tx.send(crate::keyboard::InputEvent::key_press(event))
+                .expect("send M-x eager-completion test input");
+            if let Some(notifier) = &notifier {
+                notifier.notify();
+            }
+        };
+
+        send(
+            crate::keyboard::KeyEvent::char_with_mods('x', crate::keyboard::Modifiers::meta()),
+            &tx,
+        );
+        eager_seen_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("M-x eager background timer should run before printable input");
+        send(crate::keyboard::KeyEvent::char('f'), &tx);
+        let observed_before_quit = printable_seen_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .is_ok();
+
+        send(
+            crate::keyboard::KeyEvent::char_with_mods('g', crate::keyboard::Modifiers::ctrl()),
+            &tx,
+        );
+        send(
+            crate::keyboard::KeyEvent::char_with_mods('c', crate::keyboard::Modifiers::ctrl()),
+            &tx,
+        );
+        send(crate::keyboard::KeyEvent::char('q'), &tx);
+        observed_before_quit
+    });
+
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+    let result = eval
+        .recursive_edit_inner()
+        .expect("test exit command should leave the outer command loop normally");
+    let observed_before_quit = sender.join().expect("input sender should finish");
+
+    assert_eq!(result, Value::NIL);
+    assert!(
+        observed_before_quit,
+        "M-x must process and redisplay printable input before a later C-g"
+    );
+    assert!(
+        eval.eval_symbol("neo-mx-self-insert-observed")
+            .expect("self-insert observation flag")
+            .is_truthy(),
+        "the printable key must run self-insert-command in the M-x minibuffer"
+    );
+    assert!(
+        eval.eval_symbol("neo-mx-eager-count-at-self-insert")
+            .expect("eager background callback count")
+            .as_int()
+            .is_some_and(|count| count > 0),
+        "self-insert must run after eager completion's background idle timer"
+    );
+}
+
+#[test]
 fn bootstrap_runtime_read_key_after_two_minibuffers_consumes_fresh_key() {
     init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");

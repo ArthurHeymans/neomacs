@@ -2006,7 +2006,20 @@ fn ensure_gnu_tool_bar_setup(eval: &mut Context) {
     }
 }
 
+fn throw_on_input_active(eval: &Context) -> bool {
+    eval.obarray()
+        .symbol_value("throw-on-input")
+        .is_some_and(|value| value.is_truthy())
+}
+
 fn sync_selected_gui_chrome_state(eval: &mut Context) {
+    // GUI chrome collection evaluates dynamic menu/tool-bar forms and this
+    // host callback cannot propagate their non-local control flow. Preserve
+    // the last snapshot until GNU's `while-no-input` scope has finished.
+    if throw_on_input_active(eval) {
+        return;
+    }
+
     let menu_enabled = !eval
         .obarray()
         .symbol_value("menu-bar-mode")
@@ -2022,7 +2035,6 @@ fn sync_selected_gui_chrome_state(eval: &mut Context) {
     if tool_enabled {
         ensure_gnu_tool_bar_setup(eval);
     }
-
     let selected_gui_frame_id = eval
         .frame_manager()
         .selected_frame()
@@ -3726,7 +3738,10 @@ fn publish_gui_frame(
 ) {
     evaluator.setup_thread_locals();
     sync_selected_gui_chrome_state(evaluator);
-    sync_live_gui_frame_titles(evaluator);
+    if !throw_on_input_active(evaluator) {
+        // Title formatting may evaluate Lisp mode-line forms too.
+        sync_live_gui_frame_titles(evaluator);
+    }
 
     let Some(selected) = evaluator
         .frame_manager()

@@ -342,6 +342,28 @@ fn gnu_timer_before(delay: Duration, callback: &str) -> Value {
     ])
 }
 
+fn gnu_timer_after(delay: Duration, callback: &str) -> Value {
+    let when = SystemTime::now()
+        .checked_add(delay)
+        .expect("timer deadline should fit in system time")
+        .duration_since(UNIX_EPOCH)
+        .expect("timer deadline should be after unix epoch");
+    let secs = when.as_secs() as i64;
+
+    Value::vector(vec![
+        Value::NIL,
+        Value::fixnum(secs >> 16),
+        Value::fixnum(secs & 0xFFFF),
+        Value::fixnum(when.subsec_micros() as i64),
+        Value::NIL,
+        Value::symbol(callback),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+    ])
+}
+
 #[test]
 fn process_file_runs_in_default_directory_like_gnu() {
     crate::test_utils::init_test_tracing();
@@ -3559,6 +3581,254 @@ fn accept_process_output_propagates_throw_from_timer_callback_to_outer_catch() {
         format_eval_result(&result),
         "OK thrown-from-timer",
         "a throw from a timer callback must propagate to the outer catch, not be swallowed by the timer wrapper"
+    );
+}
+
+#[test]
+fn timer_service_defers_due_timer_scheduled_by_callback_to_next_pass() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable(
+        "neo-second-timer",
+        gnu_timer_before(Duration::from_millis(1), "neo-second-timer-callback"),
+    );
+
+    ev.eval_str(
+        r#"(progn
+             (setq neo-timer-batch-log nil)
+             (fset 'neo-second-timer-callback
+                   (lambda ()
+                     (setq neo-timer-batch-log
+                           (append neo-timer-batch-log '(second)))))
+             (fset 'neo-first-timer-callback
+                   (lambda ()
+                     (setq neo-timer-batch-log
+                           (append neo-timer-batch-log '(first)))
+                     (setq timer-list (list neo-second-timer))))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install stable timer-batch probe");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "neo-first-timer-callback",
+        )]),
+    );
+
+    ev.service_pending_timers_with_wait_policy(false)
+        .expect("first timer service pass");
+
+    assert_eq!(
+        ev.eval_symbol("neo-timer-batch-log")
+            .expect("timer batch log"),
+        Value::list(vec![Value::symbol("first")]),
+        "a timer scheduled by a callback belongs to the next service pass"
+    );
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(
+            &ev.eval_symbol("timer-list").expect("remaining timer list")
+        )
+        .expect("timer-list should remain a proper list")
+        .len(),
+        1,
+        "the newly scheduled due timer must remain queued"
+    );
+
+    ev.service_pending_timers_with_wait_policy(false)
+        .expect("second timer service pass");
+    assert_eq!(
+        ev.eval_symbol("neo-timer-batch-log")
+            .expect("timer batch log after second pass"),
+        Value::list(vec![Value::symbol("first"), Value::symbol("second")])
+    );
+}
+
+#[test]
+fn command_input_preempts_self_rescheduling_zero_idle_timer_between_batches() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let idle_timer = Value::vector(vec![
+        Value::NIL,
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::NIL,
+        Value::symbol("neo-self-rescheduling-idle-callback"),
+        Value::NIL,
+        Value::T,
+        Value::fixnum(0),
+        Value::NIL,
+    ]);
+    ev.set_variable("neo-self-rescheduling-idle-timer", idle_timer);
+    ev.eval_str(
+        r#"(progn
+             (setq neo-self-rescheduling-idle-count 0)
+             (fset 'neo-self-rescheduling-idle-callback
+                   (lambda ()
+                     (setq neo-self-rescheduling-idle-count
+                           (1+ neo-self-rescheduling-idle-count))
+                     (when (< neo-self-rescheduling-idle-count 1000)
+                       (aset neo-self-rescheduling-idle-timer 0 nil)
+                       (setq timer-idle-list
+                             (list neo-self-rescheduling-idle-timer)))))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-idle-list (delq timer timer-idle-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install self-rescheduling idle timer probe");
+    ev.set_variable("timer-idle-list", Value::list(vec![idle_timer]));
+    ev.timer_start_idle();
+
+    let (first_batch_tx, first_batch_rx) = std::sync::mpsc::sync_channel(1);
+    let (input_sent_tx, input_sent_rx) = std::sync::mpsc::sync_channel(1);
+    let mut first_batch_tx = Some(first_batch_tx);
+    let mut input_sent_rx = Some(input_sent_rx);
+    ev.redisplay_fn = Some(Box::new(move |_| {
+        if let Some(tx) = first_batch_tx.take() {
+            tx.send(()).expect("announce first serviced timer batch");
+            input_sent_rx
+                .take()
+                .expect("input acknowledgement receiver")
+                .recv_timeout(Duration::from_secs(1))
+                .expect("input should be queued before the next timer batch");
+        }
+    }));
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let notifier = ev.wait_notifier();
+    let sender = std::thread::spawn(move || {
+        first_batch_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("the idle timer should complete its first batch");
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('f'),
+        ))
+        .expect("send command input while idle timer reschedules");
+        if let Some(notifier) = notifier {
+            notifier.notify();
+        }
+        input_sent_tx
+            .send(())
+            .expect("acknowledge queued command input");
+    });
+
+    let outcome = ev
+        .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
+        .expect("wait should yield to command input");
+    sender.join().expect("input sender should finish");
+
+    assert_eq!(outcome, CommandInputWaitOutcome::InputPending);
+    let callback_count = ev
+        .eval_symbol("neo-self-rescheduling-idle-count")
+        .expect("idle timer callback count should be bound")
+        .as_int()
+        .expect("idle timer callback count");
+    assert!(
+        callback_count < 1000,
+        "pending command input must win before the rescheduling cap"
+    );
+}
+
+#[test]
+fn stable_timer_batch_rechecks_later_timer_after_earlier_callback_cancels_it() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let canceled_timer = gnu_timer_before(Duration::from_millis(1), "neo-canceled-callback");
+    ev.set_variable("neo-canceled-timer", canceled_timer);
+    ev.eval_str(
+        r#"(progn
+             (setq neo-canceled-timer-ran nil)
+             (fset 'neo-cancel-later-timer
+                   (lambda ()
+                     (aset neo-canceled-timer 0 t)
+                     (setq timer-list (delq neo-canceled-timer timer-list))))
+             (fset 'neo-canceled-callback
+                   (lambda () (setq neo-canceled-timer-ran t)))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install timer cancellation probe");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![
+            gnu_timer_before(Duration::from_millis(2), "neo-cancel-later-timer"),
+            canceled_timer,
+        ]),
+    );
+
+    ev.service_pending_timers_with_wait_policy(false)
+        .expect("service copied timer list");
+
+    assert_eq!(
+        ev.eval_symbol("neo-canceled-timer-ran")
+            .expect("canceled timer flag"),
+        Value::NIL,
+        "the copied list must re-read a shared timer vector after callbacks"
+    );
+}
+
+#[test]
+fn stable_timer_batch_stops_at_first_valid_future_timer_after_callback_mutation() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let moved_timer = gnu_timer_before(Duration::from_millis(1), "neo-moved-callback");
+    let future_timer = gnu_timer_after(Duration::from_secs(60), "ignored");
+    let future_slots = future_timer
+        .as_vector_data()
+        .expect("future timer vector")
+        .clone();
+    for (name, slot) in [
+        ("neo-future-high", 1),
+        ("neo-future-low", 2),
+        ("neo-future-usecs", 3),
+        ("neo-future-psecs", 8),
+    ] {
+        ev.set_variable(name, future_slots[slot]);
+    }
+    ev.set_variable("neo-moved-timer", moved_timer);
+    ev.eval_str(
+        r#"(progn
+             (setq neo-behind-future-ran nil)
+             (fset 'neo-move-next-timer-to-future
+                   (lambda ()
+                     (aset neo-moved-timer 1 neo-future-high)
+                     (aset neo-moved-timer 2 neo-future-low)
+                     (aset neo-moved-timer 3 neo-future-usecs)
+                     (aset neo-moved-timer 8 neo-future-psecs)))
+             (fset 'neo-moved-callback (lambda () (error "moved timer ran")))
+             (fset 'neo-behind-future-callback
+                   (lambda () (setq neo-behind-future-ran t)))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install future-head mutation probe");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![
+            gnu_timer_before(Duration::from_millis(3), "neo-move-next-timer-to-future"),
+            moved_timer,
+            gnu_timer_before(Duration::from_millis(1), "neo-behind-future-callback"),
+        ]),
+    );
+
+    ev.service_pending_timers_with_wait_policy(false)
+        .expect("service copied timer list");
+
+    assert_eq!(
+        ev.eval_symbol("neo-behind-future-ran")
+            .expect("behind-future timer flag"),
+        Value::NIL,
+        "GNU stops the copied list at its first valid future timer"
     );
 }
 

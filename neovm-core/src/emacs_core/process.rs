@@ -6042,39 +6042,6 @@ impl super::eval::Context {
         Ok(())
     }
 
-    pub(crate) fn service_pending_timers_with_wait_policy(
-        &mut self,
-        redisplay: bool,
-    ) -> Result<bool, Flow> {
-        self.flush_pending_safe_funcalls();
-        let mut fired_any = false;
-
-        // GNU runs Lisp timers from `timer_check` before servicing lower-level
-        // atimer/process-fd callbacks in `wait_reading_process_output`.  A
-        // non-local `throw` raised by a timer callback propagates out to the
-        // matching outer `catch` (e.g. `jsonrpc-request`'s catch tag), so a
-        // throw from `run_timer_callback_preserving_state` is returned to the
-        // caller — and the remaining due timers are not run, exactly as in GNU
-        // where the throw unwinds out of `timer_check`.
-        while let Some(timer) = self.next_due_gnu_timer_snapshot() {
-            fired_any = true;
-            if timer.is_vector() {
-                let _ = timer.set_vector_slot(0, Value::T);
-            }
-            self.run_timer_callback_preserving_state(
-                Value::symbol("timer-event-handler"),
-                vec![timer],
-                "GNU Lisp timer",
-            )?;
-        }
-
-        if fired_any && redisplay {
-            self.redisplay();
-        }
-
-        Ok(fired_any)
-    }
-
     fn run_async_process_callback_preserving_state(
         &mut self,
         callback: Value,
@@ -6109,35 +6076,6 @@ impl super::eval::Context {
         self.finish_callback_flow(result, label)
     }
 
-    fn run_timer_callback_preserving_state(
-        &mut self,
-        callback: Value,
-        args: Vec<Value>,
-        label: &str,
-    ) -> Result<(), Flow> {
-        let saved_current_buffer = self.buffers.current_buffer_id();
-        let saved_deactivate_mark = self.eval_symbol("deactivate-mark").unwrap_or(Value::NIL);
-        let specpdl_count = self.specpdl.len();
-
-        let gc_roots = self.save_specpdl_roots();
-        self.push_specpdl_root(callback);
-        for arg in &args {
-            self.push_specpdl_root(*arg);
-        }
-
-        self.specbind(intern("inhibit-quit"), Value::T);
-
-        let result = self.apply(callback, args);
-        if let Some(buffer_id) = saved_current_buffer {
-            self.restore_current_buffer_if_live(buffer_id);
-        }
-        self.unbind_to(specpdl_count);
-        self.assign("deactivate-mark", saved_deactivate_mark);
-        self.restore_specpdl_roots(gc_roots);
-
-        self.finish_callback_flow(result, label)
-    }
-
     /// Resolve the control flow that escaped a timer/process callback after the
     /// callback's own state (buffer/deactivate-mark/specpdl/gc-roots) has been
     /// restored.
@@ -6154,7 +6092,11 @@ impl super::eval::Context {
     /// non-local control flow is propagated to the caller so it can reach the
     /// matching wait/catch boundary.  A throw to a tag with no live catch still
     /// becomes a `no-catch` error at the eval/thread boundary, as in GNU.
-    fn finish_callback_flow(&mut self, result: EvalResult, label: &str) -> Result<(), Flow> {
+    pub(crate) fn finish_callback_flow(
+        &mut self,
+        result: EvalResult,
+        label: &str,
+    ) -> Result<(), Flow> {
         match result {
             Ok(_) => Ok(()),
             Err(err @ (Flow::Throw { .. } | Flow::ThreadBlocked { .. })) => Err(err),
