@@ -221,6 +221,7 @@ fn layout_gui_menu_bar_content_assigns_local_bounds_and_actions() {
         200.0,
         18.0,
         8.0,
+        8.0,
         Color::WHITE,
         Color::BLACK,
     );
@@ -237,6 +238,50 @@ fn layout_gui_menu_bar_content_assigns_local_bounds_and_actions() {
         })
     );
     assert_eq!(content.items()[1].local_bounds().raw().x, 56.0);
+}
+
+/// Regression: on a terminal frame (char_width == 1 cell) the menu bar must use
+/// GNU's `SCHARS + 1` (one-cell) item separation, not the window-system pixel
+/// gutter. With the pixel gutter the full `dired` menu overflowed a 160-column
+/// frame and the trailing `Immediate`/`Subdir`/`Help` items were dropped; with
+/// GNU's one-cell gutter all items fit (total ~74 cells).
+#[test]
+fn tty_menu_bar_keeps_all_items_with_gnu_one_cell_gutter() {
+    // Global + dired-mode menu bar: File Edit Options Buffers Tools Operate Mark
+    // Regexp Immediate Subdir Help.
+    let labels = [
+        "File",
+        "Edit",
+        "Options",
+        "Buffers",
+        "Tools",
+        "Operate",
+        "Mark",
+        "Regexp",
+        "Immediate",
+        "Subdir",
+        "Help",
+    ];
+    let items: Vec<_> = labels
+        .iter()
+        .enumerate()
+        .map(|(index, label)| MenuBarItem {
+            index: index as u32,
+            label: (*label).to_string(),
+            key: label.to_lowercase(),
+        })
+        .collect();
+
+    // Terminal metrics: 1x1 cells, 160-column frame, half-cell padding per side
+    // (== one cell of separation, GNU's SCHARS + 1).
+    let content = layout_gui_menu_bar_content(items, 160.0, 1.0, 1.0, 0.5, Color::WHITE, Color::BLACK);
+
+    let kept: Vec<&str> = content
+        .items()
+        .iter()
+        .map(|it| it.item().label.as_str())
+        .collect();
+    assert_eq!(kept, labels, "all menu-bar items must survive TTY layout");
 }
 
 #[test]

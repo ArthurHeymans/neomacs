@@ -92,7 +92,7 @@ pub fn collect_gui_tool_bar_items(eval: &mut Context) -> Vec<ToolBarItem> {
     items
 }
 
-const GUI_CHROME_HORIZONTAL_PADDING: f32 = 8.0;
+pub(crate) const GUI_CHROME_HORIZONTAL_PADDING: f32 = 8.0;
 const TOOL_BAR_SEPARATOR_WIDTH: f32 = 12.0;
 const TOOL_BAR_ITEM_SPACING: f32 = 2.0;
 const GNU_TOOL_BAR_BASE_HEIGHT: f32 = 34.0;
@@ -126,12 +126,12 @@ fn position_menu_items(
     band_height: f32,
     char_width: f32,
     start_x: f32,
+    horizontal_padding: f32,
 ) -> (Vec<PositionedChromeItem<MenuBarItem>>, f32) {
     let mut positioned = Vec::new();
     let mut x = start_x;
     for item in items {
-        let width =
-            item.label.chars().count() as f32 * char_width + GUI_CHROME_HORIZONTAL_PADDING * 2.0;
+        let width = item.label.chars().count() as f32 * char_width + horizontal_padding * 2.0;
         let Some(bounds) = fitted_local_bounds(x, width, band_width, band_height) else {
             break;
         };
@@ -191,6 +191,7 @@ pub(crate) fn layout_gui_menu_bar_content(
     band_width: f32,
     band_height: f32,
     char_width: f32,
+    horizontal_padding: f32,
     foreground: Color,
     background: Color,
 ) -> MenuBarContent {
@@ -199,7 +200,8 @@ pub(crate) fn layout_gui_menu_bar_content(
         band_width,
         band_height,
         char_width,
-        GUI_CHROME_HORIZONTAL_PADDING,
+        horizontal_padding,
+        horizontal_padding,
     );
     MenuBarContent::new(items, foreground, background)
 }
@@ -235,11 +237,13 @@ pub(crate) fn layout_gui_compact_bar_content(
     tool_foreground: Color,
     tool_background: Color,
 ) -> CompactBarContent {
+    // The compact bar is a window-system-only affordance; keep the pixel gutter.
     let (menu_items, menu_end_x) = position_menu_items(
         menu_items,
         band_width,
         band_height,
         char_width,
+        GUI_CHROME_HORIZONTAL_PADDING,
         GUI_CHROME_HORIZONTAL_PADDING,
     );
     let (icon_size, padding) = toolbar_visual_config_for_height(band_height);
