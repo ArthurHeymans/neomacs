@@ -433,3 +433,4 @@ result
 /neovm-core/proptest-regressions/emacs_core/oracle_test/
 /drafts
 lisp/org/org-loaddefs.el
+neovm-oracle-tests/proptest-regressions/
