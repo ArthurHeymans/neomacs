@@ -48,6 +48,7 @@ slow-timeout = { period = "120s", terminate-after = 1 }
 # performance regression to investigate, not a watchdog to widen further.
 [[profile.default.overrides]]
 filter = 'package(neovm-oracle-tests) and (test(ucs_normalize) or test(oracle_prop_compare_mixed_int_float) or test(oracle_prop_consp_atom_listp))'
+threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 1 }
 
 # Oracle tests compare neomacs against GNU Emacs — single-form hangs

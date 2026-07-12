@@ -47,7 +47,7 @@ fn strict_error_org_schedule_past_date() {
 #[test]
 fn strict_error_org_deadline_invalid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Deadline on <2026-07-12 Sun>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Deadline on <FIXED-TODAY>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
  (with-temp-buffer (org-mode) (insert "* H\n") (goto-char (point-min))
