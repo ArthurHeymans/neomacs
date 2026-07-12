@@ -180,7 +180,7 @@ fn div_cx450_make_temp_file_name() {
 #[test]
 fn div_cx450_file_name_all_completions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 148""#]];
+    let expect = expect_test::expect![[r#""OK 214""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(length (file-name-all-completions "" "/tmp"))"##,
         expect,

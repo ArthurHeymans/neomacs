@@ -129,7 +129,7 @@ fn divergence_file_truename_tilde() {
 fn divergence_file_attributes_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t 64 t 2960 t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t 69 t 4280 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((attrs (file-attributes "/tmp")))

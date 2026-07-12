@@ -436,9 +436,7 @@ fn org_feed_parse_format_status_add_combo() {
 fn org_feed_update_with_custom_retriever_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (1 0 ((\"https://example.org/new\" t \"1ca541f2707e1ccf8b8b3bf2050db208f9d9fed7\")) \"* Inbox\n:MOCKSTATUS:\n((\\\"https://example.org/new\\\" t\n  \\\"1ca541f2707e1ccf8b8b3bf2050db208f9d9fed7\\\"))\n:END:\n\n** New Item\n  [2026-07-10 Fri 03:55]\n  New desc\n  [[https://example.org/new]]\n\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (1 0 ((\"https://example.org/new\" t \"1ca541f2707e1ccf8b8b3bf2050db208f9d9fed7\")) \"* Inbox\n:MOCKSTATUS:\n((\\\"https://example.org/new\\\" t\n  \\\"1ca541f2707e1ccf8b8b3bf2050db208f9d9fed7\\\"))\n:END:\n\n** New Item\n  [FIXED-ORG-TIME]\n  New desc\n  [[https://example.org/new]]\n\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -606,9 +604,7 @@ fn org_feed_handlers_changed_update_all_combo() {
 fn org_feed_atom_formatter_filter_status_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((\"tag:example,2026:1\" \"Keep One\" \"https://example.org/one\" nil nil) (\"tag:example,2026:2\" \"Drop Two\" \"https://example.org/two\" \"Unknown ‘nil’ content.\" nil)) nil nil ((\"tag:example,2026:1\" t \"055edee1ed338146d1032d3b4887710f533a2041\") (\"tag:example,2026:2\" t \"49206ff62f2d2becfe639a46417c31834e7a3f33\")) \"* Inbox\n\n  :ATOMSTATUS:\n((\\\"tag:example,2026:1\\\" t \\\"055edee1ed338146d1032d3b4887710f533a2041\\\")\n (\\\"tag:example,2026:2\\\" t \\\"49206ff62f2d2becfe639a46417c31834e7a3f33\\\"))\n  :END:\n** Keep One\n   [2026-07-10 Fri]\n   DESC:\n   [[https://example.org/one]]\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (((\"tag:example,2026:1\" \"Keep One\" \"https://example.org/one\" nil nil) (\"tag:example,2026:2\" \"Drop Two\" \"https://example.org/two\" \"Unknown ‘nil’ content.\" nil)) nil nil ((\"tag:example,2026:1\" t \"055edee1ed338146d1032d3b4887710f533a2041\") (\"tag:example,2026:2\" t \"49206ff62f2d2becfe639a46417c31834e7a3f33\")) \"* Inbox\n\n  :ATOMSTATUS:\n((\\\"tag:example,2026:1\\\" t \\\"055edee1ed338146d1032d3b4887710f533a2041\\\")\n (\\\"tag:example,2026:2\\\" t \\\"49206ff62f2d2becfe639a46417c31834e7a3f33\\\"))\n  :END:\n** Keep One\n   [2026-07-11 Sat]\n   DESC:\n   [[https://example.org/one]]\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -815,9 +811,7 @@ fn org_feed_rss_incremental_status_element_visibility_combo() {
 fn org_feed_raw_inbox_headers_error_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r##""OK ((\"feeds.org\" \"Incoming\" 6) (\" *raw-feed*\" 1 \"<?xml version=\\\"1.0\\\"?><rss><channel><item><guid>raw-1</g\" nil 2) (\" *raw-feed*\" 1 t 2) (error \"mock missing feed\") (error \"No such feed in ‘org-feed-alist\") 2 (((\"raw-1\" t \"ff0cfc66f33d573c9755c0a31137d02487b4ffbd\") (\"raw-2\" t \"a4c1b482714c008187093767e9057736f899cdc1\")) ((headline \"Existing\" nil nil 20 38) (headline \"Incoming\" nil nil 38 365) (drawer nil nil nil 51 186) (headline \"Raw Two\" nil nil 186 276) (node-property nil \"GUID\" \"raw-2\" 215 228) (link nil nil nil 264 273) (headline \"Raw One\" nil nil 276 365) (node-property nil \"GUID\" \"raw-1\" 305 318) (link nil nil nil 354 363)) \"#+TITLE: Raw Feeds\n* Existing\nBody\n\n\n* Incoming\n\n\n  :RAWSTATUS:\n((\\\"raw-1\\\" t \\\"ff0cfc66f33d573c9755c0a31137d02487b4ffbd\\\")\n (\\\"raw-2\\\" t \\\"a4c1b482714c008187093767e9057736f899cdc1\\\"))\n  :END:\n** TODO Raw Two\n:PROPERTIES:\n:GUID: raw-2\n:END:\n[2026-07-10 Fri]\nRaw body two\n[[raw-2]]\n\n\n** TODO Raw One\n:PROPERTIES:\n:GUID: raw-1\n:END:\n[2026-07-10 Fri]\nRaw body one\n[[raw-1]]\n\n\") ((retrieve \"mock://raw\") (retrieve \"mock://raw\") (retrieve \"mock://missing\") (retrieve \"mock://raw\")) (\"Clipboard pasted as level 2 subtree\" \"Clipboard pasted as level 2 subtree\" #(\"Position saved to mark ring, go back with ‘C-c &’.\" 43 48 (font-lock-face help-key-binding face help-key-binding)) \"Added 2 new items from feed Raw to file feeds.org, heading Incoming\"))""##
-    ]];
+    let expect = expect_test::expect![[r##""OK ((\"feeds.org\" \"Incoming\" 6) (\" *raw-feed*\" 1 \"<?xml version=\\\"1.0\\\"?><rss><channel><item><guid>raw-1</g\" nil 2) (\" *raw-feed*\" 1 t 2) (error \"mock missing feed\") (error \"No such feed in ‘org-feed-alist\") 2 (((\"raw-1\" t \"ff0cfc66f33d573c9755c0a31137d02487b4ffbd\") (\"raw-2\" t \"a4c1b482714c008187093767e9057736f899cdc1\")) ((headline \"Existing\" nil nil 20 38) (headline \"Incoming\" nil nil 38 365) (drawer nil nil nil 51 186) (headline \"Raw Two\" nil nil 186 276) (node-property nil \"GUID\" \"raw-2\" 215 228) (link nil nil nil 264 273) (headline \"Raw One\" nil nil 276 365) (node-property nil \"GUID\" \"raw-1\" 305 318) (link nil nil nil 354 363)) \"#+TITLE: Raw Feeds\n* Existing\nBody\n\n\n* Incoming\n\n\n  :RAWSTATUS:\n((\\\"raw-1\\\" t \\\"ff0cfc66f33d573c9755c0a31137d02487b4ffbd\\\")\n (\\\"raw-2\\\" t \\\"a4c1b482714c008187093767e9057736f899cdc1\\\"))\n  :END:\n** TODO Raw Two\n:PROPERTIES:\n:GUID: raw-2\n:END:\n[2026-07-11 Sat]\nRaw body two\n[[raw-2]]\n\n\n** TODO Raw One\n:PROPERTIES:\n:GUID: raw-1\n:END:\n[2026-07-11 Sat]\nRaw body one\n[[raw-1]]\n\n\") ((retrieve \"mock://raw\") (retrieve \"mock://raw\") (retrieve \"mock://missing\") (retrieve \"mock://raw\")) (\"Clipboard pasted as level 2 subtree\" \"Clipboard pasted as level 2 subtree\" #(\"Position saved to mark ring, go back with ‘C-c &’.\" 43 48 (font-lock-face help-key-binding face help-key-binding)) \"Added 2 new items from feed Raw to file feeds.org, heading Incoming\"))""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

@@ -225,6 +225,18 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                     (cons (neovm--oracle-normalize-1 env seen)
                           (cons (neovm--oracle-normalize-1 args seen)
                                 (neovm--oracle-normalize-1 body seen)))))))
+         ;; org-element parses a timestamp into a plist whose sub-day fields
+         ;; (:hour-start/:minute-start/:second-start and the -end variants) are
+         ;; integers.  When the timestamp came from `current-time' (a live
+         ;; `org-clock-in'/`org-insert-time-stamp'), those integers are the run
+         ;; wall-clock and differ between record and replay.  Squash the sub-day
+         ;; fields to 0 while leaving :year/:month/:day intact (dates are test
+         ;; data or, at worst, only roll at midnight).
+         ((and (consp v)
+               (memq (car v) '(:hour-start :minute-start :second-start
+                               :hour-end :minute-end :second-end))
+               (integerp (car (cdr v))))
+          (cons (car v) (cons 0 (neovm--oracle-normalize-1 (cdr (cdr v)) seen))))
          ((consp v)
           (or (gethash v seen)
               (let ((out (cons nil nil)))
@@ -260,21 +272,36 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                    (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
                    v)))
             (replace-regexp-in-string
-             ":ARCHIVE_TIME: [^\n]+"
-             ":ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]"
+             ;; Per-run tempdir is a random path (tempfile prefix
+             ;; "neovm-oracle-case-" under $TMPDIR); GNU and Neomacs share it
+             ;; within a run but it differs across recording/replay runs, so it
+             ;; is not a real divergence.  Squash the whole absolute path.
+             "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
+             "[ORACLE-TMPDIR]"
              (replace-regexp-in-string
-              "CLOCK: \\[[^]]+\\]--\\[[^]]+\\] => \\( *[0-9]+:[0-9][0-9]\\)"
-              "CLOCK: [FIXED-CLOCK] => \\1"
+              ;; Bare Org timestamps carrying a wall-clock HH:MM (e.g. from a
+              ;; `%U'/`%T' capture template or `org-insert-time-stamp') are
+              ;; recorded seconds apart from replay; the date+time is the run
+              ;; time, not test data.  Timestamps WITHOUT a time (SCHEDULED/
+              ;; DEADLINE dates like <2026-05-27 Wed>) are left intact.
+              "\\([][<>]\\)[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}\\([][<>]\\)"
+              "\\1FIXED-ORG-TIME\\2"
               (replace-regexp-in-string
-               "Created: [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
-               "Created: [FIXED-EXPORT-TIME]"
+               ":ARCHIVE_TIME: [^\n]+"
+               ":ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]"
                (replace-regexp-in-string
-                "<!-- [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\} -->"
-                "<!-- [FIXED-EXPORT-TIME] -->"
+                "CLOCK: \\[[^]]+\\]--\\[[^]]+\\] => \\( *[0-9]+:[0-9][0-9]\\)"
+                "CLOCK: [FIXED-CLOCK] => \\1"
                 (replace-regexp-in-string
-                 "% Created [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
-                 "% Created [FIXED-EXPORT-TIME]"
-                 caption-normalized)))))))
+                 "Created: [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
+                 "Created: [FIXED-EXPORT-TIME]"
+                 (replace-regexp-in-string
+                  "<!-- [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\} -->"
+                  "<!-- [FIXED-EXPORT-TIME] -->"
+                  (replace-regexp-in-string
+                   "% Created [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
+                   "% Created [FIXED-EXPORT-TIME]"
+                   caption-normalized)))))))))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))

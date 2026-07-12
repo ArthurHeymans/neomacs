@@ -863,9 +863,7 @@ fn eta_num_max_level() {
 #[test]
 fn eta_capture_fill_template() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"success!\n\" \"2026\n\" \"<2026-07-10 Fri>\n\" \"[2026-07-10 Fri]\n\" \"\" \"%i\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"success!\n\" \"2026\n\" \"<2026-07-11 Sat>\n\" \"[2026-07-11 Sat]\n\" \"\" \"%i\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)

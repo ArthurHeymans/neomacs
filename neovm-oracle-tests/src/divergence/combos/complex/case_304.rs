@@ -186,7 +186,7 @@ fn div_cx304_directory_files_recursively_pattern() {
 #[test]
 fn div_cx304_file_attributes_full_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1 27216)""#]];
+    let expect = expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1 27219)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx304-attr")))
