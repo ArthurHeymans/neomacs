@@ -857,7 +857,12 @@ mod tests {
                 .into_surface();
 
         assert_eq!(surface.content_x(), 20.0);
-        assert_eq!(surface.right_edge(), 188.0);
+        // Only the vertical-border column (one char_width) is reserved on the
+        // right; the truncation/continuation edge-marker overwrites the last body
+        // column rather than reserving its own (see `reserved_width`). So the
+        // append right edge sits one char_width (8px) past the old border+special
+        // reservation: 204 (full text right edge) - 8 (border) = 196.
+        assert_eq!(surface.right_edge(), 196.0);
         assert_eq!(surface.full_text_right_edge(), 204.0);
     }
 }
