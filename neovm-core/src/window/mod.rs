@@ -1752,14 +1752,11 @@ pub struct Frame {
     /// `old_pixel_height`, `old_body_pixel_width`,
     /// `old_body_pixel_height`, and `old_buffer` directly on
     /// `struct window`. neomacs centralizes the redisplay-time
-    /// geometry inside `display_snapshots` and the change-detection
+    /// geometry inside `presented_geometry` and the change-detection
     /// state inside `window_hook_record`. The fields below are the
     /// neomacs-side equivalents — adding the GNU names verbatim is
     /// tracked as future work in the audit's Phase 4 plan.
-    pub display_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
-    /// Presentation that owns `display_snapshots`.  `None` means no completed
-    /// redisplay geometry is currently authoritative.
-    display_presentation: Option<geometry::PresentationId>,
+    presented_geometry: Option<geometry::PresentedGeometry>,
     /// Last recorded redisplay state for GNU window change hooks.
     pub(crate) window_hook_record: FrameWindowHookRecord,
     /// GNU `frame-window-state-change` flag.
@@ -1893,8 +1890,7 @@ impl Frame {
             char_height: 16.0,
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
-            display_snapshots: HashMap::new(),
-            display_presentation: None,
+            presented_geometry: None,
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -2343,8 +2339,7 @@ impl Frame {
         }
 
         self.root_window.invalidate_display_state();
-        self.display_snapshots.clear();
-        self.display_presentation = None;
+        self.presented_geometry = None;
     }
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
@@ -2528,12 +2523,17 @@ impl Frame {
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) {
-        self.set_display_snapshots(snapshots);
-        self.display_presentation = Some(presentation);
+        let snapshots = snapshots
+            .into_iter()
+            .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
+        self.presented_geometry = Some(geometry::PresentedGeometry::new(presentation, snapshots));
     }
 
     pub const fn display_presentation(&self) -> Option<geometry::PresentationId> {
-        self.display_presentation
+        match &self.presented_geometry {
+            Some(geometry) if geometry.presentation().get() != 0 => Some(geometry.presentation()),
+            _ => None,
+        }
     }
 
     /// Begin a GNU-shaped output pass for all live windows on this frame.
@@ -2565,18 +2565,39 @@ impl Frame {
     pub fn set_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
         // Geometry installed without an owning presentation cannot retain the
         // identity of a previous publication.
-        self.display_presentation = None;
-        self.display_snapshots.clear();
-        for snapshot in snapshots {
-            if self.find_window(snapshot.window_id).is_some() {
-                self.display_snapshots.insert(snapshot.window_id, snapshot);
-            }
-        }
+        let snapshots = snapshots
+            .into_iter()
+            .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
+        self.presented_geometry = Some(geometry::PresentedGeometry::new(
+            geometry::PresentationId::new(0),
+            snapshots,
+        ));
     }
 
     /// Last redisplay geometry for WINDOW-ID, if available.
     pub fn window_display_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.display_snapshots.get(&id)
+        self.presented_geometry.as_ref()?.window(id)
+    }
+
+    pub fn presented_window_geometry(
+        &self,
+        id: WindowId,
+    ) -> Option<geometry::SnapshotWindowGeometry<'_>> {
+        let presented = self.presented_geometry.as_ref()?;
+        geometry::SnapshotWindowGeometry::new(
+            presented.presentation(),
+            self.id,
+            id,
+            presented.window(id)?,
+        )
+        .ok()
+    }
+
+    pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
+        self.presented_geometry = self
+            .presented_geometry
+            .as_ref()
+            .map(|geometry| geometry.without_window(id));
     }
 
     /// Resize the frame and window tree to new pixel dimensions.

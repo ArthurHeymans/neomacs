@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
-    use super::geometry::{Column, Line, SnapshotWindowGeometry};
+    use super::geometry::{Column, Line, PresentationId, SnapshotWindowGeometry};
 
     let mut window = Window::new_leaf(
         WindowId(11),
@@ -13,6 +13,12 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     window.set_top_line(2);
     let snapshot = WindowDisplaySnapshot {
         window_id: WindowId(11),
+        cell_origin: super::geometry::CellOrigin::new(18, 2),
+        regions: PresentedWindowRegions {
+            outer: Rect::new(144.0, 24.0, 1831.0, 1172.0),
+            text_body: Rect::new(168.0, 41.0, 1807.0, 1138.0),
+            ..PresentedWindowRegions::default()
+        },
         text_area_left_offset: 24,
         header_line_height: 5,
         tab_line_height: 12,
@@ -28,8 +34,14 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
         ..WindowDisplaySnapshot::default()
     };
 
-    let geometry = SnapshotWindowGeometry::new(FrameId(7), &window, &snapshot)
-        .expect("valid presented geometry");
+    // The published view must not reread mutable live geometry.
+    window.set_bounds(Rect::new(999.0, 999.0, 1.0, 1.0));
+    window.set_left_col(99);
+    window.set_top_line(99);
+    let geometry =
+        SnapshotWindowGeometry::new(PresentationId::new(41), FrameId(7), window.id(), &snapshot)
+            .expect("valid presented geometry");
+    assert_eq!(geometry.presentation(), PresentationId::new(41));
     assert_eq!(geometry.cell_origin().column(), Column::new(18));
     assert_eq!(geometry.cell_origin().line(), Line::new(2));
 
@@ -1104,7 +1116,8 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
 
     assert_eq!(frame.width, 400);
     assert_eq!(frame.height, 260);
-    assert!(frame.display_snapshots.is_empty());
+    assert!(frame.window_display_snapshot(w1).is_none());
+    assert!(frame.window_display_snapshot(w2).is_none());
     assert!(
         frame
             .find_window(w1)

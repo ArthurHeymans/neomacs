@@ -4854,10 +4854,7 @@ fn resolve_exact_visible_metrics(
     let Some(frame) = frames.get(fid) else {
         return Ok(None);
     };
-    let Some(window_ref) = frame.find_window(wid) else {
-        return Ok(None);
-    };
-    let Some(snapshot) = frame.window_display_snapshot(wid) else {
+    let Some(geometry) = frame.presented_window_geometry(wid) else {
         return Ok(None);
     };
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, window)? else {
@@ -4866,8 +4863,6 @@ fn resolve_exact_visible_metrics(
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
         return Ok(None);
     };
-    let geometry = crate::window::geometry::SnapshotWindowGeometry::new(fid, window_ref, snapshot)
-        .map_err(snapshot_geometry_flow)?;
     let Some(point) = geometry
         .point_for_buffer_pos(pos_lisp)
         .map_err(snapshot_geometry_flow)?
@@ -5170,6 +5165,7 @@ fn posn_at_x_y_impl(
         return Ok(Value::NIL);
     };
 
+    let presented_geometry = frame.presented_window_geometry(wid);
     let text_area_left_offset = frame
         .window_display_snapshot(wid)
         .map_or(0, |snapshot| snapshot.text_area_left_offset);
@@ -5177,17 +5173,23 @@ fn posn_at_x_y_impl(
         let rel_x = if whole { x - text_area_left_offset } else { x };
         (rel_x, y)
     } else {
-        let bounds = window_ref.bounds();
+        let (outer_x, outer_y) = presented_geometry
+            .as_ref()
+            .map(|geometry| {
+                let origin = geometry.outer_in_frame().origin();
+                (origin.x().get(), origin.y().get())
+            })
+            .unwrap_or_else(|| {
+                let bounds = window_ref.bounds();
+                (bounds.x, bounds.y)
+            });
         (
-            x - bounds.x.round() as i64 - text_area_left_offset,
-            y - bounds.y.round() as i64,
+            x - outer_x.round() as i64 - text_area_left_offset,
+            y - outer_y.round() as i64,
         )
     };
 
-    if let Some(snapshot) = frame.window_display_snapshot(wid) {
-        let geometry =
-            crate::window::geometry::SnapshotWindowGeometry::new(fid, window_ref, snapshot)
-                .map_err(snapshot_geometry_flow)?;
+    if let Some(geometry) = presented_geometry {
         if let Some(point) = geometry
             .point_at_window_coords(query_x, query_y)
             .map_err(snapshot_geometry_flow)?

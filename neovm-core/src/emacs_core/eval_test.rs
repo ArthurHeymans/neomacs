@@ -3716,6 +3716,8 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
         .expect("mutable frame")
         .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
+            cell_origin: Default::default(),
+            regions: Default::default(),
             text_area_left_offset: 5,
             mode_line_height: 0,
             header_line_height: 0,
@@ -3829,6 +3831,8 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
         .expect("mutable frame")
         .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
+            cell_origin: Default::default(),
+            regions: Default::default(),
             text_area_left_offset: 5,
             mode_line_height: 0,
             header_line_height: 0,
@@ -3927,6 +3931,8 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
         .expect("mutable frame")
         .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
+            cell_origin: Default::default(),
+            regions: Default::default(),
             text_area_left_offset: 5,
             mode_line_height: 0,
             header_line_height: 0,
@@ -4488,6 +4494,8 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
         .expect("mutable frame")
         .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
+            cell_origin: Default::default(),
+            regions: Default::default(),
             text_area_left_offset: 5,
             mode_line_height: 0,
             header_line_height: 0,
@@ -4583,6 +4591,8 @@ fn read_key_sequence_prefixes_mode_line_mouse_click_for_lookup() {
         .expect("mutable frame")
         .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
+            cell_origin: Default::default(),
+            regions: Default::default(),
             text_area_left_offset: 0,
             mode_line_height: 18,
             header_line_height: 0,

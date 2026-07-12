@@ -5,9 +5,8 @@
 //! consumers cannot silently combine body-local, window-local, frame-local,
 //! and cell-grid values.
 
-use super::{
-    DisplayPointSnapshot, FrameId, LispCharPos1, Rect, Window, WindowDisplaySnapshot, WindowId,
-};
+use super::{DisplayPointSnapshot, FrameId, LispCharPos1, Rect, WindowDisplaySnapshot, WindowId};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 /// Evaluator-owned identity of one immutable displayed geometry publication.
@@ -22,6 +21,45 @@ impl PresentationId {
 
     pub const fn get(self) -> u64 {
         self.0
+    }
+}
+
+/// One immutable, presentation-owned publication of all evaluator window geometry.
+#[derive(Clone, Debug)]
+pub struct PresentedGeometry {
+    presentation: PresentationId,
+    windows: HashMap<WindowId, WindowDisplaySnapshot>,
+}
+
+impl PresentedGeometry {
+    pub(crate) fn new(
+        presentation: PresentationId,
+        snapshots: impl IntoIterator<Item = WindowDisplaySnapshot>,
+    ) -> Self {
+        Self {
+            presentation,
+            windows: snapshots
+                .into_iter()
+                .map(|snapshot| (snapshot.window_id, snapshot))
+                .collect(),
+        }
+    }
+
+    pub const fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    pub fn window(&self, window: WindowId) -> Option<&WindowDisplaySnapshot> {
+        self.windows.get(&window)
+    }
+
+    pub(crate) fn without_window(&self, window: WindowId) -> Self {
+        let mut windows = self.windows.clone();
+        windows.remove(&window);
+        Self {
+            presentation: self.presentation,
+            windows,
+        }
     }
 }
 
@@ -270,27 +308,34 @@ impl SnapshotPointGeometry {
 /// snapshot storage does not publish one.  Adding that identity is the next
 /// migration step; naming this a snapshot view avoids inventing authority.
 pub struct SnapshotWindowGeometry<'a> {
+    presentation: PresentationId,
     frame: FrameId,
-    window: &'a Window,
+    window: WindowId,
     snapshot: &'a WindowDisplaySnapshot,
     outer: PixelRect<FrameLogicalSpace>,
 }
 
 impl<'a> SnapshotWindowGeometry<'a> {
     pub fn new(
+        presentation: PresentationId,
         frame: FrameId,
-        window: &'a Window,
+        window: WindowId,
         snapshot: &'a WindowDisplaySnapshot,
     ) -> Result<Self, GeometryError> {
-        if window.id() != snapshot.window_id {
+        if window != snapshot.window_id {
             return Err(GeometryError::SnapshotWindowMismatch);
         }
         Ok(Self {
+            presentation,
             frame,
             window,
             snapshot,
-            outer: PixelRect::from_raw(window.bounds())?,
+            outer: PixelRect::from_raw(&snapshot.regions.outer)?,
         })
+    }
+
+    pub const fn presentation(&self) -> PresentationId {
+        self.presentation
     }
 
     pub const fn frame(&self) -> FrameId {
@@ -298,7 +343,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
     }
 
     pub fn window(&self) -> WindowId {
-        self.window.id()
+        self.window
     }
 
     pub const fn outer_in_frame(&self) -> PixelRect<FrameLogicalSpace> {
@@ -306,15 +351,12 @@ impl<'a> SnapshotWindowGeometry<'a> {
     }
 
     pub fn cell_origin(&self) -> CellOrigin {
-        CellOrigin {
-            column: Column::new(self.window.left_col()),
-            line: Line::new(self.window.top_line()),
-        }
+        self.snapshot.cell_origin
     }
 
     pub fn text_body_origin_in_window(&self) -> WindowPoint<WindowLocalSpace> {
         WindowPoint {
-            window: self.window.id(),
+            window: self.window,
             point: PixelPoint {
                 x: LogicalPx::from_i64(self.snapshot.text_area_left_offset),
                 y: LogicalPx::from_i64(self.snapshot.top_chrome_height()),
@@ -363,7 +405,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
         point: &DisplayPointSnapshot,
     ) -> Result<SnapshotPointGeometry, GeometryError> {
         let body_point = WindowPoint {
-            window: self.window.id(),
+            window: self.window,
             point: PixelPoint::new(
                 LogicalPx::from_i64(point.x).get(),
                 LogicalPx::from_i64(self.snapshot.text_area_relative_y(point.y)).get(),
