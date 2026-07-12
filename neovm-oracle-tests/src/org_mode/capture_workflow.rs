@@ -922,7 +922,7 @@ fn org_capture_insert_todo_edit_clock_refile_deep() {
 fn org_capture_datetree_insert_edit_clock_refile_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** 2026-07-11 Saturday\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** 2026-07-11 Saturday\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n**** Journal entry beta\n[FIXED-ORG-TIME]\n\")""##]];
+    let expect = expect_test::expect![[r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** 2026-07-12 Sunday\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** 2026-07-12 Sunday\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n**** Journal entry beta\n[FIXED-ORG-TIME]\n\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

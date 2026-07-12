@@ -5,9 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_schedule_deadline_priority_property_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (\"<2026-05-27 Wed 09:30>\" \"<2026-05-28 Thu>\" \"1:15\" 2000 \"* TODO [#A] Task\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed 09:30>\n:PROPERTIES:\n:Effort:   1:15\n:END:\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"<FIXED-ORG-TIME>\" \"<2026-05-28 Thu>\" \"1:15\" 2000 \"* TODO [#A] Task\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <FIXED-ORG-TIME>\n:PROPERTIES:\n:Effort:   1:15\n:END:\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)

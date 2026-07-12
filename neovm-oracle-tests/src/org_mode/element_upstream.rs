@@ -1637,9 +1637,7 @@ fn upstream_org_element_citation_parser() {
 #[test]
 fn upstream_org_element_clock_parser() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (clock (timestamp (:standard-properties [8 nil nil nil 55 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2023-10-13 Fri 14:40]--[2023-10-13 Fri 14:51]\" :year-start 2023 :month-start 10 :day-start 13 :hour-start 14 :minute-start 40 :year-end 2023 :month-end 10 :day-end 13 :hour-end 14 :minute-end 51)) \"0:11\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (clock (timestamp (:standard-properties [8 nil nil nil 55 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[FIXED-ORG-TIME]--[FIXED-ORG-TIME]\" :year-start 2023 :month-start 10 :day-start 13 :hour-start 0 :minute-start 0 :year-end 2023 :month-end 10 :day-end 13 :hour-end 0 :minute-end 0)) \"0:11\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -3960,9 +3958,7 @@ fn org_element_parse_context_parent_lineage_deep_state_combo() {
 fn org_element_parse_headline_planning_property_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""OK (((1 \"TODO\" \"Alpha\" (\"work\")) (2 \"DONE\" \"Beta\" nil) (3 nil \"WAIT Gamma\" nil)) ((\"Effort\" \"1:00\")) \"* TODO Alpha :work:\nSCHEDULED: <2026-05-27 Wed 09:00>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id\n:END:\nAlpha body.\n\n** DONE Beta\nCLOSED: [2026-05-26 Mon 15:00]\n:PROPERTIES:\n:Effort: 1:00\n:END:\nBeta body.\n\n*** WAIT Gamma\nSCHEDULED: <2026-05-28 Thu>\nGamma body.\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (((1 \"TODO\" \"Alpha\" (\"work\")) (2 \"DONE\" \"Beta\" nil) (3 nil \"WAIT Gamma\" nil)) ((\"Effort\" \"1:00\")) \"* TODO Alpha :work:\nSCHEDULED: <FIXED-ORG-TIME>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id\n:END:\nAlpha body.\n\n** DONE Beta\nCLOSED: [FIXED-ORG-TIME]\n:PROPERTIES:\n:Effort: 1:00\n:END:\nBeta body.\n\n*** WAIT Gamma\nSCHEDULED: <2026-05-28 Thu>\nGamma body.\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

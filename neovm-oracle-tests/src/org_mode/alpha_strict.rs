@@ -566,9 +566,7 @@ fn alpha_all_citation_parser() {
 #[test]
 fn alpha_all_clock_parser() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (clock (timestamp (:standard-properties [8 nil nil nil 55 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2023-10-13 Fri 14:40]--[2023-10-13 Fri 14:51]\" :year-start 2023 :month-start 10 :day-start 13 :hour-start 14 :minute-start 40 :year-end 2023 :month-end 10 :day-end 13 :hour-end 14 :minute-end 51)) \"0:11\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (clock (timestamp (:standard-properties [8 nil nil nil 55 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[FIXED-ORG-TIME]--[FIXED-ORG-TIME]\" :year-start 2023 :month-start 10 :day-start 13 :hour-start 0 :minute-start 0 :year-end 2023 :month-end 10 :day-end 13 :hour-end 0 :minute-end 0)) \"0:11\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)

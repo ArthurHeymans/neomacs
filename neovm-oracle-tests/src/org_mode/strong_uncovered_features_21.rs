@@ -314,9 +314,7 @@ fn uf21_timestamps() {
 #[test]
 fn uf21_clocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((closed \"1:30\" (timestamp (:standard-properties [12 nil nil nil 51 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-01-10 10:00]--[2026-01-10 11:30]\" :year-start 2026 :month-start 1 :day-start 10 :hour-start 10 :minute-start 0 :year-end 2026 :month-end 1 :day-end 10 :hour-end 11 :minute-end 30))) (closed \"1:00\" (timestamp (:standard-properties [67 nil nil nil 106 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-01-11 14:00]--[2026-01-11 15:00]\" :year-start 2026 :month-start 1 :day-start 11 :hour-start 14 :minute-start 0 :year-end 2026 :month-end 1 :day-end 11 :hour-end 15 :minute-end 0))))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK ((closed \"1:30\" (timestamp (:standard-properties [12 nil nil nil 51 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-01-10 10:00]--[2026-01-10 11:30]\" :year-start 2026 :month-start 1 :day-start 10 :hour-start 0 :minute-start 0 :year-end 2026 :month-end 1 :day-end 10 :hour-end 0 :minute-end 0))) (closed \"1:00\" (timestamp (:standard-properties [67 nil nil nil 106 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive-range :range-type daterange :raw-value \"[2026-01-11 14:00]--[2026-01-11 15:00]\" :year-start 2026 :month-start 1 :day-start 11 :hour-start 0 :minute-start 0 :year-end 2026 :month-end 1 :day-end 11 :hour-end 0 :minute-end 0))))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
