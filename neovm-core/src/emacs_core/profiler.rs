@@ -485,7 +485,10 @@ mod tests {
     }
 
     #[test]
-    fn same_source_closure_instances_merge_like_gnu_function_equal() {
+    fn same_source_interpreted_closure_instances_do_not_merge_like_gnu_function_equal() {
+        // GNU 31: two interpreted-function instances of the same lambda are NOT
+        // `function-equal` (they merge EQ-only). Only compiled closures merge by
+        // shared bytecode -- see the compiled-closure test below.
         let mut ctx = Context::new();
         let closures = ctx
             .eval_str(
@@ -496,13 +499,12 @@ mod tests {
         let first = closures.cons_car();
         let second = closures.cons_cdr().cons_car();
         assert_ne!(first.bits(), second.bits());
-        assert!(first.function_equal(second));
+        assert!(!first.function_equal(second));
 
         let mut log = ProfilerLog::new(1, 10);
         log.record(&[first], 2);
         log.record(&[second], 3);
-        assert_eq!(log.entries.len(), 1);
-        assert_eq!(log.entries.values().next().unwrap().count, 5);
+        assert_eq!(log.entries.len(), 2);
     }
 
     #[test]

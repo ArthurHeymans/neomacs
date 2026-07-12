@@ -51,7 +51,6 @@ pub type Value = TaggedValue;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(crate) enum FunctionSourceIdentity {
-    ClosureCode(usize),
     ByteCode(u64),
 }
 
@@ -1827,15 +1826,19 @@ impl TaggedValue {
     }
 
     pub(crate) fn function_source_identity(self) -> Option<FunctionSourceIdentity> {
-        if let Some(code) = self.closure_body_value() {
-            return Some(FunctionSourceIdentity::ClosureCode(code.bits()));
-        }
+        // GNU `function-equal` (Ffunction_equal, profiler.c) only treats two
+        // distinct objects as equal when both are COMPILEDP and share their
+        // bytecode object. Interpreted-function closures (the Emacs 30+ `#[args
+        // body env]` records) fall through to the EQ-only case there, so they
+        // must NOT advertise a shared source identity here -- two instances of
+        // the same lambda expression with different captured environments are
+        // not `function-equal`.
         self.get_bytecode_data()
             .map(|function| FunctionSourceIdentity::ByteCode(function.source_id))
     }
 
-    /// GNU `function-equal`: closures are equal when they share their source
-    /// code object; other functions use ordinary identity.
+    /// GNU `function-equal`: two compiled closures are equal when they share
+    /// their bytecode object; every other function compares by identity (EQ).
     pub(crate) fn function_equal(self, other: Value) -> bool {
         if self.bits() == other.bits() {
             return true;
