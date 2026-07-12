@@ -6616,6 +6616,53 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
 }
 
 #[test]
+fn gnu_lisp_window_body_pixel_edges_preserve_gui_window_origin() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    let fid = ev.frames.selected_frame().expect("selected frame").id;
+    let wid = ev.frames.get(fid).expect("frame").selected_window;
+
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.char_width = 8.0;
+        frame.char_height = 16.0;
+        frame
+            .find_window_mut(wid)
+            .expect("selected window")
+            .set_bounds(crate::window::Rect::new(144.0, 32.0, 640.0, 480.0));
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: wid,
+            header_line_height: 5,
+            tab_line_height: 17,
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let result = ev
+        .eval_str(
+            "(progn
+               (set-window-margins nil 1 2)
+               (set-window-fringes nil 8 12)
+               (set-window-scroll-bars nil 13 'left)
+               (list (window-pixel-left)
+                     (window-pixel-top)
+                     (window-inside-pixel-edges)))",
+        )
+        .expect("GNU window.el geometry query");
+    let result = crate::emacs_core::value::list_to_vec(&result).expect("result list");
+    let body_edges = crate::emacs_core::value::list_to_vec(&result[2]).expect("body edges");
+
+    assert_eq!(result[0], Value::fixnum(144));
+    assert_eq!(result[1], Value::fixnum(32));
+    // GNU window.el composes the frame-relative window origin with the left
+    // scrollbar, fringe, and one-column margin.  The vertical body origin
+    // likewise includes the rendered header and tab lines.
+    assert_eq!(body_edges[0], Value::fixnum(144 + 13 + 8 + 8));
+    assert_eq!(body_edges[1], Value::fixnum(32 + 5 + 17));
+}
+
+#[test]
 fn display_buffer_returns_window() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_with_frame(

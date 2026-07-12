@@ -2530,7 +2530,8 @@ pub(crate) fn builtin_window_top_line(
 }
 /// `(window-pixel-left &optional WINDOW)` -> integer.
 ///
-/// In batch-mode GNU Emacs, these "pixel" helpers report character-cell units.
+/// Graphical frames report the stored frame-relative pixel coordinate.  In
+/// batch-mode GNU Emacs, this helper reports character-cell units instead.
 pub(crate) fn builtin_window_pixel_left(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2542,8 +2543,12 @@ pub(crate) fn builtin_window_pixel_left(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let cw = frames.get(fid).map(|f| f.char_width).unwrap_or(8.0);
-    let left = if cw > 0.0 {
+    let frame = frames.get(fid);
+    let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
+    let cw = frame.map(|frame| frame.char_width).unwrap_or(8.0);
+    let left = if graphical {
+        w.bounds().x as i64
+    } else if cw > 0.0 {
         (w.bounds().x / cw) as i64
     } else {
         0
@@ -2552,7 +2557,8 @@ pub(crate) fn builtin_window_pixel_left(
 }
 /// `(window-pixel-top &optional WINDOW)` -> integer.
 ///
-/// In batch-mode GNU Emacs, these "pixel" helpers report character-cell units.
+/// Graphical frames report the stored frame-relative pixel coordinate.  In
+/// batch-mode GNU Emacs, this helper reports character-cell units instead.
 pub(crate) fn builtin_window_pixel_top(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2564,8 +2570,12 @@ pub(crate) fn builtin_window_pixel_top(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let ch = frames.get(fid).map(|f| f.char_height).unwrap_or(16.0);
-    let top = if ch > 0.0 {
+    let frame = frames.get(fid);
+    let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
+    let ch = frame.map(|frame| frame.char_height).unwrap_or(16.0);
+    let top = if graphical {
+        w.bounds().y as i64
+    } else if ch > 0.0 {
         (w.bounds().y / ch) as i64
     } else {
         0
