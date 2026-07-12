@@ -3338,7 +3338,16 @@ fn window_body_height_impl(
         };
         Ok(Value::fixnum(body))
     } else {
-        let body_lines = window_body_height_lines(frames, fid, wid, w);
+        let char_height = frames
+            .get(fid)
+            .map(|frame| frame.char_height.max(1.0))
+            .unwrap_or(16.0);
+        let body_lines = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => {
+                (geometry.regions().text_body().height().get() / char_height).floor() as i64
+            }
+            None => window_body_height_lines(frames, fid, wid, w),
+        };
         Ok(Value::fixnum(body_lines))
     }
 }
@@ -3407,7 +3416,17 @@ pub(crate) fn builtin_window_text_height(
         };
         Ok(Value::fixnum(body))
     } else {
-        Ok(Value::fixnum(window_body_height_lines(frames, fid, wid, w)))
+        let char_height = frames
+            .get(fid)
+            .map(|frame| frame.char_height.max(1.0))
+            .unwrap_or(16.0);
+        let height = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => {
+                (geometry.regions().text_body().height().get() / char_height).floor() as i64
+            }
+            None => window_body_height_lines(frames, fid, wid, w),
+        };
+        Ok(Value::fixnum(height))
     }
 }
 /// `(window-text-width &optional WINDOW PIXELWISE)` -> integer.

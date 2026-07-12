@@ -974,6 +974,44 @@ fn gui_window_body_geometry_excludes_fringes_and_margins() {
         .expect("set-window-fringes"),
         Value::T
     );
+    let window_id = ev.frames.get(fid).expect("frame").selected_window;
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(1),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id,
+                regions: crate::window::PresentedWindowRegions {
+                    outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+                    text_body: neomacs_display_protocol::types::Rect::new(16.0, 0.0, 748.0, 568.0),
+                    left_margin_columns: 1,
+                    right_margin_columns: 2,
+                    left_margin: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 0.0, 8.0, 568.0,
+                    )),
+                    right_margin: Some(neomacs_display_protocol::types::Rect::new(
+                        764.0, 0.0, 16.0, 568.0,
+                    )),
+                    left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                        8.0, 0.0, 8.0, 568.0,
+                    )),
+                    right_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                        780.0, 0.0, 12.0, 568.0,
+                    )),
+                    right_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                        792.0, 0.0, 8.0, 568.0,
+                    )),
+                    mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 568.0, 800.0, 16.0,
+                    )),
+                    ..Default::default()
+                },
+                regions_materialized: true,
+                ..Default::default()
+            }],
+        )
+        .expect("presented GUI geometry");
     assert_eq!(
         super::builtin_window_body_width(&mut ev, vec![Value::NIL, Value::T])
             .expect("window-body-width"),
@@ -6776,6 +6814,15 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
             .find_window_mut(wid)
             .expect("live window")
             .set_bounds(crate::window::Rect::new(0.0, 0.0, 80.0, 24.0));
+        let display = frame
+            .find_window_mut(wid)
+            .expect("live window")
+            .display_mut()
+            .expect("leaf display state");
+        display.scroll_bar_width = 13;
+        display.vertical_scroll_bar_type =
+            Value::symbol(if scrollbar_left { "left" } else { "right" });
+        display.horizontal_scroll_bar_type = Value::NIL;
 
         let result = ev
             .eval_str(
@@ -6788,6 +6835,8 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
                        (window-inside-edges)
                        (window-body-width)
                        (window-text-width)
+                       (window-body-height)
+                       (window-text-height)
                        (window-text-width nil t)
                        (window-text-height nil t)
                        (posn-at-point 1))",
@@ -6796,7 +6845,7 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
         assert_eq!(
             crate::emacs_core::print::print_value(&result),
             format!(
-                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) ({} 3 {} 31) 72 72 {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
+                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) ({} 3 {} 31) 72 72 27 27 {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
                 body_left as i64,
                 body_right as i64,
                 (body_left / 8.0).floor() as i64,
