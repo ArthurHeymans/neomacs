@@ -2533,8 +2533,18 @@ impl Frame {
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
             .collect();
-        let candidate = geometry::PresentedGeometry::new(self.id, presentation, snapshots.clone())
-            .map_err(geometry::PresentationPublishError::InvalidGeometry)?;
+        let candidate = geometry::PresentedGeometry::new_with_frame_placement(
+            self.id,
+            presentation,
+            self.parent_frame.as_frame_id().map(FrameId),
+            self.left_pos,
+            self.top_pos,
+            self.width,
+            self.height,
+            self.z_order,
+            snapshots.clone(),
+        )
+        .map_err(geometry::PresentationPublishError::InvalidGeometry)?;
         if self
             .last_presentation
             .is_some_and(|last| presentation <= last)
@@ -3254,6 +3264,28 @@ impl FrameManager {
             }
         }
         Some((x as f32 + viewport_x, y as f32 + viewport_y))
+    }
+
+    /// Resolve immutable parent-relative child placement through only accepted
+    /// frame presentations. Parent chrome and root desktop offsets never enter
+    /// this composition.
+    pub fn place_presented_frame(
+        &self,
+        frame: FrameId,
+        presentation: geometry::PresentationId,
+    ) -> Result<neomacs_display_protocol::PlacedFrame, neomacs_display_protocol::PlaceChildError>
+    {
+        let scene = neomacs_display_protocol::PresentedFrameScene::from_placements(
+            self.frames.values().filter_map(|frame| {
+                frame
+                    .presented_geometry()
+                    .map(|geometry| geometry.frame_placement())
+            }),
+        )?;
+        scene.place(neomacs_display_protocol::PlaceChildQuery::new(
+            neomacs_display_protocol::DisplayFrameId::new(frame.0),
+            neomacs_display_protocol::PresentationId::new(presentation.get()),
+        ))
     }
 
     pub fn render_frame_tree(

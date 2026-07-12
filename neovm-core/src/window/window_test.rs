@@ -280,6 +280,83 @@ fn presentation_identity_rejects_zero() {
 }
 
 #[test]
+fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or_desktop_offsets() {
+    use super::geometry::PresentationId;
+
+    let mut manager = FrameManager::new();
+    let root = manager.create_frame("root-placement", 800, 600, BufferId(1));
+    let child = manager.create_frame("child-placement", 300, 200, BufferId(1));
+    let nested = manager.create_frame("nested-placement", 100, 80, BufferId(1));
+    {
+        let root_frame = manager.get_mut(root).unwrap();
+        root_frame.left_pos = 900;
+        root_frame.top_pos = 700;
+        root_frame.menu_bar_height = 30;
+        root_frame.tool_bar_height = 40;
+        root_frame
+            .publish_display_snapshots(PresentationId::new(40), vec![])
+            .unwrap();
+    }
+    {
+        let child_frame = manager.get_mut(child).unwrap();
+        child_frame.parent_frame = Value::make_frame(root.0);
+        child_frame.left_pos = 100;
+        child_frame.top_pos = 80;
+        child_frame
+            .publish_display_snapshots(PresentationId::new(41), vec![])
+            .unwrap();
+    }
+    {
+        let nested_frame = manager.get_mut(nested).unwrap();
+        nested_frame.parent_frame = Value::make_frame(child.0);
+        nested_frame.left_pos = 15;
+        nested_frame.top_pos = 12;
+        nested_frame
+            .publish_display_snapshots(PresentationId::new(42), vec![])
+            .unwrap();
+    }
+
+    let child_place = manager
+        .place_presented_frame(child, PresentationId::new(41))
+        .unwrap();
+    assert_eq!(
+        (
+            child_place.parent_relative().x(),
+            child_place.parent_relative().y()
+        ),
+        (100.0, 80.0)
+    );
+    assert_eq!(
+        (
+            child_place.root_relative().x(),
+            child_place.root_relative().y()
+        ),
+        (100.0, 80.0)
+    );
+    let nested_place = manager
+        .place_presented_frame(nested, PresentationId::new(42))
+        .unwrap();
+    assert_eq!(
+        (
+            nested_place.parent_relative().x(),
+            nested_place.parent_relative().y()
+        ),
+        (15.0, 12.0)
+    );
+    assert_eq!(
+        (
+            nested_place.root_relative().x(),
+            nested_place.root_relative().y()
+        ),
+        (115.0, 92.0)
+    );
+    assert!(matches!(
+        manager.place_presented_frame(nested, PresentationId::new(41)),
+        Err(neomacs_display_protocol::PlaceChildError::StalePresentation { .. })
+    ));
+}
+
+#[test]
 fn duplicate_windows_reject_candidate_without_replacing_publication() {
     use super::geometry::{GeometryError, PresentationId, PresentationPublishError};
 

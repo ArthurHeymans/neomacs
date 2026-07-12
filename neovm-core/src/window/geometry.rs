@@ -52,6 +52,7 @@ pub struct PresentedGeometry {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PresentedFrame {
     id: FrameId,
+    placement: neomacs_display_protocol::PresentedFramePlacement,
     windows: HashMap<WindowId, PresentedWindow>,
 }
 
@@ -109,10 +110,54 @@ impl PresentedGeometry {
                 return Err(GeometryError::DuplicateWindow(id));
             }
         }
+        let placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            neomacs_display_protocol::DisplayFrameId::new(frame.0),
+            neomacs_display_protocol::PresentationId::new(presentation.get()),
+            None,
+            neomacs_display_protocol::FrameRect::new(0.0, 0.0, 0.0, 0.0)
+                .expect("zero root extent is valid for compatibility construction"),
+            0,
+        );
         Ok(Self {
             presentation,
-            frame: PresentedFrame { id: frame, windows },
+            frame: PresentedFrame {
+                id: frame,
+                placement,
+                windows,
+            },
         })
+    }
+
+    pub(crate) fn new_with_frame_placement(
+        frame: FrameId,
+        presentation: PresentationId,
+        parent: Option<FrameId>,
+        left: i64,
+        top: i64,
+        width: u32,
+        height: u32,
+        z_order: i32,
+        snapshots: impl IntoIterator<Item = WindowDisplaySnapshot>,
+    ) -> Result<Self, GeometryError> {
+        let mut geometry = Self::new(frame, presentation, snapshots)?;
+        let (left, top) = if parent.is_some() {
+            (left as f32, top as f32)
+        } else {
+            (0.0, 0.0)
+        };
+        geometry.frame.placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            neomacs_display_protocol::DisplayFrameId::new(frame.0),
+            neomacs_display_protocol::PresentationId::new(presentation.get()),
+            parent.map(|parent| neomacs_display_protocol::DisplayFrameId::new(parent.0)),
+            neomacs_display_protocol::FrameRect::new(left, top, width as f32, height as f32)
+                .map_err(|_| GeometryError::InvalidExtent)?,
+            z_order,
+        );
+        Ok(geometry)
+    }
+
+    pub const fn frame_placement(&self) -> neomacs_display_protocol::PresentedFramePlacement {
+        self.frame.placement
     }
 
     pub const fn presentation(&self) -> PresentationId {
