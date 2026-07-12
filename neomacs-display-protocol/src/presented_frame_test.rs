@@ -36,6 +36,7 @@ fn place_child_preserves_immediate_parent_coordinates_and_composes_nested_ancest
         ))
         .unwrap();
     assert_eq!(placed.parent_relative(), rect(7.0, 9.0, 100.0, 80.0));
+    assert_eq!(placed.root(), DisplayFrameId::new(1));
     assert_eq!(placed.root_relative(), rect(127.0, 57.0, 100.0, 80.0));
     assert_eq!(placed.clip_in_root(), Some(rect(127.0, 57.0, 100.0, 80.0)));
     assert_eq!(placed.z_path(), &[0, 2, 4]);

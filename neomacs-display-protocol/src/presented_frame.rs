@@ -74,6 +74,7 @@ impl PlaceChildQuery {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacedFrame {
     frame: DisplayFrameId,
+    root: DisplayFrameId,
     parent_relative: FrameRect,
     root_relative: FrameRect,
     clip_in_root: Option<FrameRect>,
@@ -83,6 +84,9 @@ pub struct PlacedFrame {
 impl PlacedFrame {
     pub const fn frame(&self) -> DisplayFrameId {
         self.frame
+    }
+    pub const fn root(&self) -> DisplayFrameId {
+        self.root
     }
     pub const fn parent_relative(&self) -> FrameRect {
         self.parent_relative
@@ -169,6 +173,7 @@ impl PresentedFrameScene {
         .expect("translated valid frame rectangle remains valid");
         Ok(PlacedFrame {
             frame: placement.frame,
+            root: ancestry.last().expect("ancestry is nonempty").frame,
             parent_relative: placement.outer_in_parent,
             root_relative,
             clip_in_root: clip,

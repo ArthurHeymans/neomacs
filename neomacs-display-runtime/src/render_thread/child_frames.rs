@@ -49,13 +49,15 @@ impl ChildFrameManager {
 
     pub fn set_root_frame(&mut self, root: Option<&FrameGlyphBuffer>) {
         self.root = root.map(|root| {
-            PresentedFramePlacement::new(
-                root.frame_id,
-                root.presentation_id,
-                None,
-                FrameRect::new(0.0, 0.0, root.width, root.height).unwrap(),
-                root.z_order,
-            )
+            root.frame_placement.unwrap_or_else(|| {
+                PresentedFramePlacement::new(
+                    root.frame_id,
+                    root.presentation_id,
+                    None,
+                    FrameRect::new(0.0, 0.0, root.width, root.height).unwrap(),
+                    root.z_order,
+                )
+            })
         });
         self.rebuild_presented_scene();
     }
@@ -222,6 +224,9 @@ impl ChildFrameManager {
         let root_id = self.root.map(|root| root.frame().get());
         let mut placements = self.root.into_iter().collect::<Vec<_>>();
         placements.extend(self.frames.values().map(|entry| {
+            if let Some(placement) = entry.frame.frame_placement {
+                return placement;
+            }
             let raw_parent = entry.frame.parent_id.get();
             let parent = if Some(raw_parent) == root_id || child_ids.contains(&raw_parent) {
                 Some(DisplayFrameId::new(raw_parent))

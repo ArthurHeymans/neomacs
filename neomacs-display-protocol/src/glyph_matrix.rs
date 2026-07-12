@@ -856,6 +856,9 @@ pub struct ScrollBarItem {
 pub struct FrameDisplayState {
     /// Evaluator interaction snapshot paired with these exact pixels.
     pub presentation_id: PresentationId,
+    /// Canonical parent-relative placement paired with this presentation.
+    #[serde(default)]
+    pub frame_placement: Option<crate::PresentedFramePlacement>,
     /// Pointer semantics and transient paints paired with this exact snapshot.
     #[serde(default)]
     pub presented_pointer_source: crate::PresentedPointerSourceMap,
@@ -946,6 +949,7 @@ impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
             presentation_id: PresentationId::default(),
+            frame_placement: None,
             presented_pointer_source: crate::PresentedPointerSourceMap::empty(),
             presented_hit_index: crate::PresentedHitIndex::default(),
             window_matrices: Vec::new(),
@@ -1010,6 +1014,7 @@ impl FrameDisplayState {
         let frame_rows = (buf.height / buf.char_height.max(1.0)) as usize;
         let mut state = Self::new(frame_cols, frame_rows, buf.char_width, buf.char_height);
         state.presentation_id = buf.presentation_id;
+        state.frame_placement = buf.frame_placement;
         state.presented_hit_index = buf.presented_hit_index().clone();
         state.frame_pixel_width = buf.width;
         state.frame_pixel_height = buf.height;
@@ -1224,6 +1229,7 @@ impl FrameDisplayState {
         MATERIALIZE_CALL_COUNT.with(|count| count.set(count.get() + 1));
         let mut buf = FrameGlyphBuffer::with_size(self.frame_pixel_width, self.frame_pixel_height);
         buf.presentation_id = self.presentation_id;
+        buf.frame_placement = self.frame_placement;
         buf.char_width = self.char_width;
         buf.char_height = self.char_height;
         buf.font_pixel_size = self.font_pixel_size;

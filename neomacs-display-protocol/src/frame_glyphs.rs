@@ -806,6 +806,8 @@ pub enum WindowEffectHint {
 pub struct FrameGlyphBuffer {
     /// Evaluator interaction snapshot paired with these exact pixels.
     pub presentation_id: crate::frame_chrome::PresentationId,
+    /// Canonical frame ancestry/placement for this presentation.
+    pub frame_placement: Option<crate::PresentedFramePlacement>,
     /// Frame dimensions
     pub width: f32,
     pub height: f32,
@@ -1146,6 +1148,7 @@ impl FrameGlyphBuffer {
     pub fn new() -> Self {
         Self {
             presentation_id: crate::frame_chrome::PresentationId::default(),
+            frame_placement: None,
             width: 0.0,
             height: 0.0,
             char_width: 8.0,
