@@ -1931,3 +1931,42 @@ fn shaped_clusters_survive_materialize_and_serde() {
         Some(&glyphs)
     );
 }
+
+#[test]
+fn semantic_hit_index_survives_transport_and_materialization() {
+    let presentation = PresentationId::new(19);
+    let window = crate::DisplayWindowId::new(4);
+    let mut state = FrameDisplayState::new(20, 10, 8.0, 16.0);
+    state.presentation_id = presentation;
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        presentation,
+        vec![crate::PresentedHitRegion::new(
+            Some(window),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(8.0, 16.0, 80.0, 32.0).unwrap(),
+            0,
+        )],
+        vec![crate::PresentedTextPosition::new(
+            window,
+            crate::FrameRect::new(8.0, 16.0, 8.0, 16.0).unwrap(),
+            42,
+            0,
+            0,
+        )],
+    )
+    .unwrap();
+
+    let wire = serde_json::to_string(&state).unwrap();
+    let decoded: FrameDisplayState = serde_json::from_str(&wire).unwrap();
+    let frame = decoded.materialize();
+    let hit = frame
+        .presented_hit_index()
+        .resolve(crate::PresentedHitQuery::new(presentation, 10.0, 20.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.region().kind(), crate::PresentedRegionKind::TextBody);
+    assert_eq!(hit.text_position().unwrap().buffer_position(), 42);
+
+    let round_trip = FrameDisplayState::from_frame_glyph_buffer(&frame);
+    assert_eq!(round_trip.presented_hit_index, state.presented_hit_index);
+}

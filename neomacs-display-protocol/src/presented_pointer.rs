@@ -203,7 +203,22 @@ pub struct PresentedHitIndex {
     text_positions: Vec<PresentedTextPosition>,
 }
 
+impl Default for PresentedHitIndex {
+    fn default() -> Self {
+        Self::empty(PresentationId::default())
+    }
+}
+
 impl PresentedHitIndex {
+    #[must_use]
+    pub const fn empty(presentation: PresentationId) -> Self {
+        Self {
+            presentation,
+            regions: Vec::new(),
+            text_positions: Vec::new(),
+        }
+    }
+
     pub fn from_parts(
         presentation: PresentationId,
         regions: Vec<PresentedHitRegion>,

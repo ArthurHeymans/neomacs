@@ -849,6 +849,9 @@ pub struct FrameGlyphBuffer {
     /// Validated pointer hit regions and transient paint overrides.
     presented_pointer: crate::presented_pointer::PresentedPointerMap,
 
+    /// Presentation-qualified semantic regions and exact text positions.
+    presented_hit_index: crate::presented_pointer::PresentedHitIndex,
+
     /// Per-window metadata for animation detection
     pub window_infos: Vec<WindowInfo>,
 
@@ -990,6 +993,27 @@ pub fn derive_window_transition_hint(
 }
 
 impl FrameGlyphBuffer {
+    /// Semantic hit index installed for this exact rendered presentation.
+    pub fn presented_hit_index(&self) -> &crate::presented_pointer::PresentedHitIndex {
+        &self.presented_hit_index
+    }
+
+    pub fn install_presented_hit_index(
+        &mut self,
+        index: crate::presented_pointer::PresentedHitIndex,
+    ) -> Result<(), crate::presented_pointer::PresentedHitError> {
+        if index.presentation() != self.presentation_id {
+            return Err(
+                crate::presented_pointer::PresentedHitError::StalePresentation {
+                    expected: self.presentation_id,
+                    requested: index.presentation(),
+                },
+            );
+        }
+        self.presented_hit_index = index;
+        Ok(())
+    }
+
     /// Validated pointer metadata installed for this exact frame snapshot.
     pub fn presented_pointer(&self) -> &crate::presented_pointer::PresentedPointerMap {
         &self.presented_pointer
@@ -1120,6 +1144,7 @@ impl FrameGlyphBuffer {
             glyphs: Vec::with_capacity(10000),
             frame_chrome: crate::frame_chrome::FrameChrome::default(),
             presented_pointer: crate::presented_pointer::PresentedPointerMap::empty(),
+            presented_hit_index: crate::presented_pointer::PresentedHitIndex::default(),
             window_infos: Vec::with_capacity(16),
             transition_hints: Vec::with_capacity(16),
             effect_hints: Vec::with_capacity(16),
@@ -1158,6 +1183,8 @@ impl FrameGlyphBuffer {
         self.glyphs.clear();
         self.frame_chrome = crate::frame_chrome::FrameChrome::default();
         self.presented_pointer = crate::presented_pointer::PresentedPointerMap::empty();
+        self.presented_hit_index =
+            crate::presented_pointer::PresentedHitIndex::empty(self.presentation_id);
         self.window_infos.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();

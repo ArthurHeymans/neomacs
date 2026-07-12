@@ -859,6 +859,9 @@ pub struct FrameDisplayState {
     /// Pointer semantics and transient paints paired with this exact snapshot.
     #[serde(default)]
     pub presented_pointer_source: crate::PresentedPointerSourceMap,
+    /// Semantic hit regions and exact positions paired with this snapshot.
+    #[serde(default)]
+    pub presented_hit_index: crate::PresentedHitIndex,
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Authoritative frame-level chrome bands.
     pub frame_chrome: FrameChrome,
@@ -944,6 +947,7 @@ impl FrameDisplayState {
         Self {
             presentation_id: PresentationId::default(),
             presented_pointer_source: crate::PresentedPointerSourceMap::empty(),
+            presented_hit_index: crate::PresentedHitIndex::default(),
             window_matrices: Vec::new(),
             frame_chrome: FrameChrome::default(),
             frame_cols,
@@ -1005,6 +1009,8 @@ impl FrameDisplayState {
         let frame_cols = (buf.width / buf.char_width.max(1.0)) as usize;
         let frame_rows = (buf.height / buf.char_height.max(1.0)) as usize;
         let mut state = Self::new(frame_cols, frame_rows, buf.char_width, buf.char_height);
+        state.presentation_id = buf.presentation_id;
+        state.presented_hit_index = buf.presented_hit_index().clone();
         state.frame_pixel_width = buf.width;
         state.frame_pixel_height = buf.height;
         state.font_pixel_size = buf.font_pixel_size;
@@ -1299,6 +1305,8 @@ impl FrameDisplayState {
             buf.install_presented_pointer_source_map(&self.presented_pointer_source)
                 .expect("FrameDisplayState pointer map must match its materialized primitives");
         }
+        buf.install_presented_hit_index(self.presented_hit_index.clone())
+            .expect("FrameDisplayState hit index must match its presentation");
 
         buf
     }
