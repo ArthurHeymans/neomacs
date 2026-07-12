@@ -34,19 +34,21 @@ run-wrapper = 'memory-limit'
 # small test family without parallel CPU contention while keeping the
 # per-test watchdog tight enough to catch real hangs.
 [[profile.default.overrides]]
-filter = 'package(neovm-oracle-tests) and test(combination_minimax)'
+filter = 'package(neovm-oracle-tests) and test(minimax)'
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 1 }
 
 # A few oracle families are legitimately heavy rather than hung: the
 # ucs-normalize cases load the full Unicode normalization tables in BOTH
 # Neomacs and GNU, and the exhaustive proptest comparisons run many forms per
-# test. Under a fully parallel run these can exceed the 60s package watchdog
-# through CPU contention alone, so give them a wider window (matched first, so
-# it wins over the general oracle override below).
+# test. Individually they finish well within 120s; the tight 60s package
+# watchdog only trips them through CPU contention in a fully parallel run. Give
+# them the same 120s ceiling as minimax (matched first, so it wins over the
+# general oracle override below). If one still exceeds 120s, that is a real
+# performance regression to investigate, not a watchdog to widen further.
 [[profile.default.overrides]]
 filter = 'package(neovm-oracle-tests) and (test(ucs_normalize) or test(oracle_prop_compare_mixed_int_float) or test(oracle_prop_consp_atom_listp))'
-slow-timeout = { period = "180s", terminate-after = 1 }
+slow-timeout = { period = "120s", terminate-after = 1 }
 
 # Oracle tests compare neomacs against GNU Emacs — single-form hangs
 # should be caught quickly instead of wasting 10 minutes.

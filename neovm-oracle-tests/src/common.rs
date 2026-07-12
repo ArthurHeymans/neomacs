@@ -237,6 +237,12 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                                :hour-end :minute-end :second-end))
                (integerp (car (cdr v))))
           (cons (car v) (cons 0 (neovm--oracle-normalize-1 (cdr (cdr v)) seen))))
+         ;; `org-agenda' tags the line for the current day with an `org-today'
+         ;; text property.  Which line carries it depends on the run date, so
+         ;; across a midnight boundary between record and replay the property
+         ;; moves.  Drop the `org-today PROP' pair from any plist.
+         ((and (consp v) (eq (car v) 'org-today) (consp (cdr v)))
+          (neovm--oracle-normalize-1 (cdr (cdr v)) seen))
          ((consp v)
           (or (gethash v seen)
               (let ((out (cons nil nil)))
@@ -266,18 +272,39 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; the quote-hash sequence inside the Rust raw-string literal.
          ((stringp v)
           (let* ((hash (make-string 1 35))
+                 ;; Today's date, computed live: the normalizer runs in both the
+                 ;; recording and the replay process, so "today" is whatever day
+                 ;; each runs on.  Agenda/capture/feed output embeds the run date
+                 ;; (`%t' timestamps, datetree headings, feed dates, the current
+                 ;; agenda day), which changes across a midnight boundary between
+                 ;; record and replay.  Collapse today's date -- in the org
+                 ;; timestamp, datetree, and bare ISO forms -- to fixed tokens.
+                 ;; Fixed test dates (never equal to today on both days) are left
+                 ;; intact.
+                 (today (regexp-quote (format-time-string "%Y-%m-%d")))
                  (caption-normalized
                   (replace-regexp-in-string
                    (concat hash "\\+CAPTION: Clock summary at \\[[^]]+\\]")
                    (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
                    v)))
             (replace-regexp-in-string
-             ;; Per-run tempdir is a random path (tempfile prefix
-             ;; "neovm-oracle-case-" under $TMPDIR); GNU and Neomacs share it
-             ;; within a run but it differs across recording/replay runs, so it
-             ;; is not a real divergence.  Squash the whole absolute path.
-             "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
-             "[ORACLE-TMPDIR]"
+             ;; Bare today ISO date (e.g. an Org feed's pubdate).
+             today "[FIXED-TODAY-DATE]"
+             (replace-regexp-in-string
+              ;; Datetree heading / long form: today's ISO date + weekday name.
+              (concat today " [A-Z][a-z]+day") "[FIXED-TODAY-DAY]"
+              (replace-regexp-in-string
+               ;; Org timestamp for today with a 3-letter weekday, no time
+               ;; (e.g. a `%t' capture insert): [2026-07-12 Sun] / <...>.
+               (concat "\\([][<>]\\)" today " [A-Z][a-z][a-z]\\([][<>]\\)")
+               "\\1FIXED-TODAY\\2"
+               (replace-regexp-in-string
+                ;; Per-run tempdir is a random path (tempfile prefix
+                ;; "neovm-oracle-case-" under $TMPDIR); GNU and Neomacs share it
+                ;; within a run but it differs across recording/replay runs, so
+                ;; it is not a real divergence.  Squash the whole absolute path.
+                "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
+                "[ORACLE-TMPDIR]"
              (replace-regexp-in-string
               ;; Bare Org timestamps carrying a wall-clock HH:MM (e.g. from a
               ;; `%U'/`%T' capture template or `org-insert-time-stamp') are
@@ -301,7 +328,7 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                   (replace-regexp-in-string
                    "% Created [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
                    "% Created [FIXED-EXPORT-TIME]"
-                   caption-normalized)))))))))
+                   caption-normalized))))))))))))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))

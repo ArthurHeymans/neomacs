@@ -604,7 +604,7 @@ fn org_feed_handlers_changed_update_all_combo() {
 fn org_feed_atom_formatter_filter_status_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (((\"tag:example,2026:1\" \"Keep One\" \"https://example.org/one\" nil nil) (\"tag:example,2026:2\" \"Drop Two\" \"https://example.org/two\" \"Unknown ‘nil’ content.\" nil)) nil nil ((\"tag:example,2026:1\" t \"055edee1ed338146d1032d3b4887710f533a2041\") (\"tag:example,2026:2\" t \"49206ff62f2d2becfe639a46417c31834e7a3f33\")) \"* Inbox\n\n  :ATOMSTATUS:\n((\\\"tag:example,2026:1\\\" t \\\"055edee1ed338146d1032d3b4887710f533a2041\\\")\n (\\\"tag:example,2026:2\\\" t \\\"49206ff62f2d2becfe639a46417c31834e7a3f33\\\"))\n  :END:\n** Keep One\n   [2026-07-11 Sat]\n   DESC:\n   [[https://example.org/one]]\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (((\"tag:example,2026:1\" \"Keep One\" \"https://example.org/one\" nil nil) (\"tag:example,2026:2\" \"Drop Two\" \"https://example.org/two\" \"Unknown ‘nil’ content.\" nil)) nil nil ((\"tag:example,2026:1\" t \"055edee1ed338146d1032d3b4887710f533a2041\") (\"tag:example,2026:2\" t \"49206ff62f2d2becfe639a46417c31834e7a3f33\")) \"* Inbox\n\n  :ATOMSTATUS:\n((\\\"tag:example,2026:1\\\" t \\\"055edee1ed338146d1032d3b4887710f533a2041\\\")\n (\\\"tag:example,2026:2\\\" t \\\"49206ff62f2d2becfe639a46417c31834e7a3f33\\\"))\n  :END:\n** Keep One\n   [FIXED-TODAY]\n   DESC:\n   [[https://example.org/one]]\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
