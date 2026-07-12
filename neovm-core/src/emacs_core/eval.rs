@@ -6797,6 +6797,16 @@ impl Context {
                 self.active_minibuffer_window
             );
 
+            // GNU `command_loop_1` resets `Vdeactivate_mark = Qnil` at the top
+            // of each iteration (keyboard.c:1471), before `pre-command-hook`, so
+            // the flag reflects only the command about to run; the post-command
+            // block then deactivates the region iff a command (re)set it.
+            // Without this per-command reset a stale buffer-local `deactivate-mark`
+            // (left by an earlier buffer-modifying command such as self-insert)
+            // leaks forward and immediately kills a freshly `set-mark`ed region,
+            // so e.g. `C-SPC M-> M-;` sees no active region.
+            self.assign("deactivate-mark", Value::NIL);
+
             // GNU `keyboard.c:1500-1506` records the command pseudo-event
             // before `pre-command-hook`, so `recent-keys 'include-cmds` can
             // describe the command currently being run.

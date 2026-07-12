@@ -86,6 +86,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
     pub(crate) fn split_prefix_to_fit<B: LayoutBufferView>(
         self,
         source_item: &DisplaySourceStepItem,
+        buffer: &B,
         wrap_mode: LineWrapMode,
         append_context: &BufferSourceRowAppendContext<'_, '_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
@@ -96,6 +97,20 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         let text = source_item.text_run()?;
         let start_charpos = source_item.source_step_char().start_charpos();
         let end_charpos = source_item.source_end_charpos()?;
+        // A run carrying an overlay before/after-string must go to the char
+        // render path -- the only path that emits overlay strings. GNU renders
+        // overlay strings regardless of `truncate-lines` (xdisp.c
+        // `next_overlay_string` is orthogonal to truncation); splitting a
+        // fitting prefix here in truncate mode would render via
+        // `render_and_apply`, which drops the anchored string, so bail and let
+        // `BufferSourceCharRenderRequest` handle both truncation and the string.
+        if self
+            .overlay_context
+            .first_overlay_string_charpos_in_range(buffer, start_charpos, end_charpos)
+            .is_some()
+        {
+            return None;
+        }
         // Valid split offsets are 1..hi (exclusive): within the run's chars
         // and strictly before its end charpos, exactly the range the former
         // one-char-at-a-time loop probed.

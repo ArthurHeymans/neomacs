@@ -363,6 +363,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
         if let Some((prefix, suffix)) = text_run_request.split_prefix_to_fit(
             &source_item,
+            buffer,
             self.params.wrap_mode,
             &buffer_row_append_context,
             &mut source_render,

@@ -9685,8 +9685,21 @@ pub(crate) fn builtin_internal_default_process_filter(
     }
     let _ = eval.buffers.goto_buffer_emacs_byte_pos(buf_id, insert_pos);
 
-    // Insert text at point (which is now at the mark position).
+    // Insert text at point (which is now at the mark position). GNU inserts
+    // process output through `insert_from_string_1` -> `prepare_to_modify_buffer`,
+    // which fires before/after-change-functions. Mirror that so change trackers
+    // (e.g. `track-changes.el`) stay consistent -- otherwise the buffer size
+    // drifts from the tracker's accounting and Emacs pops a spurious *Warnings*
+    // buffer ("Missing/incorrect calls to 'before/after-change-functions'").
+    let insert_change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+        &eval.buffers,
+        buf_id,
+        insert_pos,
+        super::editfns::lisp_string_text_extent(&text),
+    )?;
+    super::editfns::signal_before_text_change(eval, insert_change)?;
     eval.buffers.insert_lisp_string_into_buffer(buf_id, &text);
+    super::editfns::signal_after_text_change(eval, insert_change)?;
 
     // The new mark is at point after insertion (insert advances point).
     // If the buffer vanished out from under us the fallback uses text.len()

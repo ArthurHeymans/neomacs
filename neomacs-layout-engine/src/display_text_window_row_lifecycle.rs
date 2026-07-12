@@ -81,17 +81,17 @@ impl<'a> TextWindowAppendSurfaceRequest<'a> {
     }
 
     fn reserved_width(self) -> f32 {
-        let right_border = if self.reserve_right_border_col {
+        // GNU reserves only the vertical-border column for a non-rightmost TTY
+        // window (window.c `window_body_width`). The truncation/continuation
+        // glyph is NOT a separate reserved column: it overwrites the LAST body
+        // column (the edge-marker code below trims the row text to its target
+        // column). So the special/edge-marker column must not shrink the text
+        // area on top of the border -- only the border counts here.
+        if self.reserve_right_border_col {
             self.char_width
         } else {
             0.0
-        };
-        let right_special = if self.reserve_right_special_col {
-            self.char_width
-        } else {
-            0.0
-        };
-        right_border + right_special
+        }
     }
 
     fn append_width(self) -> f32 {

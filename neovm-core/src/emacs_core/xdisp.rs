@@ -5386,7 +5386,13 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.make_buffer_local("show-trailing-whitespace", true);
     obarray.set_symbol_value("show-paren-context-when-offscreen", Value::NIL);
     obarray.set_symbol_value("nobreak-char-display", Value::T);
-    obarray.set_symbol_value("overlay-arrow-variable-list", Value::NIL);
+    // GNU inits this to `(overlay-arrow-position)` (xdisp.c: `Voverlay_arrow_variable_list
+    // = list1 (intern_c_string ("overlay-arrow-position"))`), so the plain
+    // `overlay-arrow-position` marker (used by e.g. gud) is scanned by redisplay.
+    obarray.set_symbol_value(
+        "overlay-arrow-variable-list",
+        Value::cons(Value::symbol("overlay-arrow-position"), Value::NIL),
+    );
     obarray.set_symbol_value("overlay-arrow-string", Value::string("=>"));
     obarray.set_symbol_value("overlay-arrow-position", Value::NIL);
     // Mirror GNU Emacs: set char-table-extra-slots property for all subtypes
