@@ -3,9 +3,30 @@
 use super::super::glyph_atlas::WgpuGlyphAtlas;
 use super::super::vertex::{RectVertex, RoundedRectVertex, Uniforms};
 use super::WgpuRenderer;
-use neomacs_display_protocol::PointerAppearanceSelection;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
+use neomacs_display_protocol::{FrameRect, PointerAppearanceSelection};
+
+fn child_scissor(
+    clip: FrameRect,
+    scale_factor: f32,
+    surface_width: u32,
+    surface_height: u32,
+) -> Option<(u32, u32, u32, u32)> {
+    let left = (clip.x() * scale_factor).floor().max(0.0) as u32;
+    let top = (clip.y() * scale_factor).floor().max(0.0) as u32;
+    let right = ((clip.x() + clip.width()) * scale_factor)
+        .ceil()
+        .clamp(0.0, surface_width as f32) as u32;
+    let bottom = ((clip.y() + clip.height()) * scale_factor)
+        .ceil()
+        .clamp(0.0, surface_height as f32) as u32;
+    if right > left && bottom > top {
+        Some((left, top, right - left, bottom - top))
+    } else {
+        None
+    }
+}
 
 impl WgpuRenderer {
     /// Render a child frame as a floating overlay on top of the parent frame.
@@ -20,6 +41,7 @@ impl WgpuRenderer {
         child: &FrameGlyphBuffer,
         offset_x: f32,
         offset_y: f32,
+        clip_in_root: FrameRect,
         glyph_atlas: &mut WgpuGlyphAtlas,
         surface_width: u32,
         surface_height: u32,
@@ -46,6 +68,14 @@ impl WgpuRenderer {
         let frame_w = child.width;
         let frame_h = child.height;
         let bg_alpha = child.background_alpha;
+        let Some(scissor) = child_scissor(
+            clip_in_root,
+            self.scale_factor,
+            surface_width,
+            surface_height,
+        ) else {
+            return;
+        };
 
         tracing::debug!(
             "render_child_frame: size={:.0}x{:.0} offset=({:.1},{:.1}) border={:.1} glyphs={}",
@@ -81,6 +111,7 @@ impl WgpuRenderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
+                pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
 
                 if shadow_enabled && shadow_layers > 0 {
                     let mut shadow_verts: Vec<RectVertex> = Vec::new();
@@ -146,6 +177,7 @@ impl WgpuRenderer {
                             occlusion_query_set: None,
                             multiview_mask: None,
                         });
+                        pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
                         if let Some(upload) =
                             self.arenas
                                 .rounded
@@ -176,6 +208,7 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
+                    pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
                     if let Some(upload) =
                         self.arenas
                             .rect
@@ -224,6 +257,7 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
+                    pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
                     if let Some(upload) =
                         self.arenas
                             .rounded
@@ -284,6 +318,7 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
+                    pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
                     if let Some(upload) =
                         self.arenas
                             .rounded
@@ -312,6 +347,24 @@ impl WgpuRenderer {
             animated_cursor,
             corner_radius,
             pointer_selection,
+            Some(scissor),
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partial_child_clip_becomes_one_physical_scissor_for_all_render_passes() {
+        let clip = FrameRect::new(10.25, 20.5, 30.25, 40.0).unwrap();
+        assert_eq!(child_scissor(clip, 1.5, 200, 200), Some((15, 30, 46, 61)));
+    }
+
+    #[test]
+    fn child_clip_outside_surface_has_no_renderable_scissor() {
+        let clip = FrameRect::new(300.0, 300.0, 20.0, 20.0).unwrap();
+        assert_eq!(child_scissor(clip, 1.0, 200, 200), None);
     }
 }

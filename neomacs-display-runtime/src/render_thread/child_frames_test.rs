@@ -212,10 +212,45 @@ fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
     assert_eq!((entry.abs_x, entry.abs_y), (115.0, 92.0));
     assert_eq!(
         entry.clip_in_root,
-        Some(FrameRect::new(115.0, 92.0, 85.0, 68.0).unwrap())
+        PresentedClip::Rect(FrameRect::new(115.0, 92.0, 85.0, 68.0).unwrap())
     );
     assert_eq!(mgr.hit_test(199.0, 159.0).unwrap().0, 30);
     assert_eq!(mgr.hit_test(201.0, 159.0), None);
+}
+
+#[test]
+fn fully_clipped_child_is_not_hittable() {
+    let mut mgr = ChildFrameManager::new();
+    let mut root = FrameGlyphBuffer::with_size(100.0, 100.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    mgr.set_root_frame(Some(&root));
+    let mut child = make_child_buf(20, 150.0, 0.0, 40.0, 40.0, 1);
+    child.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        150.0,
+        0.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(mgr.update_frame(child));
+    assert_eq!(mgr.frames[&20].clip_in_root, PresentedClip::Empty);
+    assert_eq!(mgr.hit_test(155.0, 5.0), None);
 }
 
 #[test]

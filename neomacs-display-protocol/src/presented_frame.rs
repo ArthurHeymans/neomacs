@@ -89,7 +89,7 @@ pub struct PlacedFrame {
     root: DisplayFrameId,
     parent_relative: FrameRect,
     root_relative: FrameRect,
-    clip_in_root: Option<FrameRect>,
+    clip_in_root: PresentedClip,
     z_path: Vec<i32>,
 }
 
@@ -106,12 +106,18 @@ impl PlacedFrame {
     pub const fn root_relative(&self) -> FrameRect {
         self.root_relative
     }
-    pub const fn clip_in_root(&self) -> Option<FrameRect> {
+    pub const fn clip_in_root(&self) -> PresentedClip {
         self.clip_in_root
     }
     pub fn z_path(&self) -> &[i32] {
         &self.z_path
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PresentedClip {
+    Empty,
+    Rect(FrameRect),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -173,7 +179,11 @@ impl PresentedFrameScene {
                 ancestor.outer_in_parent.height(),
             )
             .expect("translated valid frame rectangle remains valid");
-            clip = intersect_optional(clip, outer);
+            clip = Some(match clip {
+                None => PresentedClip::Rect(outer),
+                Some(PresentedClip::Empty) => PresentedClip::Empty,
+                Some(PresentedClip::Rect(current)) => intersect(current, outer),
+            });
             z_path.push(ancestor.z_order);
         }
         let root_relative = FrameRect::new(
@@ -188,7 +198,7 @@ impl PresentedFrameScene {
             root: ancestry.last().expect("ancestry is nonempty").frame,
             parent_relative: placement.outer_in_parent,
             root_relative,
-            clip_in_root: clip,
+            clip_in_root: clip.expect("ancestry is nonempty"),
             z_path,
         })
     }
@@ -218,16 +228,16 @@ impl PresentedFrameScene {
     }
 }
 
-fn intersect_optional(current: Option<FrameRect>, next: FrameRect) -> Option<FrameRect> {
-    let Some(current) = current else {
-        return Some(next);
-    };
+fn intersect(current: FrameRect, next: FrameRect) -> PresentedClip {
     let left = current.x().max(next.x());
     let top = current.y().max(next.y());
     let right = (current.x() + current.width()).min(next.x() + next.width());
     let bottom = (current.y() + current.height()).min(next.y() + next.height());
-    (right > left && bottom > top)
-        .then(|| FrameRect::new(left, top, right - left, bottom - top).unwrap())
+    if right > left && bottom > top {
+        PresentedClip::Rect(FrameRect::new(left, top, right - left, bottom - top).unwrap())
+    } else {
+        PresentedClip::Empty
+    }
 }
 
 #[cfg(test)]

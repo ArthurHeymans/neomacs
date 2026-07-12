@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::{
-    FrameRect, PlaceChildQuery, PresentedFramePlacement, PresentedFrameScene,
+    FrameRect, PlaceChildQuery, PresentedClip, PresentedFramePlacement, PresentedFrameScene,
 };
 
 /// State for one child frame.
@@ -17,7 +17,7 @@ pub(crate) struct ChildFrameEntry {
     /// Computed absolute position on screen (from parent_x/parent_y)
     pub abs_x: f32,
     pub abs_y: f32,
-    pub clip_in_root: Option<FrameRect>,
+    pub clip_in_root: PresentedClip,
     pub z_path: Vec<i32>,
     /// Frame counter when this entry was last updated
     #[allow(dead_code)] // read by the test-exercised prune_stale
@@ -67,6 +67,8 @@ impl ChildFrameManager {
         let outer = buf.frame_placement.outer_in_parent();
         let abs_x = outer.x();
         let abs_y = outer.y();
+        let width = buf.width;
+        let height = buf.height;
         let z_order = buf.frame_placement.z_order();
         let existing = self.frames.get_mut(&frame_id.get());
 
@@ -116,7 +118,10 @@ impl ChildFrameManager {
                 frame: buf,
                 abs_x,
                 abs_y,
-                clip_in_root: None,
+                clip_in_root: PresentedClip::Rect(
+                    FrameRect::new(abs_x, abs_y, width, height)
+                        .expect("child frame extent is valid"),
+                ),
                 z_path: vec![z_order],
                 last_updated: self.frame_counter,
                 ingest_seq: super::frame_state::next_faces_ingest_seq(),
@@ -195,12 +200,15 @@ impl ChildFrameManager {
                     && local_y >= 0.0
                     && local_x < entry.frame.width
                     && local_y < entry.frame.height
-                    && entry.clip_in_root.is_none_or(|clip| {
-                        x >= clip.x()
-                            && y >= clip.y()
-                            && x < clip.x() + clip.width()
-                            && y < clip.y() + clip.height()
-                    })
+                    && match entry.clip_in_root {
+                        PresentedClip::Empty => false,
+                        PresentedClip::Rect(clip) => {
+                            x >= clip.x()
+                                && y >= clip.y()
+                                && x < clip.x() + clip.width()
+                                && y < clip.y() + clip.height()
+                        }
+                    }
                 {
                     return Some((frame_id, local_x, local_y));
                 }

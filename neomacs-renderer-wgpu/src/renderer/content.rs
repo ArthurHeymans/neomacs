@@ -232,6 +232,7 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         clip_corner_radius: f32,
         pointer_selection: Option<neomacs_display_protocol::PointerAppearanceSelection>,
+        scissor: Option<(u32, u32, u32, u32)>,
     ) {
         self.arenas.glyph.begin_frame();
         self.arenas.subpixel.begin_frame();
@@ -1346,6 +1347,9 @@ impl WgpuRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+            if let Some((x, y, width, height)) = scissor {
+                pass.set_scissor_rect(x, y, width, height);
+            }
 
             if use_stencil {
                 pass.set_stencil_reference(1);

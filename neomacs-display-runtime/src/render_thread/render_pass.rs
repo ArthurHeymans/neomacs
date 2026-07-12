@@ -959,6 +959,11 @@ impl RenderApp {
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             for &child_id in render.compositor.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = render.compositor.child_frames.frames.get(&child_id) {
+                    let neomacs_display_protocol::PresentedClip::Rect(clip_in_root) =
+                        child_entry.clip_in_root
+                    else {
+                        continue;
+                    };
                     let pointer_selection = pointer_appearance.selection_for(&child_entry.frame);
                     if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
                         atlas.set_current_frame_fonts(
@@ -982,6 +987,7 @@ impl RenderApp {
                         &child_entry.frame,
                         child_entry.abs_x,
                         child_entry.abs_y,
+                        clip_in_root,
                         render.compositor.glyph_atlas.as_mut().unwrap(),
                         native.width,
                         native.height,
