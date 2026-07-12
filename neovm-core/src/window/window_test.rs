@@ -87,8 +87,8 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
 #[test]
 fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions() {
     use super::geometry::{
-        GeometryQueryError, PresentationId, PresentedGeometry, WindowGeometryQuery, WindowRegion,
-        WindowRegionBoundsQuery,
+        GeometryQueryError, PresentationId, PresentedGeometry, WindowCoordinateQuery,
+        WindowGeometryQuery, WindowRegion, WindowRegionBoundsQuery,
     };
     use neomacs_display_protocol::types::Rect as TransportRect;
 
@@ -109,6 +109,20 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             text_area_left_offset: 999,
             header_line_height: 88,
             tab_line_height: 99,
+            points: vec![DisplayPointSnapshot {
+                buffer_pos: LispCharPos1::ONE,
+                x: 10,
+                y: 999,
+                width: 7,
+                height: 17,
+                row: 8,
+                col: 3,
+            }],
+            body_rows: vec![PresentedBodyRowSnapshot {
+                output_row: 8,
+                body_row: 2,
+                body_y: 20,
+            }],
             ..WindowDisplaySnapshot::default()
         }],
     )
@@ -124,6 +138,43 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             available: presentation,
         }
     );
+    assert_eq!(
+        publication
+            .resolve(WindowCoordinateQuery::in_frame(
+                presentation,
+                WindowId(99),
+                190,
+                80,
+            ))
+            .expect_err("unknown window must not resolve"),
+        GeometryQueryError::MissingWindow(WindowId(99))
+    );
+
+    let skipped = PresentedGeometry::new(
+        FrameId(7),
+        PresentationId::new(42),
+        [WindowDisplaySnapshot {
+            window_id,
+            regions: PresentedWindowRegions {
+                outer: TransportRect::new(144.0, 24.0, 800.0, 600.0),
+                ..PresentedWindowRegions::default()
+            },
+            regions_materialized: false,
+            ..WindowDisplaySnapshot::default()
+        }],
+    )
+    .expect("valid skipped window publication");
+    assert_eq!(
+        skipped
+            .resolve(WindowCoordinateQuery::in_frame(
+                PresentationId::new(42),
+                window_id,
+                190,
+                80,
+            ))
+            .expect_err("coordinate query requires materialized geometry"),
+        GeometryQueryError::MissingMaterializedGeometry(window_id)
+    );
 
     let body = publication
         .resolve(WindowRegionBoundsQuery::new(
@@ -136,6 +187,33 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
     assert_eq!(body.origin().y().get(), 60.0);
     assert_eq!(body.width().get(), 700.0);
     assert_eq!(body.height().get(), 520.0);
+
+    for query in [
+        WindowCoordinateQuery::in_text_body(presentation, window_id, 10, 56),
+        WindowCoordinateQuery::in_whole_window(presentation, window_id, 46, 56),
+        WindowCoordinateQuery::in_frame(presentation, window_id, 190, 80),
+    ] {
+        let point = publication.resolve(query).expect("visible coordinate");
+        assert_eq!(point.buffer_pos(), LispCharPos1::ONE);
+        assert_eq!(point.in_text_body().x().get(), 10.0);
+        assert_eq!(point.in_text_body().y().get(), 20.0);
+    }
+
+    let error = publication
+        .resolve(WindowCoordinateQuery::in_frame(
+            PresentationId::new(40),
+            window_id,
+            190,
+            80,
+        ))
+        .expect_err("stale coordinate query must not resolve");
+    assert_eq!(
+        error,
+        GeometryQueryError::StalePresentation {
+            requested: PresentationId::new(40),
+            available: presentation,
+        }
+    );
 }
 
 #[test]
@@ -286,7 +364,7 @@ fn legacy_unowned_snapshots_do_not_create_an_authoritative_geometry_view() {
     }]);
 
     assert!(frame.window_display_snapshot(window_id).is_some());
-    assert!(frame.presented_window_geometry(window_id).is_none());
+    assert!(frame.presented_geometry().is_none());
 }
 use crate::buffer::LispCharPos1;
 

@@ -2609,19 +2609,6 @@ impl Frame {
         self.display_snapshots.get(&id)
     }
 
-    pub fn presented_window_geometry(
-        &self,
-        id: WindowId,
-    ) -> Option<geometry::SnapshotWindowGeometry<'_>> {
-        let presented = self.presented_geometry.as_ref()?;
-        presented
-            .resolve(geometry::WindowGeometryQuery::new(
-                presented.presentation(),
-                id,
-            ))
-            .ok()
-    }
-
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
         if self
             .presented_geometry

@@ -4877,15 +4877,6 @@ fn resolve_exact_visible_metrics(
     Ok(Some((wid, exact_metrics_from_point(point))))
 }
 
-fn snapshot_geometry_flow(error: crate::window::geometry::GeometryError) -> Flow {
-    signal(
-        LispCondition::Error,
-        vec![Value::string(format!(
-            "Invalid redisplay snapshot geometry: {error:?}"
-        ))],
-    )
-}
-
 fn geometry_query_flow(error: crate::window::geometry::GeometryQueryError) -> Flow {
     signal(
         LispCondition::Error,
@@ -5116,7 +5107,9 @@ fn resolve_posn_at_xy_window(
             .selected_frame()
             .map(|frame| (frame.id, frame.selected_window, true)));
     }
-    if let Some(windowish) = resolve_live_window_identity(frames, Some(frameish))? {
+    if frameish.as_frame_id().is_none()
+        && let Some(windowish) = resolve_live_window_identity(frames, Some(frameish))?
+    {
         return Ok(Some((windowish.0, windowish.1, true)));
     }
     let fid = if let Some(id) = frameish.as_frame_id() {
@@ -5159,6 +5152,20 @@ pub(crate) fn builtin_posn_at_x_y(eval: &mut super::eval::Context, args: Vec<Val
     posn_at_x_y_impl(&mut eval.frames, &mut eval.buffers, args)
 }
 
+fn tty_batch_posn_query_coordinates(
+    window: &crate::window::Window,
+    x: i64,
+    y: i64,
+    window_relative_input: bool,
+) -> (i64, i64) {
+    if window_relative_input {
+        (x, y)
+    } else {
+        let bounds = window.bounds();
+        (x - bounds.x.round() as i64, y - bounds.y.round() as i64)
+    }
+}
+
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -5179,42 +5186,51 @@ fn posn_at_x_y_impl(
         return Ok(Value::NIL);
     };
 
-    let presented_geometry = frame.presented_window_geometry(wid);
-    let text_area_left_offset = frame
-        .window_display_snapshot(wid)
-        .map_or(0, |snapshot| snapshot.text_area_left_offset);
-    let (query_x, query_y) = if window_relative_input {
-        let rel_x = if whole { x - text_area_left_offset } else { x };
-        (rel_x, y)
-    } else {
-        let (outer_x, outer_y) = presented_geometry
-            .as_ref()
-            .map(|geometry| {
-                let origin = geometry.outer_in_frame().origin();
-                (origin.x().get(), origin.y().get())
-            })
-            .unwrap_or_else(|| {
-                let bounds = window_ref.bounds();
-                (bounds.x, bounds.y)
-            });
-        (
-            x - outer_x.round() as i64 - text_area_left_offset,
-            y - outer_y.round() as i64,
-        )
-    };
-
-    if let Some(geometry) = presented_geometry {
-        if let Some(point) = geometry
-            .point_at_window_coords(query_x, query_y)
-            .map_err(snapshot_geometry_flow)?
-        {
-            return Ok(make_text_area_position(
+    if frame.effective_window_system().is_some() {
+        let publication = frame.presented_geometry().ok_or_else(|| {
+            signal(
+                LispCondition::Error,
+                vec![Value::string("GUI frame has no presented geometry")],
+            )
+        })?;
+        let query = if window_relative_input {
+            if whole {
+                crate::window::geometry::WindowCoordinateQuery::in_whole_window(
+                    publication.presentation(),
+                    wid,
+                    x,
+                    y,
+                )
+            } else {
+                crate::window::geometry::WindowCoordinateQuery::in_text_body(
+                    publication.presentation(),
+                    wid,
+                    x,
+                    y,
+                )
+            }
+        } else {
+            crate::window::geometry::WindowCoordinateQuery::in_frame(
+                publication.presentation(),
+                wid,
+                x,
+                y,
+            )
+        };
+        return match publication.resolve(query) {
+            Ok(point) => Ok(make_text_area_position(
                 wid,
                 exact_metrics_from_point(point),
-            ));
-        }
+            )),
+            Err(crate::window::geometry::GeometryQueryError::CoordinateNotVisible { .. }) => {
+                Ok(Value::NIL)
+            }
+            Err(error) => Err(geometry_query_flow(error)),
+        };
     }
 
+    let (query_x, query_y) =
+        tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
         return Ok(Value::NIL);
     };

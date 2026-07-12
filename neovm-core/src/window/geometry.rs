@@ -300,6 +300,11 @@ pub enum GeometryQueryError {
         window: WindowId,
         position: LispCharPos1,
     },
+    CoordinateNotVisible {
+        window: WindowId,
+        x: i64,
+        y: i64,
+    },
     InvalidGeometry(GeometryError),
 }
 
@@ -517,6 +522,101 @@ impl GeometryQuery for BufferPositionQuery {
             .ok_or(GeometryQueryError::PositionNotVisible {
                 window: self.window,
                 position: self.position,
+            })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CoordinateScope {
+    TextBody,
+    WholeWindow,
+    Frame,
+}
+
+/// Resolve one pixel coordinate against the exact immutable presentation that
+/// supplied the window regions and visible glyph positions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowCoordinateQuery {
+    presentation: PresentationId,
+    window: WindowId,
+    scope: CoordinateScope,
+    x: i64,
+    y: i64,
+}
+
+impl WindowCoordinateQuery {
+    pub const fn in_text_body(
+        presentation: PresentationId,
+        window: WindowId,
+        x: i64,
+        window_y: i64,
+    ) -> Self {
+        Self {
+            presentation,
+            window,
+            scope: CoordinateScope::TextBody,
+            x,
+            y: window_y,
+        }
+    }
+
+    pub const fn in_whole_window(
+        presentation: PresentationId,
+        window: WindowId,
+        x: i64,
+        y: i64,
+    ) -> Self {
+        Self {
+            presentation,
+            window,
+            scope: CoordinateScope::WholeWindow,
+            x,
+            y,
+        }
+    }
+
+    pub const fn in_frame(presentation: PresentationId, window: WindowId, x: i64, y: i64) -> Self {
+        Self {
+            presentation,
+            window,
+            scope: CoordinateScope::Frame,
+            x,
+            y,
+        }
+    }
+}
+
+impl query_seal::Sealed for WindowCoordinateQuery {}
+
+impl GeometryQuery for WindowCoordinateQuery {
+    type Output<'a> = SnapshotPointGeometry;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let window = geometry.resolve(WindowGeometryQuery::new(self.presentation, self.window))?;
+        let body_origin = window.text_body_origin_in_window();
+        let outer_origin = window.outer_in_frame().origin();
+        let (body_x, window_y) = match self.scope {
+            CoordinateScope::TextBody => (self.x, self.y),
+            CoordinateScope::WholeWindow => (self.x - body_origin.x().get() as i64, self.y),
+            CoordinateScope::Frame => (
+                self.x - outer_origin.x().get() as i64 - body_origin.x().get() as i64,
+                self.y - outer_origin.y().get() as i64,
+            ),
+        };
+        window
+            .point_at_window_coords(body_x, window_y)
+            .map_err(GeometryQueryError::InvalidGeometry)?
+            .ok_or(GeometryQueryError::CoordinateNotVisible {
+                window: self.window,
+                x: self.x,
+                y: self.y,
             })
     }
 }

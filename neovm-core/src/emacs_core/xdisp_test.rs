@@ -2552,7 +2552,7 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
 }
 
 #[test]
-fn test_posn_at_x_y_reports_text_area_relative_geometry_below_window_chrome() {
+fn tty_posn_at_x_y_uses_the_named_live_grid_approximation() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -2607,7 +2607,102 @@ fn test_posn_at_x_y_reports_text_area_relative_geometry_below_window_chrome() {
 
     assert_eq!(
         super::super::print::print_value(&result),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 8 (30 . 40) 0 nil 8 (3 . 2) nil (30 . 8) (0 . 0))"
+    );
+}
+
+#[test]
+fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinates() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer = eval.buffers.current_buffer().expect("buffer").id;
+    let frame_id = eval.frames.create_frame("posn-presented", 800, 600, buffer);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .publish_display_snapshots(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(
+                            144.0, 24.0, 800.0, 600.0,
+                        ),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            168.0, 41.0, 760.0, 560.0,
+                        ),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    text_area_left_offset: 999,
+                    points: vec![crate::window::DisplayPointSnapshot {
+                        buffer_pos: crate::buffer::LispCharPos1::ONE,
+                        x: 72,
+                        y: 999,
+                        width: 7,
+                        height: 17,
+                        row: 99,
+                        col: 9,
+                    }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 99,
+                        body_row: 2,
+                        body_y: 34,
+                    }],
+                    ..Default::default()
+                }],
+            )
+            .expect("presented geometry");
+    }
+
+    let cases = [
+        vec![
+            Value::fixnum(72),
+            Value::fixnum(51),
+            Value::make_window(window_id.0),
+            Value::NIL,
+        ],
+        vec![
+            Value::fixnum(96),
+            Value::fixnum(51),
+            Value::make_window(window_id.0),
+            Value::T,
+        ],
+        vec![
+            Value::fixnum(240),
+            Value::fixnum(75),
+            Value::make_frame(frame_id.0),
+            Value::NIL,
+        ],
+    ];
+    for args in cases {
+        let result = builtin_posn_at_x_y(&mut eval, args).expect("presented coordinate query");
+        assert_eq!(
+            super::super::print::print_value(&result),
+            format!(
+                "(#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17))",
+                window_id.0
+            )
+        );
+    }
+
+    eval.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_display_snapshots(Vec::new());
+    assert!(
+        builtin_posn_at_x_y(
+            &mut eval,
+            vec![
+                Value::fixnum(72),
+                Value::fixnum(51),
+                Value::make_window(window_id.0),
+            ],
+        )
+        .is_err(),
+        "GUI coordinates must not fall back to live-window approximation"
     );
 }
 
