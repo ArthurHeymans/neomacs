@@ -736,6 +736,134 @@ fn presented_pointer_hit_index_stores_each_staggered_region_once() {
 }
 
 #[test]
+fn presented_hit_index_resolves_every_window_region_and_exact_text_position() {
+    use crate::{
+        DisplayWindowId, PresentedHitIndex, PresentedHitQuery, PresentedHitRegion,
+        PresentedRegionKind, PresentedTextPosition, frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(41);
+    let window = DisplayWindowId::new(7);
+    let kinds = [
+        PresentedRegionKind::TextBody,
+        PresentedRegionKind::LeftMargin,
+        PresentedRegionKind::RightMargin,
+        PresentedRegionKind::LeftFringe,
+        PresentedRegionKind::RightFringe,
+        PresentedRegionKind::LeftScrollBar,
+        PresentedRegionKind::RightScrollBar,
+        PresentedRegionKind::HorizontalScrollBar,
+        PresentedRegionKind::TabLine,
+        PresentedRegionKind::HeaderLine,
+        PresentedRegionKind::ModeLine,
+        PresentedRegionKind::RightDivider,
+        PresentedRegionKind::BottomDivider,
+    ];
+    let regions = kinds
+        .into_iter()
+        .enumerate()
+        .map(|(index, kind)| {
+            PresentedHitRegion::new(
+                Some(window),
+                kind,
+                rect(index as f32 * 10.0, 0.0, 10.0, 10.0),
+                0,
+            )
+        })
+        .chain(std::iter::once(PresentedHitRegion::new(
+            None,
+            PresentedRegionKind::TabBar,
+            rect(0.0, 20.0, 130.0, 10.0),
+            1,
+        )))
+        .collect();
+    let positions = vec![PresentedTextPosition::new(
+        window,
+        rect(2.0, 2.0, 6.0, 8.0),
+        123,
+        4,
+        9,
+    )];
+    let index = PresentedHitIndex::from_parts(presentation, regions, positions).unwrap();
+
+    for (position, kind) in kinds.into_iter().enumerate() {
+        let hit = index
+            .resolve(PresentedHitQuery::new(
+                presentation,
+                position as f32 * 10.0 + 5.0,
+                5.0,
+            ))
+            .unwrap()
+            .expect("semantic region hit");
+        assert_eq!(hit.region().kind(), kind);
+    }
+    let text = index
+        .resolve(PresentedHitQuery::new(presentation, 3.0, 3.0))
+        .unwrap()
+        .unwrap()
+        .text_position()
+        .expect("exact text position");
+    assert_eq!(text.buffer_position(), 123);
+    assert_eq!((text.row(), text.column()), (4, 9));
+    assert_eq!(
+        index
+            .resolve(PresentedHitQuery::new(presentation, 5.0, 25.0))
+            .unwrap()
+            .unwrap()
+            .region()
+            .kind(),
+        PresentedRegionKind::TabBar
+    );
+}
+
+#[test]
+fn presented_hit_index_uses_half_open_edges_z_order_and_rejects_stale_queries() {
+    use crate::{
+        DisplayWindowId, PresentedHitError, PresentedHitIndex, PresentedHitQuery,
+        PresentedHitRegion, PresentedRegionKind, frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(8);
+    let lower = PresentedHitRegion::new(
+        Some(DisplayWindowId::new(1)),
+        PresentedRegionKind::TextBody,
+        rect(0.0, 0.0, 20.0, 10.0),
+        0,
+    );
+    let upper = PresentedHitRegion::new(
+        Some(DisplayWindowId::new(2)),
+        PresentedRegionKind::ModeLine,
+        rect(10.0, 0.0, 10.0, 10.0),
+        1,
+    );
+    let index = PresentedHitIndex::from_parts(presentation, vec![lower, upper], vec![]).unwrap();
+
+    assert_eq!(
+        index
+            .resolve(PresentedHitQuery::new(presentation, 10.0, 5.0))
+            .unwrap()
+            .unwrap()
+            .region()
+            .window(),
+        Some(DisplayWindowId::new(2))
+    );
+    assert!(
+        index
+            .resolve(PresentedHitQuery::new(presentation, 20.0, 5.0))
+            .unwrap()
+            .is_none(),
+        "right edge is exclusive"
+    );
+    assert_eq!(
+        index.resolve(PresentedHitQuery::new(PresentationId::new(7), 5.0, 5.0)),
+        Err(PresentedHitError::StalePresentation {
+            expected: presentation,
+            requested: PresentationId::new(7),
+        })
+    );
+}
+
+#[test]
 fn frame_glyph_buffers_start_with_an_empty_presented_pointer_map() {
     let default_buffer = crate::FrameGlyphBuffer::default();
     let constructed_buffer = crate::FrameGlyphBuffer::new();

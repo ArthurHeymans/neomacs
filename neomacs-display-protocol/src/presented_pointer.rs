@@ -5,8 +5,288 @@
 //! retained: render-time consumers only receive coherent immutable records.
 
 use crate::{
-    DisplaySlotId, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, FrameSize, InteractionId,
+    DisplaySlotId, DisplayWindowId, FaceId, FrameGlyph, FrameGlyphBuffer, FrameRect, FrameSize,
+    InteractionId, PresentationId,
 };
+
+/// Semantic area resolved from the immutable geometry of one presentation.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum PresentedRegionKind {
+    TextBody,
+    LeftMargin,
+    RightMargin,
+    LeftFringe,
+    RightFringe,
+    LeftScrollBar,
+    RightScrollBar,
+    HorizontalScrollBar,
+    TabLine,
+    HeaderLine,
+    ModeLine,
+    RightDivider,
+    BottomDivider,
+    MenuBar,
+    ToolBar,
+    CompactBar,
+    TabBar,
+}
+
+/// One z-ordered semantic region in frame-local logical pixels.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedHitRegion {
+    window: Option<DisplayWindowId>,
+    kind: PresentedRegionKind,
+    bounds: FrameRect,
+    z_order: i32,
+}
+
+impl PresentedHitRegion {
+    #[must_use]
+    pub const fn new(
+        window: Option<DisplayWindowId>,
+        kind: PresentedRegionKind,
+        bounds: FrameRect,
+        z_order: i32,
+    ) -> Self {
+        Self {
+            window,
+            kind,
+            bounds,
+            z_order,
+        }
+    }
+
+    #[must_use]
+    pub const fn window(self) -> Option<DisplayWindowId> {
+        self.window
+    }
+
+    #[must_use]
+    pub const fn kind(self) -> PresentedRegionKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn bounds(self) -> FrameRect {
+        self.bounds
+    }
+
+    #[must_use]
+    pub const fn z_order(self) -> i32 {
+        self.z_order
+    }
+}
+
+/// Exact displayed buffer position occupying one frame-local cell rectangle.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedTextPosition {
+    window: DisplayWindowId,
+    bounds: FrameRect,
+    buffer_position: i64,
+    row: i64,
+    column: i64,
+}
+
+impl PresentedTextPosition {
+    #[must_use]
+    pub const fn new(
+        window: DisplayWindowId,
+        bounds: FrameRect,
+        buffer_position: i64,
+        row: i64,
+        column: i64,
+    ) -> Self {
+        Self {
+            window,
+            bounds,
+            buffer_position,
+            row,
+            column,
+        }
+    }
+
+    #[must_use]
+    pub const fn window(self) -> DisplayWindowId {
+        self.window
+    }
+
+    #[must_use]
+    pub const fn bounds(self) -> FrameRect {
+        self.bounds
+    }
+
+    #[must_use]
+    pub const fn buffer_position(self) -> i64 {
+        self.buffer_position
+    }
+
+    #[must_use]
+    pub const fn row(self) -> i64 {
+        self.row
+    }
+
+    #[must_use]
+    pub const fn column(self) -> i64 {
+        self.column
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PresentedHitQuery {
+    presentation: PresentationId,
+    x: f32,
+    y: f32,
+}
+
+impl PresentedHitQuery {
+    #[must_use]
+    pub const fn new(presentation: PresentationId, x: f32, y: f32) -> Self {
+        Self { presentation, x, y }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PresentedHit {
+    region: PresentedHitRegion,
+    text_position: Option<PresentedTextPosition>,
+}
+
+impl PresentedHit {
+    #[must_use]
+    pub const fn region(self) -> PresentedHitRegion {
+        self.region
+    }
+
+    #[must_use]
+    pub const fn text_position(self) -> Option<PresentedTextPosition> {
+        self.text_position
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentedHitError {
+    StalePresentation {
+        expected: PresentationId,
+        requested: PresentationId,
+    },
+    InvalidRegionGeometry,
+    InvalidTextPositionGeometry,
+}
+
+impl std::fmt::Display for PresentedHitError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StalePresentation {
+                expected,
+                requested,
+            } => write!(
+                formatter,
+                "stale presentation: expected {}, requested {}",
+                expected.get(),
+                requested.get()
+            ),
+            Self::InvalidRegionGeometry => formatter.write_str("invalid hit-region geometry"),
+            Self::InvalidTextPositionGeometry => {
+                formatter.write_str("invalid text-position geometry")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PresentedHitError {}
+
+/// Immutable, presentation-qualified semantic hit index.
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedHitIndex {
+    presentation: PresentationId,
+    regions: Vec<PresentedHitRegion>,
+    text_positions: Vec<PresentedTextPosition>,
+}
+
+impl PresentedHitIndex {
+    pub fn from_parts(
+        presentation: PresentationId,
+        regions: Vec<PresentedHitRegion>,
+        text_positions: Vec<PresentedTextPosition>,
+    ) -> Result<Self, PresentedHitError> {
+        if regions
+            .iter()
+            .any(|region| !rect_has_valid_geometry(region.bounds))
+        {
+            return Err(PresentedHitError::InvalidRegionGeometry);
+        }
+        if text_positions
+            .iter()
+            .any(|position| !rect_has_valid_geometry(position.bounds))
+        {
+            return Err(PresentedHitError::InvalidTextPositionGeometry);
+        }
+        Ok(Self {
+            presentation,
+            regions,
+            text_positions,
+        })
+    }
+
+    #[must_use]
+    pub const fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    pub fn resolve(
+        &self,
+        query: PresentedHitQuery,
+    ) -> Result<Option<PresentedHit>, PresentedHitError> {
+        if query.presentation != self.presentation {
+            return Err(PresentedHitError::StalePresentation {
+                expected: self.presentation,
+                requested: query.presentation,
+            });
+        }
+        if !query.x.is_finite() || !query.y.is_finite() {
+            return Ok(None);
+        }
+        let Some((_, region)) = self
+            .regions
+            .iter()
+            .enumerate()
+            .filter(|(_, region)| contains(region.bounds, query.x, query.y))
+            .max_by_key(|(index, region)| (region.z_order, std::cmp::Reverse(*index)))
+        else {
+            return Ok(None);
+        };
+        let text_position = (region.kind == PresentedRegionKind::TextBody)
+            .then(|| {
+                self.text_positions.iter().find(|position| {
+                    Some(position.window) == region.window
+                        && contains(position.bounds, query.x, query.y)
+                })
+            })
+            .flatten()
+            .copied();
+        Ok(Some(PresentedHit {
+            region: *region,
+            text_position,
+        }))
+    }
+
+    #[must_use]
+    pub fn regions(&self) -> &[PresentedHitRegion] {
+        &self.regions
+    }
+
+    #[must_use]
+    pub fn text_positions(&self) -> &[PresentedTextPosition] {
+        &self.text_positions
+    }
+}
+
+fn contains(bounds: FrameRect, x: f32, y: f32) -> bool {
+    x >= bounds.x()
+        && x < bounds.x() + bounds.width()
+        && y >= bounds.y()
+        && y < bounds.y() + bounds.height()
+}
 
 /// Presentation-local index of one transient pointer appearance.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
