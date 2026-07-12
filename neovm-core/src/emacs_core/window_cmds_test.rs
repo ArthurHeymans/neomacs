@@ -1089,19 +1089,52 @@ fn gui_set_window_buffer_applies_buffer_local_display_defaults() {
         .set_buffer_local_property(buffer_id, "horizontal-scroll-bar", Value::symbol("bottom"))
         .expect("horizontal scroll bar");
 
-    let out = ev
-        .eval_str_each(
-            "(let ((w (selected-window)))
-           (set-window-buffer w \" *gui-swb-display*\")
-           (list (window-fringes w)
-                 (window-scroll-bars w)
-                 (window-scroll-bar-width w)
-                 (window-scroll-bar-height w)))",
+    ev.eval_str("(set-window-buffer (selected-window) \" *gui-swb-display*\")")
+        .expect("set-window-buffer");
+    let window_id = ev.frames.get(fid).expect("frame").selected_window;
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(1),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id,
+                regions: crate::window::PresentedWindowRegions {
+                    outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+                    text_body: neomacs_display_protocol::types::Rect::new(14.0, 0.0, 781.0, 577.0),
+                    left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                        11.0, 0.0, 3.0, 577.0,
+                    )),
+                    right_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                        795.0, 0.0, 5.0, 577.0,
+                    )),
+                    left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 0.0, 11.0, 577.0,
+                    )),
+                    horizontal_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 577.0, 800.0, 7.0,
+                    )),
+                    mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 584.0, 800.0, 16.0,
+                    )),
+                    ..Default::default()
+                },
+                regions_materialized: true,
+                ..Default::default()
+            }],
         )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
-    assert_eq!(out[0], "OK ((3 5 t nil) (11 2 left 7 1 bottom nil) 11 7)");
+        .expect("presented GUI geometry");
+    let out = ev
+        .eval_str(
+            "(let ((w (selected-window)))
+               (list (window-fringes w)
+                     (window-scroll-bars w)
+                     (window-scroll-bar-width w)
+                     (window-scroll-bar-height w)))",
+        )
+        .map(|value| crate::emacs_core::print::print_value(&value))
+        .expect("geometry query");
+    assert_eq!(out, "((3 5 t nil) (11 2 left 7 1 bottom nil) 11 7)");
 }
 
 #[test]
@@ -6752,6 +6785,9 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
                        (window-top-line)
                        (window-pixel-edges)
                        (window-inside-pixel-edges)
+                       (window-inside-edges)
+                       (window-body-width)
+                       (window-text-width)
                        (window-text-width nil t)
                        (window-text-height nil t)
                        (posn-at-point 1))",
@@ -6760,9 +6796,11 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
         assert_eq!(
             crate::emacs_core::print::print_value(&result),
             format!(
-                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
+                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) ({} 3 {} 31) 72 72 {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
                 body_left as i64,
                 body_right as i64,
+                (body_left / 8.0).floor() as i64,
+                (body_right / 8.0).ceil() as i64,
                 (body_right - body_left) as i64,
                 wid.0,
             )
@@ -6796,7 +6834,7 @@ fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_b
 }
 
 #[test]
-fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configuration() {
+fn presented_fringe_geometry_and_scrollbar_tuple_keep_live_gnu_configuration() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buffer = ev.buffers.create_buffer("*geometry-tuples*");
@@ -6847,6 +6885,12 @@ fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configurati
                     left_fringe: Some(neomacs_display_protocol::types::Rect::new(
                         0.0, 0.0, 8.0, 584.0,
                     )),
+                    left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 0.0, 13.0, 577.0,
+                    )),
+                    horizontal_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 577.0, 800.0, 7.0,
+                    )),
                     ..Default::default()
                 },
                 regions_materialized: true,
@@ -6861,6 +6905,28 @@ fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configurati
     assert_eq!(
         crate::emacs_core::print::print_value(&scrollbars),
         "(0 0 left 0 0 bottom t)"
+    );
+
+    {
+        let display = ev
+            .frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .find_window_mut(window_id)
+            .expect("window")
+            .display_mut()
+            .expect("leaf display state");
+        display.scroll_bar_width = -1;
+        display.vertical_scroll_bar_type = Value::T;
+        display.scroll_bar_height = -1;
+        display.horizontal_scroll_bar_type = Value::T;
+        display.scroll_bars_persistent = false;
+    }
+    let inherited = super::builtin_window_scroll_bars(&mut ev, vec![]).expect("scrollbars");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&inherited),
+        "(nil 1 t nil 0 t nil)",
+        "realized rectangles must not replace GNU's raw inherited tuple fields"
     );
 }
 

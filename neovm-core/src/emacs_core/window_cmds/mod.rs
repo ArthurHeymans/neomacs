@@ -3033,42 +3033,8 @@ pub(crate) fn builtin_window_scroll_bars(
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("window-scroll-bars", &args, 1)?;
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
-    let (fid, wid) =
+    let (_fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-        let regions = geometry.regions();
-        let (_, columns, configured_vertical, _, lines, configured_horizontal, persistent) = frames
-            .window_scroll_bars(wid)
-            .unwrap_or((Value::NIL, 0, Value::T, Value::NIL, 0, Value::T, false));
-        let vertical = if regions.left_scroll_bar().is_some() {
-            Value::symbol("left")
-        } else if regions.right_scroll_bar().is_some() {
-            Value::symbol("right")
-        } else {
-            configured_vertical
-        };
-        let width = regions
-            .left_scroll_bar()
-            .or(regions.right_scroll_bar())
-            .map_or(0, |rect| rect.width().get() as i64);
-        let horizontal = if regions.horizontal_scroll_bar().is_some() {
-            Value::symbol("bottom")
-        } else {
-            configured_horizontal
-        };
-        let height = regions
-            .horizontal_scroll_bar()
-            .map_or(0, |rect| rect.height().get() as i64);
-        return Ok(Value::list(vec![
-            Value::fixnum(width),
-            Value::fixnum(columns),
-            vertical,
-            Value::fixnum(height),
-            Value::fixnum(lines),
-            horizontal,
-            if persistent { Value::T } else { Value::NIL },
-        ]));
-    }
     let (width, columns, vertical_type, height, lines, horizontal_type, persistent) = frames
         .window_scroll_bars(wid)
         .unwrap_or((Value::NIL, 0, Value::T, Value::NIL, 0, Value::T, false));
@@ -3403,9 +3369,11 @@ pub(crate) fn builtin_window_body_width(
             .get(fid)
             .map(|f| f.char_width.max(1.0))
             .unwrap_or(8.0);
-        Ok(Value::fixnum(
-            (window_body_width_pixels(frames, fid, w) as f32 / cw).floor() as i64,
-        ))
+        let width = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+            None => window_body_width_pixels(frames, fid, w),
+        };
+        Ok(Value::fixnum((width as f32 / cw).floor() as i64))
     }
 }
 /// `(window-text-height &optional WINDOW PIXELWISE)` -> integer.
@@ -3466,9 +3434,11 @@ pub(crate) fn builtin_window_text_width(
             .get(fid)
             .map(|f| f.char_width.max(1.0))
             .unwrap_or(8.0);
-        Ok(Value::fixnum(
-            (window_body_width_pixels(frames, fid, w) as f32 / cw).floor() as i64,
-        ))
+        let width = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+            None => window_body_width_pixels(frames, fid, w),
+        };
+        Ok(Value::fixnum((width as f32 / cw).floor() as i64))
     }
 }
 /// `(window-edges &optional WINDOW BODY ABSOLUTE PIXELWISE)`.
@@ -3524,7 +3494,20 @@ pub(crate) fn builtin_window_edges(
     }
 
     let (left, top, right, bottom) = if body {
-        window_body_edges_cols_lines(frames, fid, wid, w, frame.char_width, frame.char_height)
+        if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
+            let rect = geometry.regions().text_body();
+            let origin = rect.origin();
+            let char_width = frame.char_width.max(1.0);
+            let char_height = frame.char_height.max(1.0);
+            (
+                (origin.x().get() / char_width).floor() as i64,
+                (origin.y().get() / char_height).floor() as i64,
+                ((origin.x().get() + rect.width().get()) / char_width).ceil() as i64,
+                ((origin.y().get() + rect.height().get()) / char_height).ceil() as i64,
+            )
+        } else {
+            window_body_edges_cols_lines(frames, fid, wid, w, frame.char_width, frame.char_height)
+        }
     } else {
         window_edges_cols_lines(w, frame.char_width, frame.char_height)
     };
