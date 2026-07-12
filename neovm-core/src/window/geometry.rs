@@ -155,6 +155,13 @@ pub struct CellOrigin {
 }
 
 impl CellOrigin {
+    pub const fn new(column: i64, line: i64) -> Self {
+        Self {
+            column: Column::new(column),
+            line: Line::new(line),
+        }
+    }
+
     pub const fn column(self) -> Column {
         self.column
     }

@@ -885,6 +885,7 @@ mod scroll_classifier_tests {
                 phys_cursor: None,
                 points: Vec::new(),
                 rows: Vec::new(),
+                ..WindowDisplaySnapshot::default()
             },
             presented_cursor: None,
             faces: std::collections::HashMap::new(),

@@ -96,7 +96,7 @@ pub fn default_gui_tool_bar_line_height(font_pixel_size: f32) -> u32 {
 // ---------------------------------------------------------------------------
 
 /// Pixel-based rectangle for window placement.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
@@ -1368,10 +1368,23 @@ pub struct WindowCursorSnapshot {
 }
 
 /// Last authoritative redisplay geometry for a live leaf window.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PresentedWindowRegions {
+    /// Frame-relative logical-pixel bounds of the complete Emacs window.
+    pub outer: Rect,
+    /// Frame-relative logical-pixel bounds of the rendered text body.
+    pub text_body: Rect,
+}
+
+/// Last authoritative redisplay geometry for a live leaf window.
+#[derive(Clone, Debug, PartialEq)]
 pub struct WindowDisplaySnapshot {
     /// Window identifier this snapshot belongs to.
     pub window_id: WindowId,
+    /// Character-grid origin stored independently from pixel geometry.
+    pub cell_origin: geometry::CellOrigin,
+    /// Immutable regions produced by the same completed redisplay.
+    pub regions: PresentedWindowRegions,
     /// Text-area offset from the window's left edge, in pixels.
     pub text_area_left_offset: i64,
     /// Last redisplay mode-line height in pixels.
@@ -1567,6 +1580,8 @@ impl Default for WindowDisplaySnapshot {
     fn default() -> Self {
         Self {
             window_id: WindowId(0),
+            cell_origin: geometry::CellOrigin::default(),
+            regions: PresentedWindowRegions::default(),
             text_area_left_offset: 0,
             mode_line_height: 0,
             header_line_height: 0,

@@ -51,9 +51,10 @@ use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
+use neovm_core::window::geometry::CellOrigin;
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, WindowCursorKind, WindowCursorPos,
-    WindowCursorSnapshot, WindowDisplaySnapshot,
+    DisplayPointSnapshot, DisplayRowSnapshot, PresentedWindowRegions, WindowCursorKind,
+    WindowCursorPos, WindowCursorSnapshot, WindowDisplaySnapshot,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -1447,9 +1448,36 @@ impl WindowOutputEmitter {
     }
 
     pub(crate) fn finish_snapshot(
-        mut self,
+        self,
         evaluator: &mut Context,
         text_area_left_offset: i64,
+        mode_line_height: i64,
+        header_line_height: i64,
+        tab_line_height: i64,
+    ) -> WindowDisplaySnapshot {
+        self.finish_snapshot_with_geometry(
+            evaluator,
+            CellOrigin::default(),
+            PresentedWindowRegions {
+                outer: neovm_core::window::Rect::default(),
+                text_body: neovm_core::window::Rect::new(
+                    text_area_left_offset as f32,
+                    0.0,
+                    0.0,
+                    0.0,
+                ),
+            },
+            mode_line_height,
+            header_line_height,
+            tab_line_height,
+        )
+    }
+
+    pub(crate) fn finish_snapshot_with_geometry(
+        mut self,
+        evaluator: &mut Context,
+        cell_origin: CellOrigin,
+        regions: PresentedWindowRegions,
         mode_line_height: i64,
         header_line_height: i64,
         tab_line_height: i64,
@@ -1463,7 +1491,9 @@ impl WindowOutputEmitter {
         self.rows.sort_by_key(|row| row.row);
         let snapshot = WindowDisplaySnapshot {
             window_id,
-            text_area_left_offset,
+            cell_origin,
+            regions,
+            text_area_left_offset: (regions.text_body.x - regions.outer.x).round() as i64,
             mode_line_height,
             header_line_height,
             tab_line_height,
