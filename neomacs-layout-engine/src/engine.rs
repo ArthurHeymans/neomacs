@@ -786,15 +786,17 @@ impl LayoutEngine {
 
             // Set up frame dimensions in the builder
             let frame_identity = if let Some(frame) = evaluator.frame_manager().get(frame_id) {
-                let (origin_x, origin_y) = evaluator
-                    .frame_manager()
-                    .frame_origin_in_root(frame_id)
-                    .unwrap_or((frame.left_pos as f32, frame.top_pos as f32));
+                let parent_id = frame.parent_frame.as_frame_id().unwrap_or(0);
+                let (parent_x, parent_y) = if parent_id == 0 {
+                    (0.0, 0.0)
+                } else {
+                    (frame.left_pos as f32, frame.top_pos as f32)
+                };
                 Some(FrameOutputIdentity {
                     frame_id: frame.id.0,
-                    parent_id: frame.parent_frame.as_frame_id().unwrap_or(0),
-                    parent_x: origin_x,
-                    parent_y: origin_y,
+                    parent_id,
+                    parent_x,
+                    parent_y,
                     z_order: frame.z_order,
                     undecorated: frame.undecorated,
                     border_width: frame.internal_border_width() as f32,

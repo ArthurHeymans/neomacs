@@ -911,6 +911,74 @@ fn real_layout_publication_routes_overlapping_children_by_published_z_order() {
 }
 
 #[test]
+fn real_layout_publication_keeps_nested_child_parent_relative_and_runtime_places_it_in_root() {
+    let mut eval = neovm_core::emacs_core::Context::new();
+    let buffer = eval.buffer_manager().current_buffer().unwrap().id();
+    let root = eval
+        .frame_manager_mut()
+        .create_frame("root-nested", 800, 600, buffer);
+    let parent = eval
+        .frame_manager_mut()
+        .create_frame("parent-nested", 300, 200, buffer);
+    let nested = eval
+        .frame_manager_mut()
+        .create_frame("nested", 100, 80, buffer);
+    for frame_id in [root, parent, nested] {
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .unwrap()
+            .set_window_system(Some(neovm_core::emacs_core::Value::symbol("neo")));
+    }
+    {
+        let frame = eval.frame_manager_mut().get_mut(parent).unwrap();
+        frame.parent_frame = neovm_core::emacs_core::Value::make_frame(root.0);
+        frame.left_pos = 100;
+        frame.top_pos = 80;
+    }
+    {
+        let frame = eval.frame_manager_mut().get_mut(nested).unwrap();
+        frame.parent_frame = neovm_core::emacs_core::Value::make_frame(parent.0);
+        frame.left_pos = 15;
+        frame.top_pos = 12;
+    }
+
+    let mut engine = neomacs_layout_engine::LayoutEngine::new_without_font_metrics();
+    let mut layout = |frame_id| {
+        engine.layout_frame_rust(&mut eval, frame_id);
+        engine
+            .last_frame_display_state
+            .take()
+            .expect("layout publication")
+            .materialize()
+    };
+    let root_frame = layout(root);
+    let parent_frame = layout(parent);
+    let nested_frame = layout(nested);
+    assert_eq!(
+        (
+            nested_frame.frame_placement.outer_in_parent().x(),
+            nested_frame.frame_placement.outer_in_parent().y(),
+        ),
+        (15.0, 12.0),
+        "layout transport must preserve the nested frame's immediate-parent coordinates"
+    );
+
+    let mut app = make_test_app(800, 600, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_emacs_frame_id(root.0);
+    render.set_current_frame(Some(root_frame), None);
+    assert!(render.update_child_frame(parent_frame));
+    assert!(render.update_child_frame(nested_frame));
+    let nested_entry = render
+        .compositor
+        .child_frames
+        .frames
+        .get(&nested.0)
+        .expect("nested runtime frame");
+    assert_eq!((nested_entry.abs_x, nested_entry.abs_y), (115.0, 92.0));
+}
+
+#[test]
 fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() {
     let mut app = make_test_app(140, 24, 1.0);
     let Some(render) = ensure_primary_frame(&mut app) else {
