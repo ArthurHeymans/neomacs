@@ -484,6 +484,7 @@ fn expect_optional_prompt_string(args: &[Value]) -> Result<(), Flow> {
 /// In batch mode, reads from `unread-command-events`, returns nil if empty.
 /// In interactive mode, blocks on the input channel via `read_char()`.
 pub(crate) fn builtin_read_event(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    super::reader::display_read_prompt(eval, &args);
     if let Some(value) = builtin_read_event_in_runtime(eval, &args)? {
         return Ok(value);
     }
@@ -529,6 +530,7 @@ pub(crate) fn builtin_read_char_exclusive(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    super::reader::display_read_prompt(eval, &args);
     if let Some(value) = builtin_read_char_exclusive_in_runtime(eval, &args)? {
         return Ok(value);
     }

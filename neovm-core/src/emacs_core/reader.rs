@@ -2603,7 +2603,21 @@ fn yes_or_no_p_should_use_dialog(runtime: &impl KeyboardInputRuntime) -> bool {
 /// Read a character from the command input (keyboard or macro).
 /// In batch mode, checks `unread-command-events` and returns nil if empty.
 /// In interactive mode, blocks on the input channel via `read_char()`.
+/// GNU `read_char` (keyboard.c) displays a non-nil string PROMPT in the echo
+/// area for the duration of the read. Mirror that so prompts such as
+/// `perform-replace`'s `(read-key "Query replacing ...: (? for help) ")` are
+/// visible while waiting for the key. A nil/omitted or empty prompt shows
+/// nothing (GNU only echoes a non-empty string prompt).
+pub(crate) fn display_read_prompt(eval: &mut super::eval::Context, args: &[Value]) {
+    if let Some(prompt) = args.first().and_then(|v| v.as_lisp_string())
+        && !prompt.is_empty()
+    {
+        eval.set_current_message(Some(prompt.clone()));
+    }
+}
+
 pub(crate) fn builtin_read_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    display_read_prompt(eval, &args);
     if let Some(value) = builtin_read_char_in_runtime(eval, &args)? {
         return Ok(value);
     }
