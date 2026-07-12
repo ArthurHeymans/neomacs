@@ -104,6 +104,19 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             modifiers: keyboard::render_modifiers_to_modifiers(*modifiers),
             target_frame_id: *target_frame_id,
         }),
+        DisplayEvent::PresentedRegion {
+            presentation,
+            hit,
+            x,
+            y,
+            target_frame_id,
+        } => Some(KbInputEvent::PresentedRegion {
+            presentation: *presentation,
+            hit: *hit,
+            x: *x,
+            y: *y,
+            target_frame_id: *target_frame_id,
+        }),
         DisplayEvent::MouseScroll {
             delta_x,
             delta_y,

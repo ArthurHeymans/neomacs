@@ -437,6 +437,28 @@ impl GuiFrameRenderState {
             .resolve(PresentedHitQuery::new(presentation, x, y))
     }
 
+    pub(super) fn presented_region_observation(
+        &self,
+        target_frame_id: u64,
+        x: f32,
+        y: f32,
+    ) -> Option<(PresentationId, Option<PresentedHit>)> {
+        let presentation = if target_frame_id == self.emacs_frame_id {
+            self.compositor.current_frame.as_ref()?.presentation_id
+        } else {
+            self.compositor
+                .child_frames
+                .frames
+                .get(&target_frame_id)?
+                .frame
+                .presentation_id
+        };
+        let hit = self
+            .presented_region_hit(target_frame_id, presentation, x, y)
+            .ok()?;
+        Some((presentation, hit))
+    }
+
     fn presented_pointer_appearance_at(
         &self,
         target: Option<(u64, f32, f32)>,

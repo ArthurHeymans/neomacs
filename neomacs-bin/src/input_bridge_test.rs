@@ -261,3 +261,42 @@ fn monitor_changes_convert_to_core_monitor_snapshot() {
         other => panic!("unexpected event: {other:?}"),
     }
 }
+
+#[test]
+fn presented_region_round_trips_without_recomputing_the_hit() {
+    let window = neomacs_display_protocol::DisplayWindowId::new(3);
+    let hit = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        neomacs_display_protocol::PresentationId::new(9),
+        vec![neomacs_display_protocol::PresentedHitRegion::new(
+            Some(window),
+            neomacs_display_protocol::PresentedRegionKind::ModeLine,
+            neomacs_display_protocol::FrameRect::new(0.0, 20.0, 80.0, 10.0).unwrap(),
+            0,
+        )],
+        vec![],
+    )
+    .unwrap()
+    .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+        neomacs_display_protocol::PresentationId::new(9),
+        5.0,
+        25.0,
+    ))
+    .unwrap();
+    let event = convert_display_event(&DisplayEvent::PresentedRegion {
+        presentation: 9,
+        hit,
+        x: 5.0,
+        y: 25.0,
+        target_frame_id: 44,
+    });
+    assert!(matches!(
+        event,
+        Some(KbInputEvent::PresentedRegion {
+            presentation: 9,
+            hit: forwarded,
+            x: 5.0,
+            y: 25.0,
+            target_frame_id: 44,
+        }) if forwarded == hit
+    ));
+}

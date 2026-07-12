@@ -84,6 +84,165 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
     }
 }
 
+#[test]
+fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observation() {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("presented-region");
+    eval.buffer_manager_mut().set_current(buffer);
+    eval.buffer_manager_mut()
+        .get_mut(buffer)
+        .unwrap()
+        .insert("abcdefg");
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(7),
+            Value::fixnum(8),
+            Value::symbol("help-echo"),
+            Value::string("semantic tip"),
+        ],
+    )
+    .unwrap();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("presented-region", 200, 100, buffer);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).unwrap();
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .publish_display_snapshots(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(10.0, 5.0, 180.0, 90.0),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            20.0, 10.0, 160.0, 70.0,
+                        ),
+                        mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                            10.0, 80.0, 180.0, 15.0,
+                        )),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    points: vec![crate::window::DisplayPointSnapshot {
+                        // Poison the legacy coordinate lookup; the transported
+                        // renderer hit below owns position 7.
+                        buffer_pos: crate::buffer::LispCharPos1::new(1),
+                        x: 0,
+                        y: 5,
+                        width: 8,
+                        height: 16,
+                        row: 3,
+                        col: 4,
+                    }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 3,
+                        body_row: 0,
+                        body_y: 0,
+                    }],
+                    ..Default::default()
+                }],
+            )
+            .unwrap();
+    }
+    let protocol_window = neomacs_display_protocol::DisplayWindowId::new(window_id.0 as i64);
+    let hit = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        neomacs_display_protocol::PresentationId::new(1),
+        vec![neomacs_display_protocol::PresentedHitRegion::new(
+            Some(protocol_window),
+            neomacs_display_protocol::PresentedRegionKind::TextBody,
+            neomacs_display_protocol::FrameRect::new(20.0, 10.0, 160.0, 70.0).unwrap(),
+            0,
+        )],
+        vec![neomacs_display_protocol::PresentedTextPosition::new(
+            protocol_window,
+            neomacs_display_protocol::FrameRect::new(20.0, 10.0, 8.0, 16.0).unwrap(),
+            7,
+            3,
+            4,
+        )],
+    )
+    .unwrap()
+    .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+        neomacs_display_protocol::PresentationId::new(1),
+        22.0,
+        12.0,
+    ))
+    .unwrap();
+
+    assert_eq!(
+        eval.handle_read_char_input_event(InputEvent::PresentedRegion {
+            presentation: 1,
+            hit,
+            x: 22.0,
+            y: 12.0,
+            target_frame_id: frame_id.0,
+        })
+        .unwrap(),
+        None
+    );
+    eval.handle_read_char_input_event(InputEvent::PresentedRegion {
+        presentation: 0,
+        hit: None,
+        x: 22.0,
+        y: 12.0,
+        target_frame_id: frame_id.0,
+    })
+    .unwrap();
+    assert_eq!(
+        eval.command_loop
+            .keyboard
+            .kboard
+            .presented_mouse_observation
+            .unwrap()
+            .presentation,
+        1,
+        "stale observation must not replace the accepted presentation"
+    );
+
+    let event = eval
+        .handle_read_char_input_event(InputEvent::MousePress {
+            button: MouseButton::Left,
+            x: 22.0,
+            y: 12.0,
+            modifiers: Modifiers::none(),
+            target_frame_id: frame_id.0,
+        })
+        .unwrap()
+        .unwrap();
+    let event = crate::emacs_core::value::list_to_vec(&event).unwrap();
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).unwrap();
+    assert_eq!(position[0], Value::make_window(window_id.0));
+    assert_eq!(position[1], Value::fixnum(7));
+    assert_eq!(position[2].cons_car(), Value::fixnum(2));
+    assert_eq!(position[2].cons_cdr(), Value::fixnum(2));
+    assert_eq!(position[5], Value::fixnum(7));
+    assert_eq!(position[6].cons_car(), Value::fixnum(4));
+    assert_eq!(position[6].cons_cdr(), Value::fixnum(3));
+    assert_eq!(position[9].cons_car(), Value::fixnum(8));
+    assert_eq!(position[9].cons_cdr(), Value::fixnum(16));
+
+    eval.queue_mouse_help_echo_update(Some(frame_id), 22, 12);
+    let help = eval
+        .command_loop
+        .keyboard
+        .kboard
+        .last_help_echo_event
+        .expect("semantic help echo");
+    let help = crate::emacs_core::value::list_to_vec(&help).unwrap();
+    assert_eq!(
+        help[2].as_lisp_string().unwrap().as_utf8_str(),
+        Some("semantic tip")
+    );
+    assert_eq!(help[5], Value::fixnum(7));
+}
+
 fn presented_pointer_fixture() -> (crate::emacs_core::Context, crate::window::FrameId, u64, u32) {
     let mut eval = crate::emacs_core::Context::new();
     let buffer = eval.buffer_manager_mut().create_buffer("presented-pointer");

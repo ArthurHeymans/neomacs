@@ -145,6 +145,7 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         InputEvent::MousePress { .. } => command(),
         InputEvent::MouseRelease { .. } => command(),
         InputEvent::MouseMove { .. } => special(PendingPolicy::TrackMouse, false, true),
+        InputEvent::PresentedRegion { .. } => special(PendingPolicy::Never, false, false),
         InputEvent::MouseScroll { .. } => command(),
         InputEvent::PixelScroll { .. } => special(PendingPolicy::Always, true, false),
         InputEvent::LayoutInvalidated => FrontendEventSemantics {

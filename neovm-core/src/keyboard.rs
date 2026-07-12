@@ -857,6 +857,14 @@ pub enum InputEvent {
         modifiers: Modifiers,
         target_frame_id: u64,
     },
+    /// Semantic pointer observation resolved against the displayed presentation.
+    PresentedRegion {
+        presentation: u64,
+        hit: Option<neomacs_display_protocol::PresentedHit>,
+        x: f32,
+        y: f32,
+        target_frame_id: u64,
+    },
     /// Mouse scroll.
     MouseScroll {
         delta_x: f32,
@@ -977,6 +985,15 @@ pub struct MousePixelPositionState {
     pub y: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PresentedMouseObservation {
+    pub presentation: u64,
+    pub hit: Option<neomacs_display_protocol::PresentedHit>,
+    pub x: f32,
+    pub y: f32,
+    pub frame_id: u64,
+}
+
 impl PrefixArg {
     /// Convert to Lisp value for `current-prefix-arg`.
     pub fn to_value(&self) -> Value {
@@ -1019,6 +1036,8 @@ pub struct KBoard {
     pub internal_last_event_frame: Option<crate::window::FrameId>,
     /// Last known mouse position in frame pixel coordinates.
     pub mouse_pixel_position: Option<MousePixelPositionState>,
+    /// Last immutable semantic hit paired with the raw pointer coordinates.
+    pub presented_mouse_observation: Option<PresentedMouseObservation>,
     /// Last queued internal `help-echo` event for deduping mouse-motion help.
     pub last_help_echo_event: Option<Value>,
     /// Unread command events in the Lisp-visible Emacs event form.
@@ -1102,6 +1121,7 @@ impl KBoard {
             unread_selection_event: None,
             internal_last_event_frame: None,
             mouse_pixel_position: None,
+            presented_mouse_observation: None,
             last_help_echo_event: None,
             unread_events: VecDeque::new(),
             current_key_sequence: ReadKeySequenceState::new(),
@@ -4011,6 +4031,34 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
+            InputEvent::PresentedRegion {
+                presentation,
+                hit,
+                x,
+                y,
+                target_frame_id,
+            } => {
+                let Some(frame_id) = self.event_frame_id(target_frame_id) else {
+                    return Ok(None);
+                };
+                let Some(frame) = self.frames.get(frame_id) else {
+                    return Ok(None);
+                };
+                if frame.display_presentation().map(|id| id.get()) != Some(presentation) {
+                    return Ok(None);
+                }
+                self.command_loop
+                    .keyboard
+                    .kboard
+                    .presented_mouse_observation = Some(PresentedMouseObservation {
+                    presentation,
+                    hit,
+                    x,
+                    y,
+                    frame_id: frame_id.0,
+                });
+                Ok(None)
+            }
             InputEvent::PresentedPointer {
                 presentation,
                 interaction,
@@ -4315,20 +4363,47 @@ impl crate::emacs_core::eval::Context {
         y: i64,
     ) -> Option<Value> {
         let frame = self.frames.get(frame_id)?;
-        let window_id = frame.window_at(x as f32, y as f32)?;
-        let snapshot = frame.window_display_snapshot(window_id)?;
+        let observation = self
+            .command_loop
+            .keyboard
+            .kboard
+            .presented_mouse_observation
+            .filter(|observation| {
+                observation.frame_id == frame_id.0
+                    && observation.x.round() as i64 == x
+                    && observation.y.round() as i64 == y
+                    && frame.display_presentation().map(|id| id.get())
+                        == Some(observation.presentation)
+            });
+        let (window_id, buffer_position) = if let Some(observation) = observation {
+            let hit = observation.hit?;
+            if hit.region().kind() != neomacs_display_protocol::PresentedRegionKind::TextBody {
+                return None;
+            }
+            let window = hit.region().window()?;
+            let position = hit.text_position()?;
+            (
+                crate::window::WindowId(window.get() as u64),
+                position.buffer_position(),
+            )
+        } else {
+            let window_id = frame.window_at(x as f32, y as f32)?;
+            let snapshot = frame.window_display_snapshot(window_id)?;
+            let window = frame.find_window(window_id)?;
+            let bounds = window.bounds();
+            let query_x = x - bounds.x.round() as i64 - snapshot.text_area_left_offset;
+            let query_y = y - bounds.y.round() as i64;
+            let point = snapshot.point_at_coords(query_x, query_y)?;
+            (window_id, point.buffer_pos.as_i64())
+        };
         let window = frame.find_window(window_id)?;
         let buffer_id = window.buffer_id()?;
-        let bounds = window.bounds();
-        let query_x = x - bounds.x.round() as i64 - snapshot.text_area_left_offset;
-        let query_y = y - bounds.y.round() as i64;
-        let point = snapshot.point_at_coords(query_x, query_y)?;
 
         let pair = crate::emacs_core::textprop::builtin_get_char_property_and_overlay_in_state(
             &self.obarray,
             &self.buffers,
             vec![
-                Value::fixnum(point.buffer_pos.as_i64()),
+                Value::fixnum(buffer_position),
                 Value::symbol("help-echo"),
                 Value::make_buffer(buffer_id),
             ],
@@ -4352,7 +4427,7 @@ impl crate::emacs_core::eval::Context {
             pair_car,
             Value::make_window(window_id.0),
             object,
-            Value::fixnum(point.buffer_pos.as_i64()),
+            Value::fixnum(buffer_position),
         ))
     }
 
@@ -5075,6 +5150,10 @@ impl crate::emacs_core::eval::Context {
             });
         };
 
+        if let Some(position) = Self::make_presented_mouse_position(frame, frame_id, x, y, eval) {
+            return position;
+        }
+
         let frame_x = x.round() as i64;
         let frame_y = y.round() as i64;
         let frame_height = frame.height as i64;
@@ -5255,6 +5334,116 @@ impl crate::emacs_core::eval::Context {
             y: window_y,
             metrics: fallback_metrics,
         })
+    }
+
+    fn make_presented_mouse_position(
+        frame: &crate::window::Frame,
+        frame_id: u64,
+        x: f32,
+        y: f32,
+        eval: &Self,
+    ) -> Option<Value> {
+        let observation = eval
+            .command_loop
+            .keyboard
+            .kboard
+            .presented_mouse_observation?;
+        if observation.frame_id != frame_id
+            || observation.x.to_bits() != x.to_bits()
+            || observation.y.to_bits() != y.to_bits()
+            || frame.display_presentation().map(|id| id.get()) != Some(observation.presentation)
+        {
+            return None;
+        }
+        let hit = observation.hit?;
+        let region = hit.region();
+        let area = match region.kind() {
+            neomacs_display_protocol::PresentedRegionKind::TextBody => None,
+            neomacs_display_protocol::PresentedRegionKind::LeftMargin => Some("left-margin"),
+            neomacs_display_protocol::PresentedRegionKind::RightMargin => Some("right-margin"),
+            neomacs_display_protocol::PresentedRegionKind::LeftFringe => Some("left-fringe"),
+            neomacs_display_protocol::PresentedRegionKind::RightFringe => Some("right-fringe"),
+            neomacs_display_protocol::PresentedRegionKind::LeftScrollBar
+            | neomacs_display_protocol::PresentedRegionKind::RightScrollBar => {
+                Some("vertical-scroll-bar")
+            }
+            neomacs_display_protocol::PresentedRegionKind::HorizontalScrollBar => {
+                Some("horizontal-scroll-bar")
+            }
+            neomacs_display_protocol::PresentedRegionKind::TabLine => Some("tab-line"),
+            neomacs_display_protocol::PresentedRegionKind::HeaderLine => Some("header-line"),
+            neomacs_display_protocol::PresentedRegionKind::ModeLine => Some("mode-line"),
+            neomacs_display_protocol::PresentedRegionKind::RightDivider => Some("vertical-line"),
+            neomacs_display_protocol::PresentedRegionKind::BottomDivider => {
+                Some("horizontal-scroll-bar")
+            }
+            neomacs_display_protocol::PresentedRegionKind::MenuBar => Some("menu-bar"),
+            neomacs_display_protocol::PresentedRegionKind::ToolBar => Some("tool-bar"),
+            neomacs_display_protocol::PresentedRegionKind::CompactBar => Some("menu-bar"),
+            neomacs_display_protocol::PresentedRegionKind::TabBar => Some("tab-bar"),
+        };
+        let Some(window_id) = region.window() else {
+            return Some(Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+                window_or_frame: Value::make_frame(frame.id.0),
+                area,
+                x: x.round() as i64,
+                y: y.round() as i64,
+                metrics: MousePosnMetrics {
+                    point: None,
+                    col: None,
+                    row: None,
+                    width: None,
+                    height: None,
+                    anchor_x: None,
+                    anchor_y: None,
+                },
+            }));
+        };
+        let window_id = crate::window::WindowId(window_id.get() as u64);
+        let publication = frame.presented_geometry()?;
+        let presented = publication
+            .resolve(crate::window::geometry::WindowGeometryQuery::new(
+                crate::window::geometry::PresentationId::new(observation.presentation),
+                window_id,
+            ))
+            .ok()?;
+        let outer = presented.regions().outer();
+        let coordinate_origin =
+            if region.kind() == neomacs_display_protocol::PresentedRegionKind::TextBody {
+                presented.regions().text_body().origin()
+            } else {
+                outer.origin()
+            };
+        let fallback_point = frame.find_window(window_id).and_then(Self::window_point);
+        let metrics = if let Some(point) = hit.text_position() {
+            let bounds = point.bounds();
+            MousePosnMetrics {
+                point: Some(point.buffer_position()),
+                col: Some(point.column()),
+                row: Some(point.row()),
+                width: Some(bounds.width().round().max(1.0) as i64),
+                height: Some(bounds.height().round().max(1.0) as i64),
+                anchor_x: None,
+                anchor_y: None,
+            }
+        } else {
+            MousePosnMetrics {
+                point: fallback_point,
+                col: None,
+                row: None,
+                width: None,
+                height: None,
+                anchor_x: None,
+                anchor_y: None,
+            }
+        };
+        Some(Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+            window_or_frame: Value::make_window(window_id.0),
+            area,
+            x: (x - coordinate_origin.x().get()).round() as i64,
+            y: (y - coordinate_origin.y().get()).round() as i64,
+            metrics,
+        }))
     }
 
     /// Append modifier prefix characters to a symbol name string.

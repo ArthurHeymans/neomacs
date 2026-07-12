@@ -64,6 +64,22 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
 }
 
 impl RenderApp {
+    fn presented_region_input_event(
+        render: &super::frame_windows::GuiFrameRenderState,
+        target_frame_id: u64,
+        x: f32,
+        y: f32,
+    ) -> Option<InputEvent> {
+        let (presentation, hit) = render.presented_region_observation(target_frame_id, x, y)?;
+        Some(InputEvent::PresentedRegion {
+            presentation: presentation.get(),
+            hit,
+            x,
+            y,
+            target_frame_id,
+        })
+    }
+
     pub(super) fn suppress_root_chrome_hover(
         render: &mut super::frame_windows::GuiFrameRenderState,
     ) -> bool {
@@ -843,6 +859,14 @@ impl RenderApp {
                     } else {
                         (0, 0, 0)
                     };
+                    if let Some(observation) = Self::presented_region_input_event(
+                        &window_state.render,
+                        target_fid,
+                        ev_x,
+                        ev_y,
+                    ) {
+                        captured_events.push(observation);
+                    }
                     event = Some(InputEvent::MouseButton {
                         button: btn,
                         x: ev_x,
@@ -865,10 +889,10 @@ impl RenderApp {
                     delivered_mouse_button = true;
                 }
             }
-            if let Some(event) = event {
+            for event in captured_events {
                 self.comms.send_input(event);
             }
-            for event in captured_events {
+            if let Some(event) = event {
                 self.comms.send_input(event);
             }
             if state == ElementState::Pressed
@@ -1080,6 +1104,11 @@ impl RenderApp {
                 window_state.render.mark_dirty();
             }
             if event.is_none() {
+                if let Some(observation) =
+                    Self::presented_region_input_event(&window_state.render, target_fid, ev_x, ev_y)
+                {
+                    self.comms.send_input(observation);
+                }
                 event = Some(InputEvent::MouseMove {
                     x: ev_x,
                     y: ev_y,

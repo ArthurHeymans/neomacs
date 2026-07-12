@@ -65,6 +65,14 @@ pub enum InputEvent {
         /// Emacs frame_id targeted by hit testing (root frame or child frame)
         target_frame_id: u64,
     },
+    /// Semantic pointer observation resolved against the displayed presentation.
+    PresentedRegion {
+        presentation: u64,
+        hit: Option<neomacs_display_protocol::PresentedHit>,
+        x: f32,
+        y: f32,
+        target_frame_id: u64,
+    },
     MouseScroll {
         delta_x: f32,
         delta_y: f32,
@@ -846,6 +854,7 @@ impl RenderComms {
             InputEvent::Key { .. } => "key",
             InputEvent::MouseButton { .. } => "mouse-button",
             InputEvent::MouseMove { .. } => "mouse-move",
+            InputEvent::PresentedRegion { .. } => "presented-region",
             InputEvent::MouseScroll { .. } => "mouse-scroll",
             InputEvent::WindowResize { .. } => "window-resize",
             InputEvent::WindowClose { .. } => "window-close",
