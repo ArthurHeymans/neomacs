@@ -268,7 +268,6 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<PresentedInteractionKey> {
-        let frame = window_state.render.compositor.current_frame.as_ref()?;
         if let Some(hit) =
             window_state
                 .render
@@ -280,13 +279,7 @@ impl RenderApp {
                 interaction,
             ));
         }
-        match frame_chrome_hit(frame, x, y)?.0 {
-            ChromeAction::Presented { interaction } => Some(PresentedInteractionKey::new(
-                frame.presentation_id,
-                *interaction,
-            )),
-            _ => None,
-        }
+        None
     }
 
     fn presented_pointer_input_event(
@@ -316,7 +309,14 @@ impl RenderApp {
         owner: PointerOwner,
     ) -> Option<PresentedInteractionKey> {
         let (x, y, frame_id) = owner.target()?;
+        let (presentation, semantic) = window_state
+            .render
+            .presented_region_observation(frame_id, x, y)?;
+        semantic?;
         let hit = window_state.render.presented_pointer_hit(frame_id, x, y)?;
+        if hit.presentation() != presentation {
+            return None;
+        }
         Some(PresentedInteractionKey::for_frame(
             frame_id,
             hit.presentation(),

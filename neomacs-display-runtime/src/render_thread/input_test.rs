@@ -12,8 +12,9 @@ use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::{
     Face, FaceId, FrameRect, ImageId, PointerAppearanceId,
     PointerAppearancePhase as ProtocolPointerAppearancePhase, PointerDrawMode, PointerImageRelief,
-    PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan,
-    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+    PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins, PresentedHitIndex,
+    PresentedHitRegion, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion,
+    PresentedPrimitiveKind, PresentedRegionKind,
 };
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
@@ -153,6 +154,21 @@ fn presented_pointer_integration_frame(presentation: u64) -> FrameGlyphBuffer {
             ],
         )
         .expect("valid integration pointer map");
+    frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                PresentationId::new(presentation),
+                vec![PresentedHitRegion::new(
+                    None,
+                    PresentedRegionKind::TabBar,
+                    FrameRect::new(0.0, 0.0, 140.0, 24.0).unwrap(),
+                    i32::MAX,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
     frame
 }
 
@@ -571,6 +587,26 @@ fn presented_pointer_integration_offset_frame(
         )
         .unwrap();
     frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                PresentationId::new(presentation),
+                regions
+                    .iter()
+                    .map(|&(x, y, width, height)| {
+                        PresentedHitRegion::new(
+                            None,
+                            PresentedRegionKind::TabBar,
+                            FrameRect::new(x, y, width, height).unwrap(),
+                            0,
+                        )
+                    })
+                    .collect(),
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    frame
 }
 
 #[test]
@@ -648,6 +684,27 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
             ..
         }
     ));
+    let root_motion = PointerOwner::Root {
+        frame_id: 0x42,
+        x: 15.0,
+        y: 8.0,
+    };
+    let root_motion_target = root_motion
+        .target()
+        .map(|(x, y, frame_id)| (frame_id, x, y));
+    window
+        .render
+        .update_presented_pointer_motion(root_motion_target);
+    assert_eq!(
+        window
+            .render
+            .presented_capture()
+            .and_then(|capture| capture.target())
+            .map(|target| target.presentation()),
+        Some(PresentationId::new(81)),
+        "motion onto the root must not retarget the child press"
+    );
+    assert_eq!(window.render.route_presentation_retirement(81), None);
     window.render.clear_pointer_hover();
     let mut replacement = presented_pointer_integration_frame(83);
     replacement.frame_id = neomacs_display_protocol::DisplayFrameId::new(0x99);
@@ -661,15 +718,18 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     // reinterpret the release coordinates for the evaluator-owned gesture.
     assert!(matches!(
         child_release.as_slice(),
-        [crate::thread_comm::InputEvent::PresentedPointer {
-            presentation: 81,
-            interaction: 1,
-            pressed: false,
-            emacs_frame_id: 0x99,
-            x: 100.0,
-            y: 80.0,
-            ..
-        }]
+        [
+            crate::thread_comm::InputEvent::PresentedPointer {
+                presentation: 81,
+                interaction: 1,
+                pressed: false,
+                emacs_frame_id: 0x99,
+                x: 100.0,
+                y: 80.0,
+                ..
+            },
+            crate::thread_comm::InputEvent::PresentationRetired { presentation: 81 }
+        ]
     ));
 
     let root_owner = RenderApp::pointer_owner(window, 15.0, 8.0);
@@ -710,6 +770,19 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     render.set_emacs_frame_id(0x42);
     render.set_current_frame(Some(presented_pointer_integration_frame(90)), None);
     let window = app.frame_windows.primary_window_mut().unwrap();
+
+    let semantic = window
+        .render
+        .presented_region_hit(0x42, PresentationId::new(90), 84.0, 10.0)
+        .unwrap()
+        .unwrap();
+    let appearance = window
+        .render
+        .presented_pointer_hit(0x42, 84.0, 10.0)
+        .unwrap();
+    assert_eq!(semantic.region().kind(), PresentedRegionKind::TabBar);
+    assert_eq!(appearance.presentation(), PresentationId::new(90));
+    assert_eq!(appearance.interaction(), Some(InteractionId::new(2)));
 
     let body = RenderApp::capture_tab_band_press(window, 20.0, 10.0).unwrap();
     let body_release = RenderApp::take_presented_release_events(&mut window.render, 20.0, 10.0);
