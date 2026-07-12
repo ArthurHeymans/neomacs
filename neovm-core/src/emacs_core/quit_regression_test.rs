@@ -133,6 +133,43 @@ fn quit_requested_atomic_is_drained_into_flag() {
     );
 }
 
+/// Ordinary frontend input must become visible at every GNU `maybe_quit`
+/// safe point while `throw-on-input` is active.  Unlike C-g, ordinary keys do
+/// not raise `quit_requested`; they arrive only through `input_rx`.  Leaving
+/// that promotion to GC/evaluator entry points makes long bytecode workloads
+/// (notably Corfu completion filtering) ignore type-ahead for seconds.
+#[test]
+fn maybe_quit_promotes_pending_frontend_input_for_while_no_input() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = runtime_startup_context();
+    ctx.set_variable("noninteractive", Value::NIL);
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ctx.input_rx = Some(rx);
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('l'),
+    ))
+    .expect("queue ordinary frontend input");
+
+    let sentinel = Value::symbol("maybe-quit-input-sentinel");
+    ctx.set_variable("throw-on-input", sentinel);
+
+    let result = ctx.maybe_quit();
+    assert!(
+        matches!(
+            result,
+            Err(crate::emacs_core::error::Flow::Throw { tag, value })
+                if tag == sentinel && value == Value::T
+        ),
+        "maybe_quit must promote queued ordinary input into throw-on-input"
+    );
+    assert_eq!(
+        ctx.command_loop.keyboard.pending_input_events.len(),
+        1,
+        "throw-on-input must preserve the key for the next command read"
+    );
+}
+
 /// Regex matcher must abort on TLS quit flag, and the top-level
 /// builtin must surface the pending state as a `quit` signal rather
 /// than `search-failed`. Mirrors GNU `regex-emacs.c:4901,5236` polling

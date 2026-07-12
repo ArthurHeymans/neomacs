@@ -8217,14 +8217,26 @@ impl Context {
         Err(signal(LispCondition::Quit, vec![]))
     }
 
-    /// GNU `maybe_quit`: do nothing when `quit-flag` is nil or
-    /// `inhibit-quit` is non-nil; otherwise process the quit request.
+    /// GNU `maybe_quit`: promote frontend input for `throw-on-input`, then do
+    /// nothing when `quit-flag` is nil or `inhibit-quit` is non-nil;
+    /// otherwise process the quit request.
+    ///
+    /// GNU's low-level input machinery updates `quit-flag` before evaluator
+    /// safe points run.  Neomacs receives ordinary frontend events through a
+    /// host channel, so this semantic safe point must perform that promotion
+    /// itself.  Restrict the channel poll to an active `throw-on-input`
+    /// binding; the normal `maybe_quit` hot path remains a flag/atomic check.
     #[inline(always)]
     pub(crate) fn maybe_quit(&mut self) -> Result<(), Flow> {
         if self.quit_flag.is_nil()
             && !self
                 .quit_requested
                 .load(std::sync::atomic::Ordering::Relaxed)
+            && (!self.has_throw_on_input_poll_source()
+                || self
+                    .obarray
+                    .symbol_value_id_or_nil(self.throw_on_input_symbol)
+                    .is_nil())
         {
             return Ok(());
         }
@@ -8233,6 +8245,10 @@ impl Context {
 
     #[cold]
     fn maybe_quit_slow(&mut self) -> Result<(), Flow> {
+        if self.has_throw_on_input_poll_source() {
+            self.poll_pending_input_for_throw_on_input()?;
+        }
+
         // Drain the cross-thread quit-request atomic into `Vquit_flag`.
         // Set by the input-bridge thread when it observes a `quit-char`
         // keystroke while the evaluator is busy (e.g. deep in bytecode
@@ -8455,9 +8471,6 @@ impl Context {
     }
 
     fn maybe_quit_before_gc(&mut self) -> Result<(), Flow> {
-        if self.has_throw_on_input_poll_source() {
-            self.poll_pending_input_for_throw_on_input()?;
-        }
         self.maybe_quit()
     }
 
