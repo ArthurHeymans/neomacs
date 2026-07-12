@@ -13,8 +13,9 @@ use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, ChromeLayoutError, FrameChrome, FrameSize, PresentationId,
 };
 use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, WindowEffectHint, WindowInfo, WindowTransitionHint, WindowTransitionKind,
-    derive_window_transition_hint,
+    GlyphRowRole, PresentedCellOrigin as ProtocolCellOrigin,
+    PresentedWindowRegions as ProtocolWindowRegions, WindowEffectHint, WindowInfo,
+    WindowTransitionHint, WindowTransitionKind, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
@@ -193,6 +194,27 @@ impl<'a> PresentedWindowRegionRequest<'a> {
     }
 }
 
+fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRegions {
+    let rect = |value: EvaluatorRect| Rect::new(value.x, value.y, value.width, value.height);
+    let optional = |value: Option<EvaluatorRect>| value.map(rect);
+    ProtocolWindowRegions {
+        outer: rect(regions.outer),
+        text_body: rect(regions.text_body),
+        left_margin: optional(regions.left_margin),
+        right_margin: optional(regions.right_margin),
+        left_fringe: optional(regions.left_fringe),
+        right_fringe: optional(regions.right_fringe),
+        left_scroll_bar: optional(regions.left_scroll_bar),
+        right_scroll_bar: optional(regions.right_scroll_bar),
+        horizontal_scroll_bar: optional(regions.horizontal_scroll_bar),
+        tab_line: optional(regions.tab_line),
+        header_line: optional(regions.header_line),
+        mode_line: optional(regions.mode_line),
+        right_divider: optional(regions.right_divider),
+        bottom_divider: optional(regions.bottom_divider),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FrameOutputIdentity {
     pub(crate) frame_id: u64,
@@ -315,6 +337,25 @@ impl FrameOutputOwner {
 
     pub(crate) fn render_window_info(&mut self, request: WindowFrameInfoRenderRequest<'_>) {
         request.render_and_apply(self.frame_output_target());
+    }
+
+    pub(crate) fn publish_window_geometry(
+        &mut self,
+        window_id: i64,
+        left_col: i64,
+        top_line: i64,
+        regions: &PresentedWindowRegions,
+    ) {
+        self.builder.install_window_metadata(
+            crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+                window_id: DisplayWindowId::new(window_id),
+                cell_origin: ProtocolCellOrigin {
+                    column: left_col,
+                    line: top_line,
+                },
+                regions: protocol_window_regions(regions),
+            },
+        );
     }
 
     pub(crate) fn render_latest_window_info_effects(
@@ -625,6 +666,8 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
                 self.params.bounds.width,
                 self.params.bounds.height,
             ),
+            cell_origin: ProtocolCellOrigin::default(),
+            regions: ProtocolWindowRegions::default(),
             mode_line_height: self.params.mode_line_height,
             header_line_height: self.params.header_line_height,
             tab_line_height: self.params.tab_line_height,

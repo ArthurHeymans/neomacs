@@ -137,6 +137,16 @@ impl OutputFrameBuildState {
                     info.window_end = range.window_end;
                 }
             }
+            OutputWindowMetadataInstallRequest::PresentedGeometry(geometry) => {
+                if let Some(info) = self
+                    .window_infos
+                    .iter_mut()
+                    .find(|info| info.window_id == geometry.window_id)
+                {
+                    info.cell_origin = geometry.cell_origin;
+                    info.regions = geometry.regions;
+                }
+            }
             OutputWindowMetadataInstallRequest::RestoreRetryCheckpoint(checkpoint) => {
                 self.transition_hints
                     .truncate(checkpoint.transition_hints_len);

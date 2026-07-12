@@ -3,8 +3,8 @@
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, PresentedCellOrigin,
+    PresentedWindowRegions, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
@@ -274,10 +274,24 @@ pub(crate) struct OutputRetryCheckpointRestoreRequest {
     pub(crate) effect_hints_len: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct OutputPresentedWindowGeometryInstallRequest {
+    pub(crate) window_id: DisplayWindowId,
+    pub(crate) cell_origin: PresentedCellOrigin,
+    pub(crate) regions: PresentedWindowRegions,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum OutputWindowMetadataInstallRequest {
     TextDisplayRange(OutputTextWindowDisplayRangeInstallRequest),
+    PresentedGeometry(OutputPresentedWindowGeometryInstallRequest),
     RestoreRetryCheckpoint(OutputRetryCheckpointRestoreRequest),
+}
+
+impl From<OutputPresentedWindowGeometryInstallRequest> for OutputWindowMetadataInstallRequest {
+    fn from(request: OutputPresentedWindowGeometryInstallRequest) -> Self {
+        Self::PresentedGeometry(request)
+    }
 }
 
 impl OutputTextWindowDisplayRangeInstallRequest {

@@ -642,6 +642,31 @@ pub struct StipplePattern {
 }
 
 /// Per-window metadata for animation transition detection
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PresentedCellOrigin {
+    pub column: i64,
+    pub line: i64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PresentedWindowRegions {
+    pub outer: Rect,
+    pub text_body: Rect,
+    pub left_margin: Option<Rect>,
+    pub right_margin: Option<Rect>,
+    pub left_fringe: Option<Rect>,
+    pub right_fringe: Option<Rect>,
+    pub left_scroll_bar: Option<Rect>,
+    pub right_scroll_bar: Option<Rect>,
+    pub horizontal_scroll_bar: Option<Rect>,
+    pub tab_line: Option<Rect>,
+    pub header_line: Option<Rect>,
+    pub mode_line: Option<Rect>,
+    pub right_divider: Option<Rect>,
+    pub bottom_divider: Option<Rect>,
+}
+
+/// Per-window metadata for animation transition detection
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowInfo {
     /// Window pointer as i64 (unique window identifier)
@@ -656,6 +681,12 @@ pub struct WindowInfo {
     pub buffer_size: i64,
     /// Frame-absolute window bounds (includes mode-line)
     pub bounds: Rect,
+    /// Independent character-grid origin from the same presentation.
+    #[serde(default)]
+    pub cell_origin: PresentedCellOrigin,
+    /// Explicit frame-relative logical-pixel regions from the same presentation.
+    #[serde(default)]
+    pub regions: PresentedWindowRegions,
     /// Height of the mode-line in pixels (0 if no mode-line)
     pub mode_line_height: f32,
     /// Height of the header-line in pixels (0 if no header-line)
@@ -1670,6 +1701,8 @@ impl FrameGlyphBuffer {
             window_end,
             buffer_size,
             bounds: Rect::new(x, y, width, height),
+            cell_origin: PresentedCellOrigin::default(),
+            regions: PresentedWindowRegions::default(),
             mode_line_height,
             header_line_height,
             tab_line_height,

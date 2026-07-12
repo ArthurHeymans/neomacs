@@ -252,6 +252,8 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         window_end: 101,
         buffer_size: params.buffer_size,
         bounds: params.bounds,
+        cell_origin: Default::default(),
+        regions: Default::default(),
         mode_line_height: params.mode_line_height,
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,

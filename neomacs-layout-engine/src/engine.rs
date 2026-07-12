@@ -778,7 +778,6 @@ impl LayoutEngine {
                 };
                 self.frame_output
                     .render_window_info(WindowFrameInfoRenderRequest::new(params, metadata));
-                self.render_latest_window_output_info_effects(&mut curr_window_infos);
 
                 // Simplified layout for this window (no face resolution, no overlays)
                 self.layout_window_rust(
@@ -793,6 +792,38 @@ impl LayoutEngine {
                     scroll_replay,
                     is_edit,
                 );
+
+                if let Some(snapshot) = self
+                    .display_snapshots
+                    .iter_mut()
+                    .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
+                {
+                    let measured = crate::display_status_line::WindowChromeMeasuredHeights {
+                        tab_line_height: snapshot.tab_line_height as f32,
+                        header_line_height: snapshot.header_line_height as f32,
+                        mode_line_height: snapshot.mode_line_height as f32,
+                    };
+                    let regions = crate::display_frame_output::PresentedWindowRegionRequest::new(
+                        params,
+                        &frame_params,
+                        window_geometry,
+                        measured,
+                    )
+                    .resolve();
+                    snapshot.cell_origin = neovm_core::window::geometry::CellOrigin::new(
+                        params.left_col,
+                        params.top_line,
+                    );
+                    snapshot.regions = regions;
+                    self.frame_output.publish_window_geometry(
+                        params.window_id,
+                        params.left_col,
+                        params.top_line,
+                        &regions,
+                    );
+                }
+
+                self.render_latest_window_output_info_effects(&mut curr_window_infos);
 
                 if let Some(info) = self.latest_output_window_info(params.window_id) {
                     self.render_window_output_decorations(

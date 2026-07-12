@@ -1676,6 +1676,73 @@ fn assert_replacement_slot_between_neighbors(
     replacement.clone()
 }
 
+#[test]
+fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regions() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.set_buffer_local("header-line-format", Value::string("HEADER"));
+        buffer.set_buffer_local("tab-line-format", Value::string("TAB"));
+        buffer.set_buffer_local("mode-line-format", Value::string("MODE"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("presented-regions", 1975, 1214, buffer_id);
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame.find_window_mut(selected).expect("window");
+        window.set_bounds(neovm_core::window::Rect::new(144.0, 24.0, 1831.0, 1172.0));
+        window.set_left_col(20);
+        window.set_top_line(1);
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let evaluator_presentation = frame
+        .display_presentation()
+        .expect("evaluator presentation");
+    let snapshot = frame
+        .window_display_snapshot(selected)
+        .expect("window snapshot");
+    let renderer = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("renderer presentation");
+    let info = renderer
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("renderer window regions");
+
+    assert_eq!(renderer.presentation_id.get(), evaluator_presentation.get());
+    assert_eq!(snapshot.cell_origin.column().get(), 20);
+    assert_eq!(snapshot.cell_origin.line().get(), 1);
+    assert_eq!(info.cell_origin.column, 20);
+    assert_eq!(info.cell_origin.line, 1);
+    assert_eq!(info.regions.outer.x, snapshot.regions.outer.x);
+    assert_eq!(info.regions.outer.y, snapshot.regions.outer.y);
+    assert_eq!(info.regions.text_body.x, snapshot.regions.text_body.x);
+    assert_eq!(info.regions.text_body.y, snapshot.regions.text_body.y);
+    assert!(snapshot.regions.tab_line.is_some());
+    assert!(snapshot.regions.header_line.is_some());
+    assert!(snapshot.regions.mode_line.is_some());
+}
+
 fn enabled_window_row_texts_expanding_stretches(
     entry: &neomacs_display_protocol::glyph_matrix::WindowMatrixEntry,
 ) -> Vec<String> {
@@ -2334,6 +2401,49 @@ fn phase1_cursor_move_is_cursor_only() {
         "cursor-only drives relaid body rows below the full-rebuild total (got {:?})",
         m.stats
     );
+}
+
+#[test]
+fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, selected) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let (first_presentation, first_regions, first_cell_origin) = {
+        let frame = eval.frame_manager().get(frame_id).expect("frame");
+        let snapshot = frame.window_display_snapshot(selected).expect("snapshot");
+        (
+            frame.display_presentation().expect("presentation"),
+            snapshot.regions,
+            snapshot.cell_origin,
+        )
+    };
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(engine.last_layout_stats().cursor_only_windows, 1);
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let second_presentation = frame.display_presentation().expect("presentation");
+    let snapshot = frame.window_display_snapshot(selected).expect("snapshot");
+    assert_ne!(second_presentation, first_presentation);
+    assert_eq!(snapshot.regions, first_regions);
+    assert_eq!(snapshot.cell_origin, first_cell_origin);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    assert_eq!(state.presentation_id.get(), second_presentation.get());
+    let info = state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("window info");
+    assert_eq!(info.regions.outer.x, snapshot.regions.outer.x);
+    assert_eq!(info.regions.text_body.y, snapshot.regions.text_body.y);
 }
 
 /// Phase 1 GOLDEN — the cursor-only fast path output must be BYTE-IDENTICAL to a
