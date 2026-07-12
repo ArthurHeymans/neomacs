@@ -1609,7 +1609,19 @@ impl LayoutEngine {
         );
 
         let redisplay_positions = match render_outcome {
-            BufferSourceRenderAttemptOutcome::Skipped => return,
+            BufferSourceRenderAttemptOutcome::Skipped => {
+                self.display_snapshots
+                    .push(neovm_core::window::WindowDisplaySnapshot {
+                        window_id,
+                        text_area_left_offset: (params.text_bounds.x - params.bounds.x).round()
+                            as i64,
+                        mode_line_height: params.mode_line_height.round() as i64,
+                        header_line_height: params.header_line_height.round() as i64,
+                        tab_line_height: params.tab_line_height.round() as i64,
+                        ..neovm_core::window::WindowDisplaySnapshot::default()
+                    });
+                return;
+            }
             BufferSourceRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();
                 retry_params.window_start = window_start;

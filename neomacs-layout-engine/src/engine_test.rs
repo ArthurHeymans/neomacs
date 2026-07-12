@@ -1743,6 +1743,60 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     assert!(snapshot.regions.mode_line.is_some());
 }
 
+#[test]
+fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("zero-body-regions", 800, 600, buffer_id);
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame.find_window_mut(selected).expect("window");
+        window.set_bounds(neovm_core::window::Rect::new(144.0, 24.0, 300.0, 0.0));
+        window.set_left_col(18);
+        window.set_top_line(2);
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert!(frame.display_presentation().is_some());
+    let snapshot = frame
+        .window_display_snapshot(selected)
+        .expect("zero-body snapshot");
+    assert_eq!(
+        snapshot.regions.outer,
+        neovm_core::window::Rect::new(144.0, 24.0, 300.0, 0.0)
+    );
+    assert_eq!(snapshot.regions.text_body.height, 0.0);
+    assert_eq!(snapshot.cell_origin.column().get(), 18);
+    assert_eq!(snapshot.cell_origin.line().get(), 2);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let info = state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("renderer zero-body regions");
+    assert_eq!(info.regions.outer.x, 144.0);
+    assert_eq!(info.regions.outer.y, 24.0);
+    assert_eq!(info.regions.text_body.height, 0.0);
+}
+
 fn enabled_window_row_texts_expanding_stretches(
     entry: &neomacs_display_protocol::glyph_matrix::WindowMatrixEntry,
 ) -> Vec<String> {
