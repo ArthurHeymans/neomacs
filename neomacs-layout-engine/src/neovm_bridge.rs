@@ -1618,7 +1618,11 @@ pub fn window_params_from_neovm_with_font_sizing(
         wrap_prefix: Vec::new(),
         line_prefix: Vec::new(),
         left_margin_width: left_margin,
+        left_margin_columns: i64::try_from(margins.left())
+            .expect("left margin column count fits in evaluator geometry"),
         right_margin_width: right_margin,
+        right_margin_columns: i64::try_from(margins.right())
+            .expect("right margin column count fits in evaluator geometry"),
         vertical_scroll_bar_side,
         horizontal_scroll_bar,
         scroll_bar_pixel_width,

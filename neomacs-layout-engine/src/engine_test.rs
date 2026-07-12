@@ -1404,7 +1404,9 @@ fn test_window_params() -> WindowParams {
         wrap_prefix: vec![],
         line_prefix: vec![],
         left_margin_width: 0.0,
+        left_margin_columns: 0,
         right_margin_width: 0.0,
+        right_margin_columns: 0,
         vertical_scroll_bar_side: None,
         horizontal_scroll_bar: false,
         scroll_bar_pixel_width: 0.0,
@@ -1728,16 +1730,18 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .iter()
         .find(|info| info.window_id.get() == selected.0 as i64)
         .expect("renderer window regions");
+    let cell_origin = info.cell_origin.expect("presented cell origin");
+    let regions = info.regions.expect("presented window regions");
 
     assert_eq!(renderer.presentation_id.get(), evaluator_presentation.get());
     assert_eq!(snapshot.cell_origin.column().get(), 20);
     assert_eq!(snapshot.cell_origin.line().get(), 1);
-    assert_eq!(info.cell_origin.column, 20);
-    assert_eq!(info.cell_origin.line, 1);
-    assert_eq!(info.regions.outer.x, snapshot.regions.outer.x);
-    assert_eq!(info.regions.outer.y, snapshot.regions.outer.y);
-    assert_eq!(info.regions.text_body.x, snapshot.regions.text_body.x);
-    assert_eq!(info.regions.text_body.y, snapshot.regions.text_body.y);
+    assert_eq!(cell_origin.column, 20);
+    assert_eq!(cell_origin.line, 1);
+    assert_eq!(regions.outer.x, snapshot.regions.outer.x);
+    assert_eq!(regions.outer.y, snapshot.regions.outer.y);
+    assert_eq!(regions.text_body.x, snapshot.regions.text_body.x);
+    assert_eq!(regions.text_body.y, snapshot.regions.text_body.y);
     assert!(snapshot.regions.tab_line.is_some());
     assert!(snapshot.regions.header_line.is_some());
     assert!(snapshot.regions.mode_line.is_some());
@@ -1792,9 +1796,10 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
         .iter()
         .find(|info| info.window_id.get() == selected.0 as i64)
         .expect("renderer zero-body regions");
-    assert_eq!(info.regions.outer.x, 144.0);
-    assert_eq!(info.regions.outer.y, 24.0);
-    assert_eq!(info.regions.text_body.height, 0.0);
+    let regions = info.regions.expect("presented zero-body regions");
+    assert_eq!(regions.outer.x, 144.0);
+    assert_eq!(regions.outer.y, 24.0);
+    assert_eq!(regions.text_body.height, 0.0);
 }
 
 fn enabled_window_row_texts_expanding_stretches(
@@ -2496,8 +2501,9 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
         .iter()
         .find(|info| info.window_id.get() == selected.0 as i64)
         .expect("window info");
-    assert_eq!(info.regions.outer.x, snapshot.regions.outer.x);
-    assert_eq!(info.regions.text_body.y, snapshot.regions.text_body.y);
+    let regions = info.regions.expect("presented window regions");
+    assert_eq!(regions.outer.x, snapshot.regions.outer.x);
+    assert_eq!(regions.text_body.y, snapshot.regions.text_body.y);
 }
 
 /// Phase 1 GOLDEN — the cursor-only fast path output must be BYTE-IDENTICAL to a

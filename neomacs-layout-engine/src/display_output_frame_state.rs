@@ -143,8 +143,8 @@ impl OutputFrameBuildState {
                     .iter_mut()
                     .find(|info| info.window_id == geometry.window_id)
                 {
-                    info.cell_origin = geometry.cell_origin;
-                    info.regions = geometry.regions;
+                    info.cell_origin = Some(geometry.cell_origin);
+                    info.regions = Some(geometry.regions);
                     info.tab_line_height =
                         geometry.regions.tab_line.map_or(0.0, |rect| rect.height);
                     info.header_line_height =

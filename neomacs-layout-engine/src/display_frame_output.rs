@@ -178,6 +178,8 @@ impl<'a> PresentedWindowRegionRequest<'a> {
         PresentedWindowRegions {
             outer: to_eval(outer),
             text_body: to_eval(body),
+            left_margin_columns: self.params.left_margin_columns,
+            right_margin_columns: self.params.right_margin_columns,
             left_margin,
             right_margin,
             left_fringe,
@@ -200,6 +202,8 @@ fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRe
     ProtocolWindowRegions {
         outer: rect(regions.outer),
         text_body: rect(regions.text_body),
+        left_margin_columns: regions.left_margin_columns,
+        right_margin_columns: regions.right_margin_columns,
         left_margin: optional(regions.left_margin),
         right_margin: optional(regions.right_margin),
         left_fringe: optional(regions.left_fringe),
@@ -666,8 +670,8 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
                 self.params.bounds.width,
                 self.params.bounds.height,
             ),
-            cell_origin: ProtocolCellOrigin::default(),
-            regions: ProtocolWindowRegions::default(),
+            cell_origin: None,
+            regions: None,
             mode_line_height: self.params.mode_line_height,
             header_line_height: self.params.header_line_height,
             tab_line_height: self.params.tab_line_height,
@@ -1183,48 +1187,49 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
+        let Some(regions) = self.info.regions.as_ref() else {
+            return;
+        };
 
         if let Some(ref side) = self.params.vertical_scroll_bar_side {
             let track = if side == "left" {
-                self.info.regions.left_scroll_bar
+                regions.left_scroll_bar
             } else {
-                self.info.regions.right_scroll_bar
+                regions.right_scroll_bar
             };
-            let Some(track) = track else {
-                return;
-            };
+            if let Some(track) = track {
+                let accessible_start = self.params.accessible_start_charpos().get();
+                let accessible_end = self.params.accessible_end_charpos().get();
+                let metrics = WindowScrollBarMetrics::vertical(
+                    self.info.window_start,
+                    self.info.window_end,
+                    accessible_start,
+                    accessible_end,
+                    track.height,
+                );
 
-            let accessible_start = self.params.accessible_start_charpos().get();
-            let accessible_end = self.params.accessible_end_charpos().get();
-            let metrics = WindowScrollBarMetrics::vertical(
-                self.info.window_start,
-                self.info.window_end,
-                accessible_start,
-                accessible_end,
-                track.height,
-            );
-
-            state.add_scroll_bar(ScrollBarItem {
-                window_id: DisplayWindowId::new(self.params.window_id),
-                row_role: GlyphRowRole::Text,
-                clip_rect: Some(self.params.bounds),
-                horizontal: false,
-                x: track.x,
-                y: track.y,
-                width: track.width,
-                height: track.height,
-                position: metrics.position,
-                portion: metrics.portion,
-                whole: metrics.whole,
-                thumb_start: metrics.thumb_start,
-                thumb_size: metrics.thumb_size,
-                track_color,
-                thumb_color,
-            });
+                state.add_scroll_bar(ScrollBarItem {
+                    window_id: DisplayWindowId::new(self.params.window_id),
+                    row_role: GlyphRowRole::Text,
+                    clip_rect: Some(self.params.bounds),
+                    horizontal: false,
+                    x: track.x,
+                    y: track.y,
+                    width: track.width,
+                    height: track.height,
+                    position: metrics.position,
+                    portion: metrics.portion,
+                    whole: metrics.whole,
+                    thumb_start: metrics.thumb_start,
+                    thumb_size: metrics.thumb_size,
+                    track_color,
+                    thumb_color,
+                });
+            }
         }
 
         if self.params.horizontal_scroll_bar {
-            let Some(track) = self.info.regions.horizontal_scroll_bar else {
+            let Some(track) = regions.horizontal_scroll_bar else {
                 return;
             };
             let track_width = track.width;

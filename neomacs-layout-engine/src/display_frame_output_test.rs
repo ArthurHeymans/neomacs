@@ -65,7 +65,9 @@ fn window_params() -> WindowParams {
         wrap_prefix: Vec::new(),
         line_prefix: Vec::new(),
         left_margin_width: 0.0,
+        left_margin_columns: 0,
         right_margin_width: 0.0,
+        right_margin_columns: 0,
         vertical_scroll_bar_side: Some("right".to_string()),
         horizontal_scroll_bar: true,
         scroll_bar_pixel_width: 12.0,
@@ -104,7 +106,9 @@ fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
     params.bounds = Rect::new(144.0, 24.0, 400.0, 300.0);
     params.text_bounds = Rect::new(180.0, 24.0, 330.0, 300.0);
     params.left_margin_width = 16.0;
+    params.left_margin_columns = 2;
     params.right_margin_width = 24.0;
+    params.right_margin_columns = 3;
     params.left_fringe_width = 8.0;
     params.right_fringe_width = 10.0;
     params.fringes_outside_margins = true;
@@ -130,6 +134,8 @@ fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
     let regions = PresentedWindowRegionRequest::new(&params, &frame, geometry, measured).resolve();
 
     assert_eq!(regions.outer, EvaluatorRect::new(144.0, 24.0, 400.0, 300.0));
+    assert_eq!(regions.left_margin_columns, 2);
+    assert_eq!(regions.right_margin_columns, 3);
     assert_eq!(
         regions.left_scroll_bar,
         Some(EvaluatorRect::new(144.0, 36.0, 12.0, 263.0))
@@ -289,8 +295,8 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         window_end: 101,
         buffer_size: params.buffer_size,
         bounds: params.bounds,
-        cell_origin: Default::default(),
-        regions,
+        cell_origin: Some(Default::default()),
+        regions: Some(regions),
         mode_line_height: params.mode_line_height,
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,
@@ -564,4 +570,22 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
 
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.scroll_bars.is_empty());
+}
+
+#[test]
+fn missing_vertical_track_does_not_suppress_horizontal_scroll_bar() {
+    let params = window_params();
+    let mut info = window_info(&params);
+    info.regions
+        .as_mut()
+        .expect("presented regions")
+        .right_scroll_bar = None;
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+
+    WindowScrollBarsRenderRequest::new(&params, &info)
+        .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+
+    let state = builder.finish(80, 24, 8.0, 16.0);
+    assert_eq!(state.scroll_bars.len(), 1);
+    assert!(state.scroll_bars[0].horizontal);
 }

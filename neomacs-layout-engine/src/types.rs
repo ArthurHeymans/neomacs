@@ -307,8 +307,12 @@ pub struct WindowParams {
     pub line_prefix: Vec<u8>,
     /// Left margin width in pixels (0 = no margin)
     pub left_margin_width: f32,
+    /// Left margin width in character columns.
+    pub left_margin_columns: i64,
     /// Right margin width in pixels (0 = no margin)
     pub right_margin_width: f32,
+    /// Right margin width in character columns.
+    pub right_margin_columns: i64,
 
     // --- Scroll bar configuration ---
     /// Effective vertical scroll bar side for this window.

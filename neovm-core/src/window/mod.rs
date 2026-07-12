@@ -1374,6 +1374,10 @@ pub struct PresentedWindowRegions {
     pub outer: Rect,
     /// Frame-relative logical-pixel bounds of the rendered text body.
     pub text_body: Rect,
+    /// Number of character columns reserved by the left margin.
+    pub left_margin_columns: i64,
+    /// Number of character columns reserved by the right margin.
+    pub right_margin_columns: i64,
     pub left_margin: Option<Rect>,
     pub right_margin: Option<Rect>,
     pub left_fringe: Option<Rect>,
