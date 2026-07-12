@@ -1257,9 +1257,18 @@ impl super::eval::Context {
                         WaitBlock::Poller(ProcessesOnly)
                     }
                 }
-                // Process output, or a pure timeout: a wakeable poll beats a
-                // blind sleep and harvests live process fds.
-                (false, _) => WaitBlock::Poller(ProcessesOnly),
+                // Process output, or a pure timeout (sleep-for / sit-for timer
+                // service): register input-wakeup interest too, so a cross-thread
+                // `Poller::notify()` — raised by the input bridge on C-g, which
+                // also sets `quit_requested` — RETURNS the block. The wait loop
+                // then re-iterates and `maybe_quit()` raises Quit within one
+                // iteration. This is neomacs' analogue of GNU's SIGINT
+                // interrupting `pselect` inside `sleep-for` (read_kbd == 0): the
+                // wait does not COMPLETE on the staged key (sleep-for's
+                // `completes_on_command_input()` is false), it only wakes to
+                // re-check the quit flag, and the key is reconciled later by the
+                // command loop.
+                (false, _) => WaitBlock::Poller(InputWakeupAndProcesses),
             };
         }
 
