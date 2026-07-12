@@ -250,7 +250,11 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         - params.tab_line_height
         - params.header_line_height
         - params.mode_line_height
-        - params.scroll_bar_pixel_height;
+        - if params.horizontal_scroll_bar {
+            params.scroll_bar_pixel_height
+        } else {
+            0.0
+        };
     let regions = PresentedWindowRegions {
         outer: params.bounds,
         text_body: Rect::new(
@@ -259,18 +263,22 @@ fn window_info(params: &WindowParams) -> WindowInfo {
             params.text_bounds.width,
             body_height,
         ),
-        right_scroll_bar: Some(Rect::new(
-            params.bounds.x + params.bounds.width - params.scroll_bar_pixel_width,
-            body_y,
-            params.scroll_bar_pixel_width,
-            body_height,
-        )),
-        horizontal_scroll_bar: Some(Rect::new(
-            params.bounds.x,
-            body_y + body_height,
-            params.bounds.width,
-            params.scroll_bar_pixel_height,
-        )),
+        right_scroll_bar: (body_height > 0.0).then(|| {
+            Rect::new(
+                params.bounds.x + params.bounds.width - params.scroll_bar_pixel_width,
+                body_y,
+                params.scroll_bar_pixel_width,
+                body_height,
+            )
+        }),
+        horizontal_scroll_bar: params.horizontal_scroll_bar.then(|| {
+            Rect::new(
+                params.bounds.x,
+                body_y + body_height,
+                params.bounds.width,
+                params.scroll_bar_pixel_height,
+            )
+        }),
         ..PresentedWindowRegions::default()
     };
     WindowInfo {
@@ -545,10 +553,8 @@ fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
 #[test]
 fn window_scroll_bars_request_skips_empty_vertical_track() {
     let mut params = window_params();
-    params.bounds.height = params.header_line_height
-        + params.tab_line_height
-        + params.mode_line_height
-        + params.scroll_bar_pixel_height;
+    params.bounds.height =
+        params.header_line_height + params.tab_line_height + params.mode_line_height;
     params.horizontal_scroll_bar = false;
     let info = window_info(&params);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
