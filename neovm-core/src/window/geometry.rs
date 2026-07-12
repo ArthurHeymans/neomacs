@@ -477,13 +477,13 @@ impl GeometryQuery for WindowRegionBoundsQuery {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PositionGeometryQuery {
+pub struct BufferPositionQuery {
     presentation: PresentationId,
     window: WindowId,
     position: LispCharPos1,
 }
 
-impl PositionGeometryQuery {
+impl BufferPositionQuery {
     pub const fn new(
         presentation: PresentationId,
         window: WindowId,
@@ -497,9 +497,9 @@ impl PositionGeometryQuery {
     }
 }
 
-impl query_seal::Sealed for PositionGeometryQuery {}
+impl query_seal::Sealed for BufferPositionQuery {}
 
-impl GeometryQuery for PositionGeometryQuery {
+impl GeometryQuery for BufferPositionQuery {
     type Output<'a> = SnapshotPointGeometry;
 
     fn presentation(&self) -> PresentationId {

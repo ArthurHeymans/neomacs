@@ -2441,20 +2441,32 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: selected_window,
-                    text_area_left_offset: 8,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(
+                            144.0, 24.0, 800.0, 600.0,
+                        ),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            168.0, 41.0, 760.0, 560.0,
+                        ),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    text_area_left_offset: 999,
+                    header_line_height: 88,
+                    tab_line_height: 99,
                     points: vec![crate::window::DisplayPointSnapshot {
                         buffer_pos: crate::buffer::LispCharPos1::new(5),
-                        x: 24,
-                        y: 18,
-                        width: 21,
-                        height: 30,
-                        row: 1,
-                        col: 3,
+                        x: 72,
+                        y: 999,
+                        width: 7,
+                        height: 17,
+                        row: 99,
+                        col: 9,
                     }],
                     body_rows: vec![crate::window::PresentedBodyRowSnapshot {
-                        output_row: 1,
-                        body_row: 1,
-                        body_y: 18,
+                        output_row: 99,
+                        body_row: 2,
+                        body_y: 34,
                     }],
                     rows: vec![crate::window::DisplayRowSnapshot {
                         row: 1,
@@ -2480,7 +2492,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
     .unwrap();
     assert_eq!(
         super::super::print::print_value(&result),
-        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+        "(#<window 1> 5 (72 . 34) 0 nil 5 (9 . 2) nil (0 . 0) (7 . 17))"
     );
 }
 

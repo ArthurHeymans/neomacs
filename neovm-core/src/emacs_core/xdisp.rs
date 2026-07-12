@@ -4854,7 +4854,7 @@ fn resolve_exact_visible_metrics(
     let Some(frame) = frames.get(fid) else {
         return Ok(None);
     };
-    let Some(geometry) = frame.presented_window_geometry(wid) else {
+    let Some(publication) = frame.presented_geometry() else {
         return Ok(None);
     };
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, window)? else {
@@ -4863,11 +4863,16 @@ fn resolve_exact_visible_metrics(
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
         return Ok(None);
     };
-    let Some(point) = geometry
-        .point_for_buffer_pos(pos_lisp)
-        .map_err(snapshot_geometry_flow)?
-    else {
-        return Ok(None);
+    let point = match publication.resolve(crate::window::geometry::BufferPositionQuery::new(
+        publication.presentation(),
+        wid,
+        pos_lisp,
+    )) {
+        Ok(point) => point,
+        Err(crate::window::geometry::GeometryQueryError::PositionNotVisible { .. }) => {
+            return Ok(None);
+        }
+        Err(error) => return Err(geometry_query_flow(error)),
     };
     Ok(Some((wid, exact_metrics_from_point(point))))
 }
@@ -4877,6 +4882,15 @@ fn snapshot_geometry_flow(error: crate::window::geometry::GeometryError) -> Flow
         LispCondition::Error,
         vec![Value::string(format!(
             "Invalid redisplay snapshot geometry: {error:?}"
+        ))],
+    )
+}
+
+fn geometry_query_flow(error: crate::window::geometry::GeometryQueryError) -> Flow {
+    signal(
+        LispCondition::Error,
+        vec![Value::string(format!(
+            "Invalid presented geometry query: {error:?}"
         ))],
     )
 }
