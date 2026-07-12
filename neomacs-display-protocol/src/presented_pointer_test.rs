@@ -864,7 +864,7 @@ fn presented_hit_index_uses_half_open_edges_z_order_and_rejects_stale_queries() 
 }
 
 #[test]
-fn unified_hit_rejects_pointer_region_without_semantic_owner() {
+fn publication_rejects_pointer_region_without_semantic_owner() {
     let presentation = crate::PresentationId::new(12);
     let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);
     frame.presentation_id = presentation;
@@ -883,10 +883,106 @@ fn unified_hit_rejects_pointer_region_without_semantic_owner() {
             .unwrap(),
         )
         .unwrap();
-    frame
-        .install_presented_pointer(
+    assert_eq!(
+        frame.install_presented_pointer(
             vec![crate::PresentedPointerRegion::new(
                 rect(20.0, 0.0, 10.0, 10.0),
+                Some(crate::InteractionId::new(1)),
+                None,
+            )],
+            vec![],
+        ),
+        Err(crate::PresentedPointerMapError::Semantic(
+            crate::PresentedHitError::MissingPointerSemanticOwner
+        ))
+    );
+}
+
+#[test]
+fn publication_rejects_pointer_owner_from_wrong_window_or_kind() {
+    let presentation = crate::PresentationId::new(13);
+    let window = crate::DisplayWindowId::new(1);
+    let bounds = rect(0.0, 0.0, 40.0, 20.0);
+    let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);
+    frame.presentation_id = presentation;
+    frame
+        .install_presented_hit_index(
+            crate::PresentedHitIndex::from_parts(
+                presentation,
+                vec![crate::PresentedHitRegion::new(
+                    Some(window),
+                    crate::PresentedRegionKind::TextBody,
+                    bounds,
+                    0,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+
+    for wrong_owner in [
+        crate::PresentedRegionId::new(
+            Some(crate::DisplayWindowId::new(2)),
+            crate::PresentedRegionKind::TextBody,
+        ),
+        crate::PresentedRegionId::new(Some(window), crate::PresentedRegionKind::ModeLine),
+    ] {
+        assert_eq!(
+            frame.install_presented_pointer(
+                vec![crate::PresentedPointerRegion::new_owned(
+                    wrong_owner,
+                    bounds,
+                    Some(crate::InteractionId::new(1)),
+                    None,
+                )],
+                vec![],
+            ),
+            Err(crate::PresentedPointerMapError::Semantic(
+                crate::PresentedHitError::UnknownPointerSemanticOwner(wrong_owner)
+            ))
+        );
+    }
+}
+
+#[test]
+fn unified_query_uses_pointer_canonical_owner_in_semantic_overlap() {
+    let presentation = crate::PresentationId::new(14);
+    let owned_window = crate::DisplayWindowId::new(1);
+    let covering_window = crate::DisplayWindowId::new(2);
+    let bounds = rect(0.0, 0.0, 40.0, 20.0);
+    let owned =
+        crate::PresentedRegionId::new(Some(owned_window), crate::PresentedRegionKind::TextBody);
+    let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);
+    frame.presentation_id = presentation;
+    frame
+        .install_presented_hit_index(
+            crate::PresentedHitIndex::from_parts(
+                presentation,
+                vec![
+                    crate::PresentedHitRegion::new(
+                        Some(owned_window),
+                        crate::PresentedRegionKind::TextBody,
+                        bounds,
+                        0,
+                    ),
+                    crate::PresentedHitRegion::new(
+                        Some(covering_window),
+                        crate::PresentedRegionKind::ModeLine,
+                        bounds,
+                        10,
+                    ),
+                ],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    frame
+        .install_presented_pointer(
+            vec![crate::PresentedPointerRegion::new_owned(
+                owned,
+                bounds,
                 Some(crate::InteractionId::new(1)),
                 None,
             )],
@@ -894,10 +990,12 @@ fn unified_hit_rejects_pointer_region_without_semantic_owner() {
         )
         .unwrap();
 
-    assert_eq!(
-        frame.resolve_presented_hit(crate::PresentedHitQuery::new(presentation, 25.0, 5.0)),
-        Err(crate::PresentedHitError::PointerOutsideSemanticRegion)
-    );
+    let hit = frame
+        .resolve_presented_hit(crate::PresentedHitQuery::new(presentation, 5.0, 5.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.semantic().unwrap().region().id(), owned);
+    assert_eq!(hit.interaction(), Some(crate::InteractionId::new(1)));
 }
 
 #[test]
@@ -963,7 +1061,10 @@ fn semantic_hit_index_rebuilds_private_buckets_after_transport() {
     .unwrap();
 
     let wire = serde_json::to_string(&index).unwrap();
-    assert!(!wire.contains("buckets"), "derived indexes are not protocol data");
+    assert!(
+        !wire.contains("buckets"),
+        "derived indexes are not protocol data"
+    );
     let decoded: crate::PresentedHitIndex = serde_json::from_str(&wire).unwrap();
     let hit = decoded
         .resolve(crate::PresentedHitQuery::new(presentation, 9.0, 8.0))

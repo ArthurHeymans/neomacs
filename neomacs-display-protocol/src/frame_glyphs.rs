@@ -1003,19 +1003,7 @@ impl FrameGlyphBuffer {
         Option<crate::presented_pointer::PresentedUnifiedHit>,
         crate::presented_pointer::PresentedHitError,
     > {
-        let semantic = self.presented_hit_index.resolve(query)?;
-        let pointer = self.presented_pointer.hit_test(query.x(), query.y());
-        if pointer.is_some() && semantic.is_none() {
-            return Err(crate::presented_pointer::PresentedHitError::PointerOutsideSemanticRegion);
-        }
-        if semantic.is_none() && pointer.is_none() {
-            return Ok(None);
-        }
-        Ok(Some(crate::presented_pointer::PresentedUnifiedHit::new(
-            semantic,
-            pointer.and_then(|region| region.interaction()),
-            pointer.and_then(|region| region.appearance()),
-        )))
+        self.presented_hit_index.resolve_unified(query)
     }
 
     /// Semantic hit index installed for this exact rendered presentation.
@@ -1025,7 +1013,7 @@ impl FrameGlyphBuffer {
 
     pub fn install_presented_hit_index(
         &mut self,
-        index: crate::presented_pointer::PresentedHitIndex,
+        mut index: crate::presented_pointer::PresentedHitIndex,
     ) -> Result<(), crate::presented_pointer::PresentedHitError> {
         if index.presentation() != self.presentation_id {
             return Err(
@@ -1034,6 +1022,9 @@ impl FrameGlyphBuffer {
                     requested: index.presentation(),
                 },
             );
+        }
+        if !self.presented_pointer.is_empty() {
+            index.bind_pointer_regions(self.presented_pointer.regions())?;
         }
         self.presented_hit_index = index;
         Ok(())
@@ -1066,6 +1057,11 @@ impl FrameGlyphBuffer {
             crate::presented_pointer::PointerMapValidationContext::from_frame_buffer(self)?;
         map.validate_against(context)?;
         map.rebuild_damage_index(self);
+        let mut hit_index = self.presented_hit_index.clone();
+        if !map.is_empty() && !hit_index.is_empty() {
+            hit_index.bind_pointer_regions(map.regions())?;
+        }
+        self.presented_hit_index = hit_index;
         self.presented_pointer = map;
         Ok(())
     }

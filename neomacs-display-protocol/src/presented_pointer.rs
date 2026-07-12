@@ -31,6 +31,33 @@ pub enum PresentedRegionKind {
     TabBar,
 }
 
+/// Stable semantic identity shared by presentation geometry and pointer data.
+///
+/// The identity contains meaning, not vector position, so serialization and
+/// private spatial-index rebuilds cannot silently retarget an interaction.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedRegionId {
+    window: Option<DisplayWindowId>,
+    kind: PresentedRegionKind,
+}
+
+impl PresentedRegionId {
+    #[must_use]
+    pub const fn new(window: Option<DisplayWindowId>, kind: PresentedRegionKind) -> Self {
+        Self { window, kind }
+    }
+
+    #[must_use]
+    pub const fn window(self) -> Option<DisplayWindowId> {
+        self.window
+    }
+
+    #[must_use]
+    pub const fn kind(self) -> PresentedRegionKind {
+        self.kind
+    }
+}
+
 /// One z-ordered semantic region in frame-local logical pixels.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PresentedHitRegion {
@@ -59,6 +86,11 @@ impl PresentedHitRegion {
     #[must_use]
     pub const fn window(self) -> Option<DisplayWindowId> {
         self.window
+    }
+
+    #[must_use]
+    pub const fn id(self) -> PresentedRegionId {
+        PresentedRegionId::new(self.window, self.kind)
     }
 
     #[must_use]
@@ -226,6 +258,8 @@ pub enum PresentedHitError {
         output_row: i64,
     },
     PointerOutsideSemanticRegion,
+    MissingPointerSemanticOwner,
+    UnknownPointerSemanticOwner(PresentedRegionId),
 }
 
 impl std::fmt::Display for PresentedHitError {
@@ -251,6 +285,15 @@ impl std::fmt::Display for PresentedHitError {
             Self::PointerOutsideSemanticRegion => formatter.write_str(
                 "pointer interaction/appearance region is outside semantic presentation geometry",
             ),
+            Self::MissingPointerSemanticOwner => {
+                formatter.write_str("pointer region has no semantic owner")
+            }
+            Self::UnknownPointerSemanticOwner(owner) => {
+                write!(
+                    formatter,
+                    "pointer region names unknown semantic owner {owner:?}"
+                )
+            }
         }
     }
 }
@@ -267,6 +310,10 @@ pub struct PresentedHitIndex {
     region_buckets: Vec<PresentedHitBucket>,
     #[serde(skip)]
     text_buckets: Vec<PresentedHitBucket>,
+    #[serde(skip)]
+    pointer_regions: Vec<PresentedPointerRegion>,
+    #[serde(skip)]
+    pointer_buckets: Vec<PresentedHitBucket>,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -311,6 +358,8 @@ impl PresentedHitIndex {
             text_positions: Vec::new(),
             region_buckets: Vec::new(),
             text_buckets: Vec::new(),
+            pointer_regions: Vec::new(),
+            pointer_buckets: Vec::new(),
         }
     }
 
@@ -349,7 +398,104 @@ impl PresentedHitIndex {
             text_positions,
             region_buckets,
             text_buckets,
+            pointer_regions: Vec::new(),
+            pointer_buckets: Vec::new(),
         })
+    }
+
+    /// Validate pointer ownership once and attach it to this immutable query
+    /// object. Runtime input never merges independently resolved maps.
+    pub(crate) fn bind_pointer_regions(
+        &mut self,
+        pointer_regions: &[PresentedPointerRegion],
+    ) -> Result<(), PresentedHitError> {
+        for pointer in pointer_regions {
+            let owner = pointer
+                .owner()
+                .ok_or(PresentedHitError::MissingPointerSemanticOwner)?;
+            let semantic = self
+                .regions
+                .iter()
+                .find(|region| region.id() == owner)
+                .ok_or(PresentedHitError::UnknownPointerSemanticOwner(owner))?;
+            if !rect_contains_rect(semantic.bounds(), pointer.bounds()) {
+                return Err(PresentedHitError::PointerOutsideSemanticRegion);
+            }
+        }
+        self.pointer_regions = pointer_regions.to_vec();
+        self.pointer_buckets = build_presented_hit_buckets(
+            self.pointer_regions
+                .iter()
+                .enumerate()
+                .map(|(index, region)| (index, region.bounds())),
+        );
+        Ok(())
+    }
+
+    pub(crate) fn resolve_unified(
+        &self,
+        query: PresentedHitQuery,
+    ) -> Result<Option<PresentedUnifiedHit>, PresentedHitError> {
+        if query.presentation != self.presentation {
+            return Err(PresentedHitError::StalePresentation {
+                expected: self.presentation,
+                requested: query.presentation,
+            });
+        }
+        let pointer = find_presented_pointer_candidate(
+            &self.pointer_regions,
+            &self.pointer_buckets,
+            query.x,
+            query.y,
+        );
+        let semantic = if let Some(pointer) = pointer {
+            let owner = pointer
+                .owner()
+                .expect("published pointer regions have validated semantic owners");
+            let region = *self
+                .regions
+                .iter()
+                .find(|region| region.id() == owner)
+                .expect("published pointer owner remains in its immutable semantic index");
+            Some(PresentedHit {
+                region,
+                text_position: self.resolve_text_position(region, query.x, query.y),
+            })
+        } else {
+            self.resolve(query)?
+        };
+        if semantic.is_none() && pointer.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(PresentedUnifiedHit::new(
+            semantic,
+            pointer.and_then(PresentedPointerRegion::interaction),
+            pointer.and_then(PresentedPointerRegion::appearance),
+        )))
+    }
+
+    fn resolve_text_position(
+        &self,
+        region: PresentedHitRegion,
+        x: f32,
+        y: f32,
+    ) -> Option<PresentedTextPosition> {
+        if region.kind != PresentedRegionKind::TextBody {
+            return None;
+        }
+        let mut selected = None;
+        for_each_presented_hit_candidate(
+            &self.text_buckets,
+            x,
+            y,
+            |index| self.text_positions[index].bounds,
+            |index| {
+                if Some(self.text_positions[index].window) == region.window {
+                    selected = Some(selected.map_or(index, |current: usize| current.min(index)));
+                }
+            },
+        );
+        selected.map(|index| self.text_positions[index])
     }
 
     #[must_use]
@@ -399,25 +545,7 @@ impl PresentedHitIndex {
             return Ok(None);
         };
         let region = &self.regions[region_index];
-        let text_position = (region.kind == PresentedRegionKind::TextBody)
-            .then(|| {
-                let mut selected = None;
-                for_each_presented_hit_candidate(
-                    &self.text_buckets,
-                    query.x,
-                    query.y,
-                    |index| self.text_positions[index].bounds,
-                    |index| {
-                        if Some(self.text_positions[index].window) == region.window {
-                            selected =
-                                Some(selected.map_or(index, |current: usize| current.min(index)));
-                        }
-                    },
-                );
-                selected.map(|index| &self.text_positions[index])
-            })
-            .flatten()
-            .copied();
+        let text_position = self.resolve_text_position(*region, query.x, query.y);
         Ok(Some(PresentedHit {
             region: *region,
             text_position,
@@ -548,6 +676,33 @@ fn contains(bounds: FrameRect, x: f32, y: f32) -> bool {
         && x < bounds.x() + bounds.width()
         && y >= bounds.y()
         && y < bounds.y() + bounds.height()
+}
+
+fn rect_contains_rect(outer: FrameRect, inner: FrameRect) -> bool {
+    inner.x() >= outer.x()
+        && inner.y() >= outer.y()
+        && inner.x() + inner.width() <= outer.x() + outer.width()
+        && inner.y() + inner.height() <= outer.y() + outer.height()
+}
+
+fn find_presented_pointer_candidate<'a>(
+    regions: &'a [PresentedPointerRegion],
+    buckets: &[PresentedHitBucket],
+    x: f32,
+    y: f32,
+) -> Option<&'a PresentedPointerRegion> {
+    if !x.is_finite() || !y.is_finite() {
+        return None;
+    }
+    let mut best = None;
+    for_each_presented_hit_candidate(
+        buckets,
+        x,
+        y,
+        |index| regions[index].bounds(),
+        |index| best = Some(best.map_or(index, |current: usize| current.min(index))),
+    );
+    best.map(|index| &regions[index])
 }
 
 /// Presentation-local index of one transient pointer appearance.
@@ -1115,6 +1270,7 @@ impl PresentedPointerAppearance {
 /// Hit geometry, evaluator-owned click meaning, and renderer-owned appearance.
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct PresentedPointerRegion {
+    owner: Option<PresentedRegionId>,
     bounds: FrameRect,
     interaction: Option<InteractionId>,
     appearance: Option<PointerAppearanceId>,
@@ -1190,11 +1346,10 @@ impl PresentedPointerSourceMap {
                         .map_err(|_| PresentedPointerMapError::PaintSpanOutOfRange)
                 })
                 .transpose()?;
-            remapped_regions.push(PresentedPointerRegion::new(
-                region.bounds,
-                region.interaction,
-                appearance,
-            ));
+            let mut remapped =
+                PresentedPointerRegion::new(region.bounds, region.interaction, appearance);
+            remapped.owner = region.owner;
+            remapped_regions.push(remapped);
         }
         self.appearances.extend(other.appearances);
         self.regions.extend(remapped_regions);
@@ -1336,11 +1491,10 @@ impl PresentedPointerSourceMap {
             if region.interaction.is_none() && appearance.is_none() {
                 continue;
             }
-            regions.push(PresentedPointerRegion::new(
-                region.bounds,
-                region.interaction,
-                appearance,
-            ));
+            let mut resolved =
+                PresentedPointerRegion::new(region.bounds, region.interaction, appearance);
+            resolved.owner = region.owner;
+            regions.push(resolved);
         }
         Ok((regions, resolved_appearances))
     }
@@ -1354,10 +1508,31 @@ impl PresentedPointerRegion {
         appearance: Option<PointerAppearanceId>,
     ) -> Self {
         Self {
+            owner: None,
             bounds,
             interaction,
             appearance,
         }
+    }
+
+    #[must_use]
+    pub const fn new_owned(
+        owner: PresentedRegionId,
+        bounds: FrameRect,
+        interaction: Option<InteractionId>,
+        appearance: Option<PointerAppearanceId>,
+    ) -> Self {
+        Self {
+            owner: Some(owner),
+            bounds,
+            interaction,
+            appearance,
+        }
+    }
+
+    #[must_use]
+    pub const fn owner(&self) -> Option<PresentedRegionId> {
+        self.owner
     }
 
     #[must_use]
@@ -1399,6 +1574,7 @@ impl<'a> PointerMapValidationContext<'a> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PresentedPointerMapError {
+    Semantic(PresentedHitError),
     UnknownAppearance(PointerAppearanceId),
     MissingRegionBehavior,
     EmptyAppearance,
@@ -1419,6 +1595,12 @@ pub enum PresentedPointerMapError {
     UnknownFace(FaceId),
     InvalidImageRelief,
     IncompleteSpanModes,
+}
+
+impl From<PresentedHitError> for PresentedPointerMapError {
+    fn from(error: PresentedHitError) -> Self {
+        Self::Semantic(error)
+    }
 }
 
 impl std::fmt::Display for PresentedPointerMapError {

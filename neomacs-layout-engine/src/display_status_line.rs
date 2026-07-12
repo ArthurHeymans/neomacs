@@ -1753,7 +1753,11 @@ impl TabBarPresentedPointerPlan {
                         .map_err(|_| PresentedPointerMapBuildError::TooManyAppearances)
                 })
                 .transpose()?;
-            regions.push(neomacs_display_protocol::PresentedPointerRegion::new(
+            regions.push(neomacs_display_protocol::PresentedPointerRegion::new_owned(
+                neomacs_display_protocol::PresentedRegionId::new(
+                    None,
+                    neomacs_display_protocol::PresentedRegionKind::TabBar,
+                ),
                 hit_bounds,
                 Some(run.interaction),
                 appearance,

@@ -54,6 +54,7 @@ fn install_pointer_region(
     use neomacs_display_protocol::{
         FaceId, FrameRect, PointerAppearanceId, PointerDrawMode, PresentedPaintSpan,
         PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind,
+        PresentedRegionId, PresentedRegionKind,
     };
 
     let appearance = visual.then(|| {
@@ -85,7 +86,8 @@ fn install_pointer_region(
     });
     frame
         .install_presented_pointer(
-            vec![PresentedPointerRegion::new(
+            vec![PresentedPointerRegion::new_owned(
+                PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                 FrameRect::new(0.0, 0.0, 20.0, 20.0).unwrap(),
                 interaction,
                 appearance

@@ -6,7 +6,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphPointerAppearance, GlyphPointe
 use neomacs_display_protocol::{
     DisplaySlotId, DisplayWindowId, FrameRect, GlyphRowRole, PointerAppearanceId, PointerDrawMode,
     PresentedPointerRegion, PresentedPointerSourceAppearance, PresentedPointerSourceMap,
-    PresentedPrimitiveKind, PresentedSourcePaintSpan,
+    PresentedPrimitiveKind, PresentedRegionId, PresentedRegionKind, PresentedSourcePaintSpan,
 };
 
 /// Stable producer-local identity used by non-buffer pointer plans.
@@ -47,6 +47,7 @@ impl std::fmt::Display for PresentedPointerMapBuildError {
 impl std::error::Error for PresentedPointerMapBuildError {}
 
 struct PendingRegion {
+    owner: PresentedRegionId,
     bounds: FrameRect,
     appearance_index: usize,
 }
@@ -92,6 +93,16 @@ impl PresentedPointerMapBuilder {
             window_id,
             source: appearance.source,
         };
+        let owner = PresentedRegionId::new(
+            (!matches!(row_role, GlyphRowRole::TabBar)).then_some(window_id),
+            match row_role {
+                GlyphRowRole::Text | GlyphRowRole::Minibuffer => PresentedRegionKind::TextBody,
+                GlyphRowRole::TabLine => PresentedRegionKind::TabLine,
+                GlyphRowRole::HeaderLine => PresentedRegionKind::HeaderLine,
+                GlyphRowRole::ModeLine => PresentedRegionKind::ModeLine,
+                GlyphRowRole::TabBar => PresentedRegionKind::TabBar,
+            },
+        );
         let mode = PointerDrawMode::Face(appearance.face_id);
         let index = if let Some(&index) = self.positions.get(&key) {
             index
@@ -151,12 +162,14 @@ impl PresentedPointerMapBuilder {
         }
 
         if let Some(previous) = self.regions.last_mut()
+            && previous.owner == owner
             && previous.appearance_index == index
             && let Some(combined) = adjacent_rect(previous.bounds, bounds)
         {
             previous.bounds = combined;
         } else {
             self.regions.push(PendingRegion {
+                owner,
                 bounds,
                 appearance_index: index,
             });
@@ -184,7 +197,8 @@ impl PresentedPointerMapBuilder {
             .map(|region| {
                 let appearance = PointerAppearanceId::try_from(region.appearance_index)
                     .map_err(|_| PresentedPointerMapBuildError::TooManyAppearances)?;
-                Ok::<_, PresentedPointerMapBuildError>(PresentedPointerRegion::new(
+                Ok::<_, PresentedPointerMapBuildError>(PresentedPointerRegion::new_owned(
+                    region.owner,
                     region.bounds,
                     None,
                     Some(appearance),

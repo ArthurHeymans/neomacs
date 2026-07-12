@@ -14,7 +14,7 @@ use neomacs_display_protocol::{
     PointerAppearancePhase as ProtocolPointerAppearancePhase, PointerDrawMode, PointerImageRelief,
     PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins, PresentedHitIndex,
     PresentedHitRegion, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion,
-    PresentedPrimitiveKind, PresentedRegionKind,
+    PresentedPrimitiveKind, PresentedRegionId, PresentedRegionKind,
 };
 use winit::keyboard::{Key, NamedKey, SmolStr};
 use winit::window::ResizeDirection;
@@ -114,17 +114,20 @@ fn presented_pointer_integration_frame(presentation: u64) -> FrameGlyphBuffer {
     frame
         .install_presented_pointer(
             vec![
-                PresentedPointerRegion::new(
+                PresentedPointerRegion::new_owned(
+                    PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                     FrameRect::new(0.0, 0.0, 80.0, 24.0).unwrap(),
                     Some(InteractionId::new(1)),
                     Some(PointerAppearanceId::try_from(0usize).unwrap()),
                 ),
-                PresentedPointerRegion::new(
+                PresentedPointerRegion::new_owned(
+                    PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                     FrameRect::new(80.0, 0.0, 16.0, 24.0).unwrap(),
                     Some(InteractionId::new(2)),
                     Some(PointerAppearanceId::try_from(0usize).unwrap()),
                 ),
-                PresentedPointerRegion::new(
+                PresentedPointerRegion::new_owned(
+                    PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                     FrameRect::new(100.0, 0.0, 24.0, 24.0).unwrap(),
                     Some(InteractionId::new(3)),
                     Some(PointerAppearanceId::try_from(1usize).unwrap()),
@@ -515,7 +518,8 @@ fn unchanged_pointer_appearance_skips_damage_inspection_in_a_ten_thousand_glyph_
     }
     frame
         .install_presented_pointer(
-            vec![PresentedPointerRegion::new(
+            vec![PresentedPointerRegion::new_owned(
+                PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                 FrameRect::new(9_999.0, 0.0, 1.0, 10.0).unwrap(),
                 None,
                 Some(PointerAppearanceId::try_from(0usize).unwrap()),
@@ -530,6 +534,21 @@ fn unchanged_pointer_appearance_skips_damage_inspection_in_a_ten_thousand_glyph_
                 PointerDrawMode::Face(FaceId::new(9)),
                 PointerDrawMode::Face(FaceId::new(9)),
             )],
+        )
+        .unwrap();
+    frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                frame.presentation_id,
+                vec![PresentedHitRegion::new(
+                    None,
+                    PresentedRegionKind::TabBar,
+                    FrameRect::new(0.0, 0.0, 10_000.0, 20.0).unwrap(),
+                    0,
+                )],
+                vec![],
+            )
+            .unwrap(),
         )
         .unwrap();
     let mut render = GuiFrameRenderState::new_without_device(0x42, false);
@@ -560,14 +579,23 @@ fn presented_pointer_integration_offset_frame(
     frame
         .faces
         .insert(FaceId::new(9), Face::new(FaceId::new(9)));
-    let (x, y, width, height) = regions[0];
-    frame.add_char('x', x, y, width, height, height - 2.0, false);
+    let (x, y, glyph_width, glyph_height) = regions[0];
+    frame.add_char(
+        'x',
+        x,
+        y,
+        glyph_width,
+        glyph_height,
+        glyph_height - 2.0,
+        false,
+    );
     frame
         .install_presented_pointer(
             regions
                 .iter()
                 .map(|&(x, y, width, height)| {
-                    PresentedPointerRegion::new(
+                    PresentedPointerRegion::new_owned(
+                        PresentedRegionId::new(None, PresentedRegionKind::TabBar),
                         FrameRect::new(x, y, width, height).unwrap(),
                         Some(InteractionId::new(1)),
                         Some(PointerAppearanceId::try_from(0usize).unwrap()),
@@ -579,7 +607,7 @@ fn presented_pointer_integration_offset_frame(
                     PresentedPrimitiveKind::Glyph,
                     0,
                     1,
-                    FrameRect::new(x, y, width, height).unwrap(),
+                    FrameRect::new(x, y, glyph_width, glyph_height).unwrap(),
                 )],
                 PointerDrawMode::Face(FaceId::new(9)),
                 PointerDrawMode::Face(FaceId::new(9)),
@@ -590,17 +618,12 @@ fn presented_pointer_integration_offset_frame(
         .install_presented_hit_index(
             PresentedHitIndex::from_parts(
                 PresentationId::new(presentation),
-                regions
-                    .iter()
-                    .map(|&(x, y, width, height)| {
-                        PresentedHitRegion::new(
-                            None,
-                            PresentedRegionKind::TabBar,
-                            FrameRect::new(x, y, width, height).unwrap(),
-                            0,
-                        )
-                    })
-                    .collect(),
+                vec![PresentedHitRegion::new(
+                    None,
+                    PresentedRegionKind::TabBar,
+                    FrameRect::new(0.0, 0.0, width, height).unwrap(),
+                    0,
+                )],
                 vec![],
             )
             .unwrap(),
@@ -1450,8 +1473,27 @@ fn chrome_hit_uses_absolute_semantic_hit_regions() {
             if interaction.get() == 4 && bounds.y() == 52.0
     ));
     frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                frame.presentation_id,
+                vec![PresentedHitRegion::new(
+                    None,
+                    PresentedRegionKind::TabBar,
+                    FrameRect::new(0.0, 52.0, 800.0, 18.0).unwrap(),
+                    i32::MAX,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    frame
         .install_presented_pointer(
-            vec![neomacs_display_protocol::PresentedPointerRegion::new(
+            vec![neomacs_display_protocol::PresentedPointerRegion::new_owned(
+                neomacs_display_protocol::PresentedRegionId::new(
+                    None,
+                    neomacs_display_protocol::PresentedRegionKind::TabBar,
+                ),
                 neomacs_display_protocol::FrameRect::new(8.0, 52.0, 80.0, 18.0)
                     .expect("pointer bounds"),
                 Some(InteractionId::new(12)),

@@ -120,6 +120,17 @@ fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         selected: true,
     });
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(DisplayWindowId::new(1)),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(0.0, 0.0, 80.0, 16.0).unwrap(),
+            0,
+        )],
+        vec![],
+    )
+    .unwrap();
 
     let appearance = crate::PresentedPointerSourceAppearance::new(
         vec![crate::PresentedSourcePaintSpan::new(
@@ -136,7 +147,11 @@ fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
         crate::PointerDrawMode::Face(FaceId::new(0)),
     );
     state.presented_pointer_source = crate::PresentedPointerSourceMap::new(
-        vec![crate::PresentedPointerRegion::new(
+        vec![crate::PresentedPointerRegion::new_owned(
+            crate::PresentedRegionId::new(
+                Some(DisplayWindowId::new(1)),
+                crate::PresentedRegionKind::TextBody,
+            ),
             crate::FrameRect::new(0.0, 0.0, 8.0, 16.0).unwrap(),
             Some(crate::InteractionId::new(7)),
             Some(crate::PointerAppearanceId::try_from(0usize).unwrap()),
