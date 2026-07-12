@@ -3,7 +3,8 @@ use crate::types::{FrameParams, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorKind, CursorStyle, DisplaySlotId, WindowEffectHint, WindowInfo, WindowTransitionKind,
+    CursorKind, CursorStyle, DisplaySlotId, PresentedWindowRegions, WindowEffectHint, WindowInfo,
+    WindowTransitionKind,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 
@@ -244,6 +245,34 @@ fn frame_output_owner_uses_compact_bar_instead_of_split_menu_and_tool_bars() {
 }
 
 fn window_info(params: &WindowParams) -> WindowInfo {
+    let body_y = params.bounds.y + params.tab_line_height + params.header_line_height;
+    let body_height = params.bounds.height
+        - params.tab_line_height
+        - params.header_line_height
+        - params.mode_line_height
+        - params.scroll_bar_pixel_height;
+    let regions = PresentedWindowRegions {
+        outer: params.bounds,
+        text_body: Rect::new(
+            params.text_bounds.x,
+            body_y,
+            params.text_bounds.width,
+            body_height,
+        ),
+        right_scroll_bar: Some(Rect::new(
+            params.bounds.x + params.bounds.width - params.scroll_bar_pixel_width,
+            body_y,
+            params.scroll_bar_pixel_width,
+            body_height,
+        )),
+        horizontal_scroll_bar: Some(Rect::new(
+            params.bounds.x,
+            body_y + body_height,
+            params.bounds.width,
+            params.scroll_bar_pixel_height,
+        )),
+        ..PresentedWindowRegions::default()
+    };
     WindowInfo {
         window_id: DisplayWindowId::new(params.window_id),
         buffer_id: params.buffer_id,
@@ -253,7 +282,7 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         buffer_size: params.buffer_size,
         bounds: params.bounds,
         cell_origin: Default::default(),
-        regions: Default::default(),
+        regions,
         mode_line_height: params.mode_line_height,
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,
