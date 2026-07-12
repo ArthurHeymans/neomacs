@@ -1356,6 +1356,45 @@ fn topmost_child_blocks_root_chrome_ownership() {
 }
 
 #[test]
+fn nested_child_ime_cursor_area_uses_presented_root_relative_placement() {
+    let mut app = make_test_app(800, 600, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_emacs_frame_id(0x42);
+
+    let mut root = FrameGlyphBuffer::with_size(800.0, 600.0);
+    set_test_frame_placement(&mut root, 0x42, 0, 0.0, 0.0, 0);
+    render.set_current_frame(Some(root), None);
+
+    let mut parent = FrameGlyphBuffer::with_size(300.0, 200.0);
+    set_test_frame_placement(&mut parent, 0x50, 0x42, 100.0, 80.0, 1);
+    assert!(render.update_child_frame(parent));
+
+    let mut nested = FrameGlyphBuffer::with_size(120.0, 80.0);
+    set_test_frame_placement(&mut nested, 0x51, 0x50, 15.0, 12.0, 2);
+    assert!(render.update_child_frame(nested));
+
+    let area = app.ime_cursor_area_for_target(&crate::render_thread::cursor::CursorTarget {
+        window_id: 9,
+        x: 7.0,
+        y: 9.0,
+        width: 8.0,
+        height: 16.0,
+        style: crate::core::frame_glyphs::CursorStyle::FilledBox,
+        frame_id: 0x51,
+    });
+
+    assert_eq!(
+        area,
+        crate::render_thread::state::ImeCursorArea {
+            x: 122,
+            y: 117,
+            width: 8,
+            height: 16,
+        }
+    );
+}
+
+#[test]
 fn popup_owns_pointer_above_underlying_presented_content() {
     let mut app = make_test_app(800, 600, 1.0);
     let render = ensure_primary_frame(&mut app).expect("primary render");

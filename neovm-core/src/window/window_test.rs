@@ -357,6 +357,103 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
 }
 
 #[test]
+fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_geometry() {
+    use super::geometry::{PresentationId, WindowGeometryQuery};
+    use neomacs_display_protocol::types::Rect as TransportRect;
+
+    fn scenario(body_left: f32) -> ((f32, f32, f32, f32), (f32, f32), (f32, f32)) {
+        let mut manager = FrameManager::new();
+        let root = manager.create_frame("popup-parent", 800, 600, BufferId(1));
+        let popup = manager.create_frame("corfu-popup", 240, 160, BufferId(1));
+        let window = manager.get(root).unwrap().selected_window;
+        let presentation = PresentationId::new(40);
+        manager
+            .get_mut(root)
+            .unwrap()
+            .publish_display_snapshots(
+                presentation,
+                vec![WindowDisplaySnapshot {
+                    window_id: window,
+                    regions: PresentedWindowRegions {
+                        outer: TransportRect::new(body_left, 50.0, 536.0, 500.0),
+                        text_body: TransportRect::new(body_left, 50.0, 536.0, 500.0),
+                        ..PresentedWindowRegions::default()
+                    },
+                    regions_materialized: true,
+                    points: vec![DisplayPointSnapshot {
+                        buffer_pos: LispCharPos1::ONE,
+                        x: 80,
+                        y: 96,
+                        width: 8,
+                        height: 16,
+                        row: 6,
+                        col: 10,
+                    }],
+                    body_rows: vec![PresentedBodyRowSnapshot {
+                        output_row: 6,
+                        body_row: 6,
+                        body_y: 96,
+                    }],
+                    ..WindowDisplaySnapshot::default()
+                }],
+            )
+            .unwrap();
+
+        let geometry = manager
+            .get(root)
+            .unwrap()
+            .presented_geometry()
+            .unwrap()
+            .resolve(WindowGeometryQuery::new(presentation, window))
+            .unwrap();
+        let body_origin = geometry.text_body_origin_in_frame().unwrap();
+        let cursor = geometry
+            .point_for_buffer_pos(LispCharPos1::ONE)
+            .unwrap()
+            .unwrap();
+        let cursor_local = cursor.in_text_body();
+        let anchor = (
+            body_origin.x().get() + cursor_local.x().get(),
+            body_origin.y().get() + cursor_local.y().get() + cursor.height().get(),
+        );
+
+        let popup_frame = manager.get_mut(popup).unwrap();
+        popup_frame.parent_frame = Value::make_frame(root.0);
+        popup_frame.left_pos = anchor.0 as i64;
+        popup_frame.top_pos = anchor.1 as i64;
+        popup_frame
+            .publish_display_snapshots(PresentationId::new(41), vec![])
+            .unwrap();
+        let placed = manager
+            .place_presented_frame(popup, PresentationId::new(41))
+            .unwrap();
+
+        (
+            (
+                cursor_local.x().get(),
+                cursor_local.y().get(),
+                cursor.width().get(),
+                cursor.height().get(),
+            ),
+            (body_origin.x().get(), body_origin.y().get()),
+            (placed.root_relative().x(), placed.root_relative().y()),
+        )
+    }
+
+    let with_side = scenario(264.0);
+    assert_eq!(with_side.0, (80.0, 96.0, 8.0, 16.0));
+    assert_eq!(with_side.1, (264.0, 50.0));
+    assert_eq!(with_side.2, (344.0, 162.0));
+
+    let without_side = scenario(24.0);
+    assert_eq!(without_side.0, with_side.0);
+    assert_eq!(without_side.1, (24.0, 50.0));
+    assert_eq!(without_side.2, (104.0, 162.0));
+    assert_eq!(without_side.1.0 - with_side.1.0, -240.0);
+    assert_eq!(without_side.2.0 - with_side.2.0, -240.0);
+}
+
+#[test]
 fn duplicate_windows_reject_candidate_without_replacing_publication() {
     use super::geometry::{GeometryError, PresentationId, PresentationPublishError};
 
