@@ -9851,8 +9851,10 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
             DisplayRowPosition::new(4.0, 1),
             DisplayRowPosition::new(12.0, 2),
             DisplayPropertyReplacementCursorPolicy::FaceChar,
+            false,
         ),
         skip_to: 4,
+        produced_row_break: false,
     };
     let mut byte_idx = "a".len();
     let mut charpos = 1;

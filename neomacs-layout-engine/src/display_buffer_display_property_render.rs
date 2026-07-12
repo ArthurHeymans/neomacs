@@ -21,6 +21,10 @@ use crate::types::WindowParams;
 pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) replacement: DisplayPropertyReplacementAppendOutcome,
     pub(crate) skip_to: i64,
+    /// The replacement's `display` string ended a display line with a newline;
+    /// the walk must emit a row break so the following buffer text starts on a
+    /// fresh row (GNU xdisp.c treats display-string '\n' as a line terminator).
+    pub(crate) produced_row_break: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,7 +42,7 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
 // Large payload variant; boxing is a perf hint deferred out of the lint gate.
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
-    Applied,
+    Applied { produced_row_break: bool },
     Fallback(DisplaySourceStepItem),
     Stop,
 }
@@ -139,6 +143,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
             self.start_position,
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
+                let produced_row_break = outcome.produced_row_break;
                 self.apply_rendered_outcome(
                     outcome,
                     progress,
@@ -146,7 +151,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
                     state.row_geometry,
                     point_charpos,
                 );
-                BufferDisplayPropertyTextReplacementApplyOutcome::Applied
+                BufferDisplayPropertyTextReplacementApplyOutcome::Applied { produced_row_break }
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
                 BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item)
@@ -229,6 +234,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
             skip_to: self.replacement.descriptor().skip_to_charpos(),
+            produced_row_break: outcome.produced_row_break(),
         }
     }
 

@@ -14,6 +14,7 @@ use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
+use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
@@ -110,12 +111,50 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.state.cursor_info,
             self.loop_context.point_charpos(),
         ) {
-            BufferDisplayPropertyTextReplacementApplyOutcome::Applied => true,
+            BufferDisplayPropertyTextReplacementApplyOutcome::Applied { produced_row_break } => {
+                if produced_row_break {
+                    self.emit_display_string_row_break(source_walk, buffer)
+                } else {
+                    true
+                }
+            }
             BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
             BufferDisplayPropertyTextReplacementApplyOutcome::Stop => false,
         }
+    }
+
+    /// A `display` string that ended in a newline terminated the current row;
+    /// emit that row break so the buffer text after the covered region (which
+    /// may be a bare newline that must still produce its own blank row) starts
+    /// on a fresh row. Returns `false` when the break exhausted the window and
+    /// the buffer walk must stop. GNU: xdisp.c `display_line` ends a display
+    /// line on a display-string '\n'.
+    fn emit_display_string_row_break<B: LayoutBufferView>(
+        &mut self,
+        source_walk: &mut BufferSourceWalk<'request, B>,
+        buffer: &B,
+    ) -> bool
+    where
+        'surface: 'request,
+    {
+        let synthetic_newline = DisplaySourceStepChar::new(
+            '\n',
+            self.state.progress.byte_idx(),
+            self.state.progress.charpos(),
+        );
+        !self
+            .loop_context
+            .line_break_request(
+                synthetic_newline,
+                self.text,
+                self.state.append_surface,
+                self.state.overlay_context,
+                self.active_face_state,
+            )
+            .render_display_string_break_and_apply(source_walk, buffer, self.state.reborrow())
+            .should_break()
     }
 
     fn render_source_item<B: LayoutBufferView>(

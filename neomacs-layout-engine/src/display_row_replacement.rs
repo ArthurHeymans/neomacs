@@ -66,13 +66,23 @@ impl DisplayRowRenderPolicy for DisplayReplacementStringItemMeasurer {
 
 struct DisplayReplacementStringRenderPolicy<'a, M> {
     item_policy: &'a mut M,
+    /// Set when the display string contains a newline (a `RowBreak` item). GNU
+    /// (xdisp.c `display_line`) treats a '\n' inside a `display` string as a
+    /// row terminator, exactly like a buffer newline; the caller must emit a
+    /// row break so the following buffer text starts on a fresh row.
+    produced_row_break: bool,
 }
 
 impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     for DisplayReplacementStringRenderPolicy<'_, M>
 {
     fn stop_before_item(&mut self, item: &DisplayItem) -> bool {
-        matches!(item.kind, DisplayItemKind::RowBreak(_))
+        if matches!(item.kind, DisplayItemKind::RowBreak(_)) {
+            self.produced_row_break = true;
+            true
+        } else {
+            false
+        }
     }
 
     fn measurement_for(
@@ -115,15 +125,18 @@ impl DisplayReplacementStringSourceAppendRequest {
         face_ids: &mut FrameFaceIdAllocator,
         append_context: &DisplayReplacementAppendContext<'_>,
         item_policy: &mut impl DisplayRowRenderPolicy,
-    ) -> DisplayRowPosition {
+    ) -> DisplayReplacementAppendResult {
         let position = self.position();
         let Some(source) = self
             .source
             .into_source(append_context.single_item.face_id())
         else {
-            return position;
+            return DisplayReplacementAppendResult::without_row_break(position);
         };
-        let mut render_policy = DisplayReplacementStringRenderPolicy { item_policy };
+        let mut render_policy = DisplayReplacementStringRenderPolicy {
+            item_policy,
+            produced_row_break: false,
+        };
         let mut source = source;
         let mut source_state = DisplayRowSourceState::default();
         let Some(outcome) = append_context.single_item.render_source_with_policy(
@@ -136,9 +149,42 @@ impl DisplayReplacementStringSourceAppendRequest {
             &mut render_policy,
             append_context.single_item.face_id(),
         ) else {
-            return position;
+            return DisplayReplacementAppendResult::new(position, render_policy.produced_row_break);
         };
-        outcome.end_position()
+        DisplayReplacementAppendResult::new(
+            outcome.end_position(),
+            render_policy.produced_row_break,
+        )
+    }
+}
+
+/// Result of appending a display-property replacement onto a text row: the
+/// position after the appended content plus whether the replacement's content
+/// (a `display` string) contained a newline that must terminate the row.
+#[derive(Clone, Copy)]
+pub(crate) struct DisplayReplacementAppendResult {
+    position: DisplayRowPosition,
+    produced_row_break: bool,
+}
+
+impl DisplayReplacementAppendResult {
+    fn new(position: DisplayRowPosition, produced_row_break: bool) -> Self {
+        Self {
+            position,
+            produced_row_break,
+        }
+    }
+
+    fn without_row_break(position: DisplayRowPosition) -> Self {
+        Self::new(position, false)
+    }
+
+    fn position(self) -> DisplayRowPosition {
+        self.position
+    }
+
+    fn produced_row_break(self) -> bool {
+        self.produced_row_break
     }
 }
 
@@ -265,13 +311,13 @@ impl DisplayReplacementStringAppendRequest {
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
-    ) -> DisplayRowPosition {
+    ) -> DisplayReplacementAppendResult {
         if self.item.is_empty() {
-            return position;
+            return DisplayReplacementAppendResult::without_row_break(position);
         }
         let Some(ref replacement_base_face) = self.replacement_base_face else {
             debug_assert!(false, "display string replacement missing base face");
-            return position;
+            return DisplayReplacementAppendResult::without_row_break(position);
         };
         let source_request = self.source_append_request(
             replacement_append_context.replacement_source,
@@ -634,14 +680,19 @@ impl DisplayPropertyReplacementAppendRequest {
         let start_position = self.start_position();
         let cursor_policy = self.cursor_policy();
         let plan = self.into_plan(buffer, state, active_face_state, face_ids);
-        let end_position = plan.append_to_text_row(
+        let append_result = plan.append_to_text_row(
             state,
             face_ids,
             append_surface,
             row_geometry,
             active_face_state,
         );
-        DisplayPropertyReplacementAppendOutcome::new(start_position, end_position, cursor_policy)
+        DisplayPropertyReplacementAppendOutcome::new(
+            start_position,
+            append_result.position(),
+            cursor_policy,
+            append_result.produced_row_break(),
+        )
     }
 }
 
@@ -754,6 +805,7 @@ pub(crate) struct DisplayPropertyReplacementAppendOutcome {
     start_position: DisplayRowPosition,
     end_position: DisplayRowPosition,
     cursor_policy: DisplayPropertyReplacementCursorPolicy,
+    produced_row_break: bool,
 }
 
 impl DisplayPropertyReplacementAppendOutcome {
@@ -761,11 +813,13 @@ impl DisplayPropertyReplacementAppendOutcome {
         start_position: DisplayRowPosition,
         end_position: DisplayRowPosition,
         cursor_policy: DisplayPropertyReplacementCursorPolicy,
+        produced_row_break: bool,
     ) -> Self {
         Self {
             start_position,
             end_position,
             cursor_policy,
+            produced_row_break,
         }
     }
 
@@ -775,6 +829,13 @@ impl DisplayPropertyReplacementAppendOutcome {
 
     pub(crate) fn end_position(self) -> DisplayRowPosition {
         self.end_position
+    }
+
+    /// Whether the replacement's `display` string contained a newline that must
+    /// terminate the current row (GNU treats display-string '\n' as a row
+    /// break; see xdisp.c `display_line`).
+    pub(crate) fn produced_row_break(self) -> bool {
+        self.produced_row_break
     }
 
     pub(crate) fn cursor_info(
@@ -819,7 +880,7 @@ impl DisplayPropertyReplacementAppendPlan {
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
-    ) -> DisplayRowPosition {
+    ) -> DisplayReplacementAppendResult {
         let position = self.start_position;
         let replacement_append_context = DisplayReplacementRowAppendContext::new(
             self.replacement_source,
@@ -909,9 +970,9 @@ impl DisplayPropertyReplacementAppendPlanItem {
         face_ids: &mut FrameFaceIdAllocator,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
-    ) -> DisplayRowPosition {
+    ) -> DisplayReplacementAppendResult {
         match self {
-            Self::Empty => position,
+            Self::Empty => DisplayReplacementAppendResult::without_row_break(position),
             Self::String(request) => request.append_to_text_row(
                 replacement_append_context,
                 state,
@@ -919,13 +980,15 @@ impl DisplayPropertyReplacementAppendPlanItem {
                 position,
                 pointer_appearance,
             ),
-            Self::Item(item) => item.append_to_text_row(
-                replacement_append_context,
-                row_geometry,
-                state,
-                face_ids,
-                position,
-                pointer_appearance,
+            Self::Item(item) => DisplayReplacementAppendResult::without_row_break(
+                item.append_to_text_row(
+                    replacement_append_context,
+                    row_geometry,
+                    state,
+                    face_ids,
+                    position,
+                    pointer_appearance,
+                ),
             ),
         }
     }
@@ -1197,5 +1260,6 @@ impl<'a> DisplayReplacementAppendContext<'a> {
             BufferDisplayReplacementStringRequest::new(source_id.raw(), value, replacement_source),
         )
         .render_to_text_row_and_emit(state, face_ids, self, item_policy)
+        .position()
     }
 }

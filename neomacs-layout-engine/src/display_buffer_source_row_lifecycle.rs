@@ -1652,6 +1652,121 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             .apply_to_progress(&mut progress);
         DisplayRowTransitionContinuation::Continue
     }
+
+    /// Terminate the current display row because a `display` string ended a
+    /// display line with a newline. Unlike `render_and_apply`, this consumes NO
+    /// buffer character: the buffer position (already advanced past the covered
+    /// region by the replacement) is unchanged, so the following buffer text —
+    /// including a bare trailing newline that must still produce its own blank
+    /// row — starts on the freshly opened row. Mirrors GNU xdisp.c, where a
+    /// display line "ends in a newline from a display string" and the buffer
+    /// text after the display property resumes on the next glyph row.
+    pub(crate) fn render_display_string_break_and_apply<B: LayoutBufferView>(
+        self,
+        source_walk: &mut BufferSourceWalk<'_, B>,
+        buffer: &B,
+        state: BufferSourceLoopMutableState<'_, '_, '_>,
+    ) -> DisplayRowTransitionContinuation {
+        let BufferSourceLoopMutableState {
+            mut progress,
+            row_geometry,
+            trailing_whitespace,
+            row_extend,
+            box_face,
+            source_render,
+            prefix_request,
+            line_numbers,
+            hscroll_skip,
+            word_wrap,
+            row_flags,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            ..
+        } = state;
+        let mut source_render = source_render;
+        let context = self.context;
+
+        let line_break_action = BufferSourceLineBreakSourceAction::for_display_string_newline(
+            progress.charpos(),
+            progress.source_position().byte_idx(),
+            context.extra_line_spacing,
+        );
+
+        {
+            let metrics = context.active_face_state.metrics();
+            source_render.extend_face_to_end_of_line(
+                row_extend,
+                row_geometry,
+                progress.row_progress().x(),
+                context.append_surface.full_text_right_edge(),
+                context.frame_background,
+                false,
+                metrics.row_height(),
+                metrics.ascent(),
+                metrics.char_width(),
+            );
+        }
+        line_break_action.apply_before_row_transition(
+            row_geometry,
+            trailing_whitespace,
+            row_extend,
+            box_face,
+            source_render.output_emitter(),
+            context.content_x,
+            &mut progress,
+        );
+
+        let line_break_transition = DisplayRowLineBreakTransitionPlan::line_break();
+        let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+            context.row_geometry_defaults,
+            context.display_text_row_base,
+            row_y_positions,
+            context.max_rows,
+            row_geometry,
+            row_flags,
+            context.row_limit,
+            hit_rows,
+            &mut source_render,
+        )
+        .emit_line_break_then_row_start(
+            line_break_transition,
+            hit_row_range.range_to(progress.charpos()),
+            progress.row_position(),
+            line_break_action.line_spacing(),
+            DisplayRowTransitionRenderState::new(
+                prefix_request,
+                context.has_prefix,
+                line_numbers,
+                hscroll_skip,
+                word_wrap,
+                trailing_whitespace,
+            ),
+            progress.row_progress_mut().col_mut(),
+        );
+
+        let synced_charpos = buffer
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(
+                context.text_start_byte + progress.source_position().byte_idx(),
+            ))
+            .get() as i64;
+        let mut synced_source_position = progress.source_position();
+        let continuation = line_break_action.apply_after_line_break_row_transition(
+            row_transition,
+            synced_charpos,
+            &mut synced_source_position,
+            hit_row_range,
+            row_geometry,
+            row_extend,
+            context.active_face_state,
+            box_face,
+            context.content_x,
+        );
+        source_walk
+            .source_position_update(synced_source_position)
+            .apply_to_progress(&mut progress);
+        continuation
+    }
 }
 
 impl BufferSourceLineBreakSourceAction {
@@ -1691,6 +1806,24 @@ impl BufferSourceLineBreakSourceAction {
             char_h,
             extra_line_spacing,
         )
+    }
+
+    /// A row break produced by a newline embedded in a `display` string, which
+    /// consumes NO buffer character: unlike a buffer newline, `next_charpos`
+    /// stays at `charpos` so the following buffer text keeps its position (GNU
+    /// xdisp.c `display_line` ends the row on a display-string '\n' without
+    /// advancing over a buffer char).
+    pub(crate) fn for_display_string_newline(
+        charpos: i64,
+        ch_start_byte_idx: usize,
+        line_spacing: f32,
+    ) -> Self {
+        Self {
+            ch_start_byte_idx,
+            charpos,
+            next_charpos: charpos,
+            line_spacing,
+        }
     }
 
     pub(crate) fn point_matches(self, point_charpos: i64) -> bool {
