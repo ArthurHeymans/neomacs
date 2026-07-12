@@ -51,14 +51,16 @@ filter = 'package(neovm-oracle-tests) and (test(ucs_normalize) or test(oracle_pr
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 1 }
 
-# `process-attributes` on a short-lived child (`sh -c "sleep 0.2"`) is timing
-# sensitive: `process-running-child-p' is only t while the child is alive, so a
-# fully parallel run can delay the check past the child's 0.2s lifetime and flip
-# it to nil. Run it isolated (adequate scheduling latency), like the heavy
-# families, rather than lengthening the child (a long-lived child holds the
-# process pipe open and blocks the eval).
+# A couple of subprocess probes are timing sensitive rather than divergent:
+# `process_attributes_running_child` reads `process-running-child-p' while a
+# 0.2s child is alive, and `quit_process_sentinel_message' waits (a bounded
+# `accept-process-output' budget) for a SIGQUIT sentinel to fire. A fully
+# parallel run can steal enough scheduling latency to miss the window. Run them
+# isolated (adequate latency), like the heavy families, rather than reshaping
+# the probes (a longer-lived child would hold the process pipe open and block
+# the eval).
 [[profile.default.overrides]]
-filter = 'package(neovm-oracle-tests) and test(process_attributes_running_child)'
+filter = 'package(neovm-oracle-tests) and (test(process_attributes_running_child) or test(quit_process_sentinel_message))'
 threads-required = "num-test-threads"
 
 # Oracle tests compare neomacs against GNU Emacs — single-form hangs
