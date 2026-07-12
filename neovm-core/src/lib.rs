@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod emacs_core;
 pub mod encoding;
 pub mod face;
+mod frontend_events;
 pub mod gc_trace;
 pub mod heap_types;
 pub mod keyboard;

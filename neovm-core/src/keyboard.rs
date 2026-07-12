@@ -247,6 +247,13 @@ impl SpecialInputServiceOutcome {
         }
     }
 
+    fn from_internal_effects(effects: crate::frontend_events::InternalEventEffects) -> Self {
+        Self {
+            redisplay_needed: effects.redisplay_needed,
+            activity: SpecialInputServiceActivity::None,
+        }
+    }
+
     pub(crate) fn has_any_activity(self) -> bool {
         self.activity.any()
     }
@@ -1442,7 +1449,7 @@ pub struct KeyboardRuntime {
     /// Input event queue used by unit tests and non-blocking command-loop paths.
     pub event_queue: VecDeque<InputEvent>,
     /// Input already received from the host but not yet returned by `read_char`.
-    pub pending_input_events: VecDeque<InputEvent>,
+    pub(crate) pending_input_events: crate::frontend_events::FrontendEventQueue,
     /// Terminal id for the currently active `kboard`.
     active_terminal_id: u64,
     /// Parked keyboard-local state for terminals that are not currently active.
@@ -1462,7 +1469,7 @@ impl KeyboardRuntime {
     pub fn new() -> Self {
         Self {
             event_queue: VecDeque::new(),
-            pending_input_events: VecDeque::new(),
+            pending_input_events: crate::frontend_events::FrontendEventQueue::default(),
             active_terminal_id: crate::emacs_core::terminal::pure::TERMINAL_ID,
             parked_kboards: HashMap::new(),
             kboard: KBoard::new(),
@@ -2012,7 +2019,7 @@ fn sync_pending_resize_events_in_keyboard_runtime(
     loop {
         match pending_input_events.front() {
             Some(InputEvent::Focus { .. }) => {
-                if let Some(event) = pending_input_events.pop_front() {
+                if let Some(event) = pending_input_events.pop_visible_front() {
                     deferred.push_back(event);
                 }
             }
@@ -2025,7 +2032,7 @@ fn sync_pending_resize_events_in_keyboard_runtime(
                     break;
                 }
                 let (width, height, emacs_frame_id) = (*width, *height, *emacs_frame_id);
-                pending_input_events.pop_front();
+                pending_input_events.pop_visible_front();
                 apply_resize_input_event_in_keyboard_runtime(
                     frames,
                     buffers,
@@ -2098,26 +2105,6 @@ fn sync_pending_resize_events_in_keyboard_runtime(
     }
 
     applied_resize
-}
-
-fn input_event_triggers_throw_on_input(event: &InputEvent) -> bool {
-    !matches!(
-        event,
-        InputEvent::Resize { .. }
-            | InputEvent::Focus { .. }
-            | InputEvent::MonitorsChanged { .. }
-            | InputEvent::MouseMove { .. }
-    )
-}
-
-fn input_event_is_wait_request_special(event: &InputEvent) -> bool {
-    matches!(
-        event,
-        InputEvent::Resize { .. }
-            | InputEvent::MonitorsChanged { .. }
-            | InputEvent::MouseMove { .. }
-            | InputEvent::WindowClose { .. }
-    )
 }
 
 fn sync_opening_gui_frame_size_from_host_in_keyboard_runtime(
@@ -2231,6 +2218,35 @@ enum QueuedReadCharEvent {
 }
 
 impl crate::emacs_core::eval::Context {
+    pub(crate) fn service_leading_internal_frontend_events(
+        &mut self,
+    ) -> crate::frontend_events::InternalEventEffects {
+        let mut effects = crate::frontend_events::InternalEventEffects::default();
+        while let Some(event) = self
+            .command_loop
+            .keyboard
+            .pending_input_events
+            .take_leading_internal()
+        {
+            let event_effects = match event {
+                crate::frontend_events::InternalFrontendEvent::PresentationRetired {
+                    presentation,
+                } => {
+                    self.retire_interaction_presentation(presentation);
+                    crate::frontend_events::InternalEventEffects::default()
+                }
+                crate::frontend_events::InternalFrontendEvent::LayoutInvalidated => {
+                    self.invalidate_redisplay();
+                    crate::frontend_events::InternalEventEffects {
+                        redisplay_needed: true,
+                    }
+                }
+            };
+            effects = effects.merge(event_effects);
+        }
+        effects
+    }
+
     pub fn begin_interaction_presentation(&mut self) -> u64 {
         self.command_loop.presented_interactions.begin()
     }
@@ -2960,25 +2976,25 @@ impl crate::emacs_core::eval::Context {
     }
 
     /// Whether `event` should be drained here by the wait-request special-input
-    /// service. Mirrors [`input_event_is_wait_request_special`], except a
+    /// service. Uses the frontend-event policy, except a
     /// `MouseMove` counts as special only when track-mouse is OFF.
     ///
     /// GNU keeps a pending mouse motion as readable command input while
     /// track-mouse is on (keyboard.c `some_mouse_moved` / `readable_events`):
-    /// the motion must stay queued so `input_event_counts_as_pending` (and the
+    /// the motion must stay queued so the pending-input query (and the
     /// `read_char` path) can see it, rather than being silently consumed as a
     /// bare cursor-position update here. With track-mouse off it is a pure
     /// position update and is consumed as before.
     fn input_event_is_wait_request_special_now(&self, event: &InputEvent) -> bool {
-        if matches!(event, InputEvent::MouseMove { .. }) {
-            return !self.track_mouse_enabled();
-        }
-        input_event_is_wait_request_special(event)
+        crate::frontend_events::is_wait_special(event, self.track_mouse_enabled())
     }
 
     fn take_next_wait_request_special_input_event(
         &mut self,
+        internal_effects: &mut crate::frontend_events::InternalEventEffects,
     ) -> Result<Option<InputEvent>, crate::emacs_core::error::Flow> {
+        *internal_effects =
+            (*internal_effects).merge(self.service_leading_internal_frontend_events());
         if let Some(event) = self
             .command_loop
             .keyboard
@@ -2987,7 +3003,10 @@ impl crate::emacs_core::eval::Context {
             .cloned()
         {
             if self.input_event_is_wait_request_special_now(&event) {
-                self.command_loop.keyboard.pending_input_events.pop_front();
+                self.command_loop
+                    .keyboard
+                    .pending_input_events
+                    .pop_visible_front();
                 self.timer_stop_idle();
                 return Ok(Some(event));
             }
@@ -2995,6 +3014,8 @@ impl crate::emacs_core::eval::Context {
         }
 
         if self.stage_next_host_input_event_if_available()? {
+            *internal_effects =
+                (*internal_effects).merge(self.service_leading_internal_frontend_events());
             if let Some(event) = self
                 .command_loop
                 .keyboard
@@ -3003,7 +3024,10 @@ impl crate::emacs_core::eval::Context {
                 .cloned()
                 && self.input_event_is_wait_request_special_now(&event)
             {
-                self.command_loop.keyboard.pending_input_events.pop_front();
+                self.command_loop
+                    .keyboard
+                    .pending_input_events
+                    .pop_visible_front();
                 self.timer_stop_idle();
                 return Ok(Some(event));
             }
@@ -3107,25 +3131,17 @@ impl crate::emacs_core::eval::Context {
     pub(crate) fn stage_pending_command_input_for_wait_request(
         &mut self,
     ) -> Result<bool, crate::emacs_core::error::Flow> {
+        self.service_leading_internal_frontend_events();
         if self.command_loop.keyboard.has_pending_kboard_input()
-            || self
-                .command_loop
-                .keyboard
-                .pending_input_events
-                .iter()
-                .any(|event| self.input_event_counts_as_pending(event, true))
+            || self.has_pending_frontend_input(true)
         {
             return Ok(true);
         }
 
         while self.stage_next_host_input_event_if_available()? {
+            self.service_leading_internal_frontend_events();
             if self.command_loop.keyboard.has_pending_kboard_input()
-                || self
-                    .command_loop
-                    .keyboard
-                    .pending_input_events
-                    .iter()
-                    .any(|event| self.input_event_counts_as_pending(event, true))
+                || self.has_pending_frontend_input(true)
             {
                 return Ok(true);
             }
@@ -3135,25 +3151,23 @@ impl crate::emacs_core::eval::Context {
             return Ok(true);
         }
 
-        Ok(self
-            .command_loop
-            .keyboard
-            .pending_input_events
-            .iter()
-            .any(|event| self.input_event_counts_as_pending(event, true)))
+        Ok(self.has_pending_frontend_input(true))
     }
 
     pub(crate) fn service_wait_request_special_input_events(
         &mut self,
     ) -> Result<SpecialInputServiceOutcome, crate::emacs_core::error::Flow> {
         let mut outcome = SpecialInputServiceOutcome::default();
+        let mut internal_effects = crate::frontend_events::InternalEventEffects::default();
 
         if self.sync_pending_resize_events() {
             outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
         }
 
-        while let Some(event) = self.take_next_wait_request_special_input_event()? {
-            if input_event_triggers_throw_on_input(&event)
+        while let Some(event) =
+            self.take_next_wait_request_special_input_event(&mut internal_effects)?
+        {
+            if crate::frontend_events::interrupts(&event)
                 && self.interrupt_for_input_event_if_requested(event.clone())?
             {
                 continue;
@@ -3199,6 +3213,10 @@ impl crate::emacs_core::eval::Context {
                 _ => {}
             }
         }
+
+        outcome = outcome.merge(SpecialInputServiceOutcome::from_internal_effects(
+            internal_effects,
+        ));
 
         Ok(outcome)
     }
@@ -3693,23 +3711,32 @@ impl crate::emacs_core::eval::Context {
     /// This is THE blocking point in the command loop.
     /// Before blocking, triggers redisplay.
     fn drain_ready_input_event_for_read_char(&mut self) -> Option<InputEvent> {
-        if let Some(event) = self.command_loop.keyboard.pending_input_events.pop_front() {
-            self.timer_stop_idle();
-            return Some(event);
-        }
-
-        let Some(ref rx) = self.input_rx else {
-            return None;
-        };
-        match rx.try_recv() {
-            Ok(event) => {
+        loop {
+            self.service_leading_internal_frontend_events();
+            if let Some(event) = self
+                .command_loop
+                .keyboard
+                .pending_input_events
+                .pop_visible_front()
+            {
                 self.timer_stop_idle();
-                Some(event)
+                return Some(event);
             }
-            Err(crossbeam_channel::TryRecvError::Empty) => None,
-            Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                self.handle_display_terminal_disconnect();
-                None
+
+            let Some(ref rx) = self.input_rx else {
+                return None;
+            };
+            match rx.try_recv() {
+                Ok(event) => self
+                    .command_loop
+                    .keyboard
+                    .pending_input_events
+                    .push_back(event),
+                Err(crossbeam_channel::TryRecvError::Empty) => return None,
+                Err(crossbeam_channel::TryRecvError::Disconnected) => {
+                    self.handle_display_terminal_disconnect();
+                    return None;
+                }
             }
         }
     }
@@ -3804,7 +3831,7 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         event: InputEvent,
     ) -> Result<Option<Value>, crate::emacs_core::error::Flow> {
-        if input_event_triggers_throw_on_input(&event)
+        if crate::frontend_events::interrupts(&event)
             && self.interrupt_for_input_event_if_requested(event.clone())?
         {
             return Ok(None);
@@ -3975,11 +4002,7 @@ impl crate::emacs_core::eval::Context {
                 Ok(None)
             }
             InputEvent::LayoutInvalidated => {
-                // This is an internal redisplay wakeup, not a Lisp keyboard event.
-                // Invalidate the signature explicitly: asset metrics live outside the
-                // evaluator state summarized by RedisplaySignature.
-                self.invalidate_redisplay();
-                Ok(None)
+                unreachable!("internal frontend events are serviced before read_char")
             }
             InputEvent::MenuSelection { index } => {
                 let event = Value::list(vec![
@@ -4054,9 +4077,8 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
-            InputEvent::PresentationRetired { presentation } => {
-                self.retire_interaction_presentation(presentation);
-                Ok(None)
+            InputEvent::PresentationRetired { .. } => {
+                unreachable!("internal frontend events are serviced before read_char")
             }
             InputEvent::MenuBarClick {
                 index,
@@ -5302,6 +5324,11 @@ impl crate::emacs_core::eval::Context {
                 tracing::warn!("internal-timer-start-idle failed: {:?}", err);
             }
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn idle_timer_running(&self) -> bool {
+        self.command_loop.idle_start_time.is_some()
     }
 
     pub(crate) fn timer_stop_idle(&mut self) {

@@ -84,6 +84,106 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
     }
 }
 
+fn presented_pointer_fixture() -> (crate::emacs_core::Context, crate::window::FrameId, u64, u32) {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("presented-pointer");
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("presented-pointer", 200, 100, buffer);
+    let presentation = eval.begin_interaction_presentation();
+    let interaction = eval.register_presented_mouse_target(
+        presentation,
+        PresentedMouseTarget {
+            area: PresentedMouseArea::TabBar,
+            posn_string: Value::cons(Value::string("tab"), Value::fixnum(0)),
+        },
+    );
+    (eval, frame, presentation, interaction)
+}
+
+#[test]
+fn pointer_before_retirement_resolves_before_snapshot_is_released() {
+    let (mut eval, frame, presentation, interaction) = presented_pointer_fixture();
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed: true,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
+            emacs_frame_id: frame.0,
+        });
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentationRetired { presentation });
+
+    let pointer = eval
+        .read_char_with_timeout(Some(std::time::Duration::ZERO))
+        .expect("read should succeed")
+        .expect("pointer preceding retirement must remain readable");
+    assert_eq!(
+        crate::emacs_core::value::list_to_vec(&pointer)
+            .expect("mouse event")
+            .first()
+            .and_then(|value| value.as_symbol_name()),
+        Some("down-mouse-1")
+    );
+    assert!(
+        eval.resolve_presented_mouse_target(presentation, interaction)
+            .is_some(),
+        "the later retirement must not overtake the pointer"
+    );
+
+    assert_eq!(
+        crate::emacs_core::reader::builtin_input_pending_p(&mut eval, vec![])
+            .expect("retirement service"),
+        Value::NIL
+    );
+    assert_eq!(
+        eval.resolve_presented_mouse_target(presentation, interaction),
+        None
+    );
+}
+
+#[test]
+fn retirement_before_pointer_rejects_stale_hit_without_reordering_key() {
+    let (mut eval, frame, presentation, interaction) = presented_pointer_fixture();
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentationRetired { presentation });
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed: true,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
+            emacs_frame_id: frame.0,
+        });
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::key_press(KeyEvent::char('k')));
+
+    let event = eval
+        .read_char_with_timeout(Some(std::time::Duration::ZERO))
+        .expect("read should succeed");
+
+    assert_eq!(event, Some(Value::fixnum('k' as i64)));
+    assert_eq!(
+        eval.resolve_presented_mouse_target(presentation, interaction),
+        None
+    );
+}
+
 #[test]
 fn layout_invalidation_forces_redisplay_when_evaluator_signature_is_unchanged() {
     let redisplays = std::rc::Rc::new(std::cell::Cell::new(0));
@@ -95,11 +195,12 @@ fn layout_invalidation_forces_redisplay_when_evaluator_signature_is_unchanged() 
     eval.redisplay();
     assert_eq!(redisplays.get(), 1, "unchanged redisplay should be skipped");
 
-    assert_eq!(
-        eval.handle_read_char_input_event(InputEvent::LayoutInvalidated)
-            .expect("layout invalidation"),
-        None
-    );
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::LayoutInvalidated);
+    let effects = eval.service_leading_internal_frontend_events();
+    assert!(effects.redisplay_needed);
     eval.redisplay();
     assert_eq!(redisplays.get(), 2);
 }

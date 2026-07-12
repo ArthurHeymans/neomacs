@@ -7056,11 +7056,12 @@ impl Context {
     /// used by the command-loop auto-save gate. Returns true when
     /// there is already-queued input that should run before an
     /// expensive auto-save.
-    fn input_pending_for_auto_save(&self) -> bool {
+    fn input_pending_for_auto_save(&mut self) -> bool {
+        self.service_leading_internal_frontend_events();
         if self.peek_unread_command_event().is_some() {
             return true;
         }
-        !self.command_loop.keyboard.pending_input_events.is_empty()
+        self.has_pending_frontend_input(true)
     }
 
     /// Apply `command-remapping` for the command-loop dispatch
@@ -8349,23 +8350,7 @@ impl Context {
             .is_truthy()
     }
 
-    pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
-        self.processes.open_channel_for_module(process)
-    }
-
-    fn should_ignore_while_no_input_event(&self, event: &crate::keyboard::InputEvent) -> bool {
-        let ignore_symbol = match event {
-            crate::keyboard::InputEvent::Focus { focused, .. } => {
-                Some(if *focused { "focus-in" } else { "focus-out" })
-            }
-            crate::keyboard::InputEvent::MonitorsChanged { .. } => Some("monitors-changed"),
-            crate::keyboard::InputEvent::SelectWindow { .. } => Some("select-window"),
-            _ => None,
-        };
-        let Some(ignore_symbol) = ignore_symbol else {
-            return false;
-        };
-
+    fn should_ignore_while_no_input_symbol(&self, ignore_symbol: &str) -> bool {
         let ignore_list = self
             .obarray
             .symbol_value("while-no-input-ignore-events")
@@ -8377,18 +8362,17 @@ impl Context {
             .any(|value| value.is_symbol_named(ignore_symbol))
     }
 
-    pub(crate) fn input_event_counts_as_pending(
-        &self,
-        event: &crate::keyboard::InputEvent,
-        filter_events: bool,
-    ) -> bool {
-        match event {
-            crate::keyboard::InputEvent::Resize { .. } => false,
-            crate::keyboard::InputEvent::Focus { .. } if !filter_events => false,
-            crate::keyboard::InputEvent::MouseMove { .. } => self.track_mouse_enabled(),
-            _ if filter_events && self.should_ignore_while_no_input_event(event) => false,
-            _ => true,
-        }
+    pub(crate) fn has_pending_frontend_input(&self, filter_events: bool) -> bool {
+        self.command_loop
+            .keyboard
+            .pending_input_events
+            .has_pending_input(filter_events, self.track_mouse_enabled(), |symbol| {
+                self.should_ignore_while_no_input_symbol(symbol)
+            })
+    }
+
+    pub(crate) fn open_channel_for_module(&self, process: Value) -> Result<std::ffi::c_int, Flow> {
+        self.processes.open_channel_for_module(process)
     }
 
     #[inline(always)]
@@ -8420,13 +8404,9 @@ impl Context {
 
         while self.stage_next_host_input_event_if_available()? {}
 
-        if self
-            .command_loop
-            .keyboard
-            .pending_input_events
-            .iter()
-            .any(|event| self.input_event_counts_as_pending(event, true))
-        {
+        self.service_leading_internal_frontend_events();
+
+        if self.has_pending_frontend_input(true) {
             tracing::debug!(
                 target: "neomacs::throw_on_input",
                 ?throw_on_input,

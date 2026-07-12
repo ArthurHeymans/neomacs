@@ -2256,6 +2256,177 @@ fn eval_list_form_throws_on_pending_host_input() {
 }
 
 #[test]
+fn presentation_retirement_does_not_interrupt_while_no_input() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::PresentationRetired { presentation: 7 })
+        .expect("queue presentation retirement");
+    ev.input_rx = Some(rx);
+    ev.obarray
+        .set_symbol_value("throw-on-input", Value::symbol("tag"));
+
+    let result = ev
+        .eval_str("(list 1 2)")
+        .expect("renderer lifecycle acknowledgement must not interrupt evaluation");
+
+    assert_eq!(format!("{result}"), "(1 2)");
+}
+
+#[test]
+fn input_pending_services_presentation_retirement_without_redisplay() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let presentation = ev.begin_interaction_presentation();
+    let interaction = ev.register_presented_mouse_target(
+        presentation,
+        crate::keyboard::PresentedMouseTarget {
+            area: crate::keyboard::PresentedMouseArea::TabBar,
+            posn_string: Value::cons(Value::string("tab"), Value::fixnum(0)),
+        },
+    );
+    ev.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(crate::keyboard::InputEvent::PresentationRetired { presentation });
+    let redisplays = Rc::new(RefCell::new(0));
+    let redisplays_in_callback = Rc::clone(&redisplays);
+    ev.redisplay_fn = Some(Box::new(move |_| {
+        *redisplays_in_callback.borrow_mut() += 1;
+    }));
+
+    let pending = crate::emacs_core::reader::builtin_input_pending_p(&mut ev, vec![])
+        .expect("input-pending-p should service internal events");
+
+    assert_eq!(pending, Value::NIL);
+    assert_eq!(
+        ev.resolve_presented_mouse_target(presentation, interaction),
+        None
+    );
+    assert_eq!(*redisplays.borrow(), 0);
+    assert!(ev.command_loop.keyboard.pending_input_events.is_empty());
+}
+
+#[test]
+fn presentation_retirement_does_not_preempt_work_or_reset_idle_epoch() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.timer_start_idle();
+    assert!(ev.idle_timer_running());
+    ev.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(crate::keyboard::InputEvent::PresentationRetired { presentation: 99 });
+
+    let command_pending = ev
+        .stage_pending_command_input_for_wait_request()
+        .expect("internal event service should succeed");
+
+    assert!(!command_pending);
+    assert!(ev.idle_timer_running());
+    assert!(ev.command_loop.keyboard.pending_input_events.is_empty());
+}
+
+#[test]
+fn presentation_retirement_does_not_preempt_timer_batches() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let when = SystemTime::now()
+        .checked_sub(Duration::from_millis(1))
+        .unwrap_or(UNIX_EPOCH)
+        .duration_since(UNIX_EPOCH)
+        .expect("timer deadline");
+    let timer = Value::vector(vec![
+        Value::NIL,
+        Value::fixnum((when.as_secs() as i64) >> 16),
+        Value::fixnum((when.as_secs() as i64) & 0xFFFF),
+        Value::fixnum(when.subsec_micros() as i64),
+        Value::NIL,
+        Value::symbol("neo-retirement-timer-callback"),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+    ]);
+    ev.set_variable("neo-retirement-timer", timer);
+    ev.eval_str(
+        r#"(progn
+             (setq neo-retirement-timer-count 0)
+             (fset 'neo-retirement-timer-callback
+                   (lambda ()
+                     (setq neo-retirement-timer-count
+                           (1+ neo-retirement-timer-count))
+                     (if (< neo-retirement-timer-count 3)
+                         (progn
+                           (aset neo-retirement-timer 0 nil)
+                           (setq timer-list (list neo-retirement-timer))))))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install timer-batch probe");
+    ev.set_variable("timer-list", Value::list(vec![timer]));
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::PresentationRetired { presentation: 77 })
+        .expect("queue renderer acknowledgement");
+    ev.input_rx = Some(rx);
+
+    let outcome = ev
+        .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_millis(50)))
+        .expect("wait should reach its deadline");
+
+    assert_eq!(
+        outcome,
+        crate::emacs_core::wait::CommandInputWaitOutcome::DeadlineElapsed
+    );
+    assert_eq!(
+        ev.eval_symbol("neo-retirement-timer-count")
+            .expect("timer count"),
+        Value::fixnum(3),
+        "the internal acknowledgement must not end the wait between timer batches"
+    );
+}
+
+#[test]
+fn retirement_wakeup_returns_to_same_blocking_read_without_redisplay_loop() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+
+    let redisplays = Rc::new(RefCell::new(0));
+    let redisplays_in_callback = Rc::clone(&redisplays);
+    let retirement_tx = tx.clone();
+    ev.redisplay_fn = Some(Box::new(move |_| {
+        *redisplays_in_callback.borrow_mut() += 1;
+        retirement_tx
+            .send(crate::keyboard::InputEvent::PresentationRetired { presentation: 42 })
+            .expect("queue renderer acknowledgement");
+    }));
+
+    let key_sender = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('x'),
+        ))
+        .expect("queue delayed key");
+    });
+
+    let event = ev
+        .read_char_with_timeout(Some(std::time::Duration::from_secs(1)))
+        .expect("read should succeed");
+    key_sender.join().expect("key sender should finish");
+
+    assert_eq!(event, Some(Value::fixnum('x' as i64)));
+    assert_eq!(
+        *redisplays.borrow(),
+        1,
+        "a lifecycle acknowledgement must resume the existing wait, not restart redisplay"
+    );
+}
+
+#[test]
 fn frame_native_width_syncs_pending_resize_without_read_char() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

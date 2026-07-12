@@ -2143,11 +2143,7 @@ fn input_pending_now(ctx: &crate::emacs_core::eval::Context, filter_events: bool
         return true;
     }
 
-    ctx.command_loop
-        .keyboard
-        .pending_input_events
-        .iter()
-        .any(|event| ctx.input_event_counts_as_pending(event, filter_events))
+    ctx.has_pending_frontend_input(filter_events)
 }
 
 pub(crate) fn builtin_input_pending_p(
