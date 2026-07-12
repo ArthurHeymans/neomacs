@@ -509,8 +509,13 @@ impl DisplayOutputBuilder {
         self.frame_state.install_frame_state(request);
     }
 
-    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        self.window_state.latest_window_enabled_rows()
+    pub(crate) fn window_content_height_px(
+        &self,
+        window_id: i64,
+        fallback_row_height: f32,
+    ) -> Option<f32> {
+        self.window_state
+            .window_content_height_px(window_id, fallback_row_height)
     }
 
     #[cfg(test)]

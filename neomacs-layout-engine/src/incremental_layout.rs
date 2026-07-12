@@ -14,7 +14,7 @@
 
 use crate::types::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::CursorStyle;
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
@@ -275,6 +275,10 @@ pub struct RetainedWindowMatrix {
     /// replays its body half verbatim, re-decorating only the cursor; the
     /// position fields are unchanged because the visible region did not move.
     pub display_snapshot: neovm_core::window::WindowDisplaySnapshot,
+    /// Exact renderer-facing cursor produced by the accepted full display walk.
+    /// Kept separately from the integer window snapshot so unchanged cursor-only
+    /// replay preserves subpixel geometry and explicit display-string placement.
+    pub presented_cursor: Option<PhysCursor>,
     /// Resolved `Face` for every `face_id` this window's retained rows reference.
     /// Face ids are allocated per-frame from a counter reset to SENTINEL each
     /// frame, and the frame faces table is rebuilt from scratch; a fast path that
@@ -311,6 +315,10 @@ pub struct CursorOnlyReplay {
     pub new_cursor_row_index: usize,
     /// Cursor style carried over from the retained pass.
     pub cursor_style: CursorStyle,
+    /// The authoritative presented cursor from the retained display, when point
+    /// is unchanged. This preserves explicit display-string `cursor` placement;
+    /// reconstructing from buffer point would lose that semantic override.
+    pub retained_cursor: Option<PhysCursor>,
     /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
     /// into the current frame's faces table before the rows are installed. See
     /// [`RetainedWindowMatrix::faces`].
@@ -456,6 +464,9 @@ impl RetainedWindowMatrix {
             new_point,
             new_cursor_row_index,
             cursor_style: cursor_style.unwrap_or(CursorStyle::FilledBox),
+            retained_cursor: (self.key.point == curr.point)
+                .then(|| self.presented_cursor.clone())
+                .flatten(),
             faces: self.faces.clone(),
         })
     }
@@ -875,6 +886,7 @@ mod scroll_classifier_tests {
                 points: Vec::new(),
                 rows: Vec::new(),
             },
+            presented_cursor: None,
             faces: std::collections::HashMap::new(),
         }
     }

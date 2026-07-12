@@ -15253,6 +15253,154 @@ fn cursor_only_reused_mouse_face_is_registered_in_frame_faces() {
 }
 
 #[test]
+fn fido_vertical_minibuffer_has_no_trailing_blank_display_row() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("fido-vertical-row-count", 624, 648, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+
+    let minibuf_id = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-fido-row-count*");
+    let minibuffer_window_id = eval
+        .activate_minibuffer_window_for_buffer(
+            minibuf_id,
+            LispString::from_utf8("M-x "),
+            Some(LispString::from_utf8("")),
+        )
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+    eval.eval_str(
+        r#"(progn
+             (fido-vertical-mode 1)
+             (setq max-mini-window-height 25)
+             (setq minibuffer-completion-table obarray
+                   minibuffer-completion-predicate #'commandp
+                   minibuffer--require-match t)
+             (icomplete-minibuffer-setup)
+             (icomplete--fido-mode-setup)
+             (icomplete--vertical-minibuffer-setup)
+             (setq icomplete-prospects-height 8)
+             (icomplete-exhibit))"#,
+    )
+    .expect("exhibit fido candidates");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == minibuffer_window_id.0 as i64)
+        .expect("minibuffer matrix entry");
+    let content_bottom = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.height_px > 0.0)
+        .map(|row| row.pixel_y + row.height_px)
+        .fold(0.0_f32, f32::max);
+    let shortest_display_row = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.height_px > 0.0)
+        .map(|row| row.height_px)
+        .fold(f32::INFINITY, f32::min);
+    let unused_height = entry.pixel_bounds.height - content_bottom;
+
+    assert!(
+        unused_height >= 0.0 && unused_height < shortest_display_row,
+        "GNU sizes the fido minibuffer from its content pixel extent, leaving less than one display row below the final candidate; content_bottom={content_bottom}, shortest_display_row={shortest_display_row}, unused_height={unused_height}, allocated_height={}",
+        entry.pixel_bounds.height,
+    );
+}
+
+#[test]
+fn fido_vertical_explicit_overlay_cursor_is_stable_across_unchanged_redisplay() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("fido-vertical-cursor", 624, 648, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+
+    let minibuf_id = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-fido-cursor*");
+    let minibuffer_window_id = eval
+        .activate_minibuffer_window_for_buffer(
+            minibuf_id,
+            LispString::from_utf8("M-x "),
+            Some(LispString::from_utf8("")),
+        )
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+    eval.eval_str(
+        r#"(progn
+             (fido-vertical-mode 1)
+             (setq max-mini-window-height 25
+                   minibuffer-completion-table obarray
+                   minibuffer-completion-predicate #'commandp
+                   minibuffer--require-match t)
+             (icomplete-minibuffer-setup)
+             (icomplete--fido-mode-setup)
+             (icomplete--vertical-minibuffer-setup)
+             (setq icomplete-prospects-height 8)
+             (icomplete-exhibit))"#,
+    )
+    .expect("exhibit fido candidates");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let first_state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("first display state");
+    let first_cursor = first_state
+        .phys_cursor
+        .as_ref()
+        .expect("first cursor")
+        .clone();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let second_cursor = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("second display state")
+        .phys_cursor
+        .as_ref()
+        .expect("second cursor");
+
+    assert_eq!(first_cursor.window_id.get(), minibuffer_window_id.0 as i64);
+    assert_eq!(first_cursor.row, 0);
+    assert!(
+        first_cursor.col > 0,
+        "the full display walk must capture icomplete's explicit overlay cursor, not the empty minibuffer buffer point"
+    );
+    assert_eq!(
+        second_cursor.slot_id, first_cursor.slot_id,
+        "GNU honors icomplete's explicit `cursor` text property on every redisplay; the cursor must not jump back to the minibuffer buffer point"
+    );
+}
+
+#[test]
 fn mx_tab_completion_materializes_unique_pointer_source_identities() {
     // Reproduce the real GUI command path: M-x text followed by TAB runs
     // `minibuffer-complete`, displays *Completions* candidates carrying

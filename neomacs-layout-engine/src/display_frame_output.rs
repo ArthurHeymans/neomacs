@@ -151,8 +151,13 @@ impl FrameOutputOwner {
             .cloned()
     }
 
-    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
-        self.builder.latest_window_enabled_rows()
+    pub(crate) fn window_content_height_px(
+        &self,
+        window_id: i64,
+        fallback_row_height: f32,
+    ) -> Option<f32> {
+        self.builder
+            .window_content_height_px(window_id, fallback_row_height)
     }
 
     pub(crate) fn render_frame_state(&mut self, request: FrameOutputStateRenderRequest<'_>) {

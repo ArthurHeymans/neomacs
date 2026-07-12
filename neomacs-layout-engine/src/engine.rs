@@ -295,8 +295,13 @@ impl LayoutEngine {
         self.frame_output.latest_window_info(window_id)
     }
 
-    fn latest_output_window_enabled_rows(&self) -> Option<usize> {
-        self.frame_output.latest_window_enabled_rows()
+    fn output_window_content_height_px(
+        &self,
+        window_id: i64,
+        fallback_row_height: f32,
+    ) -> Option<f32> {
+        self.frame_output
+            .window_content_height_px(window_id, fallback_row_height)
     }
 
     fn finish_frame_output(
@@ -808,11 +813,15 @@ impl LayoutEngine {
             // Also shrink back when the minibuffer content fits in fewer
             // rows than currently allocated.
             if !mini_resize_attempted
-                && let Some(mini_rows_used) = self.latest_output_window_enabled_rows()
                 && let Some(mini_params) = window_params_list.last()
                 && mini_params.is_minibuffer()
+                && let Some(mini_content_height_px) = self.output_window_content_height_px(
+                    mini_params.window_id,
+                    frame_params.char_height.max(1.0),
+                )
             {
                 let char_h = frame_params.char_height.max(1.0);
+                let mini_rows_used = (mini_content_height_px / char_h).ceil().max(1.0) as usize;
                 let allocated_rows = (mini_params.bounds.height / char_h).floor().max(1.0) as usize;
                 let frame_rows = frame_params.height / char_h;
                 let max_mini_lines =
@@ -840,8 +849,8 @@ impl LayoutEngine {
                 // (exact_p || BEGV == ZV)` (xdisp.c:13395). An empty
                 // mini/echo buffer is exactly one line.
                 //
-                // We measure with the glyph matrix
-                // (`latest_output_window_enabled_rows`) instead, which can
+                // We measure the glyph matrix's content pixel extent instead,
+                // which can
                 // be STALE: after find-file the mini-window is laid out
                 // with zero text height and SKIPPED, so its matrix keeps
                 // the vertico candidate row count and the echo area never
@@ -1098,6 +1107,7 @@ impl LayoutEngine {
                 .last_frame_display_state
                 .as_mut()
                 .expect("frame display state just set");
+            let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
                 std::collections::HashMap::new();
             // Snapshot the resolved Face for every face_id each window's rows
@@ -1248,6 +1258,10 @@ impl LayoutEngine {
                             validity: MatrixValidity::Valid,
                             damage,
                             display_snapshot,
+                            presented_cursor: presented_cursor
+                                .as_ref()
+                                .filter(|cursor| cursor.window_id == window_id)
+                                .cloned(),
                             faces: window_face_snapshots.remove(&window_id).unwrap_or_default(),
                         },
                     );

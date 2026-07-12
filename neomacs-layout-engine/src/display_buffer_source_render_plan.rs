@@ -606,38 +606,44 @@ impl BufferSourceOutputSetup {
             );
             publish_request.publish(evaluator, redisplay_positions);
 
-            // Re-decorate the cursor at the (possibly unchanged) point: resolve its
-            // column on the installed rows, stamp it on the matrix row + the window
-            // snapshot. `replay.cursor_style` carries the retained style — a filled
-            // box for the selected window, a hollow box for a non-selected one — so
-            // this same block produces the correct cursor for BOTH.
+            // Re-decorate the cursor. When point is unchanged, preserve the
+            // authoritative presented placement captured by the full walk; it
+            // may come from a display-string `cursor` property and therefore
+            // intentionally differ from the buffer-point column. When point
+            // moved, resolve a fresh buffer-point placement on the retained row.
             let window_id_i64 = output_window_id as i64;
-            let mut cursor = PhysCursor {
-                window_id: DisplayWindowId::new(window_id_i64),
-                charpos: replay.new_point as usize,
-                row: replay.new_cursor_row_index,
-                col: 0,
-                slot_id: DisplaySlotId {
-                    window_id: DisplayWindowId::new(window_id_i64),
-                    row: replay.new_cursor_row_index as u32,
+            let display_window_id = DisplayWindowId::new(window_id_i64);
+            let cursor = if let Some(retained) = replay.retained_cursor.as_ref() {
+                retained.clone()
+            } else {
+                let mut cursor = PhysCursor {
+                    window_id: display_window_id,
+                    charpos: replay.new_point as usize,
+                    row: replay.new_cursor_row_index,
                     col: 0,
-                },
-                x: walk_setup.text_area_left,
-                y: walk_setup.window_top + cursor_row_pixel_y,
-                width: cursor_width,
-                height: cursor_height,
-                ascent: cursor_ascent,
-                style: replay.cursor_style,
-                color: Color::BLACK,
-                cursor_fg: Color::BLACK,
+                    slot_id: DisplaySlotId {
+                        window_id: display_window_id,
+                        row: replay.new_cursor_row_index as u32,
+                        col: 0,
+                    },
+                    x: walk_setup.text_area_left,
+                    y: walk_setup.window_top + cursor_row_pixel_y,
+                    width: cursor_width,
+                    height: cursor_height,
+                    ascent: cursor_ascent,
+                    style: replay.cursor_style,
+                    color: Color::BLACK,
+                    cursor_fg: Color::BLACK,
+                };
+                if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
+                    .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
+                {
+                    placement.apply_to(&mut cursor);
+                }
+                let char_w = geometry.char_width.max(1.0);
+                cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
+                cursor
             };
-            if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
-                .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
-            {
-                placement.apply_to(&mut cursor);
-            }
-            let char_w = geometry.char_width.max(1.0);
-            cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
             // Publish through the shared selected-gated machinery so a non-selected
             // window in a split never clobbers the selected window's frame
             // phys-cursor (see `publish_fast_path_cursor`).

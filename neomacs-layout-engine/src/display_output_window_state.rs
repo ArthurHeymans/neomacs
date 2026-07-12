@@ -171,10 +171,15 @@ impl OutputWindowBuildState {
         }
     }
 
-    pub(crate) fn latest_window_enabled_rows(&self) -> Option<usize> {
+    pub(crate) fn window_content_height_px(
+        &self,
+        window_id: i64,
+        fallback_row_height: f32,
+    ) -> Option<f32> {
         self.windows
-            .last()
-            .map(OutputWindowGridEntry::enabled_row_count)
+            .iter()
+            .find(|window| window.window_id == window_id as u64)
+            .map(|window| window.grid.content_height_px(fallback_row_height))
     }
 
     #[cfg(test)]
@@ -340,8 +345,20 @@ impl OutputWindowRowGrid {
         self.matrix.ensure_hashes();
     }
 
-    pub(crate) fn enabled_row_count(&self) -> usize {
-        self.matrix.rows.iter().filter(|row| row.enabled).count()
+    pub(crate) fn content_height_px(&self, fallback_row_height: f32) -> f32 {
+        let measured_bottom = self
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| row.enabled && row.height_px > 0.0)
+            .map(|row| row.pixel_y + row.height_px)
+            .fold(0.0_f32, f32::max);
+
+        if measured_bottom > 0.0 {
+            measured_bottom
+        } else {
+            self.matrix.rows.iter().filter(|row| row.enabled).count() as f32 * fallback_row_height
+        }
     }
 
     pub(crate) fn cursor_rows(&self) -> CursorVisualColumnRows<'_> {
@@ -492,10 +509,6 @@ impl OutputWindowGridEntry {
 
     pub(crate) fn edit_rows_with_matrix_cols(&mut self, f: impl FnMut(&mut GlyphRow, usize)) {
         self.grid.edit_rows_with_matrix_cols(f);
-    }
-
-    pub(crate) fn enabled_row_count(&self) -> usize {
-        self.grid.enabled_row_count()
     }
 
     #[cfg(test)]
