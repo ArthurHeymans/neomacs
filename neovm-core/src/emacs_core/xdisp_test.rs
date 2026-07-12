@@ -2238,59 +2238,62 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
-            window_id: selected_window,
-            tab_line_height: 5,
-            header_line_height: 7,
-            mode_line_height: 9,
-            rows: vec![
-                crate::window::DisplayRowSnapshot {
-                    row: 0,
-                    y: 0,
-                    height: 5,
-                    start_x: 0,
-                    start_col: 0,
-                    end_x: 20,
-                    end_col: 2,
-                    start_buffer_pos: None,
-                    end_buffer_pos: None,
-                },
-                crate::window::DisplayRowSnapshot {
-                    row: 1,
-                    y: 5,
-                    height: 7,
-                    start_x: 0,
-                    start_col: 0,
-                    end_x: 20,
-                    end_col: 2,
-                    start_buffer_pos: None,
-                    end_buffer_pos: None,
-                },
-                crate::window::DisplayRowSnapshot {
-                    row: 2,
-                    y: 12,
-                    height: 11,
-                    start_x: 0,
-                    start_col: 0,
-                    end_x: 20,
-                    end_col: 2,
-                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
-                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
-                },
-                crate::window::DisplayRowSnapshot {
-                    row: 3,
-                    y: 23,
-                    height: 9,
-                    start_x: 0,
-                    start_col: 0,
-                    end_x: 20,
-                    end_col: 2,
-                    start_buffer_pos: None,
-                    end_buffer_pos: None,
-                },
-            ],
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
+        frame.publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(1),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id: selected_window,
+                tab_line_height: 5,
+                header_line_height: 7,
+                mode_line_height: 9,
+                rows: vec![
+                    crate::window::DisplayRowSnapshot {
+                        row: 0,
+                        y: 0,
+                        height: 5,
+                        start_x: 0,
+                        start_col: 0,
+                        end_x: 20,
+                        end_col: 2,
+                        start_buffer_pos: None,
+                        end_buffer_pos: None,
+                    },
+                    crate::window::DisplayRowSnapshot {
+                        row: 1,
+                        y: 5,
+                        height: 7,
+                        start_x: 0,
+                        start_col: 0,
+                        end_x: 20,
+                        end_col: 2,
+                        start_buffer_pos: None,
+                        end_buffer_pos: None,
+                    },
+                    crate::window::DisplayRowSnapshot {
+                        row: 2,
+                        y: 12,
+                        height: 11,
+                        start_x: 0,
+                        start_col: 0,
+                        end_x: 20,
+                        end_col: 2,
+                        start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                        end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
+                    },
+                    crate::window::DisplayRowSnapshot {
+                        row: 3,
+                        y: 23,
+                        height: 9,
+                        start_x: 0,
+                        start_col: 0,
+                        end_x: 20,
+                        end_col: 2,
+                        start_buffer_pos: None,
+                        end_buffer_pos: None,
+                    },
+                ],
+                ..crate::window::WindowDisplaySnapshot::default()
+            }],
+        );
     }
 
     let tab = builtin_window_line_height(
@@ -2431,31 +2434,34 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
             }
             other => panic!("expected leaf window, got {:?}", other),
         }
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
-            window_id: selected_window,
-            text_area_left_offset: 8,
-            points: vec![crate::window::DisplayPointSnapshot {
-                buffer_pos: crate::buffer::LispCharPos1::new(5),
-                x: 24,
-                y: 18,
-                width: 21,
-                height: 30,
-                row: 1,
-                col: 3,
+        frame.publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(1),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id: selected_window,
+                text_area_left_offset: 8,
+                points: vec![crate::window::DisplayPointSnapshot {
+                    buffer_pos: crate::buffer::LispCharPos1::new(5),
+                    x: 24,
+                    y: 18,
+                    width: 21,
+                    height: 30,
+                    row: 1,
+                    col: 3,
+                }],
+                rows: vec![crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 18,
+                    height: 30,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 0,
+                    end_col: 0,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                }],
+                ..crate::window::WindowDisplaySnapshot::default()
             }],
-            rows: vec![crate::window::DisplayRowSnapshot {
-                row: 1,
-                y: 18,
-                height: 30,
-                start_x: 0,
-                start_col: 0,
-                end_x: 0,
-                end_col: 0,
-                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
-                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
-            }],
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
+        );
     }
 
     let result = builtin_posn_at_point(

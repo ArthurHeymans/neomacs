@@ -27,16 +27,19 @@ impl PresentationId {
 /// One immutable, presentation-owned publication of all evaluator window geometry.
 #[derive(Clone, Debug)]
 pub struct PresentedGeometry {
+    frame: FrameId,
     presentation: PresentationId,
     windows: HashMap<WindowId, WindowDisplaySnapshot>,
 }
 
 impl PresentedGeometry {
     pub(crate) fn new(
+        frame: FrameId,
         presentation: PresentationId,
         snapshots: impl IntoIterator<Item = WindowDisplaySnapshot>,
     ) -> Self {
         Self {
+            frame,
             presentation,
             windows: snapshots
                 .into_iter()
@@ -53,13 +56,9 @@ impl PresentedGeometry {
         self.windows.get(&window)
     }
 
-    pub(crate) fn without_window(&self, window: WindowId) -> Self {
-        let mut windows = self.windows.clone();
-        windows.remove(&window);
-        Self {
-            presentation: self.presentation,
-            windows,
-        }
+    pub fn window_geometry(&self, window: WindowId) -> Option<SnapshotWindowGeometry<'_>> {
+        SnapshotWindowGeometry::new(self.presentation, self.frame, window, self.window(window)?)
+            .ok()
     }
 }
 
@@ -301,12 +300,7 @@ impl SnapshotPointGeometry {
     }
 }
 
-/// A borrowed, coordinate-safe view over one live window and its last
-/// redisplay snapshot.
-///
-/// It deliberately carries no `PresentationId` yet: the current evaluator
-/// snapshot storage does not publish one.  Adding that identity is the next
-/// migration step; naming this a snapshot view avoids inventing authority.
+/// A borrowed, coordinate-safe view into one immutable presented geometry.
 pub struct SnapshotWindowGeometry<'a> {
     presentation: PresentationId,
     frame: FrameId,
@@ -316,7 +310,7 @@ pub struct SnapshotWindowGeometry<'a> {
 }
 
 impl<'a> SnapshotWindowGeometry<'a> {
-    pub fn new(
+    fn new(
         presentation: PresentationId,
         frame: FrameId,
         window: WindowId,

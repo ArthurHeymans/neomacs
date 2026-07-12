@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
-    use super::geometry::{Column, Line, PresentationId, SnapshotWindowGeometry};
+    use super::geometry::{Column, Line, PresentationId, PresentedGeometry};
 
     let mut window = Window::new_leaf(
         WindowId(11),
@@ -38,9 +38,10 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     window.set_bounds(Rect::new(999.0, 999.0, 1.0, 1.0));
     window.set_left_col(99);
     window.set_top_line(99);
-    let geometry =
-        SnapshotWindowGeometry::new(PresentationId::new(41), FrameId(7), window.id(), &snapshot)
-            .expect("valid presented geometry");
+    let presented = PresentedGeometry::new(FrameId(7), PresentationId::new(41), [snapshot]);
+    let geometry = presented
+        .window_geometry(window.id())
+        .expect("valid presented geometry");
     assert_eq!(geometry.presentation(), PresentationId::new(41));
     assert_eq!(geometry.cell_origin().column(), Column::new(18));
     assert_eq!(geometry.cell_origin().line(), Line::new(2));
@@ -96,12 +97,39 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
         8
     );
 
+    frame.remove_presented_window(window_id);
+    assert_eq!(frame.display_presentation(), None);
+    assert!(frame.window_display_snapshot(window_id).is_none());
+
+    frame.publish_display_snapshots(
+        PresentationId::new(41),
+        vec![WindowDisplaySnapshot {
+            window_id,
+            ..WindowDisplaySnapshot::default()
+        }],
+    );
+
     frame.publish_display_snapshots(PresentationId::new(42), Vec::new());
     assert_eq!(frame.display_presentation(), Some(PresentationId::new(42)));
     assert!(frame.window_display_snapshot(window_id).is_none());
 
     frame.set_display_snapshots(Vec::new());
     assert_eq!(frame.display_presentation(), None);
+}
+
+#[test]
+fn legacy_unowned_snapshots_do_not_create_an_authoritative_geometry_view() {
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("legacy", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+    frame.set_display_snapshots(vec![WindowDisplaySnapshot {
+        window_id,
+        ..WindowDisplaySnapshot::default()
+    }]);
+
+    assert!(frame.window_display_snapshot(window_id).is_some());
+    assert!(frame.presented_window_geometry(window_id).is_none());
 }
 use crate::buffer::LispCharPos1;
 

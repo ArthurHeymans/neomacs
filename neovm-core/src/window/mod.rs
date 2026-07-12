@@ -2526,7 +2526,11 @@ impl Frame {
         let snapshots = snapshots
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
-        self.presented_geometry = Some(geometry::PresentedGeometry::new(presentation, snapshots));
+        self.presented_geometry = Some(geometry::PresentedGeometry::new(
+            self.id,
+            presentation,
+            snapshots,
+        ));
     }
 
     pub const fn display_presentation(&self) -> Option<geometry::PresentationId> {
@@ -2569,6 +2573,7 @@ impl Frame {
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some());
         self.presented_geometry = Some(geometry::PresentedGeometry::new(
+            self.id,
             geometry::PresentationId::new(0),
             snapshots,
         ));
@@ -2584,20 +2589,19 @@ impl Frame {
         id: WindowId,
     ) -> Option<geometry::SnapshotWindowGeometry<'_>> {
         let presented = self.presented_geometry.as_ref()?;
-        geometry::SnapshotWindowGeometry::new(
-            presented.presentation(),
-            self.id,
-            id,
-            presented.window(id)?,
-        )
-        .ok()
+        (presented.presentation().get() != 0)
+            .then(|| presented.window_geometry(id))
+            .flatten()
     }
 
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
-        self.presented_geometry = self
+        if self
             .presented_geometry
             .as_ref()
-            .map(|geometry| geometry.without_window(id));
+            .is_some_and(|geometry| geometry.window(id).is_some())
+        {
+            self.presented_geometry = None;
+        }
     }
 
     /// Resize the frame and window tree to new pixel dimensions.
