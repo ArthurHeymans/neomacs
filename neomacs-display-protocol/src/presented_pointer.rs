@@ -143,6 +143,56 @@ impl PresentedHitQuery {
     pub const fn new(presentation: PresentationId, x: f32, y: f32) -> Self {
         Self { presentation, x, y }
     }
+
+    #[must_use]
+    pub const fn presentation(self) -> PresentationId {
+        self.presentation
+    }
+
+    #[must_use]
+    pub const fn x(self) -> f32 {
+        self.x
+    }
+
+    #[must_use]
+    pub const fn y(self) -> f32 {
+        self.y
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PresentedUnifiedHit {
+    semantic: Option<PresentedHit>,
+    interaction: Option<InteractionId>,
+    appearance: Option<PointerAppearanceId>,
+}
+
+impl PresentedUnifiedHit {
+    pub(crate) const fn new(
+        semantic: Option<PresentedHit>,
+        interaction: Option<InteractionId>,
+        appearance: Option<PointerAppearanceId>,
+    ) -> Self {
+        Self {
+            semantic,
+            interaction,
+            appearance,
+        }
+    }
+    #[must_use]
+    pub const fn semantic(self) -> Option<PresentedHit> {
+        self.semantic
+    }
+
+    #[must_use]
+    pub const fn interaction(self) -> Option<InteractionId> {
+        self.interaction
+    }
+
+    #[must_use]
+    pub const fn appearance(self) -> Option<PointerAppearanceId> {
+        self.appearance
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -175,6 +225,7 @@ pub enum PresentedHitError {
         window: DisplayWindowId,
         output_row: i64,
     },
+    PointerOutsideSemanticRegion,
 }
 
 impl std::fmt::Display for PresentedHitError {
@@ -196,6 +247,9 @@ impl std::fmt::Display for PresentedHitError {
             Self::MissingBodyRow { window, output_row } => write!(
                 formatter,
                 "window {window} has no canonical body row for output row {output_row}"
+            ),
+            Self::PointerOutsideSemanticRegion => formatter.write_str(
+                "pointer interaction/appearance region is outside semantic presentation geometry",
             ),
         }
     }

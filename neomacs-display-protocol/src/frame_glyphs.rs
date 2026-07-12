@@ -993,6 +993,31 @@ pub fn derive_window_transition_hint(
 }
 
 impl FrameGlyphBuffer {
+    /// Resolve semantic ownership and interaction/appearance from one point.
+    /// Interactive paint without semantic ownership is rejected as a producer
+    /// coherence violation instead of allowing independent maps to disagree.
+    pub fn resolve_presented_hit(
+        &self,
+        query: crate::presented_pointer::PresentedHitQuery,
+    ) -> Result<
+        Option<crate::presented_pointer::PresentedUnifiedHit>,
+        crate::presented_pointer::PresentedHitError,
+    > {
+        let semantic = self.presented_hit_index.resolve(query)?;
+        let pointer = self.presented_pointer.hit_test(query.x(), query.y());
+        if pointer.is_some() && semantic.is_none() {
+            return Err(crate::presented_pointer::PresentedHitError::PointerOutsideSemanticRegion);
+        }
+        if semantic.is_none() && pointer.is_none() {
+            return Ok(None);
+        }
+        Ok(Some(crate::presented_pointer::PresentedUnifiedHit::new(
+            semantic,
+            pointer.and_then(|region| region.interaction()),
+            pointer.and_then(|region| region.appearance()),
+        )))
+    }
+
     /// Semantic hit index installed for this exact rendered presentation.
     pub fn presented_hit_index(&self) -> &crate::presented_pointer::PresentedHitIndex {
         &self.presented_hit_index

@@ -671,6 +671,7 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
     );
 
     let child_press = RenderApp::capture_presented_pointer_press(window, child_owner, 115.0, 88.0)
+        .unwrap()
         .expect("topmost child interaction");
     assert!(matches!(
         child_press,
@@ -749,6 +750,7 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
         PresentationId::new(80)
     );
     let root_press = RenderApp::capture_presented_pointer_press(window, root_owner, 15.0, 8.0)
+        .unwrap()
         .expect("root interaction");
     assert!(matches!(
         root_press,
@@ -779,6 +781,7 @@ fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() 
     let appearance = window
         .render
         .presented_pointer_hit(0x42, 84.0, 10.0)
+        .unwrap()
         .unwrap();
     assert_eq!(semantic.region().kind(), PresentedRegionKind::TabBar);
     assert_eq!(appearance.presentation(), PresentationId::new(90));

@@ -864,6 +864,43 @@ fn presented_hit_index_uses_half_open_edges_z_order_and_rejects_stale_queries() 
 }
 
 #[test]
+fn unified_hit_rejects_pointer_region_without_semantic_owner() {
+    let presentation = crate::PresentationId::new(12);
+    let mut frame = crate::FrameGlyphBuffer::with_size(100.0, 40.0);
+    frame.presentation_id = presentation;
+    frame
+        .install_presented_hit_index(
+            crate::PresentedHitIndex::from_parts(
+                presentation,
+                vec![crate::PresentedHitRegion::new(
+                    None,
+                    crate::PresentedRegionKind::TabBar,
+                    rect(0.0, 0.0, 10.0, 10.0),
+                    0,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    frame
+        .install_presented_pointer(
+            vec![crate::PresentedPointerRegion::new(
+                rect(20.0, 0.0, 10.0, 10.0),
+                Some(crate::InteractionId::new(1)),
+                None,
+            )],
+            vec![],
+        )
+        .unwrap();
+
+    assert_eq!(
+        frame.resolve_presented_hit(crate::PresentedHitQuery::new(presentation, 25.0, 5.0)),
+        Err(crate::PresentedHitError::PointerOutsideSemanticRegion)
+    );
+}
+
+#[test]
 fn frame_glyph_buffers_start_with_an_empty_presented_pointer_map() {
     let default_buffer = crate::FrameGlyphBuffer::default();
     let constructed_buffer = crate::FrameGlyphBuffer::new();

@@ -95,6 +95,21 @@ fn install_pointer_region(
             appearance.into_iter().collect(),
         )
         .unwrap();
+    frame
+        .install_presented_hit_index(
+            neomacs_display_protocol::PresentedHitIndex::from_parts(
+                frame.presentation_id,
+                vec![neomacs_display_protocol::PresentedHitRegion::new(
+                    None,
+                    neomacs_display_protocol::PresentedRegionKind::TabBar,
+                    neomacs_display_protocol::FrameRect::new(0.0, 0.0, 20.0, 20.0).unwrap(),
+                    0,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
 }
 
 fn make_test_device() -> Option<wgpu::Device> {
@@ -382,6 +397,7 @@ fn presented_pointer_hit_selects_the_displayed_root_or_child_map_in_local_coordi
 
     let root_hit = render
         .presented_pointer_hit(0x42, 5.0, 5.0)
+        .unwrap()
         .expect("root visual-only hit");
     assert_eq!(root_hit.presentation(), PresentationId::new(21));
     assert_eq!(root_hit.interaction(), None);
@@ -392,11 +408,17 @@ fn presented_pointer_hit_selects_the_displayed_root_or_child_map_in_local_coordi
 
     let child_hit = render
         .presented_pointer_hit(0x99, 5.0, 5.0)
+        .unwrap()
         .expect("child click-only local hit");
     assert_eq!(child_hit.presentation(), PresentationId::new(22));
     assert_eq!(child_hit.interaction(), Some(InteractionId::new(5)));
     assert_eq!(child_hit.appearance_key(), None);
-    assert!(render.presented_pointer_hit(0x99, 105.0, 85.0).is_none());
+    assert!(
+        render
+            .presented_pointer_hit(0x99, 105.0, 85.0)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

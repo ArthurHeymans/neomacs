@@ -392,24 +392,30 @@ impl GuiFrameRenderState {
         target_frame_id: u64,
         x: f32,
         y: f32,
-    ) -> Option<PresentedPointerHit> {
+    ) -> Result<Option<PresentedPointerHit>, PresentedHitError> {
         let frame = if target_frame_id == self.emacs_frame_id {
-            self.compositor.current_frame.as_ref()?
+            self.compositor.current_frame.as_ref()
         } else {
-            &self
-                .compositor
+            self.compositor
                 .child_frames
                 .frames
-                .get(&target_frame_id)?
-                .frame
+                .get(&target_frame_id)
+                .map(|entry| &entry.frame)
         };
-        let region = frame.presented_pointer().hit_test(x, y)?;
-        Some(PresentedPointerHit::new(
+        let Some(frame) = frame else {
+            return Ok(None);
+        };
+        let Some(hit) =
+            frame.resolve_presented_hit(PresentedHitQuery::new(frame.presentation_id, x, y))?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(PresentedPointerHit::new(
             target_frame_id,
             frame.presentation_id,
-            region.interaction(),
-            region.appearance(),
-        ))
+            hit.interaction(),
+            hit.appearance(),
+        )))
     }
 
     /// Resolve semantic geometry from the exact immutable frame presentation.
@@ -433,8 +439,8 @@ impl GuiFrameRenderState {
             return Ok(None);
         };
         frame
-            .presented_hit_index()
-            .resolve(PresentedHitQuery::new(presentation, x, y))
+            .resolve_presented_hit(PresentedHitQuery::new(presentation, x, y))
+            .map(|hit| hit.and_then(|hit| hit.semantic()))
     }
 
     pub(super) fn presented_region_observation(
@@ -442,21 +448,26 @@ impl GuiFrameRenderState {
         target_frame_id: u64,
         x: f32,
         y: f32,
-    ) -> Option<(PresentationId, Option<PresentedHit>)> {
+    ) -> Result<Option<(PresentationId, Option<PresentedHit>)>, PresentedHitError> {
         let presentation = if target_frame_id == self.emacs_frame_id {
-            self.compositor.current_frame.as_ref()?.presentation_id
+            let Some(frame) = self.compositor.current_frame.as_ref() else {
+                return Ok(None);
+            };
+            frame.presentation_id
         } else {
-            self.compositor
+            let Some(frame) = self
+                .compositor
                 .child_frames
                 .frames
-                .get(&target_frame_id)?
-                .frame
-                .presentation_id
+                .get(&target_frame_id)
+                .map(|entry| &entry.frame)
+            else {
+                return Ok(None);
+            };
+            frame.presentation_id
         };
-        let hit = self
-            .presented_region_hit(target_frame_id, presentation, x, y)
-            .ok()?;
-        Some((presentation, hit))
+        let hit = self.presented_region_hit(target_frame_id, presentation, x, y)?;
+        Ok(Some((presentation, hit)))
     }
 
     fn presented_pointer_appearance_at(
@@ -464,8 +475,13 @@ impl GuiFrameRenderState {
         target: Option<(u64, f32, f32)>,
     ) -> Option<super::state::PresentedAppearanceKey> {
         let (target_frame_id, x, y) = target?;
-        self.presented_pointer_hit(target_frame_id, x, y)
-            .and_then(|hit| hit.appearance_key())
+        match self.presented_pointer_hit(target_frame_id, x, y) {
+            Ok(hit) => hit.and_then(|hit| hit.appearance_key()),
+            Err(error) => {
+                tracing::error!(?error, "rejecting incoherent presented pointer hit");
+                None
+            }
+        }
     }
 
     fn active_pointer_damage(&mut self) -> Option<PendingPointerDamage> {

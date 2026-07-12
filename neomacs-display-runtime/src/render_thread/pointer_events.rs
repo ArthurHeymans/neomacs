@@ -69,15 +69,19 @@ impl RenderApp {
         target_frame_id: u64,
         x: f32,
         y: f32,
-    ) -> Option<InputEvent> {
-        let (presentation, hit) = render.presented_region_observation(target_frame_id, x, y)?;
-        Some(InputEvent::PresentedRegion {
+    ) -> Result<Option<InputEvent>, neomacs_display_protocol::PresentedHitError> {
+        let Some((presentation, hit)) =
+            render.presented_region_observation(target_frame_id, x, y)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(InputEvent::PresentedRegion {
             presentation: presentation.get(),
             hit,
             x,
             y,
             target_frame_id,
-        })
+        }))
     }
 
     pub(super) fn suppress_root_chrome_hover(
@@ -268,7 +272,7 @@ impl RenderApp {
         x: f32,
         y: f32,
     ) -> Option<PresentedInteractionKey> {
-        if let Some(hit) =
+        if let Ok(Some(hit)) =
             window_state
                 .render
                 .presented_pointer_hit(window_state.render.emacs_frame_id, x, y)
@@ -307,21 +311,38 @@ impl RenderApp {
     fn presented_interaction_for_owner(
         window_state: &GuiFrameWindowState,
         owner: PointerOwner,
-    ) -> Option<PresentedInteractionKey> {
-        let (x, y, frame_id) = owner.target()?;
-        let (presentation, semantic) = window_state
+    ) -> Result<Option<PresentedInteractionKey>, neomacs_display_protocol::PresentedHitError> {
+        let Some((x, y, frame_id)) = owner.target() else {
+            return Ok(None);
+        };
+        let Some((presentation, semantic)) = window_state
             .render
-            .presented_region_observation(frame_id, x, y)?;
-        semantic?;
-        let hit = window_state.render.presented_pointer_hit(frame_id, x, y)?;
-        if hit.presentation() != presentation {
-            return None;
+            .presented_region_observation(frame_id, x, y)?
+        else {
+            return Ok(None);
+        };
+        if semantic.is_none() {
+            return Ok(None);
         }
-        Some(PresentedInteractionKey::for_frame(
+        let Some(hit) = window_state.render.presented_pointer_hit(frame_id, x, y)? else {
+            return Ok(None);
+        };
+        if hit.presentation() != presentation {
+            return Err(
+                neomacs_display_protocol::PresentedHitError::StalePresentation {
+                    expected: presentation,
+                    requested: hit.presentation(),
+                },
+            );
+        }
+        let Some(interaction) = hit.interaction() else {
+            return Ok(None);
+        };
+        Ok(Some(PresentedInteractionKey::for_frame(
             frame_id,
             hit.presentation(),
-            hit.interaction()?,
-        ))
+            interaction,
+        )))
     }
 
     pub(super) fn capture_presented_pointer_press(
@@ -329,19 +350,23 @@ impl RenderApp {
         owner: PointerOwner,
         x: f32,
         y: f32,
-    ) -> Option<InputEvent> {
-        let (local_x, local_y, _) = owner.target()?;
-        let target = Self::presented_interaction_for_owner(window_state, owner)?;
+    ) -> Result<Option<InputEvent>, neomacs_display_protocol::PresentedHitError> {
+        let Some((local_x, local_y, _)) = owner.target() else {
+            return Ok(None);
+        };
+        let Some(target) = Self::presented_interaction_for_owner(window_state, owner)? else {
+            return Ok(None);
+        };
         window_state
             .render
             .capture_presented_at(target, (x - local_x, y - local_y));
-        Some(Self::presented_pointer_input_event(
+        Ok(Some(Self::presented_pointer_input_event(
             &window_state.render,
             target,
             true,
             local_x,
             local_y,
-        ))
+        )))
     }
 
     pub(super) fn capture_tab_band_press(
@@ -673,13 +698,25 @@ impl RenderApp {
                 if state == ElementState::Pressed && button == MouseButton::Left {
                     let x = window_state.render.mouse_pos.0;
                     let y = window_state.render.mouse_pos.1;
+                    if !handled_chrome {
+                        match Self::capture_presented_pointer_press(
+                            window_state,
+                            pointer_owner,
+                            x,
+                            y,
+                        ) {
+                            Ok(Some(presented)) => {
+                                event = Some(presented);
+                                handled_chrome = true;
+                            }
+                            Ok(None) => {}
+                            Err(error) => {
+                                tracing::error!(?error, "rejecting incoherent pointer press");
+                                handled_chrome = true;
+                            }
+                        }
+                    }
                     if !handled_chrome
-                        && let Some(presented) =
-                            Self::capture_presented_pointer_press(window_state, pointer_owner, x, y)
-                    {
-                        event = Some(presented);
-                        handled_chrome = true;
-                    } else if !handled_chrome
                         && pointer_owner.permits_root_chrome()
                         && Self::frame_window_point_in_band(
                             window_state,
@@ -859,7 +896,7 @@ impl RenderApp {
                     } else {
                         (0, 0, 0)
                     };
-                    if let Some(observation) = Self::presented_region_input_event(
+                    if let Ok(Some(observation)) = Self::presented_region_input_event(
                         &window_state.render,
                         target_fid,
                         ev_x,
@@ -1104,7 +1141,7 @@ impl RenderApp {
                 window_state.render.mark_dirty();
             }
             if event.is_none() {
-                if let Some(observation) =
+                if let Ok(Some(observation)) =
                     Self::presented_region_input_event(&window_state.render, target_fid, ev_x, ev_y)
                 {
                     self.comms.send_input(observation);
