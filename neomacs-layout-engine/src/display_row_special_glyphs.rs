@@ -327,6 +327,15 @@ fn install_right_border_from_source_request(
     let Some(target_col) = prepare_special_glyph_row(row, matrix_cols, target_col) else {
         return;
     };
+    // Clear any border glyph a previous redisplay pass left in the right margin
+    // before re-installing. This install is only reached for the TTY terminal
+    // right border (`reserve_terminal_right_border_col`), whose sole right-margin
+    // glyph is that border. Without this, a row reused by the cursor-only /
+    // scroll / edit fast paths already carries a `|` here; since
+    // `display_row_total_glyph_count` counts right-margin glyphs, re-running the
+    // install adds ANOTHER `|` and mis-sizes the trim/padding, so the border band
+    // accretes leftward across passes (the timing-dependent multi-column band).
+    row.glyphs[GlyphArea::RightMargin.index()].clear();
     let prior_displays_text = row.displays_text;
     let preserved_trailing = pop_display_row_trailing_text_char(row, '$');
     let preserved_cols = usize::from(preserved_trailing.is_some());
