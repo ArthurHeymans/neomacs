@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 mod display;
 mod frame_params;
+pub mod geometry;
 mod history;
 mod parameters;
 mod scroll_bar;

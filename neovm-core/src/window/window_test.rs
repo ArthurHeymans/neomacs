@@ -1,4 +1,62 @@
 use super::*;
+
+#[test]
+fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
+    use super::geometry::{Column, Line, SnapshotWindowGeometry};
+
+    let mut window = Window::new_leaf(
+        WindowId(11),
+        BufferId(1),
+        Rect::new(144.0, 24.0, 1831.0, 1172.0),
+    );
+    window.set_left_col(18);
+    window.set_top_line(2);
+    let snapshot = WindowDisplaySnapshot {
+        window_id: WindowId(11),
+        text_area_left_offset: 24,
+        header_line_height: 5,
+        tab_line_height: 12,
+        points: vec![DisplayPointSnapshot {
+            buffer_pos: LispCharPos1::ONE,
+            x: 475,
+            y: 340,
+            width: 7,
+            height: 17,
+            row: 20,
+            col: 66,
+        }],
+        ..WindowDisplaySnapshot::default()
+    };
+
+    let geometry = SnapshotWindowGeometry::new(FrameId(7), &window, &snapshot)
+        .expect("valid presented geometry");
+    assert_eq!(geometry.cell_origin().column(), Column::new(18));
+    assert_eq!(geometry.cell_origin().line(), Line::new(2));
+
+    let body_origin_in_window = geometry.text_body_origin_in_window();
+    assert_eq!(body_origin_in_window.window(), WindowId(11));
+    assert_eq!(body_origin_in_window.x().get(), 24.0);
+    assert_eq!(body_origin_in_window.y().get(), 17.0);
+
+    let body_origin = geometry
+        .text_body_origin_in_frame()
+        .expect("body origin composes into frame space");
+    assert_eq!(body_origin.x().get(), 168.0);
+    assert_eq!(body_origin.y().get(), 41.0);
+
+    let point = geometry
+        .point_for_buffer_pos(LispCharPos1::ONE)
+        .expect("valid snapshot geometry")
+        .expect("visible point");
+    let body_point = point.in_text_body();
+    assert_eq!(body_point.x().get(), 475.0);
+    assert_eq!(body_point.y().get(), 323.0);
+
+    let frame_point = point.in_frame();
+    assert_eq!(frame_point.frame(), FrameId(7));
+    assert_eq!(frame_point.x().get(), 643.0);
+    assert_eq!(frame_point.y().get(), 364.0);
+}
 use crate::buffer::LispCharPos1;
 
 #[test]

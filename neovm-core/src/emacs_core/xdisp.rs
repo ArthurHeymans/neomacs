@@ -26,7 +26,7 @@ use crate::buffer::{
 };
 use crate::emacs_core::error::LispCondition;
 use crate::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
+    DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
     WindowId,
 };
 use strum::{EnumString, IntoStaticStr};
@@ -4755,19 +4755,19 @@ struct ExactVisibleMetrics {
 }
 
 fn exact_metrics_from_point(
-    point: &DisplayPointSnapshot,
-    snapshot: &crate::window::WindowDisplaySnapshot,
+    point: crate::window::geometry::SnapshotPointGeometry,
 ) -> ExactVisibleMetrics {
+    let body_point = point.in_text_body();
     ExactVisibleMetrics {
-        point: point.buffer_pos,
-        x: point.x,
-        y: snapshot.text_area_relative_y(point.y),
+        point: point.buffer_pos(),
+        x: body_point.x().get().round() as i64,
+        y: body_point.y().get().round() as i64,
         dx: 0,
         dy: 0,
-        width: point.width.max(1),
-        height: point.height.max(1),
-        row: snapshot.text_area_relative_row(point.row),
-        col: point.col,
+        width: (point.width().get().round() as i64).max(1),
+        height: (point.height().get().round() as i64).max(1),
+        row: point.row(),
+        col: point.column(),
     }
 }
 
@@ -4855,6 +4855,9 @@ fn resolve_exact_visible_metrics(
     let Some(frame) = frames.get(fid) else {
         return Ok(None);
     };
+    let Some(window_ref) = frame.find_window(wid) else {
+        return Ok(None);
+    };
     let Some(snapshot) = frame.window_display_snapshot(wid) else {
         return Ok(None);
     };
@@ -4864,10 +4867,24 @@ fn resolve_exact_visible_metrics(
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
         return Ok(None);
     };
-    let Some(point) = snapshot.point_for_buffer_pos(pos_lisp) else {
+    let geometry = crate::window::geometry::SnapshotWindowGeometry::new(fid, window_ref, snapshot)
+        .map_err(snapshot_geometry_flow)?;
+    let Some(point) = geometry
+        .point_for_buffer_pos(pos_lisp)
+        .map_err(snapshot_geometry_flow)?
+    else {
         return Ok(None);
     };
-    Ok(Some((wid, exact_metrics_from_point(point, snapshot))))
+    Ok(Some((wid, exact_metrics_from_point(point))))
+}
+
+fn snapshot_geometry_flow(error: crate::window::geometry::GeometryError) -> Flow {
+    signal(
+        LispCondition::Error,
+        vec![Value::string(format!(
+            "Invalid redisplay snapshot geometry: {error:?}"
+        ))],
+    )
 }
 
 fn make_text_area_position(window_id: WindowId, metrics: ExactVisibleMetrics) -> Value {
@@ -5168,13 +5185,19 @@ fn posn_at_x_y_impl(
         )
     };
 
-    if let Some(snapshot) = frame.window_display_snapshot(wid)
-        && let Some(point) = snapshot.point_at_coords(query_x, query_y)
-    {
-        return Ok(make_text_area_position(
-            wid,
-            exact_metrics_from_point(&point, snapshot),
-        ));
+    if let Some(snapshot) = frame.window_display_snapshot(wid) {
+        let geometry =
+            crate::window::geometry::SnapshotWindowGeometry::new(fid, window_ref, snapshot)
+                .map_err(snapshot_geometry_flow)?;
+        if let Some(point) = geometry
+            .point_at_window_coords(query_x, query_y)
+            .map_err(snapshot_geometry_flow)?
+        {
+            return Ok(make_text_area_position(
+                wid,
+                exact_metrics_from_point(point),
+            ));
+        }
     }
 
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
