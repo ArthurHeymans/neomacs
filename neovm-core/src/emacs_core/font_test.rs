@@ -769,6 +769,55 @@ fn set_lisp_face_attribute_bumps_face_change_count() {
 }
 
 #[test]
+fn frame_face_attribute_setter_defers_runtime_realization_until_redisplay() {
+    crate::test_utils::init_test_tracing();
+    clear_font_cache_state();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = Value::make_frame(frame_id.0);
+    let face_name = "__neovm_deferred_face_realization";
+
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name), frame]).unwrap();
+    let before = eval.face_change_count;
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol(face_name),
+            Value::keyword(":foreground"),
+            Value::string("#51afef"),
+            frame,
+        ],
+    )
+    .unwrap();
+
+    let vector = lookup_frame_lisp_face_vector(&eval, frame_id, face_name)
+        .expect("frame-local Lisp face vector");
+    assert_eq!(
+        lisp_face_vector_attr(vector, LFaceAttr::Foreground),
+        Some(Value::string("#51afef")),
+        "the GNU-shaped frame-local Lisp face vector is authoritative",
+    );
+    assert!(
+        eval.face_change_count > before,
+        "the setter must dirty redisplay"
+    );
+    assert_eq!(
+        eval.face_table().resolve(face_name).foreground,
+        None,
+        "the setter must not eagerly mutate redisplay's derived face table",
+    );
+    assert!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("selected frame")
+            .realized_face(face_name)
+            .is_none(),
+        "the setter must not eagerly materialize a per-frame runtime face",
+    );
+}
+
+#[test]
 fn created_face_runtime_state_uses_symbol_identity() {
     crate::test_utils::init_test_tracing();
     clear_font_cache_state();
@@ -1557,15 +1606,18 @@ fn internal_copy_lisp_face_sets_gnu_face_id_symbol_property() {
 }
 
 #[test]
-fn internal_copy_lisp_face_eval_updates_face_table() {
+fn internal_copy_lisp_face_copies_frame_spec_without_runtime_realization() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    let frame = Value::make_frame(frame_id.0);
     builtin_internal_set_lisp_face_attribute(
         &mut eval,
         vec![
             Value::symbol("bold"),
             Value::keyword("family"),
             Value::string("Serif"),
+            frame,
         ],
     )
     .unwrap();
@@ -1575,18 +1627,27 @@ fn internal_copy_lisp_face_eval_updates_face_table() {
         vec![
             Value::symbol("bold"),
             Value::symbol("copied-face"),
-            Value::T,
+            frame,
             Value::NIL,
         ],
     )
     .unwrap();
     assert_eq!(copied.as_symbol_name(), Some("copied-face"));
+    let vector = lookup_frame_lisp_face_vector(&eval, frame_id, "copied-face")
+        .expect("copied frame-local Lisp face vector");
     assert_eq!(
-        eval.face_table()
-            .resolve("copied-face")
-            .family_runtime_string_owned()
-            .as_deref(),
-        Some("Serif")
+        lisp_face_vector_attr(vector, LFaceAttr::Family),
+        Some(Value::string("Serif")),
+    );
+    assert_eq!(
+        eval.face_table().resolve("copied-face").family,
+        None,
+        "copying a Lisp face must not eagerly mutate redisplay's derived table",
+    );
+    assert_eq!(
+        eval.face_table().resolve("copied-face").weight,
+        None,
+        "even a standard source face must stay unrealized until redisplay",
     );
 }
 

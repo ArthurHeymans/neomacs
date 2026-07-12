@@ -2347,6 +2347,7 @@ fn apply_face_layers_with_remapping(
 
 fn resolved_face_at_buffer_byte(
     eval: &super::eval::Context,
+    face_table: &crate::face::FaceTable,
     buffer: &Buffer,
     bytepos: EmacsBytePos,
 ) -> RuntimeFace {
@@ -2384,11 +2385,12 @@ fn resolved_face_at_buffer_byte(
 
     // Consult buffer-local face-remapping-alist
     let remapping = face_remapping_for_buffer(eval, buffer);
-    apply_face_layers_with_remapping(&eval.face_table, &layers, &remapping)
+    apply_face_layers_with_remapping(face_table, &layers, &remapping)
 }
 
 fn resolved_face_at_string_char_pos(
     eval: &super::eval::Context,
+    face_table: &crate::face::FaceTable,
     str_value: Value,
     char_pos: CharPos0,
 ) -> RuntimeFace {
@@ -2404,7 +2406,7 @@ fn resolved_face_at_string_char_pos(
     // Use face-remapping-alist from the current buffer (strings inherit
     // the buffer context they're displayed in).
     let remapping = face_remapping_for_current_buffer(eval);
-    apply_face_layers_with_remapping(&eval.face_table, &layers, &remapping)
+    apply_face_layers_with_remapping(face_table, &layers, &remapping)
 }
 
 fn face_height_to_font_value(height: &FaceHeight) -> Value {
@@ -3041,14 +3043,19 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
             if !has_window_system {
                 return Ok(Value::NIL);
             }
+            let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
             let char_pos = usize::try_from(pos).expect("validated non-negative string position");
             let bytepos = if string.is_multibyte() {
                 crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), char_pos)
             } else {
                 char_pos
             };
-            let face =
-                resolved_face_at_string_char_pos(eval, *string_value, CharPos0::new(char_pos));
+            let face = resolved_face_at_string_char_pos(
+                eval,
+                &face_table,
+                *string_value,
+                CharPos0::new(char_pos),
+            );
             let code = if string.is_multibyte() {
                 crate::emacs_core::emacs_char::string_char(&string.as_bytes()[bytepos..]).0
             } else {
@@ -3096,8 +3103,9 @@ pub(crate) fn builtin_font_at(eval: &mut super::eval::Context, args: Vec<Value>)
         return Ok(Value::NIL);
     }
 
+    let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
     let bytepos = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos));
-    let face = resolved_face_at_buffer_byte(eval, buffer, bytepos);
+    let face = resolved_face_at_buffer_byte(eval, &face_table, buffer, bytepos);
     let character = buffer.char_at_emacs_byte_pos(bytepos).ok_or_else(|| {
         signal(
             LispCondition::ArgsOutOfRange,
@@ -4371,6 +4379,36 @@ fn runtime_face_from_lisp_face_vector(face_name: &str, vector: Value) -> Runtime
     face
 }
 
+/// Materialize a frame's authoritative Lisp face specifications into an
+/// isolated runtime table.  This is a derived value: callers may use it for a
+/// Lisp query or install it as redisplay's cache, but must never mutate it as
+/// face-definition state.
+fn runtime_face_table_from_frame_lisp_faces(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    preserve_default_baseline: bool,
+) -> crate::face::FaceTable {
+    // Preserve the already-established default face baseline.  In particular,
+    // Lisp `font-at` queries retain relative inline heights until actual font
+    // realization; replacing the baseline with the frame's concrete default
+    // height here would prematurely collapse that semantic distinction.
+    let mut table = if preserve_default_baseline {
+        eval.face_table.clone()
+    } else {
+        crate::face::FaceTable::new()
+    };
+    for (face_name, vector) in frame_lisp_face_table_entries(eval, frame_id) {
+        if preserve_default_baseline && face_name == "default" {
+            continue;
+        }
+        table.define(
+            &face_name,
+            runtime_face_from_lisp_face_vector(&face_name, vector),
+        );
+    }
+    table
+}
+
 /// Rebuild the display-facing runtime face cache from GNU-shaped frame-local
 /// Lisp face vectors.
 ///
@@ -4383,14 +4421,7 @@ pub(crate) fn sync_runtime_face_table_from_frame_lisp_faces(
     frame_id: FrameId,
 ) {
     realize_default_lisp_face_for_frame(eval, frame_id);
-    let entries = frame_lisp_face_table_entries(eval, frame_id);
-    for (face_name, vector) in entries {
-        let face = runtime_face_from_lisp_face_vector(&face_name, vector);
-        eval.face_table.define(&face_name, face.clone());
-        if let Some(frame) = eval.frames.get_mut(frame_id) {
-            crate::emacs_core::xfaces::mirror_runtime_face_into_frame(frame, &face_name, &face);
-        }
-    }
+    eval.face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, false);
 }
 
 #[derive(Clone, Copy)]
@@ -5159,8 +5190,10 @@ pub(crate) fn builtin_internal_make_lisp_face(
     Ok(result)
 }
 
-/// Eval-backed version of `internal-copy-lisp-face` that also mirrors the
-/// copied face into the evaluator's `FaceTable`.
+/// Eval-backed version of `internal-copy-lisp-face`.
+///
+/// The copied Lisp vector remains authoritative; redisplay derives its
+/// runtime representation after observing `face_change_count`.
 pub(crate) fn builtin_internal_copy_lisp_face(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5220,22 +5253,17 @@ pub(crate) fn builtin_internal_copy_lisp_face(
 
     let result = args[1];
 
-    // Copy the Rust FaceTable entry.
-    eval.face_table.ensure_face(&to_name);
-    let copied = eval
-        .face_table
-        .get(&from_name)
-        .cloned()
-        .unwrap_or_else(|| eval.face_table.resolve(&from_name));
-    eval.face_table.define(&to_name, copied);
     eval.face_change_count += 1;
 
     Ok(result)
 }
 
-/// Eval-backed version of `internal-set-lisp-face-attribute` that also
-/// updates the evaluator's `FaceTable`, making the face attributes
-/// available to the Rust layout engine for rendering.
+/// Eval-backed version of `internal-set-lisp-face-attribute`.
+///
+/// Like GNU Emacs' `Finternal_set_lisp_face_attribute`, this mutates the
+/// authoritative Lisp face specification and marks face state changed.  It
+/// deliberately does not materialize the display-facing `FaceTable` or a
+/// per-frame runtime face: redisplay owns those derived representations.
 pub(crate) fn builtin_internal_set_lisp_face_attribute(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5351,7 +5379,8 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
 
     let result = *face;
 
-    // Now also update the evaluator's FaceTable
+    // Preserve GNU-visible live-frame font/default-parameter side effects,
+    // but leave conversion to render-facing face attributes to redisplay.
     if args.len() >= 3 {
         let value = args[2];
 
@@ -5392,18 +5421,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 )?;
             }
 
-            let face_attr = lisp_value_to_face_attr(canonical_attr, public_effective_value);
-            if let Some(fav) = face_attr {
-                eval.set_face_attribute(&face_name, canonical_attr, fav);
-            }
             if canonical_attr == LFaceAttr::Font {
                 for (derived_attr, derived_value) in
                     derived_face_attrs_from_font_value(&effective_value)
                 {
                     set_face_override(&face_name, derived_attr, derived_value, false);
-                    if let Some(fav) = lisp_value_to_face_attr(derived_attr, derived_value) {
-                        eval.set_face_attribute(&face_name, derived_attr, fav);
-                    }
                 }
             }
 
@@ -5439,10 +5461,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                         }
                     }
                 }
-                mirror_runtime_face_into_frame(eval, frame_id, &face_name);
             }
         }
     }
+
+    eval.face_change_count += 1;
 
     Ok(result)
 }
