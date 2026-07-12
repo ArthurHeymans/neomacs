@@ -2470,6 +2470,121 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
 }
 
 #[test]
+fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-chrome", 800, 600, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("completion");
+    }
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            header_line_height: 5,
+            tab_line_height: 17,
+            points: vec![crate::window::DisplayPointSnapshot {
+                buffer_pos: crate::buffer::LispCharPos1::new(1),
+                x: 54,
+                y: 313,
+                width: 7,
+                height: 17,
+                row: 17,
+                col: 0,
+            }],
+            rows: vec![crate::window::DisplayRowSnapshot {
+                row: 17,
+                y: 313,
+                height: 17,
+                start_x: 54,
+                start_col: 0,
+                end_x: 61,
+                end_col: 1,
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+            }],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let result = builtin_posn_at_point(
+        &mut eval,
+        vec![Value::fixnum(1), Value::make_window(selected_window.0)],
+    )
+    .expect("posn-at-point");
+
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(#<window 1> 1 (54 . 291) 0 nil 1 (0 . 15) nil (0 . 0) (7 . 17))"
+    );
+}
+
+#[test]
+fn test_posn_at_x_y_reports_text_area_relative_geometry_below_window_chrome() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-posn-xy-chrome", 160, 80, buf_id);
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("abcdef\n");
+    }
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            header_line_height: 5,
+            tab_line_height: 17,
+            points: vec![crate::window::DisplayPointSnapshot {
+                buffer_pos: crate::buffer::LispCharPos1::new(5),
+                x: 24,
+                y: 40,
+                width: 21,
+                height: 30,
+                row: 3,
+                col: 3,
+            }],
+            rows: vec![crate::window::DisplayRowSnapshot {
+                row: 3,
+                y: 40,
+                height: 30,
+                start_x: 0,
+                start_col: 0,
+                end_x: 45,
+                end_col: 4,
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+            }],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let result = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(30),
+            Value::fixnum(40),
+            Value::make_window(selected_window.0),
+            Value::NIL,
+        ],
+    )
+    .expect("posn-at-x-y");
+
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(#<window 1> 5 (24 . 18) 0 nil 5 (3 . 1) nil (0 . 0) (21 . 30))"
+    );
+}
+
+#[test]
 fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();

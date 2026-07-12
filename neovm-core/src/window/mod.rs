@@ -1412,6 +1412,30 @@ impl WindowVisibleBufferSpan {
 }
 
 impl WindowDisplaySnapshot {
+    /// Height of header/tab chrome above the window's text body.
+    pub fn top_chrome_height(&self) -> i64 {
+        self.header_line_height
+            .max(0)
+            .saturating_add(self.tab_line_height.max(0))
+    }
+
+    /// Number of rendered header/tab rows above the window's text body.
+    pub fn top_chrome_rows(&self) -> i64 {
+        i64::from(self.header_line_height > 0) + i64::from(self.tab_line_height > 0)
+    }
+
+    /// Convert a redisplay Y relative to the window top into GNU's text-area
+    /// coordinate space used by text `posn` values.
+    pub fn text_area_relative_y(&self, window_relative_y: i64) -> i64 {
+        window_relative_y.saturating_sub(self.top_chrome_height())
+    }
+
+    /// Convert a redisplay row relative to the window top into GNU's text-area
+    /// row used by text `posn` values.
+    pub fn text_area_relative_row(&self, window_relative_row: i64) -> i64 {
+        window_relative_row.saturating_sub(self.top_chrome_rows())
+    }
+
     pub fn logical_cursor_pos(&self) -> Option<WindowCursorPos> {
         self.logical_cursor.or_else(|| {
             self.phys_cursor

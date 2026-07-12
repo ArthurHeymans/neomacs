@@ -6561,6 +6561,61 @@ fn window_chrome_height_queries_prefer_last_redisplay_snapshot_when_available() 
 }
 
 #[test]
+fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    let wid = ev.frames.get(fid).expect("frame").selected_window;
+
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: wid,
+            header_line_height: 5,
+            tab_line_height: 17,
+            points: vec![crate::window::DisplayPointSnapshot {
+                buffer_pos: crate::buffer::LispCharPos1::new(1),
+                x: 54,
+                y: 313,
+                width: 7,
+                height: 17,
+                row: 17,
+                col: 0,
+            }],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let edges = super::builtin_window_edges(
+        &mut ev,
+        vec![Value::make_window(wid.0), Value::T, Value::NIL, Value::T],
+    )
+    .expect("window body pixel edges");
+    let edges = crate::emacs_core::value::list_to_vec(&edges).expect("edges list");
+
+    assert_eq!(edges[1], Value::fixnum(22));
+
+    let posn = crate::emacs_core::xdisp::builtin_posn_at_point(
+        &mut ev,
+        vec![Value::fixnum(1), Value::make_window(wid.0)],
+    )
+    .expect("posn-at-point");
+    let posn = crate::emacs_core::value::list_to_vec(&posn).expect("position list");
+    assert!(posn[2].is_cons(), "position coordinates");
+    assert!(posn[9].is_cons(), "position geometry");
+    let glyph_y = posn[2].cons_cdr().as_fixnum().expect("glyph y");
+    let glyph_height = posn[9].cons_cdr().as_fixnum().expect("glyph height");
+
+    assert_eq!(
+        edges[1].as_fixnum().expect("body top") + glyph_y + glyph_height,
+        330
+    );
+}
+
+#[test]
 fn display_buffer_returns_window() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_with_frame(

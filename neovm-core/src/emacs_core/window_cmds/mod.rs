@@ -1167,6 +1167,10 @@ fn window_body_edges_pixels(
     let (left, top, right, bottom) = window_edges_pixels(w);
     let (body_left_offset, _body_right_offset) =
         window_body_horizontal_offsets_pixels(frames, fid, w);
+    let top_chrome_height = frames
+        .get(fid)
+        .and_then(|frame| frame.window_display_snapshot(wid))
+        .map_or(0, crate::window::WindowDisplaySnapshot::top_chrome_height);
     let mode_line_height = if is_minibuffer_window(frames, fid, wid) {
         0
     } else {
@@ -1176,9 +1180,10 @@ fn window_body_edges_pixels(
             .unwrap_or(0)
     };
     let body_left = left.saturating_add(body_left_offset);
+    let body_top = top.saturating_add(top_chrome_height);
     let body_right = body_left.saturating_add(window_body_width_pixels(frames, fid, w));
     let body_bottom = bottom.saturating_sub(mode_line_height);
-    (body_left, top, body_right.min(right), body_bottom)
+    (body_left, body_top, body_right.min(right), body_bottom)
 }
 
 // ===========================================================================

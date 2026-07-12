@@ -4416,14 +4416,6 @@ struct WindowLineMetrics {
     offbot: i64,
 }
 
-fn snapshot_top_chrome_rows(snapshot: &WindowDisplaySnapshot) -> i64 {
-    i64::from(snapshot.tab_line_height > 0) + i64::from(snapshot.header_line_height > 0)
-}
-
-fn snapshot_top_chrome_height(snapshot: &WindowDisplaySnapshot) -> i64 {
-    snapshot.tab_line_height.max(0) + snapshot.header_line_height.max(0)
-}
-
 fn snapshot_tab_line_row(snapshot: &WindowDisplaySnapshot) -> Option<&DisplayRowSnapshot> {
     (snapshot.tab_line_height > 0)
         .then(|| snapshot.row_metrics(0))
@@ -4471,7 +4463,7 @@ fn snapshot_chrome_line_metrics(
 }
 
 fn snapshot_text_rows(snapshot: &WindowDisplaySnapshot) -> Vec<&DisplayRowSnapshot> {
-    let top_chrome_rows = snapshot_top_chrome_rows(snapshot);
+    let top_chrome_rows = snapshot.top_chrome_rows();
     let mode_row = snapshot_mode_line_row(snapshot).map(|row| row.row);
     let mut rows = snapshot
         .rows
@@ -4486,8 +4478,8 @@ fn snapshot_text_row_line_metrics(
     snapshot: &WindowDisplaySnapshot,
     row: &DisplayRowSnapshot,
 ) -> WindowLineMetrics {
-    let top_chrome_rows = snapshot_top_chrome_rows(snapshot);
-    let top_chrome_height = snapshot_top_chrome_height(snapshot);
+    let top_chrome_rows = snapshot.top_chrome_rows();
+    let top_chrome_height = snapshot.top_chrome_height();
     WindowLineMetrics {
         height: row.height,
         vpos: row.row - top_chrome_rows,
@@ -4762,16 +4754,19 @@ struct ExactVisibleMetrics {
     col: i64,
 }
 
-fn exact_metrics_from_point(point: &DisplayPointSnapshot) -> ExactVisibleMetrics {
+fn exact_metrics_from_point(
+    point: &DisplayPointSnapshot,
+    snapshot: &crate::window::WindowDisplaySnapshot,
+) -> ExactVisibleMetrics {
     ExactVisibleMetrics {
         point: point.buffer_pos,
         x: point.x,
-        y: point.y,
+        y: snapshot.text_area_relative_y(point.y),
         dx: 0,
         dy: 0,
         width: point.width.max(1),
         height: point.height.max(1),
-        row: point.row,
+        row: snapshot.text_area_relative_row(point.row),
         col: point.col,
     }
 }
@@ -4872,7 +4867,7 @@ fn resolve_exact_visible_metrics(
     let Some(point) = snapshot.point_for_buffer_pos(pos_lisp) else {
         return Ok(None);
     };
-    Ok(Some((wid, exact_metrics_from_point(point))))
+    Ok(Some((wid, exact_metrics_from_point(point, snapshot))))
 }
 
 fn make_text_area_position(window_id: WindowId, metrics: ExactVisibleMetrics) -> Value {
@@ -5178,7 +5173,7 @@ fn posn_at_x_y_impl(
     {
         return Ok(make_text_area_position(
             wid,
-            exact_metrics_from_point(&point),
+            exact_metrics_from_point(&point, snapshot),
         ));
     }
 
