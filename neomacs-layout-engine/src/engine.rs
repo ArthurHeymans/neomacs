@@ -129,43 +129,62 @@ fn build_presented_hit_index(
             window_regions.text_body,
             base_z,
         )?;
-        for (kind, rect) in [
-            (PresentedRegionKind::LeftMargin, window_regions.left_margin),
+        for (kind, rect, priority) in [
+            (
+                PresentedRegionKind::LeftMargin,
+                window_regions.left_margin,
+                10,
+            ),
             (
                 PresentedRegionKind::RightMargin,
                 window_regions.right_margin,
+                10,
             ),
-            (PresentedRegionKind::LeftFringe, window_regions.left_fringe),
+            (
+                PresentedRegionKind::LeftFringe,
+                window_regions.left_fringe,
+                10,
+            ),
             (
                 PresentedRegionKind::RightFringe,
                 window_regions.right_fringe,
+                10,
             ),
             (
                 PresentedRegionKind::LeftScrollBar,
                 window_regions.left_scroll_bar,
+                20,
             ),
             (
                 PresentedRegionKind::RightScrollBar,
                 window_regions.right_scroll_bar,
+                20,
             ),
             (
                 PresentedRegionKind::HorizontalScrollBar,
                 window_regions.horizontal_scroll_bar,
+                20,
             ),
-            (PresentedRegionKind::TabLine, window_regions.tab_line),
-            (PresentedRegionKind::HeaderLine, window_regions.header_line),
-            (PresentedRegionKind::ModeLine, window_regions.mode_line),
+            (PresentedRegionKind::TabLine, window_regions.tab_line, 20),
+            (
+                PresentedRegionKind::HeaderLine,
+                window_regions.header_line,
+                20,
+            ),
+            (PresentedRegionKind::ModeLine, window_regions.mode_line, 20),
             (
                 PresentedRegionKind::RightDivider,
                 window_regions.right_divider,
+                30,
             ),
             (
                 PresentedRegionKind::BottomDivider,
                 window_regions.bottom_divider,
+                30,
             ),
         ] {
             if let Some(rect) = rect {
-                push_region(window, kind, rect, base_z + 10)?;
+                push_region(window, kind, rect, base_z + priority)?;
             }
         }
 

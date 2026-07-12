@@ -1739,6 +1739,17 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
                                           (bottom-divider-width . 5))))",
     )
     .expect("explicit main window geometry");
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).unwrap();
+        let display = frame
+            .find_window_mut(left_side)
+            .and_then(|window| window.display_mut())
+            .expect("left side display state");
+        display.scroll_bar_width = 12;
+        display.vertical_scroll_bar_type = Value::symbol("right");
+        display.scroll_bar_height = 0;
+        display.horizontal_scroll_bar_type = Value::NIL;
+    }
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -1816,6 +1827,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     assert!(main.mode_line().is_some());
     assert!(left.right_divider().is_some());
     assert!(left.bottom_divider().is_some());
+    assert!(left.right_scroll_bar().is_some());
 
     let protocol_presentation =
         neomacs_display_protocol::PresentationId::new(evaluator_presentation.get());
@@ -1945,6 +1957,47 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     );
     assert_eq!(canonical.row(), 7);
     assert_eq!(canonical.bounds().y(), selected_regions.text_body.y + 3.0);
+
+    let materialized = renderer.materialize();
+    let left_transport = match renderer
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == left_side.0 as i64)
+        .unwrap()
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        _ => panic!("left complete geometry"),
+    };
+    for (kind, bounds, x) in [
+        (
+            neomacs_display_protocol::PresentedRegionKind::RightScrollBar,
+            left_transport.right_scroll_bar.unwrap(),
+            left_transport.right_scroll_bar.unwrap().x + 1.0,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::RightDivider,
+            left_transport.right_divider.unwrap(),
+            left_transport.right_divider.unwrap().x
+                + left_transport.right_divider.unwrap().width / 2.0,
+        ),
+        (
+            neomacs_display_protocol::PresentedRegionKind::BottomDivider,
+            left_transport.bottom_divider.unwrap(),
+            left_transport.bottom_divider.unwrap().x
+                + left_transport.bottom_divider.unwrap().width / 2.0,
+        ),
+    ] {
+        let hit = materialized
+            .resolve_presented_hit(neomacs_display_protocol::PresentedHitQuery::new(
+                protocol_presentation,
+                x,
+                bounds.y + bounds.height / 2.0,
+            ))
+            .unwrap()
+            .unwrap();
+        assert_eq!(hit.semantic().unwrap().region().kind(), kind);
+    }
 
     let retained_main = first_publication
         .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(

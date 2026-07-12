@@ -764,6 +764,74 @@ fn presented_pointer_integration_topmost_child_uses_local_coordinates_then_root_
 }
 
 #[test]
+fn real_layout_publication_routes_overlapping_children_by_published_z_order() {
+    let mut eval = neovm_core::emacs_core::Context::new();
+    let buffer = eval.buffer_manager().current_buffer().unwrap().id();
+    eval.buffer_manager_mut()
+        .get_mut(buffer)
+        .unwrap()
+        .insert("child");
+    let root = eval
+        .frame_manager_mut()
+        .create_frame("root-hit", 200, 120, buffer);
+    let lower = eval
+        .frame_manager_mut()
+        .create_frame("lower-hit", 80, 60, buffer);
+    let upper = eval
+        .frame_manager_mut()
+        .create_frame("upper-hit", 80, 60, buffer);
+    for (frame_id, parent, z_order) in [
+        (root, None, 0),
+        (lower, Some(root), 2),
+        (upper, Some(root), 9),
+    ] {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).unwrap();
+        frame.set_window_system(Some(neovm_core::emacs_core::Value::symbol("neo")));
+        frame.z_order = z_order;
+        if let Some(parent) = parent {
+            frame.parent_frame = neovm_core::emacs_core::Value::make_frame(parent.0);
+            frame.left_pos = 20;
+            frame.top_pos = 15;
+        }
+    }
+    let mut engine = neomacs_layout_engine::LayoutEngine::new();
+    let mut layout = |frame_id| {
+        engine.layout_frame_rust(&mut eval, frame_id);
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .unwrap()
+            .materialize()
+    };
+    let root_frame = layout(root);
+    let lower_frame = layout(lower);
+    let upper_frame = layout(upper);
+
+    let mut app = make_test_app(200, 120, 1.0);
+    let render = ensure_primary_frame(&mut app).expect("primary render");
+    render.set_emacs_frame_id(root.0);
+    render.set_current_frame(Some(root_frame), None);
+    assert!(render.update_child_frame(lower_frame));
+    assert!(render.update_child_frame(upper_frame));
+    let window = app.frame_windows.primary_window().unwrap();
+    let owner = RenderApp::pointer_owner(window, 25.0, 20.0);
+    assert!(matches!(
+        owner,
+        PointerOwner::Child { frame_id, .. } if frame_id == upper.0
+    ));
+    let (x, y, frame_id) = owner.target().unwrap();
+    let (_, semantic) = window
+        .render
+        .presented_region_observation(frame_id, x, y)
+        .unwrap()
+        .unwrap();
+    assert!(
+        semantic.is_some(),
+        "topmost real child must own semantic hit"
+    );
+}
+
+#[test]
 fn presented_pointer_integration_close_and_add_dispatch_distinct_interactions() {
     let mut app = make_test_app(140, 24, 1.0);
     let Some(render) = ensure_primary_frame(&mut app) else {
