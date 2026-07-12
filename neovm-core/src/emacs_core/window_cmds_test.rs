@@ -6863,6 +6863,74 @@ fn scroll_down_skips_invisible_logical_lines_when_measuring_a_page() {
     assert_eq!(results[0], "OK (35 2 1)");
 }
 
+/// Page-up near the end of a large buffer must not restart display scanning at
+/// `point-min` for every requested screen row.  That made one `C-b` in a
+/// 149-KiB Org journal execute roughly `page_height * buffer_size` display
+/// iterator steps and block the command loop for about 25 seconds.
+#[test]
+fn scroll_down_page_scans_buffer_once_not_once_per_screen_row() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*scroll-complexity*");
+    ev.buffers.set_current(buffer_id);
+    let frame_id = ev
+        .frames
+        .create_frame("scroll-complexity", 800, 600, buffer_id);
+    ev.buffers
+        .insert_into_buffer(buffer_id, &"some journal text on this line\n".repeat(400));
+    let end = ev
+        .buffers
+        .get(buffer_id)
+        .expect("scroll buffer")
+        .emacs_byte_pos_to_lisp_char_pos(
+            ev.buffers
+                .get(buffer_id)
+                .expect("scroll buffer")
+                .accessible_emacs_byte_region()
+                .end(),
+        );
+    let window_id = ev
+        .frames
+        .get(frame_id)
+        .expect("scroll frame")
+        .selected_window;
+    let window = ev
+        .frames
+        .get_mut(frame_id)
+        .expect("scroll frame")
+        .find_window_mut(window_id)
+        .expect("scroll window");
+    crate::window::window_markers::set_window_point_with_marker(&mut ev.buffers, window, end);
+    crate::window::window_markers::set_window_start_with_marker(&mut ev.buffers, window, end);
+
+    crate::emacs_core::builtins::reset_screen_line_scan_steps_for_test();
+    super::builtin_scroll_down(&mut ev, vec![Value::NIL]).expect("page up from end");
+    let after_start = super::builtin_window_start(&mut ev, vec![Value::make_window(window_id.0)])
+        .expect("window-start after page up")
+        .as_fixnum()
+        .expect("window-start is an integer");
+    let scan_steps = crate::emacs_core::builtins::screen_line_scan_steps_for_test();
+    let buffer_bytes = ev
+        .buffers
+        .get(buffer_id)
+        .expect("scroll buffer")
+        .accessible_emacs_byte_region()
+        .range()
+        .len()
+        .get();
+
+    assert!(
+        after_start < end.as_i64(),
+        "page-up must move window-start backward: before={} after={after_start}",
+        end.as_i64()
+    );
+    assert!(
+        scan_steps < buffer_bytes.saturating_mul(2),
+        "page-up rescanned the buffer per screen row: {scan_steps} display steps for \
+         {buffer_bytes} buffer bytes"
+    );
+}
+
 /// Reproduces the observable bug reported after `C-x 2` in an
 /// interactive `neomacs -nw -Q` session: the cursor ends up on the
 /// *bottom* (newly-created) window, and both mode lines render in

@@ -14,6 +14,7 @@ use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
+use std::collections::VecDeque;
 
 /// GNU `init_obarray_once` creates the initial obarray with size_bits = 15.
 pub(crate) const GNU_INITIAL_OBARRAY_SIZE: usize = 1 << 15;
@@ -1980,51 +1981,120 @@ struct ScreenLineStep {
     counts_line: bool,
 }
 
-fn previous_visible_line_start(
+fn previous_logical_line_start(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: EmacsBytePos,
+) -> Option<EmacsBytePos> {
+    let begv = buf.accessible_emacs_byte_region().start();
+    let line_start = line_start_at_or_before(buf, pos);
+    if line_start <= begv {
+        return None;
+    }
+    Some(line_start_at_or_before(
+        buf,
+        line_start.saturating_sub_len(EmacsByteLen::new(1)),
+    ))
+}
+
+/// Move backward by several displayed rows without restarting at `point-min`
+/// for every row.
+///
+/// GNU's `move_it_by_lines` first backs up across approximately the requested
+/// number of logical lines, then scans forward once to correct for wrapping
+/// and display properties.  Do the same here.  If invisible logical lines
+/// leave too few displayed rows, grow the backward search geometrically; the
+/// total forward work remains linear in the traversed buffer region.
+fn previous_screen_line_target(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     pos: EmacsBytePos,
     screen_width: usize,
-) -> Result<Option<(EmacsBytePos, bool)>, Flow> {
-    let (point_min, point_max) = match eval.buffers.get(buffer_id) {
-        Some(buf) => {
-            let accessible = buf.accessible_emacs_byte_region();
-            (accessible.start(), accessible.end())
-        }
-        None => return Ok(None),
+    truncate_lines: bool,
+    count: usize,
+) -> Result<(EmacsBytePos, i64), Flow> {
+    if count == 0 {
+        return Ok((pos, 0));
+    }
+    let point_min = match eval.buffers.get(buffer_id) {
+        Some(buf) => buf.accessible_emacs_byte_region().start(),
+        None => return Ok((pos, 0)),
     };
-    if pos <= point_min {
-        return Ok(None);
+    let current = current_screen_line_start_with_truncation(
+        eval,
+        buffer_id,
+        pos,
+        screen_width,
+        truncate_lines,
+    )?
+    .unwrap_or(point_min);
+    if current <= point_min {
+        return Ok((current, 0));
     }
 
-    let current_screen_start =
-        current_screen_line_start(eval, buffer_id, pos, screen_width)?.unwrap_or(point_min);
-    if current_screen_start <= point_min {
-        return Ok(None);
-    }
+    let mut anchor = eval
+        .buffers
+        .get(buffer_id)
+        .map(|buf| line_start_at_or_before(buf, current))
+        .unwrap_or(point_min);
+    let mut logical_lines_to_back = count.max(1);
 
-    let mut scan = point_min;
-    let mut previous_start = None;
-    let mut current_start = point_min;
-    while scan < point_max && current_start < current_screen_start {
-        let Some(step) =
-            next_screen_line_start_from(eval, buffer_id, current_start, screen_width, false)?
-        else {
-            break;
-        };
-        if step.next <= current_screen_start {
-            previous_start = Some(current_start);
-            current_start = step.next;
-            scan = step.next;
-        } else {
-            break;
+    loop {
+        if let Some(buf) = eval.buffers.get(buffer_id) {
+            for _ in 0..logical_lines_to_back {
+                let Some(previous) = previous_logical_line_start(buf, anchor) else {
+                    anchor = point_min;
+                    break;
+                };
+                anchor = previous;
+            }
         }
-    }
 
-    if let Some(previous_start) = previous_start {
-        Ok(Some((previous_start, true)))
-    } else {
-        Ok(None)
+        let anchor_is_invisible = crate::emacs_core::xdisp::zero_width_invisible_run_end_byte(
+            eval,
+            buffer_id,
+            anchor.get(),
+        )?
+        .is_some_and(|next_visible| next_visible > anchor.get());
+        if anchor_is_invisible {
+            if anchor <= point_min {
+                return Ok((current, 0));
+            }
+            logical_lines_to_back = logical_lines_to_back.saturating_mul(2);
+            continue;
+        }
+
+        let mut recent_rows = VecDeque::with_capacity(count.saturating_add(1));
+        recent_rows.push_back(anchor);
+        let mut cursor = anchor;
+        while cursor < current {
+            let Some(step) =
+                next_screen_line_start_from(eval, buffer_id, cursor, screen_width, truncate_lines)?
+            else {
+                break;
+            };
+            if step.next <= cursor || step.next > current {
+                break;
+            }
+            cursor = step.next;
+            if step.counts_line {
+                recent_rows.push_back(cursor);
+                if recent_rows.len() > count.saturating_add(1) {
+                    recent_rows.pop_front();
+                }
+            }
+        }
+
+        if recent_rows.back().copied() == Some(current) && recent_rows.len() > count {
+            return Ok((recent_rows[recent_rows.len() - count - 1], -(count as i64)));
+        }
+        if anchor <= point_min {
+            let moved = recent_rows.len().saturating_sub(1);
+            return Ok((
+                recent_rows.front().copied().unwrap_or(point_min),
+                -(moved as i64),
+            ));
+        }
+        logical_lines_to_back = logical_lines_to_back.saturating_mul(2);
     }
 }
 
@@ -2049,15 +2119,6 @@ fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePo
         bol = bol.saturating_sub_len(EmacsByteLen::new(1));
     }
     bol
-}
-
-fn current_screen_line_start(
-    eval: &mut super::eval::Context,
-    buffer_id: crate::buffer::BufferId,
-    pos: EmacsBytePos,
-    screen_width: usize,
-) -> Result<Option<EmacsBytePos>, Flow> {
-    current_screen_line_start_with_truncation(eval, buffer_id, pos, screen_width, false)
 }
 
 fn current_screen_line_start_with_truncation(
@@ -2103,6 +2164,8 @@ fn next_screen_line_start_from(
     let mut column = 0usize;
 
     while scan < point_max {
+        #[cfg(test)]
+        SCREEN_LINE_SCAN_STEPS.with(|steps| steps.set(steps.get().saturating_add(1)));
         let Some(advance) = indent::display_advance_at(eval, buffer_id, scan.get(), column)? else {
             return Ok(None);
         };
@@ -2149,6 +2212,21 @@ fn next_screen_line_start_from(
     } else {
         Ok(None)
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCREEN_LINE_SCAN_STEPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_screen_line_scan_steps_for_test() {
+    SCREEN_LINE_SCAN_STEPS.with(|steps| steps.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn screen_line_scan_steps_for_test() -> usize {
+    SCREEN_LINE_SCAN_STEPS.with(std::cell::Cell::get)
 }
 
 fn truncated_logical_line_step(
@@ -2349,19 +2427,14 @@ pub(crate) fn screen_line_motion_target(
             }
         }
     } else if lines < 0 {
-        for _ in 0..(-lines) as usize {
-            let Some((previous, line_moved)) =
-                previous_visible_line_start(eval, current_buffer, target, screen_width)?
-            else {
-                break;
-            };
-            target = previous;
-            if line_moved {
-                moved -= 1;
-            } else {
-                break;
-            }
-        }
+        (target, moved) = previous_screen_line_target(
+            eval,
+            current_buffer,
+            target,
+            screen_width,
+            truncate_lines,
+            (-lines) as usize,
+        )?;
     }
 
     Ok((target, moved))
@@ -2502,20 +2575,14 @@ pub(crate) fn builtin_vertical_motion(
             }
         }
     } else if lines < 0 {
-        let target = (-lines) as usize;
-        for _ in 0..target {
-            let Some((prev, line_moved)) =
-                previous_visible_line_start(eval, current_id, pos, screen_width)?
-            else {
-                break;
-            };
-            pos = prev;
-            if line_moved {
-                moved -= 1;
-            } else {
-                break;
-            }
-        }
+        (pos, moved) = previous_screen_line_target(
+            eval,
+            current_id,
+            pos,
+            screen_width,
+            truncate_lines,
+            (-lines) as usize,
+        )?;
     } else {
         // lines == 0 but cols is Some: stay on current screen line.
         pos = current_screen_line_start_with_truncation(
