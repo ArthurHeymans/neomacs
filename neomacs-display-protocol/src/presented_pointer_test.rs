@@ -901,6 +901,46 @@ fn unified_hit_rejects_pointer_region_without_semantic_owner() {
 }
 
 #[test]
+fn semantic_hit_index_limits_large_frame_queries_to_the_selected_row_band() {
+    let presentation = crate::PresentationId::new(30);
+    let window = crate::DisplayWindowId::new(1);
+    let mut positions = Vec::new();
+    for row in 0..100 {
+        for column in 0..100 {
+            positions.push(crate::PresentedTextPosition::new(
+                window,
+                rect(column as f32 * 8.0, row as f32 * 16.0, 8.0, 16.0),
+                1 + row * 100 + column,
+                row,
+                column,
+            ));
+        }
+    }
+    let index = crate::PresentedHitIndex::from_parts(
+        presentation,
+        vec![crate::PresentedHitRegion::new(
+            Some(window),
+            crate::PresentedRegionKind::TextBody,
+            rect(0.0, 0.0, 800.0, 1600.0),
+            0,
+        )],
+        positions,
+    )
+    .unwrap();
+
+    let hit = index
+        .resolve(crate::PresentedHitQuery::new(presentation, 404.0, 808.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.text_position().unwrap().buffer_position(), 5_051);
+    assert_eq!(
+        index.candidate_count(404.0, 808.0),
+        2,
+        "one body region plus one cell; unrelated 9,999 cells must not be examined"
+    );
+}
+
+#[test]
 fn frame_glyph_buffers_start_with_an_empty_presented_pointer_map() {
     let default_buffer = crate::FrameGlyphBuffer::default();
     let constructed_buffer = crate::FrameGlyphBuffer::new();

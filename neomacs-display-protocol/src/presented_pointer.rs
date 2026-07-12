@@ -263,6 +263,17 @@ pub struct PresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
     text_positions: Vec<PresentedTextPosition>,
+    region_buckets: Vec<PresentedHitBucket>,
+    text_buckets: Vec<PresentedHitBucket>,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+struct PresentedHitBucket {
+    top: f32,
+    bottom: f32,
+    prefix_max_bottom: f32,
+    candidates: Vec<usize>,
+    prefix_max_right: Vec<f32>,
 }
 
 impl Default for PresentedHitIndex {
@@ -278,6 +289,8 @@ impl PresentedHitIndex {
             presentation,
             regions: Vec::new(),
             text_positions: Vec::new(),
+            region_buckets: Vec::new(),
+            text_buckets: Vec::new(),
         }
     }
 
@@ -298,10 +311,24 @@ impl PresentedHitIndex {
         {
             return Err(PresentedHitError::InvalidTextPositionGeometry);
         }
+        let region_buckets = build_presented_hit_buckets(
+            regions
+                .iter()
+                .enumerate()
+                .map(|(index, region)| (index, region.bounds)),
+        );
+        let text_buckets = build_presented_hit_buckets(
+            text_positions
+                .iter()
+                .enumerate()
+                .map(|(index, position)| (index, position.bounds)),
+        );
         Ok(Self {
             presentation,
             regions,
             text_positions,
+            region_buckets,
+            text_buckets,
         })
     }
 
@@ -323,21 +350,46 @@ impl PresentedHitIndex {
         if !query.x.is_finite() || !query.y.is_finite() {
             return Ok(None);
         }
-        let Some((_, region)) = self
-            .regions
-            .iter()
-            .enumerate()
-            .filter(|(_, region)| contains(region.bounds, query.x, query.y))
-            .max_by_key(|(index, region)| (region.z_order, std::cmp::Reverse(*index)))
-        else {
+        let mut best = None;
+        for_each_presented_hit_candidate(
+            &self.region_buckets,
+            query.x,
+            query.y,
+            |index| self.regions[index].bounds,
+            |index| {
+                best = Some(best.map_or(index, |current: usize| {
+                    let candidate = &self.regions[index];
+                    let current_region = &self.regions[current];
+                    if (candidate.z_order, std::cmp::Reverse(index))
+                        > (current_region.z_order, std::cmp::Reverse(current))
+                    {
+                        index
+                    } else {
+                        current
+                    }
+                }));
+            },
+        );
+        let Some(region_index) = best else {
             return Ok(None);
         };
+        let region = &self.regions[region_index];
         let text_position = (region.kind == PresentedRegionKind::TextBody)
             .then(|| {
-                self.text_positions.iter().find(|position| {
-                    Some(position.window) == region.window
-                        && contains(position.bounds, query.x, query.y)
-                })
+                let mut selected = None;
+                for_each_presented_hit_candidate(
+                    &self.text_buckets,
+                    query.x,
+                    query.y,
+                    |index| self.text_positions[index].bounds,
+                    |index| {
+                        if Some(self.text_positions[index].window) == region.window {
+                            selected =
+                                Some(selected.map_or(index, |current: usize| current.min(index)));
+                        }
+                    },
+                );
+                selected.map(|index| &self.text_positions[index])
             })
             .flatten()
             .copied();
@@ -355,6 +407,114 @@ impl PresentedHitIndex {
     #[must_use]
     pub fn text_positions(&self) -> &[PresentedTextPosition] {
         &self.text_positions
+    }
+
+    #[cfg(test)]
+    pub(crate) fn candidate_count(&self, x: f32, y: f32) -> usize {
+        let mut count = 0;
+        for_each_presented_hit_candidate(
+            &self.region_buckets,
+            x,
+            y,
+            |index| self.regions[index].bounds,
+            |_| count += 1,
+        );
+        for_each_presented_hit_candidate(
+            &self.text_buckets,
+            x,
+            y,
+            |index| self.text_positions[index].bounds,
+            |_| count += 1,
+        );
+        count
+    }
+}
+
+fn build_presented_hit_buckets(
+    entries: impl Iterator<Item = (usize, FrameRect)>,
+) -> Vec<PresentedHitBucket> {
+    let mut entries = entries
+        .map(|(index, bounds)| (bounds.y(), bounds.y() + bounds.height(), index, bounds))
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| {
+        left.0
+            .total_cmp(&right.0)
+            .then(left.1.total_cmp(&right.1))
+            .then(left.2.cmp(&right.2))
+    });
+    let mut buckets: Vec<PresentedHitBucket> = Vec::new();
+    for (top, bottom, index, _) in &entries {
+        if buckets.last().is_none_or(|bucket| {
+            bucket.top.total_cmp(top).is_ne() || bucket.bottom.total_cmp(bottom).is_ne()
+        }) {
+            buckets.push(PresentedHitBucket {
+                top: *top,
+                bottom: *bottom,
+                prefix_max_bottom: *bottom,
+                candidates: Vec::new(),
+                prefix_max_right: Vec::new(),
+            });
+        }
+        buckets.last_mut().unwrap().candidates.push(*index);
+    }
+    let bounds_by_index = entries
+        .iter()
+        .map(|(_, _, index, bounds)| (*index, *bounds))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut prefix_max_bottom = 0.0_f32;
+    for bucket in &mut buckets {
+        prefix_max_bottom = prefix_max_bottom.max(bucket.bottom);
+        bucket.prefix_max_bottom = prefix_max_bottom;
+        bucket.candidates.sort_by(|left, right| {
+            bounds_by_index[left]
+                .x()
+                .total_cmp(&bounds_by_index[right].x())
+                .then(left.cmp(right))
+        });
+        let mut prefix_max_right = 0.0_f32;
+        bucket.prefix_max_right = bucket
+            .candidates
+            .iter()
+            .map(|index| {
+                let bounds = bounds_by_index[index];
+                prefix_max_right = prefix_max_right.max(bounds.x() + bounds.width());
+                prefix_max_right
+            })
+            .collect();
+    }
+    buckets
+}
+
+fn for_each_presented_hit_candidate(
+    buckets: &[PresentedHitBucket],
+    x: f32,
+    y: f32,
+    bounds: impl Fn(usize) -> FrameRect,
+    mut visit: impl FnMut(usize),
+) {
+    let mut bucket_end = buckets.partition_point(|bucket| bucket.top <= y);
+    while bucket_end > 0 {
+        let bucket = &buckets[bucket_end - 1];
+        if bucket.prefix_max_bottom <= y {
+            break;
+        }
+        if y < bucket.bottom {
+            let mut candidate_end = bucket
+                .candidates
+                .partition_point(|&index| bounds(index).x() <= x);
+            while candidate_end > 0 {
+                let position = candidate_end - 1;
+                if bucket.prefix_max_right[position] <= x {
+                    break;
+                }
+                let index = bucket.candidates[position];
+                if contains(bounds(index), x, y) {
+                    visit(index);
+                }
+                candidate_end -= 1;
+            }
+        }
+        bucket_end -= 1;
     }
 }
 
