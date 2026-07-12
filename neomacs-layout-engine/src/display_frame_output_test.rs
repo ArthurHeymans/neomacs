@@ -295,12 +295,10 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         window_end: 101,
         buffer_size: params.buffer_size,
         bounds: params.bounds,
-        geometry: Some(
-            neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
-                cell_origin: Default::default(),
-                regions,
-            },
-        ),
+        geometry: neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+            cell_origin: Default::default(),
+            regions,
+        },
         mode_line_height: params.mode_line_height,
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,
@@ -577,13 +575,24 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
 }
 
 #[test]
+#[should_panic(
+    expected = "every output window must install complete or skipped presented geometry"
+)]
+fn frame_output_rejects_window_without_installed_geometry() {
+    let params = window_params();
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    WindowFrameInfoRenderRequest::new(&params, WindowFrameMetadata::default())
+        .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
+    let _ = builder.finish(80, 24, 8.0, 16.0);
+}
+
+#[test]
 fn missing_vertical_track_does_not_suppress_horizontal_scroll_bar() {
     let params = window_params();
     let mut info = window_info(&params);
-    let Some(neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
-        regions,
-        ..
-    }) = info.geometry.as_mut()
+    let neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions, ..
+    } = &mut info.geometry
     else {
         panic!("complete presented regions");
     };

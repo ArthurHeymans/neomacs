@@ -39,7 +39,7 @@ fn test_window_info(
         window_end: 100,
         buffer_size: 100,
         bounds,
-        geometry: None,
+        geometry: Default::default(),
         mode_line_height,
         header_line_height: 0.0,
         tab_line_height: 0.0,

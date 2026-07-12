@@ -15,7 +15,7 @@ use neomacs_display_protocol::glyph_matrix::{
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub(crate) struct OutputFrameBuildState {
     backgrounds: Vec<BackgroundItem>,
@@ -30,6 +30,7 @@ pub(crate) struct OutputFrameBuildState {
     cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
     faces: HashMap<FaceId, Face>,
     window_infos: Vec<WindowInfo>,
+    pending_window_geometry: HashSet<DisplayWindowId>,
     transition_hints: Vec<WindowTransitionHint>,
     effect_hints: Vec<WindowEffectHint>,
     background_color: Color,
@@ -61,6 +62,7 @@ impl OutputFrameBuildState {
             cursor_effects_by_window: HashMap::new(),
             faces: HashMap::new(),
             window_infos: Vec::new(),
+            pending_window_geometry: HashSet::new(),
             transition_hints: Vec::new(),
             effect_hints: Vec::new(),
             background_color: Color {
@@ -101,6 +103,7 @@ impl OutputFrameBuildState {
         self.cursor_effects_by_window.clear();
         self.faces.clear();
         self.window_infos.clear();
+        self.pending_window_geometry.clear();
         self.transition_hints.clear();
         self.effect_hints.clear();
         self.background_color = Color {
@@ -143,7 +146,8 @@ impl OutputFrameBuildState {
                     .iter_mut()
                     .find(|info| info.window_id == geometry.window_id)
                 {
-                    info.geometry = Some(geometry.geometry);
+                    info.geometry = geometry.geometry;
+                    self.pending_window_geometry.remove(&geometry.window_id);
                     let regions = match geometry.geometry {
                         neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
                             regions,
@@ -198,7 +202,10 @@ impl OutputFrameBuildState {
                 });
             }
             OutputFrameArtifactInstallRequest::ScrollBar(item) => self.scroll_bars.push(item),
-            OutputFrameArtifactInstallRequest::WindowInfo(info) => self.window_infos.push(info),
+            OutputFrameArtifactInstallRequest::WindowInfo(info) => {
+                self.pending_window_geometry.insert(info.window_id);
+                self.window_infos.push(info);
+            }
             OutputFrameArtifactInstallRequest::TransitionHint(hint) => {
                 self.transition_hints.push(hint);
             }
@@ -317,6 +324,10 @@ impl OutputFrameBuildState {
     }
 
     pub(crate) fn install_into(self, state: &mut FrameDisplayState) {
+        assert!(
+            self.pending_window_geometry.is_empty(),
+            "every output window must install complete or skipped presented geometry"
+        );
         state.backgrounds = self.backgrounds;
         state.face_fills = self.face_fills;
         state.borders = self.borders;

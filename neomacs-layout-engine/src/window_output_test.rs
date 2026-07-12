@@ -100,7 +100,7 @@ fn window_info(window_id: i64) -> WindowInfo {
         window_end: 1,
         buffer_size: 100,
         bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
-        geometry: None,
+        geometry: Default::default(),
         mode_line_height: 0.0,
         header_line_height: 0.0,
         tab_line_height: 0.0,

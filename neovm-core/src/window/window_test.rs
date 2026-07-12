@@ -35,6 +35,11 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
             row: 20,
             col: 66,
         }],
+        body_rows: vec![PresentedBodyRowSnapshot {
+            output_row: 20,
+            body_row: 18,
+            body_y: 323,
+        }],
         ..WindowDisplaySnapshot::default()
     };
 
@@ -194,6 +199,79 @@ fn presentation_identity_rejects_zero() {
 
     assert_eq!(PresentationId::try_new(0), None);
     assert_eq!(PresentationId::try_new(7).map(PresentationId::get), Some(7));
+}
+
+#[test]
+fn duplicate_windows_reject_candidate_without_replacing_publication() {
+    use super::geometry::{GeometryError, PresentationId, PresentationPublishError};
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("duplicate-publication", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+    frame
+        .publish_display_snapshots(
+            PresentationId::new(1),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("initial publication");
+
+    let result = frame.publish_display_snapshots(
+        PresentationId::new(2),
+        vec![
+            WindowDisplaySnapshot {
+                window_id,
+                ..WindowDisplaySnapshot::default()
+            },
+            WindowDisplaySnapshot {
+                window_id,
+                ..WindowDisplaySnapshot::default()
+            },
+        ],
+    );
+
+    assert_eq!(
+        result,
+        Err(PresentationPublishError::InvalidGeometry(
+            GeometryError::DuplicateWindow(window_id)
+        ))
+    );
+    assert_eq!(frame.display_presentation(), Some(PresentationId::new(1)));
+}
+
+#[test]
+fn presented_positions_require_body_local_row_facts() {
+    use super::geometry::{GeometryError, PresentationId, PresentedGeometry};
+
+    let window_id = WindowId(11);
+    let result = PresentedGeometry::new(
+        FrameId(7),
+        PresentationId::new(1),
+        [WindowDisplaySnapshot {
+            window_id,
+            points: vec![DisplayPointSnapshot {
+                buffer_pos: LispCharPos1::ONE,
+                x: 0,
+                y: 10,
+                width: 8,
+                height: 16,
+                row: 2,
+                col: 0,
+            }],
+            ..WindowDisplaySnapshot::default()
+        }],
+    );
+
+    assert_eq!(
+        result,
+        Err(GeometryError::MissingBodyRow {
+            window: window_id,
+            output_row: 2,
+        })
+    );
 }
 
 #[test]

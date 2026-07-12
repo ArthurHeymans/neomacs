@@ -2451,6 +2451,11 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                         row: 1,
                         col: 3,
                     }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 1,
+                        body_row: 1,
+                        body_y: 18,
+                    }],
                     rows: vec![crate::window::DisplayRowSnapshot {
                         row: 1,
                         y: 18,

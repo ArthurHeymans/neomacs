@@ -14,8 +14,7 @@ use neomacs_display_protocol::frame_chrome::{
 };
 use neomacs_display_protocol::frame_glyphs::{
     GlyphRowRole, PresentedCellOrigin as ProtocolCellOrigin,
-    PresentedWindowGeometry as ProtocolWindowGeometry,
-    PresentedWindowRegions as ProtocolWindowRegions, WindowEffectHint, WindowInfo,
+    PresentedWindowGeometry as ProtocolWindowGeometry, WindowEffectHint, WindowInfo,
     WindowTransitionHint, WindowTransitionKind, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
@@ -195,10 +194,6 @@ impl<'a> PresentedWindowRegionRequest<'a> {
     }
 }
 
-pub(crate) fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRegions {
-    *regions
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FrameOutputIdentity {
     pub(crate) frame_id: u64,
@@ -338,7 +333,7 @@ impl FrameOutputOwner {
         let geometry = if materialized {
             ProtocolWindowGeometry::Complete {
                 cell_origin,
-                regions: protocol_window_regions(regions),
+                regions: *regions,
             }
         } else {
             ProtocolWindowGeometry::Skipped {
@@ -662,7 +657,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
                 self.params.bounds.width,
                 self.params.bounds.height,
             ),
-            geometry: None,
+            geometry: ProtocolWindowGeometry::default(),
             mode_line_height: self.params.mode_line_height,
             header_line_height: self.params.header_line_height,
             tab_line_height: self.params.tab_line_height,
@@ -1178,8 +1173,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
-        let Some(ProtocolWindowGeometry::Complete { regions, .. }) = self.info.geometry.as_ref()
-        else {
+        let ProtocolWindowGeometry::Complete { regions, .. } = &self.info.geometry else {
             return;
         };
 

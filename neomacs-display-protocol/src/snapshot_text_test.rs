@@ -62,7 +62,7 @@ fn golden_state() -> FrameDisplayState {
         window_end: 12,
         buffer_size: 100,
         bounds: Rect::new(0.0, 0.0, 128.0, 32.0),
-        geometry: None,
+        geometry: Default::default(),
         mode_line_height: 16.0,
         header_line_height: 0.0,
         tab_line_height: 0.0,

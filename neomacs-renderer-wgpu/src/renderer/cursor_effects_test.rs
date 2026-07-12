@@ -50,7 +50,7 @@ fn make_selected_window_info(x: f32, y: f32, w: f32, h: f32) -> WindowInfo {
         window_end: 100,
         buffer_size: 200,
         bounds: Rect::new(x, y, w, h),
-        geometry: None,
+        geometry: Default::default(),
         mode_line_height: 20.0,
         header_line_height: 0.0,
         tab_line_height: 0.0,

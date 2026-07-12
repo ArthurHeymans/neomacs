@@ -681,6 +681,15 @@ pub enum PresentedWindowGeometry {
     },
 }
 
+impl Default for PresentedWindowGeometry {
+    fn default() -> Self {
+        Self::Skipped {
+            cell_origin: PresentedCellOrigin::default(),
+            outer: Rect::default(),
+        }
+    }
+}
+
 /// Per-window metadata for animation transition detection
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowInfo {
@@ -697,7 +706,7 @@ pub struct WindowInfo {
     /// Frame-absolute window bounds (includes mode-line)
     pub bounds: Rect,
     /// Atomically installed geometry from the same presentation.
-    pub geometry: Option<PresentedWindowGeometry>,
+    pub geometry: PresentedWindowGeometry,
     /// Height of the mode-line in pixels (0 if no mode-line)
     pub mode_line_height: f32,
     /// Height of the header-line in pixels (0 if no header-line)
@@ -1712,7 +1721,10 @@ impl FrameGlyphBuffer {
             window_end,
             buffer_size,
             bounds: Rect::new(x, y, width, height),
-            geometry: None,
+            geometry: PresentedWindowGeometry::Skipped {
+                cell_origin: PresentedCellOrigin::default(),
+                outer: Rect::new(x, y, width, height),
+            },
             mode_line_height,
             header_line_height,
             tab_line_height,

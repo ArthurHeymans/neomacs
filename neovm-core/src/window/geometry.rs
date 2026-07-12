@@ -101,13 +101,14 @@ impl PresentedGeometry {
         presentation: PresentationId,
         snapshots: impl IntoIterator<Item = WindowDisplaySnapshot>,
     ) -> Result<Self, GeometryError> {
-        let windows = snapshots
-            .into_iter()
-            .map(PresentedWindow::from_snapshot)
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .map(|window| (window.id, window))
-            .collect();
+        let mut windows = HashMap::new();
+        for snapshot in snapshots {
+            let window = PresentedWindow::from_snapshot(snapshot)?;
+            let id = window.id;
+            if windows.insert(id, window).is_some() {
+                return Err(GeometryError::DuplicateWindow(id));
+            }
+        }
         Ok(Self {
             presentation,
             frame: PresentedFrame { id: frame, windows },
@@ -118,8 +119,8 @@ impl PresentedGeometry {
         self.presentation
     }
 
-    pub const fn frame(&self) -> &PresentedFrame {
-        &self.frame
+    pub(crate) fn contains_window(&self, window: WindowId) -> bool {
+        self.frame.windows.contains_key(&window)
     }
 
     fn window(&self, window: WindowId) -> Option<&PresentedWindow> {
@@ -139,16 +140,6 @@ impl PresentedGeometry {
     }
 }
 
-impl PresentedFrame {
-    pub const fn id(&self) -> FrameId {
-        self.id
-    }
-
-    pub fn window(&self, id: WindowId) -> Option<&PresentedWindow> {
-        self.windows.get(&id)
-    }
-}
-
 impl PresentedWindow {
     fn from_snapshot(snapshot: WindowDisplaySnapshot) -> Result<Self, GeometryError> {
         let outer = PixelRect::from_transport(&snapshot.regions.outer)?;
@@ -156,25 +147,36 @@ impl PresentedWindow {
             .regions_materialized
             .then(|| WindowRegions::from_transport(&snapshot.regions))
             .transpose()?;
+        let mut body_rows = HashMap::new();
+        for row in &snapshot.body_rows {
+            if body_rows.insert(row.output_row, *row).is_some() {
+                return Err(GeometryError::DuplicateBodyRow {
+                    window: snapshot.window_id,
+                    output_row: row.output_row,
+                });
+            }
+        }
         let positions = snapshot
             .points
             .iter()
             .map(|point| {
-                let body_row = snapshot
-                    .body_rows
-                    .iter()
-                    .find(|row| row.output_row == point.row);
-                PresentedPosition {
+                let body_row = body_rows
+                    .get(&point.row)
+                    .ok_or(GeometryError::MissingBodyRow {
+                        window: snapshot.window_id,
+                        output_row: point.row,
+                    })?;
+                Ok(PresentedPosition {
                     buffer_pos: point.buffer_pos,
                     x: point.x,
-                    body_y: body_row.map_or(point.y, |row| row.body_y),
+                    body_y: body_row.body_y,
                     width: point.width,
                     height: point.height,
-                    body_row: body_row.map_or(point.row, |row| row.body_row),
+                    body_row: body_row.body_row,
                     col: point.col,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, GeometryError>>()?;
         Ok(Self {
             id: snapshot.window_id,
             cell_origin: snapshot.cell_origin,
@@ -182,22 +184,6 @@ impl PresentedWindow {
             regions,
             positions,
         })
-    }
-
-    pub const fn id(&self) -> WindowId {
-        self.id
-    }
-
-    pub const fn cell_origin(&self) -> CellOrigin {
-        self.cell_origin
-    }
-
-    pub const fn outer(&self) -> PixelRect<FrameLogicalSpace> {
-        self.outer
-    }
-
-    pub const fn regions(&self) -> Option<&WindowRegions> {
-        self.regions.as_ref()
     }
 }
 
@@ -359,6 +345,59 @@ impl GeometryQuery for WindowGeometryQuery {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KnownWindowGeometryQuery {
+    presentation: PresentationId,
+    window: WindowId,
+}
+
+impl KnownWindowGeometryQuery {
+    pub const fn new(presentation: PresentationId, window: WindowId) -> Self {
+        Self {
+            presentation,
+            window,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KnownWindowGeometry {
+    outer: PixelRect<FrameLogicalSpace>,
+    cell_origin: CellOrigin,
+}
+
+impl KnownWindowGeometry {
+    pub const fn outer(self) -> PixelRect<FrameLogicalSpace> {
+        self.outer
+    }
+    pub const fn cell_origin(self) -> CellOrigin {
+        self.cell_origin
+    }
+}
+
+impl query_seal::Sealed for KnownWindowGeometryQuery {}
+
+impl GeometryQuery for KnownWindowGeometryQuery {
+    type Output<'a> = KnownWindowGeometry;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let window = geometry
+            .window(self.window)
+            .ok_or(GeometryQueryError::MissingWindow(self.window))?;
+        Ok(KnownWindowGeometry {
+            outer: window.outer,
+            cell_origin: window.cell_origin,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WindowRegion {
     Outer,
     TextBody,
@@ -410,7 +449,8 @@ impl GeometryQuery for WindowRegionBoundsQuery {
             .window(self.window)
             .ok_or(GeometryQueryError::MissingWindow(self.window))?;
         let regions = window
-            .regions()
+            .regions
+            .as_ref()
             .ok_or(GeometryQueryError::MissingMaterializedGeometry(self.window))?;
         let rect = match self.region {
             WindowRegion::Outer => Some(regions.outer),
@@ -673,6 +713,9 @@ impl<Space> WindowPoint<Space> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GeometryError {
     SnapshotWindowMismatch,
+    DuplicateWindow(WindowId),
+    MissingBodyRow { window: WindowId, output_row: i64 },
+    DuplicateBodyRow { window: WindowId, output_row: i64 },
     NonFiniteCoordinate,
     InvalidExtent,
 }
@@ -737,7 +780,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
         window: WindowId,
         window_geometry: &'a PresentedWindow,
     ) -> Option<Self> {
-        let regions = window_geometry.regions()?;
+        let regions = window_geometry.regions.as_ref()?;
         Some(Self {
             presentation,
             frame,
@@ -762,6 +805,10 @@ impl<'a> SnapshotWindowGeometry<'a> {
 
     pub const fn outer_in_frame(&self) -> PixelRect<FrameLogicalSpace> {
         self.outer
+    }
+
+    pub const fn regions(&self) -> WindowRegions {
+        *self.regions
     }
 
     pub fn cell_origin(&self) -> CellOrigin {

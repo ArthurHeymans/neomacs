@@ -24,7 +24,7 @@ fn make_window_info(window_id: i64, buffer_id: u64, window_start: i64, bounds: R
         window_end: window_start + 200,
         buffer_size: 10_000,
         bounds,
-        geometry: None,
+        geometry: Default::default(),
         mode_line_height: 20.0,
         header_line_height: 0.0,
         tab_line_height: 0.0,

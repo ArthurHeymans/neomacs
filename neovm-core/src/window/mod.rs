@@ -2626,7 +2626,7 @@ impl Frame {
         if self
             .presented_geometry
             .as_ref()
-            .is_some_and(|geometry| geometry.frame().window(id).is_some())
+            .is_some_and(|geometry| geometry.contains_window(id))
         {
             self.presented_geometry = None;
             self.display_snapshots.clear();
