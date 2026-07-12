@@ -118,5 +118,4 @@ pub mod unicode;
 pub mod window_output;
 
 pub use engine::*;
-pub use hit_test::{hit_test_charpos_at_pixel, hit_test_window_charpos};
 pub use types::*;

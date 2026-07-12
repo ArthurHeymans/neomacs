@@ -19,7 +19,7 @@ use crate::display_row_walk_state::{
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
 };
 use crate::display_status_line::ChromeRowRenderServices;
-use crate::hit_test::{HitRow, WindowHitData};
+use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -254,9 +254,6 @@ pub(crate) struct TextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView
 }
 
 pub(crate) struct TextWindowFinishRequest {
-    window_id: i64,
-    content_x: f32,
-    char_w: f32,
     text_area_left_offset: i64,
     mode_line_height: i64,
     header_line_height: i64,
@@ -271,13 +268,12 @@ pub(crate) struct TextWindowFinishState<'a> {
 }
 
 pub(crate) struct TextWindowFinishOutput {
-    hit_data: WindowHitData,
     snapshot: WindowDisplaySnapshot,
 }
 
 impl TextWindowFinishOutput {
-    pub(crate) fn into_parts(self) -> (WindowHitData, WindowDisplaySnapshot) {
-        (self.hit_data, self.snapshot)
+    pub(crate) fn into_snapshot(self) -> WindowDisplaySnapshot {
+        self.snapshot
     }
 }
 
@@ -780,18 +776,12 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
 
 impl TextWindowFinishRequest {
     pub(crate) fn new(
-        window_id: i64,
-        content_x: f32,
-        char_w: f32,
         text_area_left_offset: i64,
         mode_line_height: i64,
         header_line_height: i64,
         tab_line_height: i64,
     ) -> Self {
         Self {
-            window_id,
-            content_x,
-            char_w,
             text_area_left_offset,
             mode_line_height,
             header_line_height,
@@ -803,20 +793,13 @@ impl TextWindowFinishRequest {
         self,
         state: TextWindowFinishState<'_>,
     ) -> TextWindowFinishOutput {
-        let (hit_rows, snapshot) = state.finish_snapshot(
+        let (_hit_rows, snapshot) = state.finish_snapshot(
             self.text_area_left_offset,
             self.mode_line_height,
             self.header_line_height,
             self.tab_line_height,
         );
-        let hit_data = WindowHitData {
-            window_id: self.window_id,
-            content_x: self.content_x,
-            char_w: self.char_w,
-            rows: hit_rows,
-        };
-
-        TextWindowFinishOutput { hit_data, snapshot }
+        TextWindowFinishOutput { snapshot }
     }
 }
 

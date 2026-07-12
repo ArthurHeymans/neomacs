@@ -7914,21 +7914,14 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
-    let finished = TextWindowFinishRequest::new(41, 12.0, 8.0, 2, 11, 7, 5).finish_and_snapshot(
-        TextWindowFinishState::new(
+    let finished =
+        TextWindowFinishRequest::new(2, 11, 7, 5).finish_and_snapshot(TextWindowFinishState::new(
             TextWindowOutputTarget::from_builder(&mut builder),
             output_emitter,
             &mut eval,
             hit_rows,
-        ),
-    );
-    let (hit_data, snapshot) = finished.into_parts();
-
-    assert_eq!(hit_data.window_id, 41);
-    assert_eq!(hit_data.content_x, 12.0);
-    assert_eq!(hit_data.char_w, 8.0);
-    assert_eq!(hit_data.rows.len(), 1);
-    assert_eq!(hit_data.rows[0].charpos_start, 3);
+        ));
+    let snapshot = finished.into_snapshot();
     assert_eq!(snapshot.text_area_left_offset, 2);
     assert_eq!(snapshot.mode_line_height, 11);
     assert_eq!(snapshot.header_line_height, 7);

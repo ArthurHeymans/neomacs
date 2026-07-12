@@ -2194,49 +2194,6 @@ impl RowTrace {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct HitRowTrace {
-    y_start_bits: u32,
-    y_end_bits: u32,
-    charpos_start: i64,
-    charpos_end: i64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WindowHitTrace {
-    content_x_bits: u32,
-    char_w_bits: u32,
-    rows: Vec<HitRowTrace>,
-    first_col_hits: Vec<i64>,
-}
-
-impl WindowHitTrace {
-    fn from_window(window: &crate::hit_test::WindowHitData) -> Self {
-        Self {
-            content_x_bits: window.content_x.to_bits(),
-            char_w_bits: window.char_w.to_bits(),
-            rows: window
-                .rows
-                .iter()
-                .map(|row| HitRowTrace {
-                    y_start_bits: row.y_start.to_bits(),
-                    y_end_bits: row.y_end.to_bits(),
-                    charpos_start: row.charpos_start,
-                    charpos_end: row.charpos_end,
-                })
-                .collect(),
-            first_col_hits: window
-                .rows
-                .iter()
-                .map(|row| {
-                    let y = (row.y_start + row.y_end) / 2.0;
-                    crate::hit_test::hit_test_window_charpos(window.window_id, window.content_x, y)
-                })
-                .collect(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct BackendLayoutTrace {
     matrix_rows: Vec<RowTrace>,
     points: Vec<DisplayPointSnapshot>,
@@ -2251,7 +2208,6 @@ struct BackendLayoutTrace {
     window_end_pos: usize,
     /// GNU `w->window_end_bytepos` (byte companion of `window_end_pos`).
     window_end_bytepos: usize,
-    hit: Option<WindowHitTrace>,
 }
 
 fn selected_window_layout_trace(
@@ -2299,16 +2255,6 @@ fn window_layout_trace(
             } => (*window_start, *point, *window_end_pos, *window_end_bytepos),
             other => panic!("expected leaf window, got {other:?}"),
         };
-    let hit = crate::hit_test::with_frame_hit_data(|windows| {
-        windows
-            .and_then(|windows| {
-                windows
-                    .iter()
-                    .find(|window| window.window_id == selected_window.0 as i64)
-            })
-            .map(WindowHitTrace::from_window)
-    });
-
     BackendLayoutTrace {
         matrix_rows: window_entry
             .matrix
@@ -2325,7 +2271,6 @@ fn window_layout_trace(
         window_point,
         window_end_pos,
         window_end_bytepos,
-        hit,
     }
 }
 
@@ -5797,9 +5742,8 @@ fn implemented_text_backends_match_selective_display_output() {
         "baseline should not render selective-display hidden text, rows={rows:?}"
     );
     assert!(
-        baseline.hit.as_ref().is_some_and(|hit| hit.rows.len() >= 2),
-        "baseline should publish hit rows across selective-display output, hit={:?}",
-        baseline.hit
+        baseline.output_rows.len() >= 2,
+        "baseline should publish rows across selective-display output"
     );
 
     for kind in implemented_text_backends() {
@@ -6600,14 +6544,6 @@ fn implemented_text_backends_match_composite_glyph_output() {
             .any(|point| point.buffer_pos == LispCharPos1::new(1)),
         "baseline should publish display geometry for the first composite base char, trace={baseline:?}"
     );
-    assert!(
-        baseline
-            .hit
-            .as_ref()
-            .is_some_and(|hit| !hit.rows.is_empty()),
-        "baseline should publish hit rows for composite output, hit={:?}",
-        baseline.hit
-    );
 
     for kind in implemented_text_backends() {
         let trace = composition_backend_layout_trace(kind);
@@ -6635,14 +6571,6 @@ fn implemented_text_backends_match_wrapped_redisplay_retry_output() {
         "baseline should publish wrapped visual rows, rows={:?}",
         baseline.output_rows
     );
-    assert!(
-        baseline
-            .hit
-            .as_ref()
-            .is_some_and(|hit| hit.rows.len() >= 2 && hit.first_col_hits.len() == hit.rows.len()),
-        "baseline should publish hit rows for wrapped visual output, hit={:?}",
-        baseline.hit
-    );
 
     for kind in implemented_text_backends() {
         let (trace, backend_target_pos) = wrapped_retry_backend_layout_trace(kind);
@@ -6668,14 +6596,6 @@ fn implemented_text_backends_match_point_line_tail_retry_output() {
             .iter()
             .any(|item| item.buffer_pos == LispCharPos1::from_one_based_usize(later_pos)),
         "baseline should publish later positions from the point line after retry, later_pos={later_pos}, trace={baseline:?}"
-    );
-    assert!(
-        baseline
-            .hit
-            .as_ref()
-            .is_some_and(|hit| !hit.rows.is_empty()),
-        "baseline should publish hit rows for point-line retry output, hit={:?}",
-        baseline.hit
     );
 
     for kind in implemented_text_backends() {
@@ -6713,7 +6633,7 @@ fn implemented_text_backends_match_mode_line_geometry_after_redisplay_retry() {
 }
 
 #[test]
-fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
+fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
     let baseline = hscroll_cursor_backend_layout_trace(BufferTextBackendKind::GapBuffer);
     let cursor = baseline.phys_cursor.as_ref().expect("baseline cursor");
     assert_eq!(cursor.x, 0);
@@ -6739,14 +6659,6 @@ fn implemented_text_backends_match_hscroll_cursor_and_hit_output() {
             LispCharPos1::new(7)
         )),
         "baseline should publish the visible hscrolled buffer span"
-    );
-    assert!(
-        baseline
-            .hit
-            .as_ref()
-            .is_some_and(|hit| !hit.rows.is_empty()),
-        "baseline should publish hit rows for hscroll output, hit={:?}",
-        baseline.hit
     );
 
     for kind in implemented_text_backends() {
@@ -12386,33 +12298,6 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
         .find_window(selected_window)
         .and_then(|window| window.display())
         .expect("window display state");
-    let second_text_row = snapshot
-        .rows
-        .iter()
-        .find(|row| row.row == 1)
-        .expect("second overlay row snapshot");
-    let overlay_hit_row = crate::hit_test::with_frame_hit_data(|windows| {
-        windows
-            .and_then(|windows| {
-                windows
-                    .iter()
-                    .find(|window| window.window_id == selected_window.0 as i64)
-            })
-            .and_then(|window| {
-                window.rows.iter().find(|row| {
-                    let y = second_text_row.y as f32 + 1.0;
-                    y >= row.y_start && y < row.y_end
-                })
-            })
-            .cloned()
-    })
-    .expect("overlay hit row");
-    let overlay_hit = crate::hit_test::hit_test_window_charpos(
-        selected_window.0 as i64,
-        0.0,
-        second_text_row.y as f32 + 1.0,
-    );
-
     assert!(
         snapshot
             .rows
@@ -12430,10 +12315,6 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
         display.output_cursor.is_some_and(|cursor| cursor.row >= 1),
         "expected live output cursor to advance onto multiline overlay rows, output={:?}",
         display.output_cursor
-    );
-    assert!(
-        overlay_hit >= overlay_hit_row.charpos_start && overlay_hit <= overlay_hit_row.charpos_end,
-        "expected multiline overlay row hit-testing to land inside the recorded overlay row span, hit={overlay_hit} row={overlay_hit_row:?}"
     );
 }
 

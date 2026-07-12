@@ -18,7 +18,7 @@ use crate::display_text_window_row_lifecycle::{
     TextWindowTailFinalizeState, TextWindowVisibilityRetryOutcome,
     TextWindowVisibilityRetryRequest,
 };
-use crate::hit_test::{HitRow, WindowHitData};
+use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::FaceId;
@@ -48,7 +48,6 @@ pub(crate) struct BufferSourceTailRequestContext<'a> {
     window_top: f32,
     text_y: f32,
     text_height: f32,
-    content_x: f32,
     char_width: f32,
     char_height: f32,
     row_limit: DisplayRowLimit,
@@ -142,7 +141,6 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         window_top: f32,
         text_y: f32,
         text_height: f32,
-        content_x: f32,
         char_width: f32,
         char_height: f32,
         row_limit: DisplayRowLimit,
@@ -162,7 +160,6 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             window_top,
             text_y,
             text_height,
-            content_x,
             char_width,
             char_height,
             row_limit,
@@ -245,9 +242,6 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         // — a tall `display` element grows these past the face-only estimate the
         // text-area geometry was reserved from.
         TextWindowFinishRequest::new(
-            self.params.window_id,
-            self.content_x,
-            self.char_width,
             (self.text_area_left - self.params.bounds.x).round() as i64,
             measured_chrome_heights.mode_line_height.round() as i64,
             measured_chrome_heights.header_line_height.round() as i64,
@@ -259,15 +253,12 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         &self,
         finish_state: TextWindowFinishState<'_>,
         measured_chrome_heights: WindowChromeMeasuredHeights,
-        hit_data: &mut Vec<WindowHitData>,
         display_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
         let finished_window = self
             .finish_request(measured_chrome_heights)
             .finish_and_snapshot(finish_state);
-        let (finished_hit_data, finished_snapshot) = finished_window.into_parts();
-        hit_data.push(finished_hit_data);
-        display_snapshots.push(finished_snapshot);
+        display_snapshots.push(finished_window.into_snapshot());
     }
 }
 

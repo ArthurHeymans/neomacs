@@ -18,7 +18,6 @@ use super::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items,
     layout_gui_compact_bar_content, layout_gui_menu_bar_content, layout_gui_tool_bar_content,
 };
-use super::hit_test::*;
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
@@ -309,7 +308,6 @@ pub struct LayoutEngine {
     /// Reusable text buffer to avoid allocation per frame
     text_buf: Vec<u8>,
     /// Hit-test data being built for current frame
-    hit_data: Vec<WindowHitData>,
     /// Authoritative visible glyph geometry published back into core state.
     display_snapshots: Vec<WindowDisplaySnapshot>,
     /// Cosmic-text font metrics service.
@@ -500,7 +498,6 @@ impl LayoutEngine {
     pub fn new() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024), // 64KB initial
-            hit_data: Vec::new(),
             display_snapshots: Vec::new(),
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
@@ -529,7 +526,6 @@ impl LayoutEngine {
     pub fn new_without_font_metrics() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024),
-            hit_data: Vec::new(),
             display_snapshots: Vec::new(),
             font_metrics: None,
             font_sizing: FontSizing::xft(),
@@ -781,7 +777,6 @@ impl LayoutEngine {
                 ));
 
             // Clear hit-test data for new frame
-            self.hit_data.clear();
             self.display_snapshots.clear();
 
             let tab_bar_height = frame_params.tab_bar_height;
@@ -1480,7 +1475,6 @@ impl LayoutEngine {
                 )
                 .expect("layout presentation identity is fresh");
         }
-        set_frame_hit_data(Some(std::mem::take(&mut self.hit_data)));
     }
 
     /// Simplified window layout using neovm-core data.
@@ -1740,7 +1734,6 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 face_resolver,
                 &mut self.frame_face_id_counter,
-                &mut self.hit_data,
                 &mut self.display_snapshots,
             ),
             &mut self.text_buf,

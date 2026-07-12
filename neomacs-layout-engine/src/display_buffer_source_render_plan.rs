@@ -413,14 +413,8 @@ impl BufferSourceOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let (
-            mut output,
-            font_metrics,
-            face_resolver,
-            frame_face_id_counter,
-            hit_data,
-            display_snapshots,
-        ) = state.into_parts();
+        let (mut output, font_metrics, face_resolver, frame_face_id_counter, display_snapshots) =
+            state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
         let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
 
@@ -479,7 +473,6 @@ impl BufferSourceOutputSetup {
             walk_setup.window_top,
             geometry.text_y,
             geometry.text_height,
-            geometry.content_x,
             geometry.char_width,
             geometry.char_height,
             self.row_limit,
@@ -667,7 +660,6 @@ impl BufferSourceOutputSetup {
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
                 measured_chrome_heights,
-                hit_data,
                 display_snapshots,
             );
             *frame_face_id_counter = face_ids.finish();
@@ -859,7 +851,6 @@ impl BufferSourceOutputSetup {
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
                 measured_chrome_heights,
-                hit_data,
                 display_snapshots,
             );
             *frame_face_id_counter = face_ids.finish();
@@ -1001,7 +992,6 @@ impl BufferSourceOutputSetup {
                 std::mem::take(&mut walk_setup.hit_rows),
             ),
             measured_chrome_heights,
-            hit_data,
             display_snapshots,
         );
         *frame_face_id_counter = face_ids.finish();
