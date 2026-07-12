@@ -81,6 +81,57 @@ fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKe
     )
 }
 
+#[test]
+fn incoherent_presented_observation_drops_the_raw_pointer_event() {
+    let expected = PresentationId::new(8);
+    let requested = PresentationId::new(7);
+    let result = RenderApp::pair_presented_region_with_raw_input(
+        Err(
+            neomacs_display_protocol::PresentedHitError::StalePresentation {
+                expected,
+                requested,
+            },
+        ),
+        crate::thread_comm::InputEvent::MouseMove {
+            x: 1.0,
+            y: 2.0,
+            modifiers: 0,
+            target_frame_id: 1,
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(neomacs_display_protocol::PresentedHitError::StalePresentation {
+            expected: actual_expected,
+            requested: actual_requested,
+        }) if actual_expected == expected && actual_requested == requested
+    ));
+}
+
+#[test]
+fn incoherent_presented_observation_drops_the_raw_mouse_button_event() {
+    let result = RenderApp::pair_presented_region_with_raw_input(
+        Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry),
+        crate::thread_comm::InputEvent::MouseButton {
+            button: 1,
+            x: 1.0,
+            y: 2.0,
+            pressed: true,
+            modifiers: 0,
+            target_frame_id: 1,
+            webkit_id: 0,
+            webkit_rel_x: 0,
+            webkit_rel_y: 0,
+        },
+    );
+
+    assert!(matches!(
+        result,
+        Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)
+    ));
+}
+
 fn presented_pointer_integration_relief(pressed: bool) -> PointerImageRelief {
     let light = Color::new(0.85, 0.85, 0.85, 1.0);
     let dark = Color::new(0.25, 0.25, 0.25, 1.0);

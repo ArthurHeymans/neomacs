@@ -84,6 +84,13 @@ impl RenderApp {
         }))
     }
 
+    pub(super) fn pair_presented_region_with_raw_input(
+        observation: Result<Option<InputEvent>, neomacs_display_protocol::PresentedHitError>,
+        raw: InputEvent,
+    ) -> Result<(Option<InputEvent>, InputEvent), neomacs_display_protocol::PresentedHitError> {
+        observation.map(|observation| (observation, raw))
+    }
+
     pub(super) fn suppress_root_chrome_hover(
         render: &mut super::frame_windows::GuiFrameRenderState,
     ) -> bool {
@@ -896,15 +903,7 @@ impl RenderApp {
                     } else {
                         (0, 0, 0)
                     };
-                    if let Ok(Some(observation)) = Self::presented_region_input_event(
-                        &window_state.render,
-                        target_fid,
-                        ev_x,
-                        ev_y,
-                    ) {
-                        captured_events.push(observation);
-                    }
-                    event = Some(InputEvent::MouseButton {
+                    let raw = InputEvent::MouseButton {
                         button: btn,
                         x: ev_x,
                         y: ev_y,
@@ -914,16 +913,41 @@ impl RenderApp {
                         webkit_id: wk_id,
                         webkit_rel_x: wk_rx,
                         webkit_rel_y: wk_ry,
-                    });
-                    if state == ElementState::Pressed {
-                        window_state.render.clear_presented_capture();
-                        window_state
-                            .render
-                            .chrome
-                            .interaction
-                            .toolbar_press_captured = false;
+                    };
+                    match Self::pair_presented_region_with_raw_input(
+                        Self::presented_region_input_event(
+                            &window_state.render,
+                            target_fid,
+                            ev_x,
+                            ev_y,
+                        ),
+                        raw,
+                    ) {
+                        Ok((observation, raw)) => {
+                            if let Some(observation) = observation {
+                                captured_events.push(observation);
+                            }
+                            event = Some(raw);
+                            if state == ElementState::Pressed {
+                                window_state.render.clear_presented_capture();
+                                window_state
+                                    .render
+                                    .chrome
+                                    .interaction
+                                    .toolbar_press_captured = false;
+                            }
+                            delivered_mouse_button = true;
+                        }
+                        Err(error) => {
+                            tracing::error!(
+                                ?error,
+                                target_fid,
+                                ev_x,
+                                ev_y,
+                                "dropping incoherent mouse-button input"
+                            );
+                        }
                     }
-                    delivered_mouse_button = true;
                 }
             }
             for event in captured_events {
@@ -1141,17 +1165,37 @@ impl RenderApp {
                 window_state.render.mark_dirty();
             }
             if event.is_none() {
-                if let Ok(Some(observation)) =
-                    Self::presented_region_input_event(&window_state.render, target_fid, ev_x, ev_y)
-                {
-                    self.comms.send_input(observation);
-                }
-                event = Some(InputEvent::MouseMove {
+                let raw = InputEvent::MouseMove {
                     x: ev_x,
                     y: ev_y,
                     modifiers,
                     target_frame_id: target_fid,
-                });
+                };
+                match Self::pair_presented_region_with_raw_input(
+                    Self::presented_region_input_event(
+                        &window_state.render,
+                        target_fid,
+                        ev_x,
+                        ev_y,
+                    ),
+                    raw,
+                ) {
+                    Ok((observation, raw)) => {
+                        if let Some(observation) = observation {
+                            self.comms.send_input(observation);
+                        }
+                        event = Some(raw);
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            ?error,
+                            target_fid,
+                            ev_x,
+                            ev_y,
+                            "dropping incoherent mouse-move input"
+                        );
+                    }
+                }
             }
             if let Some(event) = event {
                 self.comms.send_input(event);
