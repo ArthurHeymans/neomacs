@@ -6572,21 +6572,50 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
-            window_id: wid,
-            header_line_height: 5,
-            tab_line_height: 17,
-            points: vec![crate::window::DisplayPointSnapshot {
-                buffer_pos: crate::buffer::LispCharPos1::new(1),
-                x: 54,
-                y: 313,
-                width: 7,
-                height: 17,
-                row: 17,
-                col: 0,
-            }],
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
+        frame
+            .publish_display_snapshots(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id: wid,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(
+                            0.0, 0.0, 800.0, 600.0,
+                        ),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            0.0, 22.0, 800.0, 562.0,
+                        ),
+                        tab_line: Some(neomacs_display_protocol::types::Rect::new(
+                            0.0, 0.0, 800.0, 17.0,
+                        )),
+                        header_line: Some(neomacs_display_protocol::types::Rect::new(
+                            0.0, 17.0, 800.0, 5.0,
+                        )),
+                        mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                            0.0, 584.0, 800.0, 16.0,
+                        )),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    header_line_height: 999,
+                    tab_line_height: 999,
+                    points: vec![crate::window::DisplayPointSnapshot {
+                        buffer_pos: crate::buffer::LispCharPos1::new(1),
+                        x: 54,
+                        y: 999,
+                        width: 7,
+                        height: 17,
+                        row: 17,
+                        col: 0,
+                    }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 17,
+                        body_row: 17,
+                        body_y: 291,
+                    }],
+                    ..crate::window::WindowDisplaySnapshot::default()
+                }],
+            )
+            .expect("presented geometry");
     }
 
     let edges = super::builtin_window_edges(
@@ -6681,12 +6710,33 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
                         mode_line: Some(neomacs_display_protocol::types::Rect::new(
                             144.0, 492.0, 640.0, 20.0,
                         )),
+                        right_divider: Some(neomacs_display_protocol::types::Rect::new(
+                            782.0, 32.0, 2.0, 480.0,
+                        )),
+                        bottom_divider: Some(neomacs_display_protocol::types::Rect::new(
+                            144.0, 510.0, 640.0, 2.0,
+                        )),
                         ..Default::default()
                     },
                     regions_materialized: true,
                     header_line_height: 99,
                     tab_line_height: 99,
                     mode_line_height: 99,
+                    text_area_left_offset: 999,
+                    points: vec![crate::window::DisplayPointSnapshot {
+                        buffer_pos: crate::buffer::LispCharPos1::ONE,
+                        x: 72,
+                        y: 999,
+                        width: 7,
+                        height: 17,
+                        row: 99,
+                        col: 9,
+                    }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 99,
+                        body_row: 2,
+                        body_y: 34,
+                    }],
                     ..Default::default()
                 }],
             )
@@ -6697,13 +6747,26 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
             .set_bounds(crate::window::Rect::new(0.0, 0.0, 80.0, 24.0));
 
         let result = ev
-            .eval_str("(list (window-pixel-left) (window-pixel-top) (window-inside-pixel-edges))")
+            .eval_str(
+                "(list (window-pixel-left)
+                       (window-pixel-top)
+                       (window-left-column)
+                       (window-top-line)
+                       (window-pixel-edges)
+                       (window-inside-pixel-edges)
+                       (window-text-width nil t)
+                       (window-text-height nil t)
+                       (posn-at-point 1))",
+            )
             .expect("GNU window.el geometry query");
         assert_eq!(
             crate::emacs_core::print::print_value(&result),
             format!(
-                "(144 32 ({} 54 {} 492))",
-                body_left as i64, body_right as i64
+                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
+                body_left as i64,
+                body_right as i64,
+                (body_right - body_left) as i64,
+                wid.0,
             )
         );
     }
@@ -6731,6 +6794,77 @@ fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_b
     assert!(
         super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T]).is_err(),
         "materialized GUI body geometry is mandatory for pixelwise body queries"
+    );
+}
+
+#[test]
+fn presented_fringe_and_scrollbar_tuples_preserve_live_non_geometric_configuration() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer = ev.buffers.create_buffer("*geometry-tuples*");
+    ev.buffers.set_current(buffer);
+    let frame_id = ev.frames.create_frame("gui", 800, 600, buffer);
+    let window_id = ev.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = ev.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+    }
+    assert!(ev.frames.set_window_fringes(window_id, Some(8), Some(0), true, true));
+    assert!(ev.frames.set_window_scroll_bars(
+        window_id,
+        Some(0),
+        Value::symbol("left"),
+        Some(0),
+        Value::symbol("bottom"),
+        true,
+    ));
+    // Exercise a valid published zero-width realization while retaining the
+    // live Lisp configuration fields.  The geometry tuple must not infer
+    // these non-geometric values from absence of a positive-area rectangle.
+    {
+        let display = ev
+            .frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .find_window_mut(window_id)
+            .expect("window")
+            .display_mut()
+            .expect("leaf display state");
+        display.vertical_scroll_bar_type = Value::symbol("left");
+        display.horizontal_scroll_bar_type = Value::symbol("bottom");
+    }
+    ev.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(1),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id,
+                regions: crate::window::PresentedWindowRegions {
+                    outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+                    text_body: neomacs_display_protocol::types::Rect::new(
+                        8.0, 0.0, 792.0, 584.0,
+                    ),
+                    left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                        0.0, 0.0, 8.0, 584.0,
+                    )),
+                    ..Default::default()
+                },
+                regions_materialized: true,
+                ..Default::default()
+            }],
+        )
+        .expect("presented geometry");
+
+    let fringes = super::builtin_window_fringes(&mut ev, vec![]).expect("fringes");
+    let scrollbars = super::builtin_window_scroll_bars(&mut ev, vec![]).expect("scrollbars");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&fringes),
+        "(8 0 t t)"
+    );
+    assert_eq!(
+        crate::emacs_core::print::print_value(&scrollbars),
+        "(0 0 left 0 0 bottom t)"
     );
 }
 

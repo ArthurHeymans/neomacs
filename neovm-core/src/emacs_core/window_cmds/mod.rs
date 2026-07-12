@@ -1134,7 +1134,7 @@ fn window_body_edges_cols_lines(
     char_width: f32,
     char_height: f32,
 ) -> (i64, i64, i64, i64) {
-    let (left, top, right, bottom) = window_body_edges_pixels(frames, fid, wid, w);
+    let (left, top, right, bottom) = tty_batch_window_body_edges_pixels(frames, fid, wid, w);
     let left = if char_width > 0.0 {
         (left as f32 / char_width).floor() as i64
     } else {
@@ -1158,7 +1158,7 @@ fn window_body_edges_cols_lines(
     (left, top, right, bottom)
 }
 
-fn window_body_edges_pixels(
+fn tty_batch_window_body_edges_pixels(
     frames: &FrameManager,
     fid: FrameId,
     wid: WindowId,
@@ -1167,10 +1167,6 @@ fn window_body_edges_pixels(
     let (left, top, right, bottom) = window_edges_pixels(w);
     let (body_left_offset, _body_right_offset) =
         window_body_horizontal_offsets_pixels(frames, fid, w);
-    let top_chrome_height = frames
-        .get(fid)
-        .and_then(|frame| frame.window_display_snapshot(wid))
-        .map_or(0, crate::window::WindowDisplaySnapshot::top_chrome_height);
     let mode_line_height = if is_minibuffer_window(frames, fid, wid) {
         0
     } else {
@@ -1180,7 +1176,7 @@ fn window_body_edges_pixels(
             .unwrap_or(0)
     };
     let body_left = left.saturating_add(body_left_offset);
-    let body_top = top.saturating_add(top_chrome_height);
+    let body_top = top;
     let body_right = body_left.saturating_add(window_body_width_pixels(frames, fid, w));
     let body_bottom = bottom.saturating_sub(mode_line_height);
     (body_left, body_top, body_right.min(right), body_bottom)
@@ -2953,15 +2949,13 @@ pub(crate) fn builtin_window_fringes(
         let right = regions
             .right_fringe()
             .map_or(0, |rect| rect.width().get() as i64);
-        let outside = match (regions.left_fringe(), regions.left_margin()) {
-            (Some(fringe), Some(margin)) => fringe.origin().x().get() < margin.origin().x().get(),
-            _ => false,
-        };
+        let (_, _, outside, persistent) =
+            frames.window_fringes(wid).unwrap_or((0, 0, false, false));
         return Ok(Value::list(vec![
             Value::fixnum(left),
             Value::fixnum(right),
             if outside { Value::T } else { Value::NIL },
-            Value::NIL,
+            if persistent { Value::T } else { Value::NIL },
         ]));
     }
     let (left, right, outside, persistent) =
@@ -3043,12 +3037,15 @@ pub(crate) fn builtin_window_scroll_bars(
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
     if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
+        let (_, columns, configured_vertical, _, lines, configured_horizontal, persistent) = frames
+            .window_scroll_bars(wid)
+            .unwrap_or((Value::NIL, 0, Value::T, Value::NIL, 0, Value::T, false));
         let vertical = if regions.left_scroll_bar().is_some() {
             Value::symbol("left")
         } else if regions.right_scroll_bar().is_some() {
             Value::symbol("right")
         } else {
-            Value::NIL
+            configured_vertical
         };
         let width = regions
             .left_scroll_bar()
@@ -3057,19 +3054,19 @@ pub(crate) fn builtin_window_scroll_bars(
         let horizontal = if regions.horizontal_scroll_bar().is_some() {
             Value::symbol("bottom")
         } else {
-            Value::NIL
+            configured_horizontal
         };
         let height = regions
             .horizontal_scroll_bar()
             .map_or(0, |rect| rect.height().get() as i64);
         return Ok(Value::list(vec![
             Value::fixnum(width),
-            Value::fixnum(0),
+            Value::fixnum(columns),
             vertical,
             Value::fixnum(height),
-            Value::fixnum(0),
+            Value::fixnum(lines),
             horizontal,
-            Value::NIL,
+            if persistent { Value::T } else { Value::NIL },
         ]));
     }
     let (width, columns, vertical_type, height, lines, horizontal_type, persistent) = frames
@@ -3188,8 +3185,15 @@ pub(crate) fn builtin_window_scroll_bar_height(
     expect_max_args("window-scroll-bar-height", &args, 1)?;
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
-    let (_fid, wid) =
+    let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
+        let height = geometry
+            .regions()
+            .horizontal_scroll_bar()
+            .map_or(0, |rect| rect.height().get() as i64);
+        return Ok(Value::fixnum(height));
+    }
     Ok(Value::fixnum(frames.window_scroll_bar_area_height(wid)))
 }
 /// `(window-mode-line-height &optional WINDOW)` -> integer.
@@ -3418,15 +3422,20 @@ pub(crate) fn builtin_window_text_height(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        let total = window_height_pixels(w);
-        let body = if is_minibuffer_window(frames, fid, wid) {
-            total
-        } else {
-            let mode_line_height = frames
-                .get(fid)
-                .map(|frame| frame.char_height.max(0.0) as i64)
-                .unwrap_or(0);
-            total.saturating_sub(mode_line_height)
+        let body = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => geometry.regions().text_body().height().get() as i64,
+            None => {
+                let total = window_height_pixels(w);
+                if is_minibuffer_window(frames, fid, wid) {
+                    total
+                } else {
+                    let mode_line_height = frames
+                        .get(fid)
+                        .map(|frame| frame.char_height.max(0.0) as i64)
+                        .unwrap_or(0);
+                    total.saturating_sub(mode_line_height)
+                }
+            }
         };
         Ok(Value::fixnum(body))
     } else {
@@ -3447,7 +3456,11 @@ pub(crate) fn builtin_window_text_width(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        Ok(Value::fixnum(window_body_width_pixels(frames, fid, w)))
+        let width = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+            None => window_body_width_pixels(frames, fid, w),
+        };
+        Ok(Value::fixnum(width))
     } else {
         let cw = frames
             .get(fid)
@@ -3483,8 +3496,23 @@ pub(crate) fn builtin_window_edges(
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
 
     if pixelwise {
-        let (left, top, right, bottom) = if body {
-            window_body_edges_pixels(frames, fid, wid, w)
+        let (left, top, right, bottom) = if let Some(geometry) =
+            presented_gui_window_geometry(frames, fid, wid)?
+        {
+            let rect = if body {
+                geometry.regions().text_body()
+            } else {
+                geometry.outer_in_frame()
+            };
+            let origin = rect.origin();
+            (
+                origin.x().get() as i64,
+                origin.y().get() as i64,
+                (origin.x().get() + rect.width().get()) as i64,
+                (origin.y().get() + rect.height().get()) as i64,
+            )
+        } else if body {
+            tty_batch_window_body_edges_pixels(frames, fid, wid, w)
         } else {
             window_edges_pixels(w)
         };
@@ -3519,7 +3547,19 @@ pub(crate) fn builtin_window_pixel_edges(
     let Some(w) = w else {
         return Ok(Value::NIL);
     };
-    let (left, top, right, bottom) = window_edges_pixels(w);
+    let (left, top, right, bottom) = match presented_gui_known_geometry(&eval.frames, fid, wid)? {
+        Some(geometry) => {
+            let rect = geometry.outer();
+            let origin = rect.origin();
+            (
+                origin.x().get() as i64,
+                origin.y().get() as i64,
+                (origin.x().get() + rect.width().get()) as i64,
+                (origin.y().get() + rect.height().get()) as i64,
+            )
+        }
+        None => window_edges_pixels(w),
+    };
     Ok(Value::list(vec![
         Value::fixnum(left),
         Value::fixnum(top),
