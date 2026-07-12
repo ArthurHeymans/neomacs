@@ -694,7 +694,11 @@ impl PresentedPointerSourceMap {
                 .insert((kind, row_role, slot), index)
                 .is_some()
             {
-                return Err(PresentedPointerMapError::DuplicateSourceIdentity);
+                return Err(PresentedPointerMapError::DuplicateSourceIdentity {
+                    kind,
+                    row_role,
+                    slot,
+                });
             }
         }
         let mut resolved_appearances = Vec::new();
@@ -865,7 +869,11 @@ pub enum PresentedPointerMapError {
     RegionOutsideFrame,
     ClipOutsideFrame,
     PrimitiveKindMismatch,
-    DuplicateSourceIdentity,
+    DuplicateSourceIdentity {
+        kind: PresentedPrimitiveKind,
+        row_role: crate::GlyphRowRole,
+        slot: DisplaySlotId,
+    },
     UnknownFace(FaceId),
     InvalidImageRelief,
     IncompleteSpanModes,

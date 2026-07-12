@@ -253,7 +253,15 @@ fn source_pointer_map_disambiguates_equal_chrome_slots_by_row_role() {
     frame.glyphs.push(glyph(crate::GlyphRowRole::TabBar));
     assert_eq!(
         frame.install_presented_pointer_source_map(&source),
-        Err(PresentedPointerMapError::DuplicateSourceIdentity)
+        Err(PresentedPointerMapError::DuplicateSourceIdentity {
+            kind: PresentedPrimitiveKind::Glyph,
+            row_role: crate::GlyphRowRole::TabBar,
+            slot: crate::DisplaySlotId {
+                window_id: crate::DisplayWindowId::new(0),
+                row: 0,
+                col: 0,
+            },
+        })
     );
 }
 

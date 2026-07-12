@@ -170,9 +170,13 @@ where
             params
         };
 
-        let text_source =
-            BufferWindowSourceRequest::from_window_params(source_params, geometry.max_rows)
-                .read_into(&buf_access, text_buf);
+        let source_request =
+            BufferWindowSourceRequest::from_window_params(source_params, geometry.max_rows);
+        let text_source = if scroll.is_some() {
+            source_request.read_exact_into(&buf_access, text_buf)
+        } else {
+            source_request.read_into(&buf_access, text_buf)
+        };
         let bytes_read = text_source.bytes_read();
         let text = if bytes_read > 0 {
             &text_buf[..bytes_read]

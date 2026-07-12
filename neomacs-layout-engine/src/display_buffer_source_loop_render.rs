@@ -29,27 +29,12 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     ) where
         'surface: 'request,
     {
-        // GNU `handle_stop`-at-init (`src/xdisp.c` ~4189): before the first
-        // buffer char is produced, the iterator loads the before-strings of
-        // overlays anchored at its starting charpos (window-start). The per-char
-        // overlay path anchors on the *post*-step charpos, so the row's very
-        // first charpos is otherwise never visited. Run this once, after the row
-        // prelude (line numbers / line prefix) so the before-string follows the
-        // gutter exactly as buffer text would.
-        let row_start_overlay_charpos = self.progress.charpos();
-        let mut row_start_overlays_pending = true;
-
         while self.progress.byte_idx() < text.len()
             && self
                 .row_geometry
                 .current_row_is_visible(loop_context.row_visibility_limit())
         {
             self.render_row_prelude(row_prelude_context, active_face_state, buffer);
-
-            if row_start_overlays_pending {
-                row_start_overlays_pending = false;
-                self.render_row_start_overlay_before_strings(row_start_overlay_charpos, buffer);
-            }
 
             if self
                 .render_invisible_text_for_context(
@@ -93,34 +78,6 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 break;
             }
         }
-    }
-
-    /// GNU `handle_stop`-at-init: emit the before-strings of overlays anchored
-    /// at the row's starting charpos before the first buffer char. Gated by
-    /// `should_render` like the end-of-buffer tail path so overflowing rows are
-    /// not produced.
-    fn render_row_start_overlay_before_strings<B: LayoutBufferView>(
-        &mut self,
-        anchor_charpos: i64,
-        buffer: &B,
-    ) {
-        if !self.overlay_context.should_render(self.row_geometry) {
-            return;
-        }
-        let (x, col) = self.progress.row_progress_mut().coordinates_mut();
-        self.overlay_context.render_before_strings_at_text_row(
-            buffer,
-            anchor_charpos,
-            self.source_render.reborrow(),
-            x,
-            col,
-            self.row_geometry,
-            self.cursor_info,
-            self.hit_rows,
-            self.hit_row_range,
-            self.row_y_positions,
-            self.face_ids,
-        );
     }
 
     fn render_row_prelude<B: LayoutBufferView>(

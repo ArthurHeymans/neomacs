@@ -34,24 +34,6 @@ use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
 
-/// Selects which overlay strings a render pass emits at an anchor charpos.
-/// GNU's `load_overlay_strings` collects both before- and after-strings, but
-/// the row-start `handle_stop`-at-init pass only wants the before-strings.
-#[derive(Clone, Copy)]
-enum OverlayStringRenderFilter {
-    All,
-    BeforeOnly,
-}
-
-impl OverlayStringRenderFilter {
-    fn accepts(self, after_string_p: bool) -> bool {
-        match self {
-            OverlayStringRenderFilter::All => true,
-            OverlayStringRenderFilter::BeforeOnly => !after_string_p,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct OverlayStringRenderSource {
     value: Value,
@@ -311,51 +293,12 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         anchor_charpos: i64,
         state: &mut OverlayStringRenderState<'_>,
     ) {
-        self.render_filtered_at(
-            buffer,
-            anchor_charpos,
-            state,
-            OverlayStringRenderFilter::All,
-        );
-    }
-
-    /// GNU `handle_stop`-at-init: at the iterator's first buffer position the
-    /// before-strings of overlays *starting* there are loaded before any buffer
-    /// char is produced (`get_overlay_strings_1`, `src/xdisp.c`). The per-char
-    /// path anchors on the *post*-step charpos, so the row's very first charpos
-    /// is otherwise uncovered. Render only before-strings here: after-strings at
-    /// the row start belong to text that ended before the visible region and are
-    /// emitted by the per-char / end-of-buffer tail paths.
-    fn render_before_strings_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-    ) {
-        self.render_filtered_at(
-            buffer,
-            anchor_charpos,
-            state,
-            OverlayStringRenderFilter::BeforeOnly,
-        );
-    }
-
-    fn render_filtered_at<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        state: &mut OverlayStringRenderState<'_>,
-        filter: OverlayStringRenderFilter,
-    ) {
         if !self.enabled {
             return;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
         let row_context = self.row_context();
         for overlay_string in text_props.overlay_strings_at(anchor_charpos) {
-            if !filter.accepts(overlay_string.after_string_p) {
-                continue;
-            }
             let kind = if overlay_string.after_string_p {
                 OverlayStringKind::After
             } else {
@@ -400,38 +343,6 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             face_ids,
         );
         self.render_at(buffer, anchor_charpos, &mut overlay_state);
-    }
-
-    /// Row-start counterpart of [`Self::render_at_text_row`] that mirrors GNU's
-    /// `handle_stop`-at-init: emit only the before-strings anchored at the row's
-    /// first buffer charpos (the per-char path covers post-step positions only).
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_before_strings_at_text_row<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        anchor_charpos: i64,
-        source_render: TextRowSourceRenderState<'_>,
-        x: &mut f32,
-        col: &mut usize,
-        geometry: &mut DisplayRowGeometryState,
-        cursor_info: &mut CursorCaptureState,
-        hit_rows: &mut Vec<HitRow>,
-        hit_row_range: &mut HitRowRangeTracker,
-        row_y_positions: &mut DisplayRowYPositions,
-        face_ids: &mut FrameFaceIdAllocator,
-    ) {
-        let mut overlay_state = OverlayStringRenderState::from_source_render(
-            source_render,
-            x,
-            col,
-            geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-        );
-        self.render_before_strings_at(buffer, anchor_charpos, &mut overlay_state);
     }
 
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {

@@ -12338,7 +12338,17 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
         let _ = buf.overlays_mut().overlay_put(
             overlay,
             Value::symbol("before-string"),
-            Value::string("1/1 "),
+            Value::string_with_text_properties(
+                "1/1 ",
+                vec![StringTextPropertyRun {
+                    start: 0,
+                    end: 4,
+                    plist: Value::list(vec![
+                        Value::symbol("mouse-face"),
+                        Value::symbol("highlight"),
+                    ]),
+                }],
+            ),
         );
         buf.goto_emacs_byte_pos(EmacsBytePos::new(bob));
     }
@@ -12367,6 +12377,8 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
     let rows = enabled_window_row_texts(entry);
     let first_row = rows.first().cloned().unwrap_or_default();
 
+    state.materialize();
+
     assert!(
         first_row.contains("1/1"),
         "expected point-min before-string to render on the first row, rows={rows:?}"
@@ -12382,6 +12394,11 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
     assert!(
         count_idx < buffer_idx,
         "before-string must render ahead of the first buffer char, first_row={first_row:?}"
+    );
+    assert_eq!(
+        first_row.matches("1/1").count(),
+        1,
+        "point-min before-string must be emitted exactly once, first_row={first_row:?}"
     );
 }
 
@@ -14729,6 +14746,40 @@ fn phase3_plain_edit_matches_full_rebuild_golden() {
     );
 }
 
+#[test]
+fn phase3_delete_at_eob_does_not_relay_reused_prefix_from_buffer_start() {
+    let text = ";; first scratch line\n;; second scratch line\n\n";
+    let with_typed_char = format!("{text}a");
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&with_typed_char, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        let end = buffer.point_max_emacs_byte_pos().get();
+        buffer.delete_emacs_byte_range(emacs_byte_range(end - 1, end));
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "expected the EOB deletion to exercise localized edit replay"
+    );
+    let state = engine.last_frame_display_state.as_ref().expect("state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == win.0 as i64)
+        .expect("selected window");
+    let rendered = enabled_window_row_texts(entry).join("");
+    assert_eq!(
+        rendered.matches(";; first scratch line").count(),
+        1,
+        "localized EOB deletion must not append a second copy of reused prefix rows: {rendered:?}"
+    );
+}
+
 /// Phase 5 (#44) — the fast paths emit per-row `RowDamage` parallel to the
 /// matrix rows: cursor-only reuses every body row (`Reused`), scroll marks its
 /// reused rows `ReusedShifted{dvpos}`, and a full rebuild is all `New`.
@@ -15170,6 +15221,83 @@ fn cursor_only_reused_mouse_face_is_registered_in_frame_faces() {
         !state.presented_pointer_source.appearances().is_empty(),
         "expected the retained mouse-face to publish a pointer appearance"
     );
+    state.materialize();
+}
+
+#[test]
+fn mx_tab_completion_materializes_unique_pointer_source_identities() {
+    // Reproduce the real GUI command path: M-x text followed by TAB runs
+    // `minibuffer-complete`, displays *Completions* candidates carrying
+    // `mouse-face`, and leaves the frame ready for the render-thread
+    // materialization that reported DuplicateSourceIdentity.
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("mx-tab-pointer-identity", 960, 640, buf_id);
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+
+    let minibuf_id = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-pointer-completion*");
+    eval.activate_minibuffer_window_for_buffer(
+        minibuf_id,
+        LispString::from_utf8("M-x "),
+        Some(LispString::from_utf8("profiler-re")),
+    )
+    .expect("activate minibuffer")
+    .expect("minibuffer window");
+    eval.eval_str(
+        r#"(progn
+             (fido-vertical-mode 1)
+             (setq minibuffer-completion-table obarray
+                   minibuffer-completion-predicate #'commandp
+                   minibuffer--require-match t)
+             (icomplete-minibuffer-setup)
+             (icomplete--fido-mode-setup)
+             (icomplete--vertical-minibuffer-setup)
+             (icomplete-exhibit))"#,
+    )
+    .expect("exhibit fido candidates before TAB");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("warm M-x display state")
+        .materialize();
+
+    eval.eval_str(
+        r#"(with-output-to-temp-buffer "*Completions*"
+             (display-completion-list
+              (all-completions "" obarray #'commandp)))"#,
+    )
+    .expect("display M-x TAB completions");
+
+    assert!(
+        eval.eval_str("(get-buffer-window \"*Completions*\" 0)")
+            .expect("query completions window")
+            .is_truthy(),
+        "TAB should leave *Completions* displayed"
+    );
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    assert!(
+        !state.presented_pointer_source.appearances().is_empty(),
+        "test requires completion candidate mouse-face pointer metadata"
+    );
+
     state.materialize();
 }
 

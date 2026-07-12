@@ -117,6 +117,31 @@ impl BufferWindowSourceRequest {
     ) -> BufferWindowSource {
         let window_start =
             self.resolve_window_start(|charpos| access.byte_at(access.charpos_to_bytepos(charpos)));
+        self.read_from_resolved_start(window_start, access, out)
+    }
+
+    /// Read from an already-resolved partial-layout boundary.
+    ///
+    /// Incremental replay computes the exact first character that must be
+    /// relaid. Applying normal viewport scrolling/recentering to that boundary
+    /// would change the requested source range and duplicate retained rows.
+    pub(crate) fn read_exact_into<B: LayoutBufferView>(
+        self,
+        access: &RustBufferAccess<'_, B>,
+        out: &mut Vec<u8>,
+    ) -> BufferWindowSource {
+        let window_start = self
+            .requested_window_start
+            .clamp(self.accessible_start, self.accessible_end);
+        self.read_from_resolved_start(window_start, access, out)
+    }
+
+    fn read_from_resolved_start<B: LayoutBufferView>(
+        self,
+        window_start: i64,
+        access: &RustBufferAccess<'_, B>,
+        out: &mut Vec<u8>,
+    ) -> BufferWindowSource {
         let text_start_byte = access.charpos_to_bytepos(window_start) as usize;
         let read_chars = self.accessible_end - window_start + 1;
         let bytes_read = if read_chars <= 0 {
