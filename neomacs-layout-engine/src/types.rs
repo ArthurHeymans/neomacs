@@ -186,6 +186,9 @@ pub struct WindowParams {
     pub selected: bool,
     /// What kind of window this is (main editing area or minibuffer).
     pub kind: WindowKind,
+    /// Independent character-grid origin; never derived from pixel bounds.
+    pub left_col: i64,
+    pub top_line: i64,
 
     /// First visible buffer position in layout 0-based char coordinates.
     /// Derived from GNU `marker_position (w->start)`.
@@ -272,6 +275,8 @@ pub struct WindowParams {
     /// Fringe widths in pixels
     pub left_fringe_width: f32,
     pub right_fringe_width: f32,
+    /// Whether fringes are outside margins in the horizontal band ordering.
+    pub fringes_outside_margins: bool,
     /// indicate-empty-lines: 0=off, 1=left, 2=right
     pub indicate_empty_lines: i32,
     /// Whether to show trailing whitespace

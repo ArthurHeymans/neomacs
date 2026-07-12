@@ -1374,6 +1374,18 @@ pub struct PresentedWindowRegions {
     pub outer: Rect,
     /// Frame-relative logical-pixel bounds of the rendered text body.
     pub text_body: Rect,
+    pub left_margin: Option<Rect>,
+    pub right_margin: Option<Rect>,
+    pub left_fringe: Option<Rect>,
+    pub right_fringe: Option<Rect>,
+    pub left_scroll_bar: Option<Rect>,
+    pub right_scroll_bar: Option<Rect>,
+    pub horizontal_scroll_bar: Option<Rect>,
+    pub tab_line: Option<Rect>,
+    pub header_line: Option<Rect>,
+    pub mode_line: Option<Rect>,
+    pub right_divider: Option<Rect>,
+    pub bottom_divider: Option<Rect>,
 }
 
 /// Last authoritative redisplay geometry for a live leaf window.

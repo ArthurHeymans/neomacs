@@ -1466,6 +1466,7 @@ impl WindowOutputEmitter {
                     0.0,
                     0.0,
                 ),
+                ..PresentedWindowRegions::default()
             },
             mode_line_height,
             header_line_height,

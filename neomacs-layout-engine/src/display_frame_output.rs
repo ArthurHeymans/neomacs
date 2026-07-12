@@ -1,7 +1,7 @@
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
-    FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
+    FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest, WindowChromeMeasuredHeights,
 };
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::display_text_window_row_lifecycle::TextWindowTerminalRightBorderRequest;
@@ -20,6 +20,7 @@ use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::window::{PresentedWindowRegions, Rect as EvaluatorRect};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -42,6 +43,154 @@ pub(crate) struct WindowFrameGeometryRequest<'a> {
     params: &'a WindowParams,
     frame_params: &'a FrameParams,
     main_area_bottom: f32,
+}
+
+pub(crate) struct PresentedWindowRegionRequest<'a> {
+    params: &'a WindowParams,
+    frame_params: &'a FrameParams,
+    geometry: WindowFrameGeometry,
+    measured: WindowChromeMeasuredHeights,
+}
+
+impl<'a> PresentedWindowRegionRequest<'a> {
+    pub(crate) fn new(
+        params: &'a WindowParams,
+        frame_params: &'a FrameParams,
+        geometry: WindowFrameGeometry,
+        measured: WindowChromeMeasuredHeights,
+    ) -> Self {
+        Self {
+            params,
+            frame_params,
+            geometry,
+            measured,
+        }
+    }
+
+    pub(crate) fn resolve(self) -> PresentedWindowRegions {
+        let outer = self.params.bounds;
+        let tab_h = self.measured.tab_line_height.max(0.0);
+        let header_h = self.measured.header_line_height.max(0.0);
+        let mode_h = self.measured.mode_line_height.max(0.0);
+        let hscroll_h = if self.params.horizontal_scroll_bar {
+            self.params.scroll_bar_pixel_height.max(0.0)
+        } else {
+            0.0
+        };
+        let body_y = outer.y + tab_h + header_h;
+        let body_h = (outer.height - tab_h - header_h - hscroll_h - mode_h).max(0.0);
+        let body = Rect::new(
+            self.params.text_bounds.x,
+            body_y,
+            self.params.text_bounds.width,
+            body_h,
+        );
+        let band = |x: f32, width: f32| {
+            (width > 0.0).then(|| EvaluatorRect::new(x, body_y, width, body_h))
+        };
+        let to_eval = |rect: Rect| EvaluatorRect::new(rect.x, rect.y, rect.width, rect.height);
+
+        let left_sb_w = if self.params.vertical_scroll_bar_side.as_deref() == Some("left") {
+            self.params.scroll_bar_pixel_width.max(0.0)
+        } else {
+            0.0
+        };
+        let right_sb_w = if self.params.vertical_scroll_bar_side.as_deref() == Some("right") {
+            self.params.scroll_bar_pixel_width.max(0.0)
+        } else {
+            0.0
+        };
+
+        let mut left_x = outer.x;
+        let left_scroll_bar = band(left_x, left_sb_w);
+        left_x += left_sb_w;
+        let (left_fringe, left_margin) = if self.params.fringes_outside_margins {
+            let fringe = band(left_x, self.params.left_fringe_width);
+            left_x += self.params.left_fringe_width.max(0.0);
+            let margin = band(left_x, self.params.left_margin_width);
+            (fringe, margin)
+        } else {
+            let margin = band(left_x, self.params.left_margin_width);
+            left_x += self.params.left_margin_width.max(0.0);
+            let fringe = band(left_x, self.params.left_fringe_width);
+            (fringe, margin)
+        };
+
+        let mut right_x = body.x + body.width;
+        let (right_fringe, right_margin) = if self.params.fringes_outside_margins {
+            let margin = band(right_x, self.params.right_margin_width);
+            right_x += self.params.right_margin_width.max(0.0);
+            let fringe = band(right_x, self.params.right_fringe_width);
+            right_x += self.params.right_fringe_width.max(0.0);
+            (fringe, margin)
+        } else {
+            let fringe = band(right_x, self.params.right_fringe_width);
+            right_x += self.params.right_fringe_width.max(0.0);
+            let margin = band(right_x, self.params.right_margin_width);
+            right_x += self.params.right_margin_width.max(0.0);
+            (fringe, margin)
+        };
+        let right_scroll_bar = band(right_x, right_sb_w);
+
+        let optional_rect =
+            |rect: Rect| (rect.width > 0.0 && rect.height > 0.0).then(|| to_eval(rect));
+        let tab_line = optional_rect(Rect::new(outer.x, outer.y, outer.width, tab_h));
+        let header_line = optional_rect(Rect::new(outer.x, outer.y + tab_h, outer.width, header_h));
+        let horizontal_scroll_bar =
+            optional_rect(Rect::new(outer.x, body_y + body_h, outer.width, hscroll_h));
+        let mode_line = optional_rect(Rect::new(
+            outer.x,
+            outer.y + outer.height - mode_h,
+            outer.width,
+            mode_h,
+        ));
+
+        let right_divider_width = if !self.params.is_minibuffer()
+            && !self.geometry.is_rightmost
+            && self.frame_params.right_divider_width > 0
+        {
+            self.frame_params.right_divider_width as f32
+        } else {
+            0.0
+        };
+        let bottom_divider_height = if !self.params.is_minibuffer()
+            && !self.geometry.is_bottommost
+            && self.frame_params.bottom_divider_width > 0
+        {
+            self.frame_params.bottom_divider_width as f32
+        } else {
+            0.0
+        };
+        let right_divider = optional_rect(Rect::new(
+            self.geometry.right_edge - right_divider_width,
+            outer.y,
+            right_divider_width,
+            (outer.height - bottom_divider_height).max(0.0),
+        ));
+        let bottom_divider = optional_rect(Rect::new(
+            outer.x,
+            self.geometry.bottom_edge - bottom_divider_height,
+            (outer.width - right_divider_width).max(0.0),
+            bottom_divider_height,
+        ));
+
+        PresentedWindowRegions {
+            outer: to_eval(outer),
+            text_body: to_eval(body),
+            left_margin,
+            right_margin,
+            left_fringe,
+            right_fringe,
+            left_scroll_bar,
+            right_scroll_bar,
+            horizontal_scroll_bar,
+            tab_line,
+            header_line,
+            mode_line,
+            right_divider,
+            bottom_divider,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

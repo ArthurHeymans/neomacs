@@ -1502,6 +1502,8 @@ pub fn window_params_from_neovm_with_font_sizing(
         } else {
             WindowKind::Main
         },
+        left_col: window.left_col(),
+        top_line: window.top_line(),
         // Window::window_start tracks GNU marker positions (1-based).
         // Normalize to the layout engine's internal 0-based char positions.
         window_start: lisp_char_pos_to_layout_i64(window_start),
@@ -1582,6 +1584,9 @@ pub fn window_params_from_neovm_with_font_sizing(
         visual_cursors,
         left_fringe_width: left_fringe,
         right_fringe_width: right_fringe,
+        fringes_outside_margins: window
+            .display()
+            .is_some_and(|display| display.fringes_outside_margins),
         indicate_empty_lines: if buffer_local_bool(buffer, "indicate-empty-lines") {
             1
         } else {

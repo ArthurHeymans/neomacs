@@ -15,6 +15,8 @@ fn window_params() -> WindowParams {
         text_bounds: Rect::new(20.0, 30.0, 80.0, 70.0),
         selected: true,
         kind: WindowKind::Main,
+        left_col: 0,
+        top_line: 0,
         window_start: 10,
         window_end: 80,
         point: 10,
@@ -46,6 +48,7 @@ fn window_params() -> WindowParams {
         visual_cursors: Vec::new(),
         left_fringe_width: 0.0,
         right_fringe_width: 0.0,
+        fringes_outside_margins: false,
         indicate_empty_lines: 0,
         show_trailing_whitespace: false,
         trailing_ws_bg: 0,
@@ -89,6 +92,92 @@ fn frame_params() -> FrameParams {
         divider_first_fg: 0x404040,
         divider_last_fg: 0x505050,
     }
+}
+
+#[test]
+fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
+    use crate::display_status_line::WindowChromeMeasuredHeights;
+    use neovm_core::window::Rect as EvaluatorRect;
+
+    let mut params = window_params();
+    params.bounds = Rect::new(144.0, 24.0, 400.0, 300.0);
+    params.text_bounds = Rect::new(180.0, 24.0, 330.0, 300.0);
+    params.left_margin_width = 16.0;
+    params.right_margin_width = 24.0;
+    params.left_fringe_width = 8.0;
+    params.right_fringe_width = 10.0;
+    params.fringes_outside_margins = true;
+    params.vertical_scroll_bar_side = Some("left".to_string());
+    params.scroll_bar_pixel_width = 12.0;
+    params.horizontal_scroll_bar = true;
+    params.scroll_bar_pixel_height = 8.0;
+
+    let frame = frame_params();
+    let geometry = WindowFrameGeometry {
+        right_edge: 544.0,
+        bottom_edge: 324.0,
+        is_rightmost: false,
+        is_bottommost: false,
+        reserve_terminal_right_border_col: false,
+    };
+    let measured = WindowChromeMeasuredHeights {
+        mode_line_height: 17.0,
+        header_line_height: 7.0,
+        tab_line_height: 5.0,
+    };
+
+    let regions = PresentedWindowRegionRequest::new(&params, &frame, geometry, measured).resolve();
+
+    assert_eq!(regions.outer, EvaluatorRect::new(144.0, 24.0, 400.0, 300.0));
+    assert_eq!(
+        regions.left_scroll_bar,
+        Some(EvaluatorRect::new(144.0, 36.0, 12.0, 263.0))
+    );
+    assert_eq!(
+        regions.left_fringe,
+        Some(EvaluatorRect::new(156.0, 36.0, 8.0, 263.0))
+    );
+    assert_eq!(
+        regions.left_margin,
+        Some(EvaluatorRect::new(164.0, 36.0, 16.0, 263.0))
+    );
+    assert_eq!(
+        regions.text_body,
+        EvaluatorRect::new(180.0, 36.0, 330.0, 263.0)
+    );
+    assert_eq!(
+        regions.right_margin,
+        Some(EvaluatorRect::new(510.0, 36.0, 24.0, 263.0))
+    );
+    assert_eq!(
+        regions.right_fringe,
+        Some(EvaluatorRect::new(534.0, 36.0, 10.0, 263.0))
+    );
+    assert_eq!(regions.right_scroll_bar, None);
+    assert_eq!(
+        regions.tab_line,
+        Some(EvaluatorRect::new(144.0, 24.0, 400.0, 5.0))
+    );
+    assert_eq!(
+        regions.header_line,
+        Some(EvaluatorRect::new(144.0, 29.0, 400.0, 7.0))
+    );
+    assert_eq!(
+        regions.horizontal_scroll_bar,
+        Some(EvaluatorRect::new(144.0, 299.0, 400.0, 8.0))
+    );
+    assert_eq!(
+        regions.mode_line,
+        Some(EvaluatorRect::new(144.0, 307.0, 400.0, 17.0))
+    );
+    assert_eq!(
+        regions.right_divider,
+        Some(EvaluatorRect::new(538.0, 24.0, 6.0, 295.0))
+    );
+    assert_eq!(
+        regions.bottom_divider,
+        Some(EvaluatorRect::new(144.0, 319.0, 394.0, 5.0))
+    );
 }
 
 #[test]
