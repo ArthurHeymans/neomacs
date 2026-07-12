@@ -218,6 +218,153 @@ fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
     assert_eq!(mgr.hit_test(201.0, 159.0), None);
 }
 
+#[test]
+fn missing_parent_is_rejected_instead_of_rewritten_as_a_root() {
+    let mut mgr = ChildFrameManager::new();
+    let mut orphan = make_child_buf(30, 15.0, 12.0, 100.0, 80.0, 4);
+    orphan.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        15.0,
+        12.0,
+        4,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+
+    assert!(!mgr.update_frame(orphan));
+    assert!(!mgr.frames.contains_key(&30));
+}
+
+#[test]
+fn cyclic_replacement_is_rejected_transactionally() {
+    let mut mgr = ChildFrameManager::new();
+    let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    mgr.set_root_frame(Some(&root));
+    let mut parent = make_child_buf(20, 100.0, 80.0, 100.0, 80.0, 1);
+    parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        100.0,
+        80.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(mgr.update_frame(parent));
+    let mut nested = make_child_buf(30, 15.0, 12.0, 80.0, 60.0, 2);
+    nested.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        15.0,
+        12.0,
+        2,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(mgr.update_frame(nested));
+
+    let mut cyclic_parent = make_child_buf(20, 100.0, 80.0, 100.0, 80.0, 1);
+    cyclic_parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        100.0,
+        80.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(!mgr.update_frame(cyclic_parent));
+    assert_eq!(
+        mgr.frames[&20]
+            .frame
+            .frame_placement
+            .parent()
+            .unwrap()
+            .get(),
+        10
+    );
+    assert_eq!(
+        (mgr.frames[&30].abs_x, mgr.frames[&30].abs_y),
+        (115.0, 92.0)
+    );
+}
+
+#[test]
+fn removing_parent_cascades_to_all_descendants() {
+    let mut mgr = ChildFrameManager::new();
+    let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    mgr.set_root_frame(Some(&root));
+    let mut parent = make_child_buf(20, 100.0, 80.0, 100.0, 80.0, 1);
+    parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        neomacs_display_protocol::DisplayFrameId::new(10),
+        100.0,
+        80.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(mgr.update_frame(parent));
+    let mut nested = make_child_buf(30, 15.0, 12.0, 80.0, 60.0, 2);
+    nested.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(30),
+        neomacs_display_protocol::DisplayFrameId::new(20),
+        15.0,
+        12.0,
+        2,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    assert!(mgr.update_frame(nested));
+
+    assert!(mgr.remove_frame(20));
+    assert!(!mgr.frames.contains_key(&20));
+    assert!(!mgr.frames.contains_key(&30));
+}
+
 // ===================================================================
 // Z-order sorting (render_order / sorted_for_rendering)
 // ===================================================================

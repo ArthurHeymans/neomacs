@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::{
-    DisplayFrameId, FrameRect, PlaceChildQuery, PresentedFramePlacement, PresentedFrameScene,
+    FrameRect, PlaceChildQuery, PresentedFramePlacement, PresentedFrameScene,
 };
 
 /// State for one child frame.
@@ -88,6 +88,14 @@ impl ChildFrameManager {
             return false;
         }
 
+        let Ok(scene) = self.scene_with_replacement(&buf) else {
+            tracing::error!(
+                frame_id = frame_id.get(),
+                "rejecting incoherent child-frame ancestry update"
+            );
+            return false;
+        };
+
         let existed = self.frames.contains_key(&frame_id.get());
         tracing::debug!(
             frame_id = frame_id.get(),
@@ -115,13 +123,34 @@ impl ChildFrameManager {
             },
         );
 
-        self.rebuild_presented_scene();
+        self.apply_presented_scene(&scene);
         true
     }
 
     /// Remove a child frame by ID.
     pub fn remove_frame(&mut self, frame_id: u64) -> bool {
-        if self.frames.remove(&frame_id).is_some() {
+        if self.frames.contains_key(&frame_id) {
+            let mut removed = std::collections::HashSet::from([frame_id]);
+            loop {
+                let descendants = self
+                    .frames
+                    .iter()
+                    .filter_map(|(&id, entry)| {
+                        (!removed.contains(&id)
+                            && entry
+                                .frame
+                                .frame_placement
+                                .parent()
+                                .is_some_and(|parent| removed.contains(&parent.get())))
+                        .then_some(id)
+                    })
+                    .collect::<Vec<_>>();
+                if descendants.is_empty() {
+                    break;
+                }
+                removed.extend(descendants);
+            }
+            self.frames.retain(|id, _| !removed.contains(id));
             self.rebuild_presented_scene();
             tracing::info!(
                 frame_id,
@@ -207,34 +236,36 @@ impl ChildFrameManager {
     }
 
     fn rebuild_presented_scene(&mut self) {
-        let child_ids = self
-            .frames
-            .keys()
-            .copied()
-            .collect::<std::collections::HashSet<_>>();
-        let root_id = self.root.map(|root| root.frame().get());
         let mut placements = self.root.into_iter().collect::<Vec<_>>();
-        placements.extend(self.frames.values().map(|entry| {
-            let placement = entry.frame.frame_placement;
-            let raw_parent = placement.parent().map(DisplayFrameId::get);
-            if raw_parent
-                .is_some_and(|parent| Some(parent) != root_id && !child_ids.contains(&parent))
-            {
-                PresentedFramePlacement::new(
-                    placement.frame(),
-                    placement.presentation(),
-                    None,
-                    placement.outer_in_parent(),
-                    placement.z_order(),
-                )
-            } else {
-                placement
-            }
-        }));
+        placements.extend(
+            self.frames
+                .values()
+                .map(|entry| entry.frame.frame_placement),
+        );
         let Ok(scene) = PresentedFrameScene::from_placements(placements) else {
             tracing::error!("rejecting incoherent child-frame ancestry");
             return;
         };
+        self.apply_presented_scene(&scene);
+    }
+
+    fn scene_with_replacement(
+        &self,
+        replacement: &FrameGlyphBuffer,
+    ) -> Result<PresentedFrameScene, neomacs_display_protocol::PlaceChildError> {
+        let replacement_id = replacement.frame_placement.frame().get();
+        let mut placements = self.root.into_iter().collect::<Vec<_>>();
+        placements.extend(
+            self.frames
+                .iter()
+                .filter(|(id, _)| **id != replacement_id)
+                .map(|(_, entry)| entry.frame.frame_placement),
+        );
+        placements.push(replacement.frame_placement);
+        PresentedFrameScene::from_placements(placements)
+    }
+
+    fn apply_presented_scene(&mut self, scene: &PresentedFrameScene) {
         for entry in self.frames.values_mut() {
             let Ok(placed) = scene.place(PlaceChildQuery::new(
                 entry.frame.frame_placement.frame(),
