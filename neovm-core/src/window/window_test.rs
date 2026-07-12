@@ -19,9 +19,11 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
             text_body: Rect::new(168.0, 41.0, 1807.0, 1138.0),
             ..PresentedWindowRegions::default()
         },
-        text_area_left_offset: 24,
-        header_line_height: 5,
-        tab_line_height: 12,
+        // Deliberately stale compatibility scalars: typed geometry must use
+        // the explicit regions above instead.
+        text_area_left_offset: 999,
+        header_line_height: 88,
+        tab_line_height: 99,
         points: vec![DisplayPointSnapshot {
             buffer_pos: LispCharPos1::ONE,
             x: 475,

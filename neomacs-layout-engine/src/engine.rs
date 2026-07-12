@@ -798,18 +798,36 @@ impl LayoutEngine {
                     .iter_mut()
                     .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
                 {
-                    let measured = crate::display_status_line::WindowChromeMeasuredHeights {
-                        tab_line_height: snapshot.tab_line_height as f32,
-                        header_line_height: snapshot.header_line_height as f32,
-                        mode_line_height: snapshot.mode_line_height as f32,
+                    let regions = if snapshot.regions_materialized {
+                        let measured = crate::display_status_line::WindowChromeMeasuredHeights {
+                            tab_line_height: snapshot.tab_line_height as f32,
+                            header_line_height: snapshot.header_line_height as f32,
+                            mode_line_height: snapshot.mode_line_height as f32,
+                        };
+                        crate::display_frame_output::PresentedWindowRegionRequest::new(
+                            params,
+                            &frame_params,
+                            window_geometry,
+                            measured,
+                        )
+                        .resolve()
+                    } else {
+                        neovm_core::window::PresentedWindowRegions {
+                            outer: neovm_core::window::Rect::new(
+                                params.bounds.x,
+                                params.bounds.y,
+                                params.bounds.width,
+                                params.bounds.height,
+                            ),
+                            text_body: neovm_core::window::Rect::new(
+                                params.text_bounds.x,
+                                params.bounds.y,
+                                0.0,
+                                0.0,
+                            ),
+                            ..neovm_core::window::PresentedWindowRegions::default()
+                        }
                     };
-                    let regions = crate::display_frame_output::PresentedWindowRegionRequest::new(
-                        params,
-                        &frame_params,
-                        window_geometry,
-                        measured,
-                    )
-                    .resolve();
                     snapshot.cell_origin = neovm_core::window::geometry::CellOrigin::new(
                         params.left_col,
                         params.top_line,
@@ -1613,11 +1631,6 @@ impl LayoutEngine {
                 self.display_snapshots
                     .push(neovm_core::window::WindowDisplaySnapshot {
                         window_id,
-                        text_area_left_offset: (params.text_bounds.x - params.bounds.x).round()
-                            as i64,
-                        mode_line_height: params.mode_line_height.round() as i64,
-                        header_line_height: params.header_line_height.round() as i64,
-                        tab_line_height: params.tab_line_height.round() as i64,
                         ..neovm_core::window::WindowDisplaySnapshot::default()
                     });
                 return;

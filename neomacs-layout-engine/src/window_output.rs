@@ -1494,6 +1494,7 @@ impl WindowOutputEmitter {
             window_id,
             cell_origin,
             regions,
+            regions_materialized: true,
             text_area_left_offset: (regions.text_body.x - regions.outer.x).round() as i64,
             mode_line_height,
             header_line_height,

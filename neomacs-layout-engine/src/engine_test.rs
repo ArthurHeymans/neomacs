@@ -1703,13 +1703,19 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .get(frame_id)
         .expect("frame")
         .selected_window;
-    {
-        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        let window = frame.find_window_mut(selected).expect("window");
-        window.set_bounds(neovm_core::window::Rect::new(144.0, 24.0, 1831.0, 1172.0));
-        window.set_left_col(20);
-        window.set_top_line(1);
-    }
+    let left_side = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            Some(144),
+            neovm_core::window::SplitPlacement::BeforeTarget,
+        )
+        .expect("left side window");
+    eval.eval_str("(set-window-margins nil 2 3)")
+        .expect("main window margins");
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -1718,33 +1724,64 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     let evaluator_presentation = frame
         .display_presentation()
         .expect("evaluator presentation");
-    let snapshot = frame
-        .window_display_snapshot(selected)
-        .expect("window snapshot");
+    let first_publication = frame
+        .presented_geometry()
+        .expect("first immutable publication")
+        .clone();
     let renderer = engine
         .last_frame_display_state
         .as_ref()
         .expect("renderer presentation");
-    let info = renderer
-        .window_infos
-        .iter()
-        .find(|info| info.window_id.get() == selected.0 as i64)
-        .expect("renderer window regions");
-    let cell_origin = info.cell_origin.expect("presented cell origin");
-    let regions = info.regions.expect("presented window regions");
-
     assert_eq!(renderer.presentation_id.get(), evaluator_presentation.get());
-    assert_eq!(snapshot.cell_origin.column().get(), 20);
-    assert_eq!(snapshot.cell_origin.line().get(), 1);
-    assert_eq!(cell_origin.column, 20);
-    assert_eq!(cell_origin.line, 1);
-    assert_eq!(regions.outer.x, snapshot.regions.outer.x);
-    assert_eq!(regions.outer.y, snapshot.regions.outer.y);
-    assert_eq!(regions.text_body.x, snapshot.regions.text_body.x);
-    assert_eq!(regions.text_body.y, snapshot.regions.text_body.y);
-    assert!(snapshot.regions.tab_line.is_some());
-    assert!(snapshot.regions.header_line.is_some());
-    assert!(snapshot.regions.mode_line.is_some());
+    for window_id in [left_side, selected] {
+        let snapshot = frame
+            .window_display_snapshot(window_id)
+            .expect("evaluator window snapshot");
+        let info = renderer
+            .window_infos
+            .iter()
+            .find(|info| info.window_id.get() == window_id.0 as i64)
+            .expect("renderer window regions");
+        let cell_origin = info.cell_origin.expect("presented cell origin");
+        let regions = info.regions.expect("presented window regions");
+        assert_eq!(cell_origin.column, snapshot.cell_origin.column().get());
+        assert_eq!(cell_origin.line, snapshot.cell_origin.line().get());
+        assert_eq!(
+            regions,
+            crate::display_frame_output::protocol_window_regions(&snapshot.regions)
+        );
+    }
+    let left = frame
+        .window_display_snapshot(left_side)
+        .expect("left snapshot");
+    let main = frame
+        .window_display_snapshot(selected)
+        .expect("main snapshot");
+    assert_eq!(left.regions.outer.x, 0.0);
+    assert_eq!(left.regions.outer.width, 144.0);
+    assert_eq!(main.regions.outer.x, 144.0);
+    assert_eq!(main.regions.left_margin_columns, 2);
+    assert_eq!(main.regions.right_margin_columns, 3);
+    let retained_main = first_publication
+        .window(selected)
+        .expect("retained main geometry")
+        .regions;
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+    assert_ne!(
+        frame.display_presentation(),
+        Some(first_publication.presentation())
+    );
+    frame.resize_pixelwise(1600, 900);
+    assert!(frame.presented_geometry().is_none());
+    assert_eq!(
+        first_publication
+            .window(selected)
+            .expect("retained publication survives later layout and invalidation")
+            .regions,
+        retained_main
+    );
 }
 
 #[test]
@@ -1766,7 +1803,7 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
         let window = frame.find_window_mut(selected).expect("window");
-        window.set_bounds(neovm_core::window::Rect::new(144.0, 24.0, 300.0, 0.0));
+        window.set_bounds(neovm_core::window::Rect::new(144.0, 24.0, 0.0, 100.0));
         window.set_left_col(18);
         window.set_top_line(2);
     }
@@ -1781,9 +1818,16 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
         .expect("zero-body snapshot");
     assert_eq!(
         snapshot.regions.outer,
-        neovm_core::window::Rect::new(144.0, 24.0, 300.0, 0.0)
+        neovm_core::window::Rect::new(144.0, 24.0, 0.0, 100.0)
     );
+    assert!(!snapshot.regions_materialized);
+    assert_eq!(snapshot.regions.text_body.width, 0.0);
     assert_eq!(snapshot.regions.text_body.height, 0.0);
+    assert_eq!(snapshot.regions.tab_line, None);
+    assert_eq!(snapshot.regions.header_line, None);
+    assert_eq!(snapshot.regions.mode_line, None);
+    assert_eq!(snapshot.regions.left_margin, None);
+    assert_eq!(snapshot.regions.right_margin, None);
     assert_eq!(snapshot.cell_origin.column().get(), 18);
     assert_eq!(snapshot.cell_origin.line().get(), 2);
 
@@ -1799,6 +1843,8 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     let regions = info.regions.expect("presented zero-body regions");
     assert_eq!(regions.outer.x, 144.0);
     assert_eq!(regions.outer.y, 24.0);
+    assert_eq!(regions.outer.height, 100.0);
+    assert_eq!(regions.text_body.width, 0.0);
     assert_eq!(regions.text_body.height, 0.0);
 }
 

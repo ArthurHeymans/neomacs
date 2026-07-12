@@ -1,9 +1,8 @@
 //! Coordinate-safe views over redisplay's existing window snapshots.
 //!
-//! This module does not own a second copy of geometry.  It gives the live
-//! `Window` and its last `WindowDisplaySnapshot` typed pixel and cell views so
-//! consumers cannot silently combine body-local, window-local, frame-local,
-//! and cell-grid values.
+//! A `PresentedGeometry` owns one immutable frame publication and exposes typed
+//! pixel and cell views so consumers cannot silently combine body-local,
+//! window-local, frame-local, and cell-grid values.
 
 use super::{DisplayPointSnapshot, FrameId, LispCharPos1, Rect, WindowDisplaySnapshot, WindowId};
 use std::collections::HashMap;
@@ -352,8 +351,8 @@ impl<'a> SnapshotWindowGeometry<'a> {
         WindowPoint {
             window: self.window,
             point: PixelPoint {
-                x: LogicalPx::from_i64(self.snapshot.text_area_left_offset),
-                y: LogicalPx::from_i64(self.snapshot.top_chrome_height()),
+                x: LogicalPx(self.snapshot.regions.text_body.x - self.snapshot.regions.outer.x),
+                y: LogicalPx(self.snapshot.regions.text_body.y - self.snapshot.regions.outer.y),
                 space: PhantomData,
             },
         }
@@ -402,7 +401,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
             window: self.window,
             point: PixelPoint::new(
                 LogicalPx::from_i64(point.x).get(),
-                LogicalPx::from_i64(self.snapshot.text_area_relative_y(point.y)).get(),
+                LogicalPx::from_i64(point.y).get() - self.text_body_origin_in_window().y().get(),
             )?,
         };
         let body_origin = self.text_body_origin_in_frame()?;

@@ -196,7 +196,7 @@ impl<'a> PresentedWindowRegionRequest<'a> {
     }
 }
 
-fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRegions {
+pub(crate) fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRegions {
     let rect = |value: EvaluatorRect| Rect::new(value.x, value.y, value.width, value.height);
     let optional = |value: Option<EvaluatorRect>| value.map(rect);
     ProtocolWindowRegions {

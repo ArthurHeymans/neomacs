@@ -1401,6 +1401,8 @@ pub struct WindowDisplaySnapshot {
     pub cell_origin: geometry::CellOrigin,
     /// Immutable regions produced by the same completed redisplay.
     pub regions: PresentedWindowRegions,
+    /// Whether redisplay materialized the window body and chrome in this snapshot.
+    pub regions_materialized: bool,
     /// Text-area offset from the window's left edge, in pixels.
     pub text_area_left_offset: i64,
     /// Last redisplay mode-line height in pixels.
@@ -1598,6 +1600,7 @@ impl Default for WindowDisplaySnapshot {
             window_id: WindowId(0),
             cell_origin: geometry::CellOrigin::default(),
             regions: PresentedWindowRegions::default(),
+            regions_materialized: false,
             text_area_left_offset: 0,
             mode_line_height: 0,
             header_line_height: 0,
@@ -2542,6 +2545,11 @@ impl Frame {
             Some(geometry) if geometry.presentation().get() != 0 => Some(geometry.presentation()),
             _ => None,
         }
+    }
+
+    /// The immutable geometry publication owned by the last accepted presentation.
+    pub const fn presented_geometry(&self) -> Option<&geometry::PresentedGeometry> {
+        self.presented_geometry.as_ref()
     }
 
     /// Begin a GNU-shaped output pass for all live windows on this frame.
