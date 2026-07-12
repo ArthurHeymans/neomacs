@@ -10,6 +10,21 @@ use super::{
 };
 use std::marker::PhantomData;
 
+/// Evaluator-owned identity of one immutable displayed geometry publication.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct PresentationId(u64);
+
+impl PresentationId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 /// A logical-pixel coordinate or extent.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]

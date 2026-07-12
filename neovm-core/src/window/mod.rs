@@ -1730,6 +1730,9 @@ pub struct Frame {
     /// neomacs-side equivalents — adding the GNU names verbatim is
     /// tracked as future work in the audit's Phase 4 plan.
     pub display_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
+    /// Presentation that owns `display_snapshots`.  `None` means no completed
+    /// redisplay geometry is currently authoritative.
+    display_presentation: Option<geometry::PresentationId>,
     /// Last recorded redisplay state for GNU window change hooks.
     pub(crate) window_hook_record: FrameWindowHookRecord,
     /// GNU `frame-window-state-change` flag.
@@ -1864,6 +1867,7 @@ impl Frame {
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             display_snapshots: HashMap::new(),
+            display_presentation: None,
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -2313,6 +2317,7 @@ impl Frame {
 
         self.root_window.invalidate_display_state();
         self.display_snapshots.clear();
+        self.display_presentation = None;
     }
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
@@ -2489,6 +2494,21 @@ impl Frame {
         self.set_display_snapshots(snapshots);
     }
 
+    /// Atomically publish authoritative evaluator geometry for one completed
+    /// presentation.
+    pub fn publish_display_snapshots(
+        &mut self,
+        presentation: geometry::PresentationId,
+        snapshots: Vec<WindowDisplaySnapshot>,
+    ) {
+        self.set_display_snapshots(snapshots);
+        self.display_presentation = Some(presentation);
+    }
+
+    pub const fn display_presentation(&self) -> Option<geometry::PresentationId> {
+        self.display_presentation
+    }
+
     /// Begin a GNU-shaped output pass for all live windows on this frame.
     pub fn begin_display_output_pass(&mut self) {
         let live_window_ids = self.live_window_ids_with_minibuffer();
@@ -2516,6 +2536,9 @@ impl Frame {
     /// Replace the authoritative per-window redisplay geometry map without
     /// mutating live cursor/output state.
     pub fn set_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
+        // Geometry installed without an owning presentation cannot retain the
+        // identity of a previous publication.
+        self.display_presentation = None;
         self.display_snapshots.clear();
         for snapshot in snapshots {
             if self.find_window(snapshot.window_id).is_some() {

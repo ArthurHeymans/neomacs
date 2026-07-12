@@ -13972,6 +13972,16 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         .as_ref()
         .expect("tab-bar display state");
     assert_ne!(state.presentation_id.get(), 0);
+    assert_eq!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .display_presentation()
+            .expect("evaluator display presentation")
+            .get(),
+        state.presentation_id.get(),
+        "renderer output and evaluator geometry must belong to one presentation"
+    );
     let presented_targets = state
         .frame_chrome
         .band(FrameChromeKind::TabBar)

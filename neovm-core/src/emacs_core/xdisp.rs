@@ -26,8 +26,7 @@ use crate::buffer::{
 };
 use crate::emacs_core::error::LispCondition;
 use crate::window::{
-    DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot,
-    WindowId,
+    DisplayRowSnapshot, FrameId, FrameManager, Window, WindowDisplaySnapshot, WindowId,
 };
 use strum::{EnumString, IntoStaticStr};
 

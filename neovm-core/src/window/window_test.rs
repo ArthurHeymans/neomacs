@@ -57,6 +57,40 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     assert_eq!(frame_point.x().get(), 643.0);
     assert_eq!(frame_point.y().get(), 364.0);
 }
+
+#[test]
+fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
+    use super::geometry::PresentationId;
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("F1", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+
+    frame.publish_display_snapshots(
+        PresentationId::new(41),
+        vec![WindowDisplaySnapshot {
+            window_id,
+            text_area_left_offset: 8,
+            ..WindowDisplaySnapshot::default()
+        }],
+    );
+    assert_eq!(frame.display_presentation(), Some(PresentationId::new(41)));
+    assert_eq!(
+        frame
+            .window_display_snapshot(window_id)
+            .expect("published snapshot")
+            .text_area_left_offset,
+        8
+    );
+
+    frame.publish_display_snapshots(PresentationId::new(42), Vec::new());
+    assert_eq!(frame.display_presentation(), Some(PresentationId::new(42)));
+    assert!(frame.window_display_snapshot(window_id).is_none());
+
+    frame.set_display_snapshots(Vec::new());
+    assert_eq!(frame.display_presentation(), None);
+}
 use crate::buffer::LispCharPos1;
 
 #[test]
