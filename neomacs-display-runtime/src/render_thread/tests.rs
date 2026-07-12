@@ -714,3 +714,81 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
         Some(800.0)
     );
 }
+
+#[test]
+fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_window() {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    );
+    app.frame_windows.adopt_primary_frame_id(0x42);
+
+    let mut root = FrameGlyphBuffer::with_size(800.0, 600.0);
+    root.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(0x42),
+        neomacs_display_protocol::DisplayFrameId::new(0),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    let mut parent = FrameGlyphBuffer::with_size(300.0, 200.0);
+    parent.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(0x50),
+        neomacs_display_protocol::DisplayFrameId::new(0x42),
+        100.0,
+        80.0,
+        1,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    let mut nested = FrameGlyphBuffer::with_size(120.0, 80.0);
+    nested.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(0x51),
+        neomacs_display_protocol::DisplayFrameId::new(0x50),
+        15.0,
+        12.0,
+        2,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    for frame in [root, parent, nested] {
+        emacs
+            .frame_tx
+            .send(FrameDisplayState::from_frame_glyph_buffer(&frame))
+            .unwrap();
+    }
+
+    app.poll_frame();
+
+    let nested = app
+        .frame_windows
+        .primary_window()
+        .unwrap()
+        .render
+        .compositor
+        .child_frames
+        .frames
+        .get(&0x51)
+        .expect("nested child routed to root window");
+    assert_eq!((nested.abs_x, nested.abs_y), (115.0, 92.0));
+}

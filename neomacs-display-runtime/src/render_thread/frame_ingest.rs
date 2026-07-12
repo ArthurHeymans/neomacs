@@ -500,7 +500,10 @@ impl RenderApp {
                 let typing_ripple_enabled = self.effects.typing_ripple.enabled;
                 let cursor_trail_fade_enabled = self.effects.cursor_trail_fade.enabled;
                 let renderer = self.renderer.as_ref();
-                if let Some(window_state) = self.frame_windows.get_mut(parent_id.get()) {
+                if let Some(window_state) = self
+                    .frame_windows
+                    .get_mut_by_presented_frame(parent_id.get())
+                {
                     let old_presentation = window_state
                         .render
                         .compositor
