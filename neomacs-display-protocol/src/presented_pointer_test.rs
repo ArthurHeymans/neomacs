@@ -941,6 +941,54 @@ fn semantic_hit_index_limits_large_frame_queries_to_the_selected_row_band() {
 }
 
 #[test]
+fn semantic_hit_index_rebuilds_private_buckets_after_transport() {
+    let presentation = crate::PresentationId::new(31);
+    let window = crate::DisplayWindowId::new(1);
+    let index = crate::PresentedHitIndex::from_parts(
+        presentation,
+        vec![crate::PresentedHitRegion::new(
+            Some(window),
+            crate::PresentedRegionKind::TextBody,
+            rect(0.0, 0.0, 80.0, 16.0),
+            0,
+        )],
+        vec![crate::PresentedTextPosition::new(
+            window,
+            rect(8.0, 0.0, 8.0, 16.0),
+            2,
+            0,
+            1,
+        )],
+    )
+    .unwrap();
+
+    let wire = serde_json::to_string(&index).unwrap();
+    assert!(!wire.contains("buckets"), "derived indexes are not protocol data");
+    let decoded: crate::PresentedHitIndex = serde_json::from_str(&wire).unwrap();
+    let hit = decoded
+        .resolve(crate::PresentedHitQuery::new(presentation, 9.0, 8.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.text_position().unwrap().buffer_position(), 2);
+}
+
+#[test]
+fn semantic_hit_index_rejects_adversarial_wire_geometry() {
+    let wire = r#"{
+        "presentation": 32,
+        "regions": [{
+            "window": 1,
+            "kind": "TextBody",
+            "bounds": {"x": 0.0, "y": 0.0, "width": -8.0, "height": 16.0},
+            "z_order": 0
+        }],
+        "text_positions": []
+    }"#;
+
+    assert!(serde_json::from_str::<crate::PresentedHitIndex>(wire).is_err());
+}
+
+#[test]
 fn frame_glyph_buffers_start_with_an_empty_presented_pointer_map() {
     let default_buffer = crate::FrameGlyphBuffer::default();
     let constructed_buffer = crate::FrameGlyphBuffer::new();

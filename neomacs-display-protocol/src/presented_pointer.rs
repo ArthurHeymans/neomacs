@@ -258,12 +258,14 @@ impl std::fmt::Display for PresentedHitError {
 impl std::error::Error for PresentedHitError {}
 
 /// Immutable, presentation-qualified semantic hit index.
-#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct PresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
     text_positions: Vec<PresentedTextPosition>,
+    #[serde(skip)]
     region_buckets: Vec<PresentedHitBucket>,
+    #[serde(skip)]
     text_buckets: Vec<PresentedHitBucket>,
 }
 
@@ -274,6 +276,24 @@ struct PresentedHitBucket {
     prefix_max_bottom: f32,
     candidates: Vec<usize>,
     prefix_max_right: Vec<f32>,
+}
+
+#[derive(serde::Deserialize)]
+struct RawPresentedHitIndex {
+    presentation: PresentationId,
+    regions: Vec<PresentedHitRegion>,
+    text_positions: Vec<PresentedTextPosition>,
+}
+
+impl<'de> serde::Deserialize<'de> for PresentedHitIndex {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = RawPresentedHitIndex::deserialize(deserializer)?;
+        Self::from_parts(raw.presentation, raw.regions, raw.text_positions)
+            .map_err(serde::de::Error::custom)
+    }
 }
 
 impl Default for PresentedHitIndex {
