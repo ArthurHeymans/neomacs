@@ -1714,8 +1714,30 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
             neovm_core::window::SplitPlacement::BeforeTarget,
         )
         .expect("left side window");
-    eval.eval_str("(set-window-margins nil 2 3)")
-        .expect("main window margins");
+    let _bottom_side = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_side,
+            neovm_core::window::SplitDirection::Vertical,
+            buffer_id,
+            Some(100),
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("bottom side window");
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.eval_str(
+        "(progn
+           (set-window-margins nil 2 3)
+           (set-window-fringes nil 8 10 t)
+           (set-window-scroll-bars nil 12 'left 8 'bottom)
+           (modify-frame-parameters nil '((right-divider-width . 6)
+                                          (bottom-divider-width . 5))))",
+    )
+    .expect("explicit main window geometry");
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -1734,38 +1756,65 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .expect("renderer presentation");
     assert_eq!(renderer.presentation_id.get(), evaluator_presentation.get());
     for window_id in [left_side, selected] {
-        let snapshot = frame
-            .window_display_snapshot(window_id)
-            .expect("evaluator window snapshot");
+        let presented_window = first_publication
+            .frame()
+            .window(window_id)
+            .expect("evaluator presented window");
+        let typed_regions = *presented_window.regions().expect("materialized regions");
         let info = renderer
             .window_infos
             .iter()
             .find(|info| info.window_id.get() == window_id.0 as i64)
             .expect("renderer window regions");
-        let cell_origin = info.cell_origin.expect("presented cell origin");
-        let regions = info.regions.expect("presented window regions");
-        assert_eq!(cell_origin.column, snapshot.cell_origin.column().get());
-        assert_eq!(cell_origin.line, snapshot.cell_origin.line().get());
-        assert_eq!(
+        let Some(neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+            cell_origin,
             regions,
-            crate::display_frame_output::protocol_window_regions(&snapshot.regions)
+        }) = info.geometry
+        else {
+            panic!("complete renderer geometry");
+        };
+        assert_eq!(
+            cell_origin.column,
+            presented_window.cell_origin().column().get()
         );
+        assert_eq!(
+            cell_origin.line,
+            presented_window.cell_origin().line().get()
+        );
+        assert!(typed_regions.matches_transport(&regions));
     }
-    let left = frame
-        .window_display_snapshot(left_side)
-        .expect("left snapshot");
-    let main = frame
-        .window_display_snapshot(selected)
-        .expect("main snapshot");
-    assert_eq!(left.regions.outer.x, 0.0);
-    assert_eq!(left.regions.outer.width, 144.0);
-    assert_eq!(main.regions.outer.x, 144.0);
-    assert_eq!(main.regions.left_margin_columns, 2);
-    assert_eq!(main.regions.right_margin_columns, 3);
+    let left = *first_publication
+        .frame()
+        .window(left_side)
+        .and_then(|window| window.regions())
+        .expect("left regions");
+    let main = *first_publication
+        .frame()
+        .window(selected)
+        .and_then(|window| window.regions())
+        .expect("main regions");
+    assert_eq!(left.outer().origin().x().get(), 0.0);
+    assert_eq!(left.outer().width().get(), 144.0);
+    assert_eq!(main.outer().origin().x().get(), 144.0);
+    assert_eq!(main.left_margin_columns(), 2);
+    assert_eq!(main.right_margin_columns(), 3);
+    assert!(main.left_margin().is_some());
+    assert!(main.right_margin().is_some());
+    assert!(main.left_fringe().is_some());
+    assert!(main.right_fringe().is_some());
+    assert!(main.left_scroll_bar().is_some());
+    assert!(main.horizontal_scroll_bar().is_some());
+    assert!(main.tab_line().is_some());
+    assert!(main.header_line().is_some());
+    assert!(main.mode_line().is_some());
+    assert!(left.right_divider().is_some());
+    assert!(left.bottom_divider().is_some());
     let retained_main = first_publication
+        .frame()
         .window(selected)
         .expect("retained main geometry")
-        .regions;
+        .regions()
+        .copied();
 
     engine.layout_frame_rust(&mut eval, frame_id);
     let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
@@ -1777,9 +1826,11 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     assert!(frame.presented_geometry().is_none());
     assert_eq!(
         first_publication
+            .frame()
             .window(selected)
             .expect("retained publication survives later layout and invalidation")
-            .regions,
+            .regions()
+            .copied(),
         retained_main
     );
 }
@@ -1813,23 +1864,28 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     assert!(frame.display_presentation().is_some());
-    let snapshot = frame
-        .window_display_snapshot(selected)
-        .expect("zero-body snapshot");
-    assert_eq!(
-        snapshot.regions.outer,
-        neovm_core::window::Rect::new(144.0, 24.0, 0.0, 100.0)
-    );
-    assert!(!snapshot.regions_materialized);
-    assert_eq!(snapshot.regions.text_body.width, 0.0);
-    assert_eq!(snapshot.regions.text_body.height, 0.0);
-    assert_eq!(snapshot.regions.tab_line, None);
-    assert_eq!(snapshot.regions.header_line, None);
-    assert_eq!(snapshot.regions.mode_line, None);
-    assert_eq!(snapshot.regions.left_margin, None);
-    assert_eq!(snapshot.regions.right_margin, None);
-    assert_eq!(snapshot.cell_origin.column().get(), 18);
-    assert_eq!(snapshot.cell_origin.line().get(), 2);
+    let presentation = frame.display_presentation().expect("presentation");
+    let presented_window = frame
+        .presented_geometry()
+        .and_then(|geometry| geometry.frame().window(selected))
+        .expect("skipped presented window");
+    assert_eq!(presented_window.outer().origin().x().get(), 144.0);
+    assert_eq!(presented_window.outer().origin().y().get(), 24.0);
+    assert_eq!(presented_window.outer().width().get(), 0.0);
+    assert_eq!(presented_window.outer().height().get(), 100.0);
+    assert!(presented_window.regions().is_none());
+    assert_eq!(presented_window.cell_origin().column().get(), 18);
+    assert_eq!(presented_window.cell_origin().line().get(), 2);
+    assert!(matches!(
+        frame
+            .presented_geometry()
+            .expect("geometry")
+            .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
+                presentation,
+                selected,
+            )),
+        Err(neovm_core::window::geometry::GeometryQueryError::MissingMaterializedGeometry(id)) if id == selected
+    ));
 
     let state = engine
         .last_frame_display_state
@@ -1840,12 +1896,19 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
         .iter()
         .find(|info| info.window_id.get() == selected.0 as i64)
         .expect("renderer zero-body regions");
-    let regions = info.regions.expect("presented zero-body regions");
-    assert_eq!(regions.outer.x, 144.0);
-    assert_eq!(regions.outer.y, 24.0);
-    assert_eq!(regions.outer.height, 100.0);
-    assert_eq!(regions.text_body.width, 0.0);
-    assert_eq!(regions.text_body.height, 0.0);
+    let Some(neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
+        cell_origin,
+        outer,
+    }) = info.geometry
+    else {
+        panic!("skipped renderer geometry");
+    };
+    assert_eq!(cell_origin.column, 18);
+    assert_eq!(cell_origin.line, 2);
+    assert_eq!(
+        outer,
+        neomacs_display_protocol::types::Rect::new(144.0, 24.0, 0.0, 100.0)
+    );
 }
 
 fn enabled_window_row_texts_expanding_stretches(
@@ -2547,7 +2610,13 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
         .iter()
         .find(|info| info.window_id.get() == selected.0 as i64)
         .expect("window info");
-    let regions = info.regions.expect("presented window regions");
+    let Some(neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions,
+        ..
+    }) = info.geometry
+    else {
+        panic!("complete presented window regions");
+    };
     assert_eq!(regions.outer.x, snapshot.regions.outer.x);
     assert_eq!(regions.text_body.y, snapshot.regions.text_body.y);
 }

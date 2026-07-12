@@ -668,6 +668,19 @@ pub struct PresentedWindowRegions {
     pub bottom_divider: Option<Rect>,
 }
 
+/// Atomic geometry state for one window in a presentation.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum PresentedWindowGeometry {
+    Complete {
+        cell_origin: PresentedCellOrigin,
+        regions: PresentedWindowRegions,
+    },
+    Skipped {
+        cell_origin: PresentedCellOrigin,
+        outer: Rect,
+    },
+}
+
 /// Per-window metadata for animation transition detection
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowInfo {
@@ -683,10 +696,8 @@ pub struct WindowInfo {
     pub buffer_size: i64,
     /// Frame-absolute window bounds (includes mode-line)
     pub bounds: Rect,
-    /// Independent character-grid origin from the same presentation.
-    pub cell_origin: Option<PresentedCellOrigin>,
-    /// Explicit frame-relative logical-pixel regions from the same presentation.
-    pub regions: Option<PresentedWindowRegions>,
+    /// Atomically installed geometry from the same presentation.
+    pub geometry: Option<PresentedWindowGeometry>,
     /// Height of the mode-line in pixels (0 if no mode-line)
     pub mode_line_height: f32,
     /// Height of the header-line in pixels (0 if no header-line)
@@ -1701,8 +1712,7 @@ impl FrameGlyphBuffer {
             window_end,
             buffer_size,
             bounds: Rect::new(x, y, width, height),
-            cell_origin: None,
-            regions: None,
+            geometry: None,
             mode_line_height,
             header_line_height,
             tab_line_height,

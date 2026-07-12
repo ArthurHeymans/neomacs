@@ -100,7 +100,7 @@ fn frame_params() -> FrameParams {
 #[test]
 fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
     use crate::display_status_line::WindowChromeMeasuredHeights;
-    use neovm_core::window::Rect as EvaluatorRect;
+    use neomacs_display_protocol::types::Rect as EvaluatorRect;
 
     let mut params = window_params();
     params.bounds = Rect::new(144.0, 24.0, 400.0, 300.0);
@@ -295,8 +295,12 @@ fn window_info(params: &WindowParams) -> WindowInfo {
         window_end: 101,
         buffer_size: params.buffer_size,
         bounds: params.bounds,
-        cell_origin: Some(Default::default()),
-        regions: Some(regions),
+        geometry: Some(
+            neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+                cell_origin: Default::default(),
+                regions,
+            },
+        ),
         mode_line_height: params.mode_line_height,
         header_line_height: params.header_line_height,
         tab_line_height: params.tab_line_height,
@@ -576,10 +580,14 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
 fn missing_vertical_track_does_not_suppress_horizontal_scroll_bar() {
     let params = window_params();
     let mut info = window_info(&params);
-    info.regions
-        .as_mut()
-        .expect("presented regions")
-        .right_scroll_bar = None;
+    let Some(neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+        regions,
+        ..
+    }) = info.geometry.as_mut()
+    else {
+        panic!("complete presented regions");
+    };
+    regions.right_scroll_bar = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)

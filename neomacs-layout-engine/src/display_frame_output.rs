@@ -14,6 +14,7 @@ use neomacs_display_protocol::frame_chrome::{
 };
 use neomacs_display_protocol::frame_glyphs::{
     GlyphRowRole, PresentedCellOrigin as ProtocolCellOrigin,
+    PresentedWindowGeometry as ProtocolWindowGeometry,
     PresentedWindowRegions as ProtocolWindowRegions, WindowEffectHint, WindowInfo,
     WindowTransitionHint, WindowTransitionKind, derive_window_transition_hint,
 };
@@ -21,7 +22,7 @@ use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::emacs_core::eval::DisplayHost;
-use neovm_core::window::{PresentedWindowRegions, Rect as EvaluatorRect};
+use neovm_core::window::PresentedWindowRegions;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -86,10 +87,8 @@ impl<'a> PresentedWindowRegionRequest<'a> {
             self.params.text_bounds.width,
             body_h,
         );
-        let band = |x: f32, width: f32| {
-            (width > 0.0).then(|| EvaluatorRect::new(x, body_y, width, body_h))
-        };
-        let to_eval = |rect: Rect| EvaluatorRect::new(rect.x, rect.y, rect.width, rect.height);
+        let band = |x: f32, width: f32| (width > 0.0).then(|| Rect::new(x, body_y, width, body_h));
+        let to_eval = |rect: Rect| rect;
 
         let left_sb_w = if self.params.vertical_scroll_bar_side.as_deref() == Some("left") {
             self.params.scroll_bar_pixel_width.max(0.0)
@@ -197,26 +196,7 @@ impl<'a> PresentedWindowRegionRequest<'a> {
 }
 
 pub(crate) fn protocol_window_regions(regions: &PresentedWindowRegions) -> ProtocolWindowRegions {
-    let rect = |value: EvaluatorRect| Rect::new(value.x, value.y, value.width, value.height);
-    let optional = |value: Option<EvaluatorRect>| value.map(rect);
-    ProtocolWindowRegions {
-        outer: rect(regions.outer),
-        text_body: rect(regions.text_body),
-        left_margin_columns: regions.left_margin_columns,
-        right_margin_columns: regions.right_margin_columns,
-        left_margin: optional(regions.left_margin),
-        right_margin: optional(regions.right_margin),
-        left_fringe: optional(regions.left_fringe),
-        right_fringe: optional(regions.right_fringe),
-        left_scroll_bar: optional(regions.left_scroll_bar),
-        right_scroll_bar: optional(regions.right_scroll_bar),
-        horizontal_scroll_bar: optional(regions.horizontal_scroll_bar),
-        tab_line: optional(regions.tab_line),
-        header_line: optional(regions.header_line),
-        mode_line: optional(regions.mode_line),
-        right_divider: optional(regions.right_divider),
-        bottom_divider: optional(regions.bottom_divider),
-    }
+    *regions
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -349,15 +329,27 @@ impl FrameOutputOwner {
         left_col: i64,
         top_line: i64,
         regions: &PresentedWindowRegions,
+        materialized: bool,
     ) {
+        let cell_origin = ProtocolCellOrigin {
+            column: left_col,
+            line: top_line,
+        };
+        let geometry = if materialized {
+            ProtocolWindowGeometry::Complete {
+                cell_origin,
+                regions: protocol_window_regions(regions),
+            }
+        } else {
+            ProtocolWindowGeometry::Skipped {
+                cell_origin,
+                outer: regions.outer,
+            }
+        };
         self.builder.install_window_metadata(
             crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
                 window_id: DisplayWindowId::new(window_id),
-                cell_origin: ProtocolCellOrigin {
-                    column: left_col,
-                    line: top_line,
-                },
-                regions: protocol_window_regions(regions),
+                geometry,
             },
         );
     }
@@ -670,8 +662,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
                 self.params.bounds.width,
                 self.params.bounds.height,
             ),
-            cell_origin: None,
-            regions: None,
+            geometry: None,
             mode_line_height: self.params.mode_line_height,
             header_line_height: self.params.header_line_height,
             tab_line_height: self.params.tab_line_height,
@@ -1187,7 +1178,8 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
-        let Some(regions) = self.info.regions.as_ref() else {
+        let Some(ProtocolWindowGeometry::Complete { regions, .. }) = self.info.geometry.as_ref()
+        else {
             return;
         };
 

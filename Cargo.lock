@@ -3199,6 +3199,7 @@ dependencies = [
  "malachite",
  "memchr",
  "memmap2",
+ "neomacs-display-protocol",
  "neovm-host-abi",
  "network-interface",
  "notify",

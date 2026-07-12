@@ -4,7 +4,9 @@
 //! pixel and cell views so consumers cannot silently combine body-local,
 //! window-local, frame-local, and cell-grid values.
 
-use super::{DisplayPointSnapshot, FrameId, LispCharPos1, Rect, WindowDisplaySnapshot, WindowId};
+use super::{FrameId, LispCharPos1, WindowDisplaySnapshot, WindowId};
+use neomacs_display_protocol::frame_glyphs::PresentedWindowRegions;
+use neomacs_display_protocol::types::Rect as TransportRect;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::num::NonZeroU64;
@@ -37,14 +39,60 @@ impl PresentationId {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PresentationPublishError {
     ReusedPresentation(PresentationId),
+    InvalidGeometry(GeometryError),
 }
 
 /// One immutable, presentation-owned publication of all evaluator window geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PresentedGeometry {
-    frame: FrameId,
     presentation: PresentationId,
-    windows: HashMap<WindowId, WindowDisplaySnapshot>,
+    frame: PresentedFrame,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentedFrame {
+    id: FrameId,
+    windows: HashMap<WindowId, PresentedWindow>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresentedWindow {
+    id: WindowId,
+    cell_origin: CellOrigin,
+    outer: PixelRect<FrameLogicalSpace>,
+    regions: Option<WindowRegions>,
+    positions: Vec<PresentedPosition>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WindowRegions {
+    outer: PixelRect<FrameLogicalSpace>,
+    text_body: PixelRect<FrameLogicalSpace>,
+    left_margin_columns: i64,
+    right_margin_columns: i64,
+    left_margin: Option<PixelRect<FrameLogicalSpace>>,
+    right_margin: Option<PixelRect<FrameLogicalSpace>>,
+    left_fringe: Option<PixelRect<FrameLogicalSpace>>,
+    right_fringe: Option<PixelRect<FrameLogicalSpace>>,
+    left_scroll_bar: Option<PixelRect<FrameLogicalSpace>>,
+    right_scroll_bar: Option<PixelRect<FrameLogicalSpace>>,
+    horizontal_scroll_bar: Option<PixelRect<FrameLogicalSpace>>,
+    tab_line: Option<PixelRect<FrameLogicalSpace>>,
+    header_line: Option<PixelRect<FrameLogicalSpace>>,
+    mode_line: Option<PixelRect<FrameLogicalSpace>>,
+    right_divider: Option<PixelRect<FrameLogicalSpace>>,
+    bottom_divider: Option<PixelRect<FrameLogicalSpace>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PresentedPosition {
+    buffer_pos: LispCharPos1,
+    x: i64,
+    body_y: i64,
+    width: i64,
+    height: i64,
+    body_row: i64,
+    col: i64,
 }
 
 impl PresentedGeometry {
@@ -52,28 +100,30 @@ impl PresentedGeometry {
         frame: FrameId,
         presentation: PresentationId,
         snapshots: impl IntoIterator<Item = WindowDisplaySnapshot>,
-    ) -> Self {
-        Self {
-            frame,
+    ) -> Result<Self, GeometryError> {
+        let windows = snapshots
+            .into_iter()
+            .map(PresentedWindow::from_snapshot)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(|window| (window.id, window))
+            .collect();
+        Ok(Self {
             presentation,
-            windows: snapshots
-                .into_iter()
-                .map(|snapshot| (snapshot.window_id, snapshot))
-                .collect(),
-        }
+            frame: PresentedFrame { id: frame, windows },
+        })
     }
 
     pub const fn presentation(&self) -> PresentationId {
         self.presentation
     }
 
-    pub fn window(&self, window: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.windows.get(&window)
+    pub const fn frame(&self) -> &PresentedFrame {
+        &self.frame
     }
 
-    pub fn window_geometry(&self, window: WindowId) -> Option<SnapshotWindowGeometry<'_>> {
-        SnapshotWindowGeometry::new(self.presentation, self.frame, window, self.window(window)?)
-            .ok()
+    fn window(&self, window: WindowId) -> Option<&PresentedWindow> {
+        self.frame.windows.get(&window)
     }
 
     /// Resolve one of the closed set of semantic geometry queries against this
@@ -86,6 +136,147 @@ impl PresentedGeometry {
             });
         }
         query.resolve_presented(self)
+    }
+}
+
+impl PresentedFrame {
+    pub const fn id(&self) -> FrameId {
+        self.id
+    }
+
+    pub fn window(&self, id: WindowId) -> Option<&PresentedWindow> {
+        self.windows.get(&id)
+    }
+}
+
+impl PresentedWindow {
+    fn from_snapshot(snapshot: WindowDisplaySnapshot) -> Result<Self, GeometryError> {
+        let outer = PixelRect::from_transport(&snapshot.regions.outer)?;
+        let regions = snapshot
+            .regions_materialized
+            .then(|| WindowRegions::from_transport(&snapshot.regions))
+            .transpose()?;
+        let positions = snapshot
+            .points
+            .iter()
+            .map(|point| {
+                let body_row = snapshot
+                    .body_rows
+                    .iter()
+                    .find(|row| row.output_row == point.row);
+                PresentedPosition {
+                    buffer_pos: point.buffer_pos,
+                    x: point.x,
+                    body_y: body_row.map_or(point.y, |row| row.body_y),
+                    width: point.width,
+                    height: point.height,
+                    body_row: body_row.map_or(point.row, |row| row.body_row),
+                    col: point.col,
+                }
+            })
+            .collect();
+        Ok(Self {
+            id: snapshot.window_id,
+            cell_origin: snapshot.cell_origin,
+            outer,
+            regions,
+            positions,
+        })
+    }
+
+    pub const fn id(&self) -> WindowId {
+        self.id
+    }
+
+    pub const fn cell_origin(&self) -> CellOrigin {
+        self.cell_origin
+    }
+
+    pub const fn outer(&self) -> PixelRect<FrameLogicalSpace> {
+        self.outer
+    }
+
+    pub const fn regions(&self) -> Option<&WindowRegions> {
+        self.regions.as_ref()
+    }
+}
+
+impl WindowRegions {
+    fn from_transport(regions: &PresentedWindowRegions) -> Result<Self, GeometryError> {
+        let optional = |rect: Option<TransportRect>| {
+            rect.map(|rect| PixelRect::from_transport(&rect))
+                .transpose()
+        };
+        Ok(Self {
+            outer: PixelRect::from_transport(&regions.outer)?,
+            text_body: PixelRect::from_transport(&regions.text_body)?,
+            left_margin_columns: regions.left_margin_columns,
+            right_margin_columns: regions.right_margin_columns,
+            left_margin: optional(regions.left_margin)?,
+            right_margin: optional(regions.right_margin)?,
+            left_fringe: optional(regions.left_fringe)?,
+            right_fringe: optional(regions.right_fringe)?,
+            left_scroll_bar: optional(regions.left_scroll_bar)?,
+            right_scroll_bar: optional(regions.right_scroll_bar)?,
+            horizontal_scroll_bar: optional(regions.horizontal_scroll_bar)?,
+            tab_line: optional(regions.tab_line)?,
+            header_line: optional(regions.header_line)?,
+            mode_line: optional(regions.mode_line)?,
+            right_divider: optional(regions.right_divider)?,
+            bottom_divider: optional(regions.bottom_divider)?,
+        })
+    }
+
+    pub const fn outer(self) -> PixelRect<FrameLogicalSpace> {
+        self.outer
+    }
+    pub const fn text_body(self) -> PixelRect<FrameLogicalSpace> {
+        self.text_body
+    }
+    pub const fn left_margin_columns(self) -> i64 {
+        self.left_margin_columns
+    }
+    pub const fn right_margin_columns(self) -> i64 {
+        self.right_margin_columns
+    }
+    pub fn matches_transport(self, regions: &PresentedWindowRegions) -> bool {
+        Self::from_transport(regions).is_ok_and(|other| other == self)
+    }
+    pub const fn left_margin(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.left_margin
+    }
+    pub const fn right_margin(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.right_margin
+    }
+    pub const fn left_fringe(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.left_fringe
+    }
+    pub const fn right_fringe(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.right_fringe
+    }
+    pub const fn left_scroll_bar(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.left_scroll_bar
+    }
+    pub const fn right_scroll_bar(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.right_scroll_bar
+    }
+    pub const fn horizontal_scroll_bar(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.horizontal_scroll_bar
+    }
+    pub const fn tab_line(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.tab_line
+    }
+    pub const fn header_line(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.header_line
+    }
+    pub const fn mode_line(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.mode_line
+    }
+    pub const fn right_divider(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.right_divider
+    }
+    pub const fn bottom_divider(self) -> Option<PixelRect<FrameLogicalSpace>> {
+        self.bottom_divider
     }
 }
 
@@ -114,6 +305,7 @@ pub enum GeometryQueryError {
         available: PresentationId,
     },
     MissingWindow(WindowId),
+    MissingMaterializedGeometry(WindowId),
     MissingRegion {
         window: WindowId,
         region: WindowRegion,
@@ -153,11 +345,16 @@ impl GeometryQuery for WindowGeometryQuery {
         self,
         geometry: &'a PresentedGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
-        let snapshot = geometry
+        let window = geometry
             .window(self.window)
             .ok_or(GeometryQueryError::MissingWindow(self.window))?;
-        SnapshotWindowGeometry::new(geometry.presentation, geometry.frame, self.window, snapshot)
-            .map_err(GeometryQueryError::InvalidGeometry)
+        SnapshotWindowGeometry::new(
+            geometry.presentation,
+            geometry.frame.id,
+            self.window,
+            window,
+        )
+        .ok_or(GeometryQueryError::MissingMaterializedGeometry(self.window))
     }
 }
 
@@ -209,10 +406,12 @@ impl GeometryQuery for WindowRegionBoundsQuery {
         self,
         geometry: &'a PresentedGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
-        let snapshot = geometry
+        let window = geometry
             .window(self.window)
             .ok_or(GeometryQueryError::MissingWindow(self.window))?;
-        let regions = &snapshot.regions;
+        let regions = window
+            .regions()
+            .ok_or(GeometryQueryError::MissingMaterializedGeometry(self.window))?;
         let rect = match self.region {
             WindowRegion::Outer => Some(regions.outer),
             WindowRegion::TextBody => Some(regions.text_body),
@@ -233,7 +432,7 @@ impl GeometryQuery for WindowRegionBoundsQuery {
             window: self.window,
             region: self.region,
         })?;
-        PixelRect::from_raw(&rect).map_err(GeometryQueryError::InvalidGeometry)
+        Ok(rect)
     }
 }
 
@@ -374,7 +573,7 @@ pub struct PixelRect<Space> {
 }
 
 impl<Space> PixelRect<Space> {
-    fn from_raw(rect: &Rect) -> Result<Self, GeometryError> {
+    fn from_transport(rect: &TransportRect) -> Result<Self, GeometryError> {
         if rect.x < 0.0
             || rect.y < 0.0
             || !rect.width.is_finite()
@@ -526,7 +725,8 @@ pub struct SnapshotWindowGeometry<'a> {
     presentation: PresentationId,
     frame: FrameId,
     window: WindowId,
-    snapshot: &'a WindowDisplaySnapshot,
+    window_geometry: &'a PresentedWindow,
+    regions: &'a WindowRegions,
     outer: PixelRect<FrameLogicalSpace>,
 }
 
@@ -535,17 +735,16 @@ impl<'a> SnapshotWindowGeometry<'a> {
         presentation: PresentationId,
         frame: FrameId,
         window: WindowId,
-        snapshot: &'a WindowDisplaySnapshot,
-    ) -> Result<Self, GeometryError> {
-        if window != snapshot.window_id {
-            return Err(GeometryError::SnapshotWindowMismatch);
-        }
-        Ok(Self {
+        window_geometry: &'a PresentedWindow,
+    ) -> Option<Self> {
+        let regions = window_geometry.regions()?;
+        Some(Self {
             presentation,
             frame,
             window,
-            snapshot,
-            outer: PixelRect::from_raw(&snapshot.regions.outer)?,
+            window_geometry,
+            regions,
+            outer: regions.outer,
         })
     }
 
@@ -566,15 +765,19 @@ impl<'a> SnapshotWindowGeometry<'a> {
     }
 
     pub fn cell_origin(&self) -> CellOrigin {
-        self.snapshot.cell_origin
+        self.window_geometry.cell_origin
     }
 
     pub fn text_body_origin_in_window(&self) -> WindowPoint<WindowLocalSpace> {
         WindowPoint {
             window: self.window,
             point: PixelPoint {
-                x: LogicalPx(self.snapshot.regions.text_body.x - self.snapshot.regions.outer.x),
-                y: LogicalPx(self.snapshot.regions.text_body.y - self.snapshot.regions.outer.y),
+                x: LogicalPx(
+                    self.regions.text_body.origin.x.get() - self.regions.outer.origin.x.get(),
+                ),
+                y: LogicalPx(
+                    self.regions.text_body.origin.y.get() - self.regions.outer.origin.y.get(),
+                ),
                 space: PhantomData,
             },
         }
@@ -595,10 +798,16 @@ impl<'a> SnapshotWindowGeometry<'a> {
         &self,
         buffer_pos: LispCharPos1,
     ) -> Result<Option<SnapshotPointGeometry>, GeometryError> {
-        self.snapshot
-            .point_for_buffer_pos(buffer_pos)
-            .map(|point| self.materialize_point(point))
-            .transpose()
+        let idx = self
+            .window_geometry
+            .positions
+            .partition_point(|point| point.buffer_pos < buffer_pos);
+        let point = self
+            .window_geometry
+            .positions
+            .get(idx)
+            .filter(|point| point.buffer_pos == buffer_pos);
+        point.map(|point| self.materialize_point(point)).transpose()
     }
 
     /// Resolve coordinates in GNU's current snapshot convention: X is
@@ -608,22 +817,33 @@ impl<'a> SnapshotWindowGeometry<'a> {
         body_x: i64,
         window_y: i64,
     ) -> Result<Option<SnapshotPointGeometry>, GeometryError> {
-        self.snapshot
-            .point_at_coords(body_x, window_y)
-            .as_ref()
-            .map(|point| self.materialize_point(point))
-            .transpose()
+        let body_y = window_y.saturating_sub(self.text_body_origin_in_window().y().get() as i64);
+        let mut points: Vec<_> = self
+            .window_geometry
+            .positions
+            .iter()
+            .filter(|point| {
+                body_y >= point.body_y && body_y < point.body_y.saturating_add(point.height.max(1))
+            })
+            .collect();
+        points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
+        let point = points
+            .iter()
+            .copied()
+            .find(|point| body_x < point.x.saturating_add(point.width.max(1)))
+            .or_else(|| points.last().copied());
+        point.map(|point| self.materialize_point(point)).transpose()
     }
 
     fn materialize_point(
         &self,
-        point: &DisplayPointSnapshot,
+        point: &PresentedPosition,
     ) -> Result<SnapshotPointGeometry, GeometryError> {
         let body_point = WindowPoint {
             window: self.window,
             point: PixelPoint::new(
                 LogicalPx::from_i64(point.x).get(),
-                LogicalPx::from_i64(point.y).get() - self.text_body_origin_in_window().y().get(),
+                LogicalPx::from_i64(point.body_y).get(),
             )?,
         };
         let body_origin = self.text_body_origin_in_frame()?;
@@ -640,7 +860,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
             frame_point,
             width: LogicalPx::from_i64(point.width),
             height: LogicalPx::from_i64(point.height),
-            row: self.snapshot.text_area_relative_row(point.row),
+            row: point.body_row,
             column: point.col,
         })
     }

@@ -813,13 +813,13 @@ impl LayoutEngine {
                         .resolve()
                     } else {
                         neovm_core::window::PresentedWindowRegions {
-                            outer: neovm_core::window::Rect::new(
+                            outer: neomacs_display_protocol::types::Rect::new(
                                 params.bounds.x,
                                 params.bounds.y,
                                 params.bounds.width,
                                 params.bounds.height,
                             ),
-                            text_body: neovm_core::window::Rect::new(
+                            text_body: neomacs_display_protocol::types::Rect::new(
                                 params.text_bounds.x,
                                 params.bounds.y,
                                 0.0,
@@ -838,6 +838,7 @@ impl LayoutEngine {
                         params.left_col,
                         params.top_line,
                         &regions,
+                        snapshot.regions_materialized,
                     );
                 }
 

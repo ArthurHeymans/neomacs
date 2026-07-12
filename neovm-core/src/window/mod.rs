@@ -1269,6 +1269,14 @@ pub struct DisplayPointSnapshot {
     pub col: i64,
 }
 
+/// Body-local row facts emitted directly by redisplay for semantic queries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresentedBodyRowSnapshot {
+    pub output_row: i64,
+    pub body_row: i64,
+    pub body_y: i64,
+}
+
 /// Per-row metrics from the last redisplay of a window.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayRowSnapshot {
@@ -1368,29 +1376,7 @@ pub struct WindowCursorSnapshot {
 }
 
 /// Last authoritative redisplay geometry for a live leaf window.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct PresentedWindowRegions {
-    /// Frame-relative logical-pixel bounds of the complete Emacs window.
-    pub outer: Rect,
-    /// Frame-relative logical-pixel bounds of the rendered text body.
-    pub text_body: Rect,
-    /// Number of character columns reserved by the left margin.
-    pub left_margin_columns: i64,
-    /// Number of character columns reserved by the right margin.
-    pub right_margin_columns: i64,
-    pub left_margin: Option<Rect>,
-    pub right_margin: Option<Rect>,
-    pub left_fringe: Option<Rect>,
-    pub right_fringe: Option<Rect>,
-    pub left_scroll_bar: Option<Rect>,
-    pub right_scroll_bar: Option<Rect>,
-    pub horizontal_scroll_bar: Option<Rect>,
-    pub tab_line: Option<Rect>,
-    pub header_line: Option<Rect>,
-    pub mode_line: Option<Rect>,
-    pub right_divider: Option<Rect>,
-    pub bottom_divider: Option<Rect>,
-}
+pub use neomacs_display_protocol::frame_glyphs::PresentedWindowRegions;
 
 /// Last authoritative redisplay geometry for a live leaf window.
 #[derive(Clone, Debug, PartialEq)]
@@ -1403,6 +1389,9 @@ pub struct WindowDisplaySnapshot {
     pub regions: PresentedWindowRegions,
     /// Whether redisplay materialized the window body and chrome in this snapshot.
     pub regions_materialized: bool,
+    /// Body-local row mapping published by the producer, independent of chrome
+    /// row counts retained for compatibility.
+    pub body_rows: Vec<PresentedBodyRowSnapshot>,
     /// Text-area offset from the window's left edge, in pixels.
     pub text_area_left_offset: i64,
     /// Last redisplay mode-line height in pixels.
@@ -1601,6 +1590,7 @@ impl Default for WindowDisplaySnapshot {
             cell_origin: geometry::CellOrigin::default(),
             regions: PresentedWindowRegions::default(),
             regions_materialized: false,
+            body_rows: Vec::new(),
             text_area_left_offset: 0,
             mode_line_height: 0,
             header_line_height: 0,
@@ -2543,7 +2533,8 @@ impl Frame {
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
             .collect();
-        let candidate = geometry::PresentedGeometry::new(self.id, presentation, snapshots.clone());
+        let candidate = geometry::PresentedGeometry::new(self.id, presentation, snapshots.clone())
+            .map_err(geometry::PresentationPublishError::InvalidGeometry)?;
         if self
             .last_presentation
             .is_some_and(|last| presentation <= last)
@@ -2623,14 +2614,19 @@ impl Frame {
         id: WindowId,
     ) -> Option<geometry::SnapshotWindowGeometry<'_>> {
         let presented = self.presented_geometry.as_ref()?;
-        presented.window_geometry(id)
+        presented
+            .resolve(geometry::WindowGeometryQuery::new(
+                presented.presentation(),
+                id,
+            ))
+            .ok()
     }
 
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
         if self
             .presented_geometry
             .as_ref()
-            .is_some_and(|geometry| geometry.window(id).is_some())
+            .is_some_and(|geometry| geometry.frame().window(id).is_some())
         {
             self.presented_geometry = None;
             self.display_snapshots.clear();

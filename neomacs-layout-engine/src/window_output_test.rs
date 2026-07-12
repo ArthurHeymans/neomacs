@@ -100,8 +100,7 @@ fn window_info(window_id: i64) -> WindowInfo {
         window_end: 1,
         buffer_size: 100,
         bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
-        cell_origin: Default::default(),
-        regions: Default::default(),
+        geometry: None,
         mode_line_height: 0.0,
         header_line_height: 0.0,
         tab_line_height: 0.0,
@@ -791,8 +790,9 @@ fn publish_text_window_decorative_cursor_installs_cursor_item_and_effects_only()
 
 #[test]
 fn finished_snapshot_publishes_selected_window_outer_body_and_cell_origin() {
+    use neomacs_display_protocol::types::Rect as TransportRect;
+    use neovm_core::window::PresentedWindowRegions;
     use neovm_core::window::geometry::CellOrigin;
-    use neovm_core::window::{PresentedWindowRegions, Rect};
 
     let mut eval = neovm_core::emacs_core::Context::new();
     let buffer_id = eval
@@ -811,8 +811,8 @@ fn finished_snapshot_publishes_selected_window_outer_body_and_cell_origin() {
     let emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 168.0, 24.0);
 
     let regions = PresentedWindowRegions {
-        outer: Rect::new(144.0, 24.0, 1831.0, 1172.0),
-        text_body: Rect::new(168.0, 41.0, 1807.0, 1138.0),
+        outer: TransportRect::new(144.0, 24.0, 1831.0, 1172.0),
+        text_body: TransportRect::new(168.0, 41.0, 1807.0, 1138.0),
         ..PresentedWindowRegions::default()
     };
     let snapshot = emitter.finish_snapshot_with_geometry(
@@ -826,11 +826,11 @@ fn finished_snapshot_publishes_selected_window_outer_body_and_cell_origin() {
 
     assert_eq!(
         snapshot.regions.outer,
-        Rect::new(144.0, 24.0, 1831.0, 1172.0)
+        TransportRect::new(144.0, 24.0, 1831.0, 1172.0)
     );
     assert_eq!(
         snapshot.regions.text_body,
-        Rect::new(168.0, 41.0, 1807.0, 1138.0)
+        TransportRect::new(168.0, 41.0, 1807.0, 1138.0)
     );
     assert_eq!(snapshot.cell_origin, CellOrigin::new(20, 1));
     assert_eq!(snapshot.header_line_height, 5);

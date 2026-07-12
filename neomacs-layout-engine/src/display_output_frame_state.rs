@@ -143,14 +143,25 @@ impl OutputFrameBuildState {
                     .iter_mut()
                     .find(|info| info.window_id == geometry.window_id)
                 {
-                    info.cell_origin = Some(geometry.cell_origin);
-                    info.regions = Some(geometry.regions);
-                    info.tab_line_height =
-                        geometry.regions.tab_line.map_or(0.0, |rect| rect.height);
-                    info.header_line_height =
-                        geometry.regions.header_line.map_or(0.0, |rect| rect.height);
-                    info.mode_line_height =
-                        geometry.regions.mode_line.map_or(0.0, |rect| rect.height);
+                    info.geometry = Some(geometry.geometry);
+                    let regions = match geometry.geometry {
+                        neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Complete {
+                            regions,
+                            ..
+                        } => Some(regions),
+                        neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
+                            ..
+                        } => None,
+                    };
+                    info.tab_line_height = regions
+                        .and_then(|regions| regions.tab_line)
+                        .map_or(0.0, |rect| rect.height);
+                    info.header_line_height = regions
+                        .and_then(|regions| regions.header_line)
+                        .map_or(0.0, |rect| rect.height);
+                    info.mode_line_height = regions
+                        .and_then(|regions| regions.mode_line)
+                        .map_or(0.0, |rect| rect.height);
                 }
             }
             OutputWindowMetadataInstallRequest::RestoreRetryCheckpoint(checkpoint) => {

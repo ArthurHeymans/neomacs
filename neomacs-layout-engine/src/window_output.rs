@@ -1459,8 +1459,8 @@ impl WindowOutputEmitter {
             evaluator,
             CellOrigin::default(),
             PresentedWindowRegions {
-                outer: neovm_core::window::Rect::default(),
-                text_body: neovm_core::window::Rect::new(
+                outer: neomacs_display_protocol::types::Rect::default(),
+                text_body: neomacs_display_protocol::types::Rect::new(
                     text_area_left_offset as f32,
                     0.0,
                     0.0,
@@ -1490,11 +1490,24 @@ impl WindowOutputEmitter {
         self.points
             .sort_by_key(|point| (point.buffer_pos, point.row, point.col, point.x));
         self.rows.sort_by_key(|row| row.row);
+        let body_origin_y = (regions.text_body.y - regions.outer.y).round() as i64;
+        let mut body_rows: Vec<_> = self
+            .points
+            .iter()
+            .map(|point| neovm_core::window::PresentedBodyRowSnapshot {
+                output_row: point.row,
+                body_row: point.row.saturating_sub(self.text_row_base),
+                body_y: point.y.saturating_sub(body_origin_y),
+            })
+            .collect();
+        body_rows.sort_by_key(|row| row.output_row);
+        body_rows.dedup_by_key(|row| row.output_row);
         let snapshot = WindowDisplaySnapshot {
             window_id,
             cell_origin,
             regions,
             regions_materialized: true,
+            body_rows,
             text_area_left_offset: (regions.text_body.x - regions.outer.x).round() as i64,
             mode_line_height,
             header_line_height,

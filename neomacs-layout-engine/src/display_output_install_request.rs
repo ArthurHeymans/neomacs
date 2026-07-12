@@ -3,8 +3,8 @@
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, PresentedCellOrigin,
-    PresentedWindowRegions, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, PresentedWindowGeometry,
+    WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
 use neomacs_display_protocol::types::FaceId;
@@ -277,8 +277,7 @@ pub(crate) struct OutputRetryCheckpointRestoreRequest {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OutputPresentedWindowGeometryInstallRequest {
     pub(crate) window_id: DisplayWindowId,
-    pub(crate) cell_origin: PresentedCellOrigin,
-    pub(crate) regions: PresentedWindowRegions,
+    pub(crate) geometry: PresentedWindowGeometry,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

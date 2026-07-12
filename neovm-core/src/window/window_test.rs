@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     use super::geometry::{Column, Line, PresentationId, PresentedGeometry};
+    use neomacs_display_protocol::types::Rect as TransportRect;
 
     let mut window = Window::new_leaf(
         WindowId(11),
@@ -15,10 +16,11 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
         window_id: WindowId(11),
         cell_origin: super::geometry::CellOrigin::new(18, 2),
         regions: PresentedWindowRegions {
-            outer: Rect::new(144.0, 24.0, 1831.0, 1172.0),
-            text_body: Rect::new(168.0, 41.0, 1807.0, 1138.0),
+            outer: TransportRect::new(144.0, 24.0, 1831.0, 1172.0),
+            text_body: TransportRect::new(168.0, 41.0, 1807.0, 1138.0),
             ..PresentedWindowRegions::default()
         },
+        regions_materialized: true,
         // Deliberately stale compatibility scalars: typed geometry must use
         // the explicit regions above instead.
         text_area_left_offset: 999,
@@ -40,9 +42,13 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     window.set_bounds(Rect::new(999.0, 999.0, 1.0, 1.0));
     window.set_left_col(99);
     window.set_top_line(99);
-    let presented = PresentedGeometry::new(FrameId(7), PresentationId::new(41), [snapshot]);
+    let presented = PresentedGeometry::new(FrameId(7), PresentationId::new(41), [snapshot])
+        .expect("valid presented geometry");
     let geometry = presented
-        .window_geometry(window.id())
+        .resolve(super::geometry::WindowGeometryQuery::new(
+            PresentationId::new(41),
+            window.id(),
+        ))
         .expect("valid presented geometry");
     assert_eq!(geometry.presentation(), PresentationId::new(41));
     assert_eq!(geometry.cell_origin().column(), Column::new(18));
@@ -79,6 +85,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
         GeometryQueryError, PresentationId, PresentedGeometry, WindowGeometryQuery, WindowRegion,
         WindowRegionBoundsQuery,
     };
+    use neomacs_display_protocol::types::Rect as TransportRect;
 
     let window_id = WindowId(11);
     let presentation = PresentationId::new(41);
@@ -88,17 +95,19 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
         [WindowDisplaySnapshot {
             window_id,
             regions: PresentedWindowRegions {
-                outer: Rect::new(144.0, 24.0, 800.0, 600.0),
-                text_body: Rect::new(180.0, 60.0, 700.0, 520.0),
-                left_scroll_bar: Some(Rect::new(144.0, 60.0, 12.0, 520.0)),
+                outer: TransportRect::new(144.0, 24.0, 800.0, 600.0),
+                text_body: TransportRect::new(180.0, 60.0, 700.0, 520.0),
+                left_scroll_bar: Some(TransportRect::new(144.0, 60.0, 12.0, 520.0)),
                 ..PresentedWindowRegions::default()
             },
+            regions_materialized: true,
             text_area_left_offset: 999,
             header_line_height: 88,
             tab_line_height: 99,
             ..WindowDisplaySnapshot::default()
         }],
-    );
+    )
+    .expect("valid presented geometry");
 
     let error = publication
         .resolve(WindowGeometryQuery::new(PresentationId::new(40), window_id))
