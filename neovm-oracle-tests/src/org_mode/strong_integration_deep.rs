@@ -250,7 +250,9 @@ fn int_clock_effort_property() {
 #[test]
 fn int_headline_timestamp_planning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Meeting <2026-01-15 Wed>\" (timestamp (:standard-properties [39 nil nil nil 61 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<FIXED-ORG-TIME>\" :year-start 2026 :month-start 1 :day-start 14 :hour-start 0 :minute-start 0 :year-end 2026 :month-end 1 :day-end 14 :hour-end 0 :minute-end 0)) nil ((active 2026 15) (active 2026 16) (active 2026 17)))""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"Meeting <2026-01-15 Wed>\" (timestamp (:standard-properties [39 nil nil nil 61 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<FIXED-ORG-TIME>\" :year-start 2026 :month-start 1 :day-start 14 :hour-start 0 :minute-start 0 :year-end 2026 :month-end 1 :day-end 14 :hour-end 0 :minute-end 0)) nil ((active 2026 15) (active 2026 16) (active 2026 17)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

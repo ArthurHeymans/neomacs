@@ -679,7 +679,9 @@ fn org_export_filter_babel_call_deep_state_combo() {
 fn org_org_export_native_planning_macro_footnote_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""OK ((#(\"Native\" 0 6 (:parent (#(\"Native\" 0 6 (:parent #4)))))) t t t nil ((planning \"<FIXED-ORG-TIME>\" \"<2026-05-28 Thu>\") (drawer \"LOGBOOK\") (macro \"badge\" (\"ok\")) (link \"https://example.org\" \"https\" \"//example.org\") (footnote \"n\")) t t t t t \"#+macro: badge Badge-$1\n* TODO Keep                                                            :work:\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <FIXED-ORG-TIME>\n:PROPERTIES:\n:Owner:    Ada\n:Score:    7\n:END:\n:LOGBOOK:\n- State \\\"TODO\\\" from \\\"\\\" [2026-05-26 Tue]\n:END:\nParagraph Badge-ok with [[https://example.org][link]] and footnote[fn:n].\n#+begin_quote\nQuoted *bold* text.\n#+end_quote\n\n[fn:n] Note body with /italic/.\n\")""##]];
+    let expect = expect_test::expect![[
+        r##""OK ((#(\"Native\" 0 6 (:parent (#(\"Native\" 0 6 (:parent #4)))))) t t t nil ((planning \"<FIXED-ORG-TIME>\" \"<2026-05-28 Thu>\") (drawer \"LOGBOOK\") (macro \"badge\" (\"ok\")) (link \"https://example.org\" \"https\" \"//example.org\") (footnote \"n\")) t t t t t \"#+macro: badge Badge-$1\n* TODO Keep                                                            :work:\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <FIXED-ORG-TIME>\n:PROPERTIES:\n:Owner:    Ada\n:Score:    7\n:END:\n:LOGBOOK:\n- State \\\"TODO\\\" from \\\"\\\" [2026-05-26 Tue]\n:END:\nParagraph Badge-ok with [[https://example.org][link]] and footnote[fn:n].\n#+begin_quote\nQuoted *bold* text.\n#+end_quote\n\n[fn:n] Note body with /italic/.\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-org)

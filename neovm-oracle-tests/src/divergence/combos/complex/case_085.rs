@@ -162,8 +162,7 @@ fn div_cx85_cl_adjoin_pushnew_with_test_and_key() {
 #[test]
 fn div_cx85_cl_subseq_setf_on_list_vector_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-subseq)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5))

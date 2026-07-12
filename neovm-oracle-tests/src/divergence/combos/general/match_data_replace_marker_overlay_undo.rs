@@ -107,7 +107,9 @@ fn combo_replace_match_marker_overlay_undo_chain() {
 fn combo_replace_match_shorter_markers_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK ((#(\"AAA-X-BBB-X-CCC\" 0 3 (sect a) 6 9 (sect b) 12 15 (sect c)) 4 10 12 5 11 nil nil) (#(\"AAA-XXXXXXX-BBB-XXXXXXX-CCC\" 0 3 (sect a) 4 11 (sect x1) 12 15 (sect b) 16 23 (sect x2) 24 27 (sect c)) 4 16 17 5 17 nil x1))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"AAA-X-BBB-X-CCC\" 0 3 (sect a) 6 9 (sect b) 12 15 (sect c)) 4 10 12 5 11 nil nil) (#(\"AAA-XXXXXXX-BBB-XXXXXXX-CCC\" 0 3 (sect a) 4 11 (sect x1) 12 15 (sect b) 16 23 (sect x2) 24 27 (sect c)) 4 16 17 5 17 nil x1))""#
+    ]];
     // Replace with shorter string; markers after match must retreat.
     crate::common::assert_oracle_parity_expect(
         r#"(progn

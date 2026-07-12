@@ -1192,8 +1192,7 @@ fn beta_interpret_timestamp_inactive() {
 #[test]
 fn beta_interpret_timestamp_active_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK \"<FIXED-ORG-TIME>--<FIXED-ORG-TIME>\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"<FIXED-ORG-TIME>--<FIXED-ORG-TIME>\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)

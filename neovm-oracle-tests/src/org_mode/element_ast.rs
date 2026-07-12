@@ -309,7 +309,9 @@ fn org_element_visible_only_lineage_inherited_combo() {
 fn org_element_full_ast_dump_with_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r##""OK (((1 \"TODO\" \"Alpha\" (\"work\" \"urgent\") nil) (2 \"DONE\" \"Sub A1\" (\"deep\") nil) (3 nil \"WAIT Sub A1a\" nil nil) (2 \"TODO\" \"Sub A2\" nil nil) (1 nil \"Beta\" (\"home\") nil)) ((\"<FIXED-ORG-TIME>\" nil nil) (nil nil \"[FIXED-ORG-TIME]\") (\"<2026-05-28 Thu>\" nil nil)) nil ((\"1:30\" closed)) ((\"emacs-lisp\" \"(+ 1 2)\n\")) ((org nil)) ((\"https\" \"//example.org\" \"https://example.org\")) ((\"1\")) (org-data section keyword keyword headline plain-text section planning paragraph plain-text timestamp plain-text drawer paragraph plain-text drawer clock paragraph plain-text bold plain-text plain-text italic plain-text plain-text headline plain-text section planning paragraph plain-text headline plain-text section planning paragraph plain-text src-block table table-row table-cell plain-text table-cell plain-text table-row table-row table-cell plain-text table-cell plain-text table-row table-cell plain-text table-cell plain-text headline plain-text section paragraph link plain-text plain-text headline plain-text section paragraph plain-text footnote-reference plain-text footnote-definition paragraph plain-text) nil nil \"#+TITLE: AST Probe\n#+AUTHOR: Tester\n\n* TODO Alpha :work:urgent:\nSCHEDULED: <FIXED-ORG-TIME>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id-1\n:END:\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  1:30\n:END:\nAlpha body with *bold* and /italic/.\n\n** DONE Sub A1 :deep:\nCLOSED: [FIXED-ORG-TIME]\nSub A1 body.\n*** WAIT Sub A1a\nSCHEDULED: <2026-05-28 Thu>\nSub A1a body.\n\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n| Name | Val |\n|------+-----|\n| foo | 1 |\n| bar | 2 |\n\n** TODO Sub A2\n[[https://example.org][Example Link]]\n\n* Beta :home:\nBeta body with footnote[fn:1].\n\n[fn:1] Footnote definition.\n\")""##]];
+    let expect = expect_test::expect![[
+        r##""OK (((1 \"TODO\" \"Alpha\" (\"work\" \"urgent\") nil) (2 \"DONE\" \"Sub A1\" (\"deep\") nil) (3 nil \"WAIT Sub A1a\" nil nil) (2 \"TODO\" \"Sub A2\" nil nil) (1 nil \"Beta\" (\"home\") nil)) ((\"<FIXED-ORG-TIME>\" nil nil) (nil nil \"[FIXED-ORG-TIME]\") (\"<2026-05-28 Thu>\" nil nil)) nil ((\"1:30\" closed)) ((\"emacs-lisp\" \"(+ 1 2)\n\")) ((org nil)) ((\"https\" \"//example.org\" \"https://example.org\")) ((\"1\")) (org-data section keyword keyword headline plain-text section planning paragraph plain-text timestamp plain-text drawer paragraph plain-text drawer clock paragraph plain-text bold plain-text plain-text italic plain-text plain-text headline plain-text section planning paragraph plain-text headline plain-text section planning paragraph plain-text src-block table table-row table-cell plain-text table-cell plain-text table-row table-row table-cell plain-text table-cell plain-text table-row table-cell plain-text table-cell plain-text headline plain-text section paragraph link plain-text plain-text headline plain-text section paragraph plain-text footnote-reference plain-text footnote-definition paragraph plain-text) nil nil \"#+TITLE: AST Probe\n#+AUTHOR: Tester\n\n* TODO Alpha :work:urgent:\nSCHEDULED: <FIXED-ORG-TIME>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 2:00\n:Owner: Ada\n:ID: alpha-id-1\n:END:\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  1:30\n:END:\nAlpha body with *bold* and /italic/.\n\n** DONE Sub A1 :deep:\nCLOSED: [FIXED-ORG-TIME]\nSub A1 body.\n*** WAIT Sub A1a\nSCHEDULED: <2026-05-28 Thu>\nSub A1a body.\n\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n\n| Name | Val |\n|------+-----|\n| foo | 1 |\n| bar | 2 |\n\n** TODO Sub A2\n[[https://example.org][Example Link]]\n\n* Beta :home:\nBeta body with footnote[fn:1].\n\n[fn:1] Footnote definition.\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -538,7 +540,9 @@ fn org_element_parse_clock_line_divergence() {
 fn org_element_parse_scheduled_deadline_closed_clock_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [FIXED-ORG-TIME]\n:PROPERTIES:\n:Effort: 1h\n:END:\nCLOCK: [FIXED-CLOCK] =>  2:00\nBody.\n\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [FIXED-ORG-TIME]\n:PROPERTIES:\n:Effort: 1h\n:END:\nCLOCK: [FIXED-CLOCK] =>  2:00\nBody.\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -706,7 +710,9 @@ fn org_element_parse_scheduled_deadline_no_closed_no_clock() {
 fn org_element_parse_scheduled_deadline_closed_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [FIXED-ORG-TIME]\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody.\n\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alpha\" 1 \"TODO\")) nil \"* TODO Alpha\nSCHEDULED: <2026-05-28 Wed>\nDEADLINE: <2026-06-01 Mon>\nCLOSED: [FIXED-ORG-TIME]\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody.\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
