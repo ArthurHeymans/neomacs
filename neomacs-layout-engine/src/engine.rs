@@ -202,13 +202,18 @@ fn build_presented_hit_index(
                         output_row: point.row,
                     },
                 )?;
-            let bounds = FrameRect::new(
-                window_regions.text_body.x + point.x as f32,
-                window_regions.text_body.y + body_row.body_y as f32,
-                point.width.max(1) as f32,
-                point.height.max(1) as f32,
-            )
-            .map_err(|_| {
+            let raw_x = window_regions.text_body.x + point.x as f32;
+            let raw_y = window_regions.text_body.y + body_row.body_y as f32;
+            let left = raw_x.max(window_regions.text_body.x);
+            let top = raw_y.max(window_regions.text_body.y);
+            let right = (raw_x + point.width.max(1) as f32)
+                .min(window_regions.text_body.x + window_regions.text_body.width);
+            let bottom = (raw_y + point.height.max(1) as f32)
+                .min(window_regions.text_body.y + window_regions.text_body.height);
+            if right <= left || bottom <= top {
+                continue;
+            }
+            let bounds = FrameRect::new(left, top, right - left, bottom - top).map_err(|_| {
                 neomacs_display_protocol::PresentedHitError::InvalidTextPositionGeometry
             })?;
             positions.push(PresentedTextPosition::new(
