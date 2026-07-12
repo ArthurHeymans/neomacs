@@ -9,7 +9,6 @@
 
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::value::{HashTableTest, Value};
-use crate::face::Face as RuntimeFace;
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
@@ -1714,7 +1713,6 @@ pub struct Frame {
     pub face_hash_table: Value,
     /// Per-frame realized Lisp faces, mirroring GNU's `frame->face_hash_table`
     /// runtime surface for renderer-facing consumers.
-    pub realized_faces: HashMap<Value, RuntimeFace>,
     /// GNU `struct frame.z_order`: stacking order among sibling child frames.
     pub z_order: i32,
     /// Whether a child frame suppresses the TTY decoration border.
@@ -1844,7 +1842,6 @@ impl Frame {
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
-            realized_faces: HashMap::new(),
             z_order: 0,
             undecorated: false,
             no_accept_focus: false,
@@ -2086,20 +2083,8 @@ impl Frame {
         self.remove_parameter(key.symbol())
     }
 
-    pub fn realized_face(&self, name: &str) -> Option<&RuntimeFace> {
-        self.realized_faces.get(&Value::symbol(name))
-    }
-
     pub fn face_hash_table(&self) -> Value {
         self.face_hash_table
-    }
-
-    pub fn set_realized_face(&mut self, name: Value, face: RuntimeFace) {
-        self.realized_faces.insert(name, face);
-    }
-
-    pub fn clear_realized_faces(&mut self) {
-        self.realized_faces.clear();
     }
 
     pub fn defer_next_gui_parameter_resize(&mut self) {
@@ -4523,7 +4508,6 @@ impl GcTrace for FrameManager {
                 roots.push(*v);
             }
             roots.push(frame.face_hash_table);
-            roots.extend(frame.realized_faces.keys().copied());
             frame.root_window.trace_roots(roots);
             if let Some(mb) = &frame.minibuffer_leaf {
                 mb.trace_roots(roots);

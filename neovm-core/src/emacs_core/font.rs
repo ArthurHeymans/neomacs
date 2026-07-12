@@ -684,20 +684,7 @@ fn live_frame_id_for_face_update(
     }
 }
 
-fn mirror_runtime_face_into_frame(
-    eval: &mut super::eval::Context,
-    frame_id: FrameId,
-    face_name: &str,
-) {
-    let Some(face) = eval.face_table().get(face_name).cloned() else {
-        return;
-    };
-    if let Some(frame) = eval.frames.get_mut(frame_id) {
-        crate::emacs_core::xfaces::mirror_runtime_face_into_frame(frame, face_name, &face);
-    }
-}
-
-fn set_runtime_face_color_from_frame_parameter(
+fn set_frame_face_color_from_frame_parameter(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
     face_name: &str,
@@ -713,13 +700,6 @@ fn set_runtime_face_color_from_frame_parameter(
             Value::make_frame(frame_id.0),
         ],
     )?;
-    let attr_value = value
-        .as_utf8_str()
-        .and_then(crate::face::Color::parse)
-        .map(crate::face::FaceAttrValue::Color)
-        .unwrap_or(crate::face::FaceAttrValue::Unspecified);
-    eval.set_face_attribute(face_name, attr, attr_value);
-    mirror_runtime_face_into_frame(eval, frame_id, face_name);
     Ok(())
 }
 
@@ -731,7 +711,7 @@ pub(crate) fn update_face_from_frame_parameter(
 ) -> Result<(), crate::emacs_core::error::Flow> {
     match param {
         FrameParam::ForegroundColor => {
-            set_runtime_face_color_from_frame_parameter(
+            set_frame_face_color_from_frame_parameter(
                 eval,
                 frame_id,
                 "default",
@@ -743,7 +723,7 @@ pub(crate) fn update_face_from_frame_parameter(
             if let Some(function) = eval.obarray().symbol_function("frame-set-background-mode") {
                 let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
             }
-            set_runtime_face_color_from_frame_parameter(
+            set_frame_face_color_from_frame_parameter(
                 eval,
                 frame_id,
                 "default",
@@ -756,14 +736,12 @@ pub(crate) fn update_face_from_frame_parameter(
     Ok(())
 }
 
-/// Realize the selected frame's `font-parameter` into the runtime/frame-local
-/// `default` face without mutating Lisp override state.
+/// Seed the selected frame's authoritative `default` Lisp face specification
+/// from its `font-parameter` without mutating Lisp override state.
 ///
 /// GNU keeps the defface for `default` empty and realizes the actual frame
-/// font through the face subsystem in C.  Neomacs still needs the runtime
-/// `FaceTable` and per-frame face hash table populated early so startup code
-/// that depends on the realized default face does not fall back to a static
-/// global seed.
+/// font through the face subsystem in C.  Redisplay later derives the runtime
+/// face table from this frame-local specification.
 pub fn seed_live_frame_default_face_from_font_parameter(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
@@ -776,13 +754,15 @@ pub fn seed_live_frame_default_face_from_font_parameter(
         return;
     };
 
+    let Some(vector) =
+        ensure_frame_lisp_face_vector(eval, frame_id, "default", FrameFaceInitial::SelectedBase)
+    else {
+        return;
+    };
     for (attr_name, attr_value) in derived_face_attrs_from_font_value(&font_value) {
-        if let Some(face_attr) = lisp_value_to_face_attr(attr_name, attr_value) {
-            eval.set_face_attribute("default", attr_name, face_attr);
-        }
+        set_lisp_face_vector_attr(vector, attr_name, attr_value);
     }
-
-    mirror_runtime_face_into_frame(eval, frame_id, "default");
+    eval.face_change_count += 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -5972,26 +5952,7 @@ pub(crate) fn builtin_internal_merge_in_global_face(
         sync_face_overrides_from_lisp_face_vector(&face_name, local_vector, false);
     }
 
-    FACE_ATTR_STATE.with(|slot| {
-        let state = slot.borrow();
-        if let Some(attrs) = state.defaults_overrides.get(&face_symbol_id(&face_name)) {
-            for (attr_name, value) in attrs {
-                if let Some(face_attr) = lisp_value_to_face_attr(*attr_name, *value) {
-                    eval.set_face_attribute(&face_name, *attr_name, face_attr);
-                }
-                if *attr_name == LFaceAttr::Font {
-                    for (derived_attr, derived_value) in derived_face_attrs_from_font_value(value) {
-                        if let Some(face_attr) =
-                            lisp_value_to_face_attr(derived_attr, derived_value)
-                        {
-                            eval.set_face_attribute(&face_name, derived_attr, face_attr);
-                        }
-                    }
-                }
-            }
-        }
-    });
-    mirror_runtime_face_into_frame(eval, frame_id, &face_name);
+    eval.face_change_count += 1;
     Ok(Value::NIL)
 }
 

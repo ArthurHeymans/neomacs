@@ -9,7 +9,7 @@ use crate::emacs_core::error::EvalResult;
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{HashKey, HashTableTest, Value, ValueKind, list_to_vec};
-use crate::face::{Face as RuntimeFace, LFACE_VECTOR_SIZE, LFaceAttr};
+use crate::face::{LFACE_VECTOR_SIZE, LFaceAttr};
 
 /// Register bootstrap variables owned by the face subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {
@@ -121,15 +121,6 @@ pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult 
     }
 
     Ok(Value::vector(attrs))
-}
-
-pub(crate) fn mirror_runtime_face_into_frame(
-    frame: &mut crate::window::Frame,
-    face_name: &str,
-    face: &RuntimeFace,
-) {
-    let face_symbol = Value::symbol(face_name);
-    frame.set_realized_face(face_symbol, face.clone());
 }
 
 pub(crate) fn init_frame_lisp_faces(frame: &mut crate::window::Frame) {

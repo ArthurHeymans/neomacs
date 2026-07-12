@@ -59,42 +59,6 @@ fn frame_face_hash_table_eval_returns_stable_frame_owned_table() {
 }
 
 #[test]
-fn mirror_runtime_face_into_frame_uses_symbol_keys() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
-    let face = eval.face_table().resolve("default");
-
-    let frame = eval.frames.get_mut(frame_id).expect("selected frame");
-    mirror_runtime_face_into_frame(frame, "default", &face);
-
-    assert!(frame.realized_faces.contains_key(&Value::symbol("default")));
-    assert!(frame.realized_face("default").is_some());
-}
-
-#[test]
-fn clearing_realized_faces_preserves_authoritative_lisp_face_specs() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
-    let face = eval.face_table().resolve("default");
-    let frame = eval.frames.get_mut(frame_id).expect("selected frame");
-    let table = frame.face_hash_table();
-    let default_spec = lookup_frame_face_hash_entry(table, Value::symbol("default"))
-        .expect("initialized default Lisp face specification");
-    mirror_runtime_face_into_frame(frame, "default", &face);
-
-    frame.clear_realized_faces();
-
-    assert!(frame.realized_face("default").is_none());
-    assert_eq!(
-        lookup_frame_face_hash_entry(table, Value::symbol("default")),
-        Some(default_spec),
-        "clearing a disposable realization cache must not delete Lisp face specifications",
-    );
-}
-
-#[test]
 fn ensure_startup_compat_variables_backfills_missing_xfaces_state() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

@@ -807,14 +807,6 @@ fn frame_face_attribute_setter_defers_runtime_realization_until_redisplay() {
         None,
         "the setter must not eagerly mutate redisplay's derived face table",
     );
-    assert!(
-        eval.frame_manager()
-            .get(frame_id)
-            .expect("selected frame")
-            .realized_face(face_name)
-            .is_none(),
-        "the setter must not eagerly materialize a per-frame runtime face",
-    );
 }
 
 #[test]
@@ -2988,7 +2980,7 @@ fn internal_get_lisp_face_attribute_eval_reads_live_face_table() {
 }
 
 #[test]
-fn internal_merge_in_global_face_eval_updates_live_face_table() {
+fn internal_merge_in_global_face_updates_frame_spec_without_runtime_realization() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
     let face = Value::symbol("__neovm_internal_merge_global_face_eval");
@@ -3008,6 +3000,14 @@ fn internal_merge_in_global_face_eval_updates_live_face_table() {
     .expect("set defaults background");
     builtin_internal_merge_in_global_face(&mut eval, vec![face, Value::fixnum(frame_id)])
         .expect("merge defaults into selected live face");
+
+    assert_eq!(
+        eval.face_table()
+            .resolve("__neovm_internal_merge_global_face_eval")
+            .background,
+        None,
+        "merging Lisp defaults must not eagerly mutate redisplay's derived table",
+    );
 
     let value = builtin_internal_get_lisp_face_attribute(
         &mut eval,
