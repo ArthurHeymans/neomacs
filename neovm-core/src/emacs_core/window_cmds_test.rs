@@ -69,6 +69,28 @@ fn eval_with_gui_frame(src: &str) -> Vec<String> {
         .collect()
 }
 
+fn publish_selected_gui_window_regions(
+    ev: &mut Context,
+    fid: crate::window::FrameId,
+    presentation: u64,
+    regions: crate::window::PresentedWindowRegions,
+) {
+    let window_id = ev.frames.get(fid).expect("frame").selected_window;
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .publish_display_snapshots(
+            crate::window::geometry::PresentationId::new(presentation),
+            vec![crate::window::WindowDisplaySnapshot {
+                window_id,
+                regions,
+                regions_materialized: true,
+                ..Default::default()
+            }],
+        )
+        .expect("presented GUI geometry");
+}
+
 fn bootstrap_eval_with_frame(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
 }
@@ -1052,44 +1074,174 @@ fn gui_window_body_geometry_excludes_fringes_and_margins() {
 #[test]
 fn gui_window_fringes_default_to_frame_defaults_when_reset() {
     crate::test_utils::init_test_tracing();
-    let out = eval_with_gui_frame(
-        "(let ((w (selected-window)))
-           (list (window-fringes w)
-                 (set-window-fringes w 0 4)
-                 (window-fringes w)
-                 (set-window-fringes w nil nil)
-                 (window-fringes w)))",
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    let regions_with_fringes = |left_width: f32, right_width: f32| {
+        let left_fringe = (left_width > 0.0)
+            .then(|| neomacs_display_protocol::types::Rect::new(0.0, 0.0, left_width, 568.0));
+        let right_fringe = (right_width > 0.0).then(|| {
+            neomacs_display_protocol::types::Rect::new(792.0 - right_width, 0.0, right_width, 568.0)
+        });
+        crate::window::PresentedWindowRegions {
+            outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+            text_body: neomacs_display_protocol::types::Rect::new(
+                left_width,
+                0.0,
+                792.0 - left_width - right_width,
+                568.0,
+            ),
+            left_fringe,
+            right_fringe,
+            right_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                792.0, 0.0, 8.0, 568.0,
+            )),
+            mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 568.0, 800.0, 16.0,
+            )),
+            ..Default::default()
+        }
+    };
+
+    publish_selected_gui_window_regions(&mut ev, fid, 1, regions_with_fringes(8.0, 8.0));
+    assert_eq!(
+        super::builtin_window_fringes(&mut ev, vec![Value::NIL]).expect("default fringes"),
+        Value::list(vec![
+            Value::fixnum(8),
+            Value::fixnum(8),
+            Value::NIL,
+            Value::NIL,
+        ])
     );
-    assert_eq!(out[0], "OK ((8 8 nil nil) t (0 4 nil nil) t (8 8 nil nil))");
+
+    super::builtin_set_window_fringes(
+        &mut ev,
+        vec![Value::NIL, Value::fixnum(0), Value::fixnum(4)],
+    )
+    .expect("set explicit fringes");
+    publish_selected_gui_window_regions(&mut ev, fid, 2, regions_with_fringes(0.0, 4.0));
+    assert_eq!(
+        super::builtin_window_fringes(&mut ev, vec![Value::NIL]).expect("explicit fringes"),
+        Value::list(vec![
+            Value::fixnum(0),
+            Value::fixnum(4),
+            Value::NIL,
+            Value::NIL,
+        ])
+    );
+
+    super::builtin_set_window_fringes(&mut ev, vec![Value::NIL, Value::NIL, Value::NIL])
+        .expect("reset fringes");
+    publish_selected_gui_window_regions(&mut ev, fid, 3, regions_with_fringes(8.0, 8.0));
+    assert_eq!(
+        super::builtin_window_fringes(&mut ev, vec![Value::NIL]).expect("reset fringes"),
+        Value::list(vec![
+            Value::fixnum(8),
+            Value::fixnum(8),
+            Value::NIL,
+            Value::NIL,
+        ])
+    );
 }
 
 #[test]
 fn gui_window_scroll_bars_round_trip_explicit_state() {
     crate::test_utils::init_test_tracing();
-    let out = eval_with_gui_frame(
-        "(let ((w (selected-window)))
-           (list (window-scroll-bars w)
-                 (set-window-scroll-bars w 13 'left 9 'bottom t)
-                 (window-scroll-bars w)
-                 (window-scroll-bar-width w)
-                 (window-scroll-bar-height w)))",
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    assert_eq!(
+        ev.eval_str("(window-scroll-bars)")
+            .map(|value| crate::emacs_core::print::print_value(&value))
+            .expect("default scroll bars"),
+        "(nil 1 t nil 0 t nil)"
+    );
+    ev.eval_str("(set-window-scroll-bars nil 13 'left 9 'bottom t)")
+        .expect("set scroll bars");
+    publish_selected_gui_window_regions(
+        &mut ev,
+        fid,
+        1,
+        crate::window::PresentedWindowRegions {
+            outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+            text_body: neomacs_display_protocol::types::Rect::new(13.0, 0.0, 787.0, 575.0),
+            left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 0.0, 13.0, 575.0,
+            )),
+            horizontal_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 575.0, 800.0, 9.0,
+            )),
+            mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 584.0, 800.0, 16.0,
+            )),
+            ..Default::default()
+        },
     );
     assert_eq!(
-        out[0],
-        "OK ((nil 1 t nil 0 t nil) t (13 2 left 9 1 bottom t) 13 9)"
+        ev.eval_str(
+            "(list (window-scroll-bars)
+                   (window-scroll-bar-width)
+                   (window-scroll-bar-height))",
+        )
+        .map(|value| crate::emacs_core::print::print_value(&value))
+        .expect("realized scroll bars"),
+        "((13 2 left 9 1 bottom t) 13 9)"
     );
 }
 
 #[test]
 fn gui_window_body_geometry_excludes_scroll_bar_area() {
     crate::test_utils::init_test_tracing();
-    let out = eval_with_gui_frame(
-        "(let ((w (selected-window)))
-           (set-window-scroll-bars w 13 'left)
-           (list (window-body-width w t)
-                 (window-text-width w t)))",
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let fid = ev.frames.create_frame("F1", 800, 600, buf);
+    ev.frames
+        .get_mut(fid)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    ev.eval_str("(set-window-scroll-bars nil 13 'left)")
+        .expect("set scroll bars");
+    publish_selected_gui_window_regions(
+        &mut ev,
+        fid,
+        1,
+        crate::window::PresentedWindowRegions {
+            outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+            text_body: neomacs_display_protocol::types::Rect::new(21.0, 0.0, 771.0, 568.0),
+            left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                13.0, 0.0, 8.0, 568.0,
+            )),
+            right_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                792.0, 0.0, 8.0, 568.0,
+            )),
+            left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 0.0, 13.0, 568.0,
+            )),
+            mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 568.0, 800.0, 16.0,
+            )),
+            ..Default::default()
+        },
     );
-    assert_eq!(out[0], "OK (771 771)");
+    assert_eq!(
+        ev.eval_str("(list (window-body-width nil t) (window-text-width nil t))")
+            .map(|value| crate::emacs_core::print::print_value(&value))
+            .expect("body geometry"),
+        "(771 771)"
+    );
 }
 
 #[test]

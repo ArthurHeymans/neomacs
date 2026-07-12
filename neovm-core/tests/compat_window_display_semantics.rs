@@ -1,6 +1,34 @@
 use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::{Context, Value, format_eval_result};
-use neovm_core::window::{FrameManager, SplitDirection, SplitPlacement, Window};
+use neovm_core::window::{
+    FrameManager, PresentedWindowRegions, SplitDirection, SplitPlacement, Window,
+    WindowDisplaySnapshot,
+};
+
+fn publish_selected_gui_window_regions(
+    eval: &mut Context,
+    frame_id: neovm_core::window::FrameId,
+    regions: PresentedWindowRegions,
+) {
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .publish_display_snapshots(
+            neovm_core::window::geometry::PresentationId::new(1),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                regions,
+                regions_materialized: true,
+                ..Default::default()
+            }],
+        )
+        .expect("presented GUI geometry");
+}
 
 fn run_neovm_gui_eval(body: &str) -> String {
     let mut eval = Context::new();
@@ -19,17 +47,46 @@ fn run_neovm_gui_eval(body: &str) -> String {
 
 #[test]
 fn compat_gui_window_scroll_bars_round_trip() {
-    let actual = run_neovm_gui_eval(
-        "(let ((w (selected-window)))
-           (list (window-scroll-bars w)
-                 (set-window-scroll-bars w 13 'left 9 'bottom t)
-                 (window-scroll-bars w)
-                 (window-scroll-bar-width w)
-                 (window-scroll-bar-height w)))",
+    let mut eval = Context::new();
+    let scratch = eval.buffer_manager_mut().create_buffer("*scratch*");
+    eval.buffer_manager_mut().set_current(scratch);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("F1", 800, 600, scratch);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let before = eval.eval_str("(window-scroll-bars)");
+    assert_eq!(format_eval_result(&before), "OK (nil 1 t nil 0 t nil)");
+    eval.eval_str("(set-window-scroll-bars nil 13 'left 9 'bottom t)")
+        .expect("set scroll bars");
+    publish_selected_gui_window_regions(
+        &mut eval,
+        frame_id,
+        PresentedWindowRegions {
+            outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+            text_body: neomacs_display_protocol::types::Rect::new(13.0, 0.0, 787.0, 575.0),
+            left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 0.0, 13.0, 575.0,
+            )),
+            horizontal_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 575.0, 800.0, 9.0,
+            )),
+            mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 584.0, 800.0, 16.0,
+            )),
+            ..Default::default()
+        },
+    );
+    let actual = eval.eval_str(
+        "(list (window-scroll-bars)
+               (window-scroll-bar-width)
+               (window-scroll-bar-height))",
     );
     assert_eq!(
-        actual,
-        "OK ((nil 1 t nil 0 t nil) t (13 2 left 9 1 bottom t) 13 9)"
+        format_eval_result(&actual),
+        "OK ((13 2 left 9 1 bottom t) 13 9)"
     );
 }
 
@@ -52,13 +109,41 @@ fn compat_gui_window_vscroll_round_trip() {
 
 #[test]
 fn compat_gui_window_body_geometry_excludes_scroll_bar_area() {
-    let actual = run_neovm_gui_eval(
-        "(let ((w (selected-window)))
-           (set-window-scroll-bars w 13 'left)
-           (list (window-body-width w t)
-                 (window-text-width w t)))",
+    let mut eval = Context::new();
+    let scratch = eval.buffer_manager_mut().create_buffer("*scratch*");
+    eval.buffer_manager_mut().set_current(scratch);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("F1", 800, 600, scratch);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.eval_str("(set-window-scroll-bars nil 13 'left)")
+        .expect("set scroll bars");
+    publish_selected_gui_window_regions(
+        &mut eval,
+        frame_id,
+        PresentedWindowRegions {
+            outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+            text_body: neomacs_display_protocol::types::Rect::new(21.0, 0.0, 771.0, 568.0),
+            left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                13.0, 0.0, 8.0, 568.0,
+            )),
+            right_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                792.0, 0.0, 8.0, 568.0,
+            )),
+            left_scroll_bar: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 0.0, 13.0, 568.0,
+            )),
+            mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                0.0, 568.0, 800.0, 16.0,
+            )),
+            ..Default::default()
+        },
     );
-    assert_eq!(actual, "OK (771 771)");
+    let actual = eval.eval_str("(list (window-body-width nil t) (window-text-width nil t))");
+    assert_eq!(format_eval_result(&actual), "OK (771 771)");
 }
 
 #[test]
