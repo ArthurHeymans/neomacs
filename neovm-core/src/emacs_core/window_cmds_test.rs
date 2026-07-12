@@ -6616,50 +6616,97 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
 }
 
 #[test]
-fn gnu_lisp_window_body_pixel_edges_preserve_gui_window_origin() {
+fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
     crate::test_utils::init_test_tracing();
-    let mut ev = runtime_startup_context();
-    let fid = ev.frames.selected_frame().expect("selected frame").id;
-    let wid = ev.frames.get(fid).expect("frame").selected_window;
-
+    for (presentation, scrollbar_left, body_left, body_right) in
+        [(1, true, 173.0, 756.0), (2, false, 160.0, 743.0)]
     {
+        let mut ev = runtime_startup_context();
+        let fid = ev.frames.selected_frame().expect("selected frame").id;
+        let wid = ev.frames.get(fid).expect("frame").selected_window;
+        let outer = neomacs_display_protocol::types::Rect::new(144.0, 32.0, 640.0, 480.0);
+        let body = neomacs_display_protocol::types::Rect::new(
+            body_left,
+            54.0,
+            body_right - body_left,
+            438.0,
+        );
+        let scrollbar = neomacs_display_protocol::types::Rect::new(
+            if scrollbar_left { 144.0 } else { 771.0 },
+            54.0,
+            13.0,
+            438.0,
+        );
         let frame = ev.frames.get_mut(fid).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
         frame.char_width = 8.0;
         frame.char_height = 16.0;
         frame
+            .publish_display_snapshots(
+                crate::window::geometry::PresentationId::new(presentation),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id: wid,
+                    cell_origin: crate::window::geometry::CellOrigin::new(18, 2),
+                    regions: crate::window::PresentedWindowRegions {
+                        outer,
+                        text_body: body,
+                        left_margin_columns: 1,
+                        right_margin_columns: 2,
+                        left_margin: Some(neomacs_display_protocol::types::Rect::new(
+                            165.0, 54.0, 8.0, 438.0,
+                        )),
+                        right_margin: Some(neomacs_display_protocol::types::Rect::new(
+                            body_right, 54.0, 16.0, 438.0,
+                        )),
+                        left_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                            if scrollbar_left { 157.0 } else { 144.0 },
+                            54.0,
+                            8.0,
+                            438.0,
+                        )),
+                        right_fringe: Some(neomacs_display_protocol::types::Rect::new(
+                            body_right + 16.0,
+                            54.0,
+                            12.0,
+                            438.0,
+                        )),
+                        left_scroll_bar: scrollbar_left.then_some(scrollbar),
+                        right_scroll_bar: (!scrollbar_left).then_some(scrollbar),
+                        tab_line: Some(neomacs_display_protocol::types::Rect::new(
+                            144.0, 32.0, 640.0, 17.0,
+                        )),
+                        header_line: Some(neomacs_display_protocol::types::Rect::new(
+                            144.0, 49.0, 640.0, 5.0,
+                        )),
+                        mode_line: Some(neomacs_display_protocol::types::Rect::new(
+                            144.0, 492.0, 640.0, 20.0,
+                        )),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    header_line_height: 99,
+                    tab_line_height: 99,
+                    mode_line_height: 99,
+                    ..Default::default()
+                }],
+            )
+            .expect("presented GUI geometry");
+        frame
             .find_window_mut(wid)
-            .expect("selected window")
-            .set_bounds(crate::window::Rect::new(144.0, 32.0, 640.0, 480.0));
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
-            window_id: wid,
-            header_line_height: 5,
-            tab_line_height: 17,
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
+            .expect("live window")
+            .set_bounds(crate::window::Rect::new(0.0, 0.0, 80.0, 24.0));
+
+        let result = ev
+            .eval_str("(list (window-pixel-left) (window-pixel-top) (window-inside-pixel-edges))")
+            .expect("GNU window.el geometry query");
+        assert_eq!(
+            crate::emacs_core::print::print_value(&result),
+            format!(
+                "(144 32 ({} 54 {} 492))",
+                body_left as i64, body_right as i64
+            )
+        );
     }
-
-    let result = ev
-        .eval_str(
-            "(progn
-               (set-window-margins nil 1 2)
-               (set-window-fringes nil 8 12)
-               (set-window-scroll-bars nil 13 'left)
-               (list (window-pixel-left)
-                     (window-pixel-top)
-                     (window-inside-pixel-edges)))",
-        )
-        .expect("GNU window.el geometry query");
-    let result = crate::emacs_core::value::list_to_vec(&result).expect("result list");
-    let body_edges = crate::emacs_core::value::list_to_vec(&result[2]).expect("body edges");
-
-    assert_eq!(result[0], Value::fixnum(144));
-    assert_eq!(result[1], Value::fixnum(32));
-    // GNU window.el composes the frame-relative window origin with the left
-    // scrollbar, fringe, and one-column margin.  The vertical body origin
-    // likewise includes the rendered header and tab lines.
-    assert_eq!(body_edges[0], Value::fixnum(144 + 13 + 8 + 8));
-    assert_eq!(body_edges[1], Value::fixnum(32 + 5 + 17));
 }
 
 #[test]
