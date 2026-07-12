@@ -50,12 +50,16 @@ fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
     }
 }
 
-fn expect_int(value: &Value) -> Result<i64, Flow> {
+// GNU validates the COUNT argument of these motion commands with
+// `CHECK_FIXNUM` (see `move_point` and `Fbeginning_of_line`/`Fend_of_line`
+// in src/cmds.c), which signals `(wrong-type-argument fixnump …)` — a fixnum
+// check, not a position/marker check. Markers and bignums are rejected.
+fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
-            vec![Value::symbol("integer-or-marker-p"), *value],
+            vec![Value::symbol("fixnump"), *value],
         )),
     }
 }
@@ -840,7 +844,7 @@ pub(crate) fn builtin_beginning_of_line(
     let n = if args.is_empty() || args[0].is_nil() {
         1
     } else {
-        expect_int(&args[0])?
+        expect_fixnum(&args[0])?
     };
     // GNU `Fbeginning_of_line` (cmds.c:148) is literally
     // `SET_PT (XFIXNUM (Fline_beginning_position (n)))`. Delegate to our
@@ -873,7 +877,7 @@ pub(crate) fn builtin_end_of_line(eval: &mut super::eval::Context, args: Vec<Val
     let n = if args.is_empty() || args[0].is_nil() {
         1
     } else {
-        expect_int(&args[0])?
+        expect_fixnum(&args[0])?
     };
     // GNU `Fend_of_line` (cmds.c:172) calls `Fline_end_position` (which
     // applies field constraints) then SET_PTs to that, looping over
@@ -918,7 +922,7 @@ pub(crate) fn builtin_forward_char(
     let n = if args.is_empty() || args[0].is_nil() {
         1
     } else {
-        expect_int(&args[0])?
+        expect_fixnum(&args[0])?
     };
     let current_id = eval.buffers.current_buffer_id().ok_or_else(no_buffer)?;
     let (old_byte, cur_char, begv_char, zv_char, new_byte) = {
@@ -963,7 +967,7 @@ pub(crate) fn builtin_backward_char(
     let n = if args.is_empty() || args[0].is_nil() {
         1
     } else {
-        expect_int(&args[0])?
+        expect_fixnum(&args[0])?
     };
     // backward-char N == forward-char (- N)
     builtin_forward_char(eval, vec![Value::fixnum(-n)])

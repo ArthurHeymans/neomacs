@@ -1291,7 +1291,9 @@ pub(crate) fn builtin_match_beginning_with_state(
         crate::emacs_core::perf_trace::HotpathOp::MatchBeginning,
         || {
             expect_args("match-beginning", args, 1)?;
-            let group = expect_int(&args[0])?;
+            // GNU `match_limit` (search.c) runs SUBEXP through `CHECK_FIXNUM`,
+            // signalling `(wrong-type-argument fixnump …)` — not `integerp`.
+            let group = expect_fixnum(&args[0])?;
             if group < 0 {
                 return Err(signal(
                     LispCondition::ArgsOutOfRange,
@@ -1348,7 +1350,9 @@ pub(crate) fn builtin_match_end_with_state(
         crate::emacs_core::perf_trace::HotpathOp::MatchEnd,
         || {
             expect_args("match-end", args, 1)?;
-            let group = expect_int(&args[0])?;
+            // GNU `match_limit` (search.c) runs SUBEXP through `CHECK_FIXNUM`,
+            // signalling `(wrong-type-argument fixnump …)` — not `integerp`.
+            let group = expect_fixnum(&args[0])?;
             if group < 0 {
                 return Err(signal(
                     LispCondition::ArgsOutOfRange,
