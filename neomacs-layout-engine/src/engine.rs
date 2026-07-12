@@ -78,7 +78,7 @@ use neomacs_display_protocol::frame_chrome::{
 };
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
-use neomacs_display_protocol::frame_glyphs::{PresentedWindowGeometry, WindowInfo};
+use neomacs_display_protocol::frame_glyphs::WindowInfo;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::DisplayWindowId;
 #[cfg(test)]
@@ -104,7 +104,7 @@ fn build_presented_hit_index(
                            rect: neomacs_display_protocol::types::Rect,
                            z_order|
      -> Result<(), neomacs_display_protocol::PresentedHitError> {
-        if rect.width <= 0.0 || rect.height <= 0.0 {
+        if rect.width == 0.0 || rect.height == 0.0 {
             return Ok(());
         }
         let bounds = FrameRect::new(rect.x, rect.y, rect.width, rect.height)
@@ -114,13 +114,16 @@ fn build_presented_hit_index(
     };
 
     for (window_z, info) in state.window_infos.iter().enumerate() {
-        let PresentedWindowGeometry::Complete {
-            regions: window_regions,
-            ..
-        } = info.geometry
+        let Some(snapshot) = snapshots
+            .iter()
+            .find(|snapshot| snapshot.window_id.0 as i64 == info.window_id.get())
         else {
             continue;
         };
+        if !snapshot.regions_materialized {
+            continue;
+        }
+        let window_regions = snapshot.regions;
         let base_z = i32::try_from(window_z).unwrap_or(i32::MAX / 100) * 100;
         let window = Some(info.window_id);
         push_region(
@@ -188,38 +191,33 @@ fn build_presented_hit_index(
             }
         }
 
-        if let Some(snapshot) = snapshots
-            .iter()
-            .find(|snapshot| snapshot.window_id.0 as i64 == info.window_id.get())
-        {
-            for point in &snapshot.points {
-                let body_row = snapshot
-                    .body_rows
-                    .iter()
-                    .find(|row| row.output_row == point.row)
-                    .ok_or(
-                        neomacs_display_protocol::PresentedHitError::MissingBodyRow {
-                            window: info.window_id,
-                            output_row: point.row,
-                        },
-                    )?;
-                let bounds = FrameRect::new(
-                    window_regions.text_body.x + point.x as f32,
-                    window_regions.text_body.y + body_row.body_y as f32,
-                    point.width.max(1) as f32,
-                    point.height.max(1) as f32,
-                )
-                .map_err(|_| {
-                    neomacs_display_protocol::PresentedHitError::InvalidTextPositionGeometry
-                })?;
-                positions.push(PresentedTextPosition::new(
-                    info.window_id,
-                    bounds,
-                    point.buffer_pos.as_i64(),
-                    body_row.body_row,
-                    point.col,
-                ));
-            }
+        for point in &snapshot.points {
+            let body_row = snapshot
+                .body_rows
+                .iter()
+                .find(|row| row.output_row == point.row)
+                .ok_or(
+                    neomacs_display_protocol::PresentedHitError::MissingBodyRow {
+                        window: info.window_id,
+                        output_row: point.row,
+                    },
+                )?;
+            let bounds = FrameRect::new(
+                window_regions.text_body.x + point.x as f32,
+                window_regions.text_body.y + body_row.body_y as f32,
+                point.width.max(1) as f32,
+                point.height.max(1) as f32,
+            )
+            .map_err(|_| {
+                neomacs_display_protocol::PresentedHitError::InvalidTextPositionGeometry
+            })?;
+            positions.push(PresentedTextPosition::new(
+                info.window_id,
+                bounds,
+                point.buffer_pos.as_i64(),
+                body_row.body_row,
+                point.col,
+            ));
         }
     }
 

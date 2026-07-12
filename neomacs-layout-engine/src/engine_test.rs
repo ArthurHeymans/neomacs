@@ -1925,6 +1925,20 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
                 .cloned()
         })
         .collect::<Vec<_>>();
+    let mut poisoned_transport = renderer.clone();
+    let neomacs_display_protocol::PresentedWindowGeometry::Complete {
+        regions: transported_regions,
+        ..
+    } = &mut poisoned_transport
+        .window_infos
+        .iter_mut()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("selected transported window")
+        .geometry
+    else {
+        panic!("complete transported geometry");
+    };
+    transported_regions.text_body.x += 500.0;
     let poisoned = snapshots
         .iter_mut()
         .find(|snapshot| snapshot.window_id == selected)
@@ -1944,7 +1958,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         selected_regions.text_body.y > selected_regions.outer.y,
         "fixture must contain top chrome"
     );
-    let rebuilt = build_presented_hit_index(renderer, &snapshots).unwrap();
+    let rebuilt = build_presented_hit_index(&poisoned_transport, &snapshots).unwrap();
     let canonical = rebuilt
         .text_positions()
         .iter()
@@ -1957,6 +1971,36 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     );
     assert_eq!(canonical.row(), 7);
     assert_eq!(canonical.bounds().y(), selected_regions.text_body.y + 3.0);
+
+    let mut invalid_snapshots = snapshots.clone();
+    invalid_snapshots
+        .iter_mut()
+        .find(|snapshot| snapshot.window_id == selected)
+        .expect("selected invalid snapshot")
+        .regions
+        .text_body
+        .width = -1.0;
+    assert_eq!(
+        build_presented_hit_index(renderer, &invalid_snapshots),
+        Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)
+    );
+    let mut zero_snapshots = snapshots.clone();
+    let zero = zero_snapshots
+        .iter_mut()
+        .find(|snapshot| snapshot.window_id == selected)
+        .expect("selected zero-area snapshot");
+    zero.points.clear();
+    zero.regions.text_body.width = 0.0;
+    let zero_index = build_presented_hit_index(renderer, &zero_snapshots).unwrap();
+    assert!(!zero_index.regions().iter().any(|region| {
+        region.id()
+            == neomacs_display_protocol::PresentedRegionId::new(
+                Some(neomacs_display_protocol::DisplayWindowId::new(
+                    selected.0 as i64,
+                )),
+                neomacs_display_protocol::PresentedRegionKind::TextBody,
+            )
+    }));
 
     let materialized = renderer.materialize();
     let left_transport = match renderer
