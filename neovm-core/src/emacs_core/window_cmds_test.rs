@@ -6710,6 +6710,31 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
 }
 
 #[test]
+fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_bounds() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer = ev.buffers.create_buffer("*geometry-invariant*");
+    ev.buffers.set_current(buffer);
+    let frame_id = ev.frames.create_frame("gui", 800, 600, buffer);
+    let window_id = ev.frames.get(frame_id).expect("frame").selected_window;
+    let frame = ev.frames.get_mut(frame_id).expect("frame");
+    frame.set_window_system(Some(Value::symbol("neo")));
+    frame
+        .find_window_mut(window_id)
+        .expect("window")
+        .set_bounds(crate::window::Rect::new(901.0, 902.0, 903.0, 904.0));
+
+    assert!(
+        super::builtin_window_pixel_left(&mut ev, vec![]).is_err(),
+        "a GUI primitive must not disguise a missing presentation as live geometry"
+    );
+    assert!(
+        super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T]).is_err(),
+        "materialized GUI body geometry is mandatory for pixelwise body queries"
+    );
+}
+
+#[test]
 fn display_buffer_returns_window() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_with_frame(

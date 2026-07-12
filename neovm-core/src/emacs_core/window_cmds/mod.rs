@@ -2507,6 +2507,9 @@ pub(crate) fn builtin_window_left_column(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
+    if let Some(geometry) = presented_gui_known_geometry(frames, fid, wid)? {
+        return Ok(Value::fixnum(geometry.cell_origin().column().get()));
+    }
     // GNU `Fwindow_left_column` returns `w->left_col` directly. See
     // `Window::left_col`.
     Ok(Value::fixnum(w.left_col()))
@@ -2522,6 +2525,9 @@ pub(crate) fn builtin_window_top_line(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
+    if let Some(geometry) = presented_gui_known_geometry(frames, fid, wid)? {
+        return Ok(Value::fixnum(geometry.cell_origin().line().get()));
+    }
     // GNU `Fwindow_top_line` returns `w->top_line` directly (the stored
     // character-line edge maintained by the resize passes, decoupled from pixel
     // geometry -- it includes FRAME_TOP_MARGIN, which has no pixel height in
@@ -2529,20 +2535,64 @@ pub(crate) fn builtin_window_top_line(
     Ok(Value::fixnum(w.top_line()))
 }
 
+fn geometry_invariant(message: impl Into<String>) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "GUI geometry invariant violated: {}",
+            message.into()
+        ))],
+    )
+}
+
+fn presented_gui_publication(
+    frames: &FrameManager,
+    fid: FrameId,
+) -> Result<Option<&crate::window::geometry::PresentedGeometry>, Flow> {
+    let frame = frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    if frame.effective_window_system().is_none() {
+        return Ok(None);
+    }
+    frame
+        .presented_geometry()
+        .map(Some)
+        .ok_or_else(|| geometry_invariant(format!("frame {} has no presented geometry", fid.0)))
+}
+
+fn presented_gui_known_geometry(
+    frames: &FrameManager,
+    fid: FrameId,
+    wid: WindowId,
+) -> Result<Option<crate::window::geometry::KnownWindowGeometry>, Flow> {
+    let Some(publication) = presented_gui_publication(frames, fid)? else {
+        return Ok(None);
+    };
+    publication
+        .resolve(crate::window::geometry::KnownWindowGeometryQuery::new(
+            publication.presentation(),
+            wid,
+        ))
+        .map(Some)
+        .map_err(|error| geometry_invariant(format!("{error:?}")))
+}
+
 fn presented_gui_window_geometry(
     frames: &FrameManager,
     fid: FrameId,
     wid: WindowId,
-) -> Option<crate::window::geometry::SnapshotWindowGeometry<'_>> {
-    let frame = frames.get(fid)?;
-    frame.effective_window_system()?;
-    let publication = frame.presented_geometry()?;
+) -> Result<Option<crate::window::geometry::SnapshotWindowGeometry<'_>>, Flow> {
+    let Some(publication) = presented_gui_publication(frames, fid)? else {
+        return Ok(None);
+    };
     publication
         .resolve(crate::window::geometry::WindowGeometryQuery::new(
             publication.presentation(),
             wid,
         ))
-        .ok()
+        .map(Some)
+        .map_err(|error| geometry_invariant(format!("{error:?}")))
 }
 
 fn tty_batch_pixel_left(window: &Window, char_width: f32) -> i64 {
@@ -2579,9 +2629,12 @@ pub(crate) fn builtin_window_pixel_left(
     let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
     let cw = frame.map(|frame| frame.char_width).unwrap_or(8.0);
     let left = if graphical {
-        presented_gui_window_geometry(frames, fid, wid).map_or(w.bounds().x as i64, |geometry| {
-            geometry.outer_in_frame().origin().x().get() as i64
-        })
+        presented_gui_known_geometry(frames, fid, wid)?
+            .expect("graphical backend must return presented geometry")
+            .outer()
+            .origin()
+            .x()
+            .get() as i64
     } else {
         tty_batch_pixel_left(w, cw)
     };
@@ -2606,9 +2659,12 @@ pub(crate) fn builtin_window_pixel_top(
     let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
     let ch = frame.map(|frame| frame.char_height).unwrap_or(16.0);
     let top = if graphical {
-        presented_gui_window_geometry(frames, fid, wid).map_or(w.bounds().y as i64, |geometry| {
-            geometry.outer_in_frame().origin().y().get() as i64
-        })
+        presented_gui_known_geometry(frames, fid, wid)?
+            .expect("graphical backend must return presented geometry")
+            .outer()
+            .origin()
+            .y()
+            .get() as i64
     } else {
         tty_batch_pixel_top(w, ch)
     };
@@ -2843,7 +2899,7 @@ pub(crate) fn builtin_window_margins(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
         let left = regions.left_margin_columns();
         let right = regions.right_margin_columns();
@@ -2889,7 +2945,7 @@ pub(crate) fn builtin_window_fringes(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
         let left = regions
             .left_fringe()
@@ -2985,7 +3041,7 @@ pub(crate) fn builtin_window_scroll_bars(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
         let vertical = if regions.left_scroll_bar().is_some() {
             Value::symbol("left")
@@ -3113,7 +3169,7 @@ pub(crate) fn builtin_window_scroll_bar_width(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
         let width = regions
             .left_scroll_bar()
@@ -3156,7 +3212,7 @@ pub(crate) fn builtin_window_mode_line_height(
         } else {
             1
         },
-    );
+    )?;
     Ok(Value::fixnum(height))
 }
 /// `(window-header-line-height &optional WINDOW)` -> integer.
@@ -3175,7 +3231,7 @@ pub(crate) fn builtin_window_header_line_height(
         wid,
         WindowChromeMetric::HeaderLine,
         0,
-    )))
+    )?))
 }
 /// `(window-tab-line-height &optional WINDOW)` -> integer.
 pub(crate) fn builtin_window_tab_line_height(
@@ -3193,7 +3249,7 @@ pub(crate) fn builtin_window_tab_line_height(
         wid,
         WindowChromeMetric::TabLine,
         0,
-    )))
+    )?))
 }
 
 #[derive(Clone, Copy)]
@@ -3209,17 +3265,17 @@ fn window_chrome_height_in_state(
     wid: WindowId,
     metric: WindowChromeMetric,
     fallback: i64,
-) -> i64 {
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+) -> Result<i64, Flow> {
+    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
         let regions = geometry.regions();
-        return match metric {
+        return Ok(match metric {
             WindowChromeMetric::ModeLine => regions.mode_line(),
             WindowChromeMetric::HeaderLine => regions.header_line(),
             WindowChromeMetric::TabLine => regions.tab_line(),
         }
-        .map_or(0, |rect| rect.height().get() as i64);
+        .map_or(0, |rect| rect.height().get() as i64));
     }
-    frames
+    Ok(frames
         .get(fid)
         .and_then(|frame| frame.window_display_snapshot(wid))
         .map(|snapshot| match metric {
@@ -3228,7 +3284,7 @@ fn window_chrome_height_in_state(
             WindowChromeMetric::TabLine => snapshot.tab_line_height,
         })
         .unwrap_or(fallback)
-        .max(0)
+        .max(0))
 }
 /// `(window-pixel-height &optional WINDOW)` -> integer.
 ///
@@ -3244,12 +3300,11 @@ pub(crate) fn builtin_window_pixel_height(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    Ok(Value::fixnum(
-        presented_gui_window_geometry(frames, fid, wid).map_or_else(
-            || window_height_pixels(w),
-            |geometry| geometry.outer_in_frame().height().get() as i64,
-        ),
-    ))
+    let height = match presented_gui_known_geometry(frames, fid, wid)? {
+        Some(geometry) => geometry.outer().height().get() as i64,
+        None => window_height_pixels(w),
+    };
+    Ok(Value::fixnum(height))
 }
 /// `(window-pixel-width &optional WINDOW)` -> integer.
 ///
@@ -3265,12 +3320,11 @@ pub(crate) fn builtin_window_pixel_width(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    Ok(Value::fixnum(
-        presented_gui_window_geometry(frames, fid, wid).map_or_else(
-            || window_width_pixels(w),
-            |geometry| geometry.outer_in_frame().width().get() as i64,
-        ),
-    ))
+    let width = match presented_gui_known_geometry(frames, fid, wid)? {
+        Some(geometry) => geometry.outer().width().get() as i64,
+        None => window_width_pixels(w),
+    };
+    Ok(Value::fixnum(width))
 }
 /// `(window-body-height &optional WINDOW PIXELWISE)` -> integer.
 ///
@@ -3297,7 +3351,7 @@ fn window_body_height_impl(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid) {
+        if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
             return Ok(Value::fixnum(
                 geometry.regions().text_body().height().get() as i64
             ));
@@ -3335,12 +3389,11 @@ pub(crate) fn builtin_window_body_width(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        Ok(Value::fixnum(
-            presented_gui_window_geometry(frames, fid, wid).map_or_else(
-                || window_body_width_pixels(frames, fid, w),
-                |geometry| geometry.regions().text_body().width().get() as i64,
-            ),
-        ))
+        let width = match presented_gui_window_geometry(frames, fid, wid)? {
+            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+            None => window_body_width_pixels(frames, fid, w),
+        };
+        Ok(Value::fixnum(width))
     } else {
         let cw = frames
             .get(fid)
