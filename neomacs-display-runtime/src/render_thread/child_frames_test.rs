@@ -144,6 +144,33 @@ fn update_frame_abs_position_from_parent_xy() {
     assert_eq!(entry.abs_y, 456.7);
 }
 
+#[test]
+fn nested_child_composes_parent_relative_offsets_once_and_clips_to_root() {
+    let mut mgr = ChildFrameManager::new();
+    let mut root = FrameGlyphBuffer::with_size(200.0, 160.0);
+    root.frame_id = neomacs_display_protocol::DisplayFrameId::new(10);
+    root.presentation_id = neomacs_display_protocol::PresentationId::new(1);
+    mgr.set_root_frame(Some(&root));
+    let mut parent = make_child_buf(20, 100.0, 80.0, 120.0, 100.0, 2);
+    parent.parent_id = root.frame_id;
+    parent.presentation_id = neomacs_display_protocol::PresentationId::new(2);
+    mgr.update_frame(parent);
+    let mut nested = make_child_buf(30, 15.0, 12.0, 100.0, 80.0, 4);
+    nested.parent_id = neomacs_display_protocol::DisplayFrameId::new(20);
+    nested.presentation_id = neomacs_display_protocol::PresentationId::new(3);
+    mgr.update_frame(nested);
+
+    let entry = mgr.frames.get(&30).unwrap();
+    assert_eq!((entry.frame.parent_x, entry.frame.parent_y), (15.0, 12.0));
+    assert_eq!((entry.abs_x, entry.abs_y), (115.0, 92.0));
+    assert_eq!(
+        entry.clip_in_root,
+        Some(FrameRect::new(115.0, 92.0, 85.0, 68.0).unwrap())
+    );
+    assert_eq!(mgr.hit_test(199.0, 159.0).unwrap().0, 30);
+    assert_eq!(mgr.hit_test(201.0, 159.0), None);
+}
+
 // ===================================================================
 // Z-order sorting (render_order / sorted_for_rendering)
 // ===================================================================

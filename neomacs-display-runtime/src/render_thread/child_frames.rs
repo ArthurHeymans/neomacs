@@ -6,6 +6,9 @@
 use std::collections::HashMap;
 
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neomacs_display_protocol::{
+    DisplayFrameId, FrameRect, PlaceChildQuery, PresentedFramePlacement, PresentedFrameScene,
+};
 
 /// State for one child frame.
 pub(crate) struct ChildFrameEntry {
@@ -14,6 +17,8 @@ pub(crate) struct ChildFrameEntry {
     /// Computed absolute position on screen (from parent_x/parent_y)
     pub abs_x: f32,
     pub abs_y: f32,
+    pub clip_in_root: Option<FrameRect>,
+    pub z_path: Vec<i32>,
     /// Frame counter when this entry was last updated
     #[allow(dead_code)] // read by the test-exercised prune_stale
     pub last_updated: u64,
@@ -29,6 +34,7 @@ pub(crate) struct ChildFrameManager {
     render_order: Vec<u64>,
     /// Monotonic counter incremented each poll_frame cycle
     frame_counter: u64,
+    root: Option<PresentedFramePlacement>,
 }
 
 impl ChildFrameManager {
@@ -37,7 +43,21 @@ impl ChildFrameManager {
             frames: HashMap::new(),
             render_order: Vec::new(),
             frame_counter: 0,
+            root: None,
         }
+    }
+
+    pub fn set_root_frame(&mut self, root: Option<&FrameGlyphBuffer>) {
+        self.root = root.map(|root| {
+            PresentedFramePlacement::new(
+                root.frame_id,
+                root.presentation_id,
+                None,
+                FrameRect::new(0.0, 0.0, root.width, root.height).unwrap(),
+                root.z_order,
+            )
+        });
+        self.rebuild_presented_scene();
     }
 
     /// Increment the frame counter. Call once per poll_frame cycle.
@@ -54,6 +74,7 @@ impl ChildFrameManager {
         let frame_id = buf.frame_id;
         let abs_x = buf.parent_x;
         let abs_y = buf.parent_y;
+        let z_order = buf.z_order;
         let existing = self.frames.get_mut(&frame_id.get());
 
         let glyph_count = buf.glyphs.len();
@@ -94,19 +115,21 @@ impl ChildFrameManager {
                 frame: buf,
                 abs_x,
                 abs_y,
+                clip_in_root: None,
+                z_path: vec![z_order],
                 last_updated: self.frame_counter,
                 ingest_seq: super::frame_state::next_faces_ingest_seq(),
             },
         );
 
-        self.rebuild_render_order();
+        self.rebuild_presented_scene();
         true
     }
 
     /// Remove a child frame by ID.
     pub fn remove_frame(&mut self, frame_id: u64) -> bool {
         if self.frames.remove(&frame_id).is_some() {
-            self.rebuild_render_order();
+            self.rebuild_presented_scene();
             tracing::info!(
                 frame_id,
                 "child_frame_lifecycle: render_thread_child_removed"
@@ -129,7 +152,7 @@ impl ChildFrameManager {
         self.frames
             .retain(|_, entry| entry.last_updated >= threshold);
         if self.frames.len() != before {
-            self.rebuild_render_order();
+            self.rebuild_presented_scene();
         }
     }
 
@@ -150,6 +173,12 @@ impl ChildFrameManager {
                     && local_y >= 0.0
                     && local_x < entry.frame.width
                     && local_y < entry.frame.height
+                    && entry.clip_in_root.is_none_or(|clip| {
+                        x >= clip.x()
+                            && y >= clip.y()
+                            && x < clip.x() + clip.width()
+                            && y < clip.y() + clip.height()
+                    })
                 {
                     return Some((frame_id, local_x, local_y));
                 }
@@ -170,10 +199,66 @@ impl ChildFrameManager {
         self.render_order.extend(self.frames.keys());
         // Sort by z_order ascending (lowest z = rendered first = behind)
         self.render_order.sort_by(|a, b| {
-            let za = self.frames.get(a).map(|e| e.frame.z_order).unwrap_or(0);
-            let zb = self.frames.get(b).map(|e| e.frame.z_order).unwrap_or(0);
-            za.cmp(&zb)
+            let za = self
+                .frames
+                .get(a)
+                .map(|e| e.z_path.as_slice())
+                .unwrap_or(&[]);
+            let zb = self
+                .frames
+                .get(b)
+                .map(|e| e.z_path.as_slice())
+                .unwrap_or(&[]);
+            za.cmp(zb).then(a.cmp(b))
         });
+    }
+
+    fn rebuild_presented_scene(&mut self) {
+        let child_ids = self
+            .frames
+            .keys()
+            .copied()
+            .collect::<std::collections::HashSet<_>>();
+        let root_id = self.root.map(|root| root.frame().get());
+        let mut placements = self.root.into_iter().collect::<Vec<_>>();
+        placements.extend(self.frames.values().map(|entry| {
+            let raw_parent = entry.frame.parent_id.get();
+            let parent = if Some(raw_parent) == root_id || child_ids.contains(&raw_parent) {
+                Some(DisplayFrameId::new(raw_parent))
+            } else {
+                None
+            };
+            PresentedFramePlacement::new(
+                entry.frame.frame_id,
+                entry.frame.presentation_id,
+                parent,
+                FrameRect::new(
+                    entry.frame.parent_x,
+                    entry.frame.parent_y,
+                    entry.frame.width,
+                    entry.frame.height,
+                )
+                .expect("validated child-frame geometry"),
+                entry.frame.z_order,
+            )
+        }));
+        let Ok(scene) = PresentedFrameScene::from_placements(placements) else {
+            tracing::error!("rejecting incoherent child-frame ancestry");
+            return;
+        };
+        for entry in self.frames.values_mut() {
+            let Ok(placed) = scene.place(PlaceChildQuery::new(
+                entry.frame.frame_id,
+                entry.frame.presentation_id,
+            )) else {
+                continue;
+            };
+            entry.abs_x = placed.root_relative().x();
+            entry.abs_y = placed.root_relative().y();
+            entry.clip_in_root = placed.clip_in_root();
+            entry.z_path = placed.z_path().to_vec();
+        }
+        self.rebuild_render_order();
     }
 }
 

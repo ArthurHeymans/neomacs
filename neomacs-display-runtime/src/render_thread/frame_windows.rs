@@ -867,6 +867,7 @@ impl GuiFrameRenderState {
             .as_ref()
             .map(|frame| frame.presentation_id);
         let next_presentation = frame.as_ref().map(|frame| frame.presentation_id);
+        self.compositor.child_frames.set_root_frame(frame.as_ref());
         self.compositor.current_frame = frame;
         let appearance_changed = if let Some(previous) = previous_presentation
             && Some(previous) != next_presentation
