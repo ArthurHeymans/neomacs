@@ -5573,7 +5573,7 @@ pub(crate) fn builtin_scroll_up(eval: &mut super::eval::Context, args: Vec<Value
         arg.as_ref(),
         1,
     );
-    let result = scroll_by_lines_in_state(&mut eval.frames, &mut eval.buffers, lines);
+    let result = scroll_by_screen_lines(eval, lines);
     eval.invalidate_redisplay();
     result
 }
@@ -5591,53 +5591,21 @@ pub(crate) fn builtin_scroll_down(eval: &mut super::eval::Context, args: Vec<Val
         arg.as_ref(),
         -1,
     );
-    let result = scroll_by_lines_in_state(&mut eval.frames, &mut eval.buffers, lines);
+    let result = scroll_by_screen_lines(eval, lines);
     eval.invalidate_redisplay();
     result
 }
 
-fn line_motion_bytes(bytes: &[u8], begv: usize, zv: usize, start: usize, lines: i64) -> usize {
-    let mut pos = start.clamp(begv, zv);
-    if lines > 0 {
-        for _ in 0..lines {
-            while pos < zv && bytes[pos] != b'\n' {
-                pos += 1;
-            }
-            if pos < zv {
-                pos += 1;
-            }
-        }
-    } else if lines < 0 {
-        while pos > begv && bytes[pos - 1] != b'\n' {
-            pos -= 1;
-        }
-        for _ in 0..(-lines) {
-            if pos <= begv {
-                break;
-            }
-            pos -= 1;
-            while pos > begv && bytes[pos - 1] != b'\n' {
-                pos -= 1;
-            }
-        }
-    }
-    pos
-}
-
-fn scroll_by_lines_in_state(
-    frames: &mut FrameManager,
-    buffers: &mut BufferManager,
-    lines: i64,
-) -> EvalResult {
-    let _ = ensure_selected_frame_id_in_state(frames, buffers);
-    let (fid, wid) = resolve_window_id_in_state(frames, buffers, None)?;
-    let body_height = window_body_height_impl(frames, buffers, vec![])
+fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalResult {
+    let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
+    let (fid, wid) = resolve_window_id_in_state(&mut eval.frames, &mut eval.buffers, None)?;
+    let body_height = window_body_height_impl(&mut eval.frames, &mut eval.buffers, vec![])
         .ok()
         .and_then(|v| v.as_fixnum())
         .unwrap_or(24)
         .max(1);
     let (buffer_id, window_point, window_start, window_end_valid) =
-        match get_leaf(frames, fid, wid)? {
+        match get_leaf(&eval.frames, fid, wid)? {
             Window::Leaf {
                 buffer_id,
                 point,
@@ -5647,12 +5615,12 @@ fn scroll_by_lines_in_state(
             } => (*buffer_id, *point, *window_start, *window_end_valid),
             _ => return Ok(Value::NIL),
         };
-    let Some(buf) = buffers.get(buffer_id) else {
+    let Some(buf) = eval.buffers.get(buffer_id) else {
         return Ok(Value::NIL);
     };
-    let text = buf.full_text_string();
     let accessible = buf.accessible_emacs_byte_region();
-    let selected_live_window = frames
+    let selected_live_window = eval
+        .frames
         .get(fid)
         .is_some_and(|frame| frame.selected_window == wid);
     let effective_point = if selected_live_window {
@@ -5663,7 +5631,6 @@ fn scroll_by_lines_in_state(
     let pt = accessible
         .clamp(buf.lisp_pos_to_emacs_byte_pos(effective_point))
         .get();
-    let bytes = text.as_bytes();
     let begv = accessible.start().get();
     let zv = accessible.end().get();
     let mut start = accessible
@@ -5671,13 +5638,29 @@ fn scroll_by_lines_in_state(
         .get();
 
     if !window_end_valid {
-        start = line_motion_bytes(bytes, begv, zv, pt, -(body_height / 2));
+        start = crate::emacs_core::builtins::screen_line_motion_target(
+            eval,
+            buffer_id,
+            EmacsBytePos::new(pt),
+            Some(Value::make_window(wid.0)),
+            -(body_height / 2),
+        )?
+        .0
+        .get();
     }
 
     let pos;
     let mut next_point = pt;
     if lines > 0 {
-        pos = line_motion_bytes(bytes, begv, zv, start, lines);
+        pos = crate::emacs_core::builtins::screen_line_motion_target(
+            eval,
+            buffer_id,
+            EmacsBytePos::new(start),
+            Some(Value::make_window(wid.0)),
+            lines,
+        )?
+        .0
+        .get();
         if pos >= zv {
             return Err(scroll_up_batch_error());
         }
@@ -5688,29 +5671,67 @@ fn scroll_by_lines_in_state(
         if start <= begv {
             return Err(scroll_down_batch_error());
         }
-        pos = line_motion_bytes(bytes, begv, zv, start, lines);
+        pos = crate::emacs_core::builtins::screen_line_motion_target(
+            eval,
+            buffer_id,
+            EmacsBytePos::new(start),
+            Some(Value::make_window(wid.0)),
+            lines,
+        )?
+        .0
+        .get();
         // GNU window_scroll_line_based: after scrolling backward, a point that
         // fell BELOW the new window is pulled up to the start of the last
         // fully-visible line; a point still visible stays put. When the window
         // now reaches end-of-buffer, `bottom` clamps to ZV and everything up to
         // ZV (including point-max) is visible, so point must NOT be pulled.
-        let bottom = line_motion_bytes(bytes, begv, zv, pos, body_height);
+        let bottom = crate::emacs_core::builtins::screen_line_motion_target(
+            eval,
+            buffer_id,
+            EmacsBytePos::new(pos),
+            Some(Value::make_window(wid.0)),
+            body_height,
+        )?
+        .0
+        .get();
         if pt >= bottom && bottom < zv {
-            next_point = line_motion_bytes(bytes, begv, zv, bottom, -1);
+            next_point = crate::emacs_core::builtins::screen_line_motion_target(
+                eval,
+                buffer_id,
+                EmacsBytePos::new(bottom),
+                Some(Value::make_window(wid.0)),
+                -1,
+            )?
+            .0
+            .get();
         }
     } else {
         pos = start;
     }
 
+    let Some(buf) = eval.buffers.get(buffer_id) else {
+        return Ok(Value::NIL);
+    };
     let start_lisp = buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos));
     let point_lisp = buf.emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(next_point));
-    let _ = buffers.goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(next_point));
-    if let Some(window) = frames
+    let _ = eval
+        .buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(next_point));
+    if let Some(window) = eval
+        .frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(wid))
     {
-        crate::window::window_markers::set_window_point_with_marker(buffers, window, point_lisp);
-        crate::window::window_markers::set_window_start_with_marker(buffers, window, start_lisp);
+        crate::window::window_markers::set_window_point_with_marker(
+            &mut eval.buffers,
+            window,
+            point_lisp,
+        );
+        crate::window::window_markers::set_window_start_with_marker(
+            &mut eval.buffers,
+            window,
+            start_lisp,
+        );
         if let Window::Leaf {
             window_end_valid,
             vscroll,

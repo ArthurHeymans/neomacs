@@ -6832,6 +6832,37 @@ fn scroll_down_from_eob_pulls_point_to_last_visible_line_like_gnu() {
     assert_eq!(results[0], "OK (35 2 (:ok 151 185 1351 1657))");
 }
 
+/// A near-full-screen scroll is measured in displayed screen rows, not raw
+/// buffer newlines.  This matters for folded Org subtrees: invisible logical
+/// lines occupy no part of the window and therefore cannot consume a page.
+#[test]
+fn scroll_down_skips_invisible_logical_lines_when_measuring_a_page() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let ((w (selected-window)))
+           (save-current-buffer (set-buffer (window-buffer w))
+             (erase-buffer)
+             (let ((i 1))
+               (while (<= i 80)
+                 (insert (format \"v%02d\\n\" i))
+                 (setq i (1+ i))))
+             (goto-char (point-min))
+             (forward-line 20)
+             (let ((hidden-beg (point)))
+               (forward-line 40)
+               (put-text-property hidden-beg (point) 'invisible t))
+             (goto-char (point-min))
+             (forward-line 69))
+           (set-window-point w (point))
+           (set-window-start w (point))
+           (scroll-down nil)
+           (list (window-body-height w)
+                 next-screen-context-lines
+                 (line-number-at-pos (window-start w))))",
+    );
+    assert_eq!(results[0], "OK (35 2 1)");
+}
+
 /// Reproduces the observable bug reported after `C-x 2` in an
 /// interactive `neomacs -nw -Q` session: the cursor ends up on the
 /// *bottom* (newly-created) window, and both mode lines render in

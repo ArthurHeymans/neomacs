@@ -2285,6 +2285,88 @@ fn vertical_motion_from_live_snapshot(
     })
 }
 
+/// Resolve screen-line motion without changing point.
+///
+/// This is the shared display-motion seam used by both `vertical-motion` and
+/// window scrolling.  It prefers the last live redisplay snapshot and falls
+/// back to the display-property-aware scanner for motion beyond the currently
+/// visible rows.
+pub(crate) fn screen_line_motion_target(
+    eval: &mut super::eval::Context,
+    current_buffer: BufferId,
+    point: EmacsBytePos,
+    window: Option<Value>,
+    lines: i64,
+) -> Result<(EmacsBytePos, i64), Flow> {
+    let Some(buf) = eval.buffers.get(current_buffer) else {
+        return Ok((point, 0));
+    };
+    let accessible = buf.accessible_emacs_byte_region();
+    let point = accessible.clamp(point);
+    let point_lisp = buf.emacs_byte_pos_to_lisp_char_pos(point);
+
+    if let Some(snapshot_motion) =
+        vertical_motion_from_live_snapshot(eval, window, current_buffer, point_lisp, None, lines)
+    {
+        let target = eval
+            .buffers
+            .get(current_buffer)
+            .map(|buf| buf.lisp_pos_to_emacs_byte_pos(snapshot_motion.target))
+            .unwrap_or(point);
+        return Ok((target, snapshot_motion.moved));
+    }
+
+    let screen_width = vertical_motion_screen_width(eval, window);
+    let truncate_lines =
+        super::window_cmds::window_truncates_lines_for_motion(eval, window, current_buffer);
+    let mut target = current_screen_line_start_with_truncation(
+        eval,
+        current_buffer,
+        point,
+        screen_width,
+        truncate_lines,
+    )?
+    .unwrap_or(point);
+    let mut moved = 0_i64;
+
+    if lines > 0 {
+        for _ in 0..lines {
+            let Some(step) = next_visible_line_start(
+                eval,
+                current_buffer,
+                target,
+                screen_width,
+                truncate_lines,
+            )?
+            else {
+                break;
+            };
+            target = step.next;
+            if step.counts_line {
+                moved += 1;
+            } else {
+                break;
+            }
+        }
+    } else if lines < 0 {
+        for _ in 0..(-lines) as usize {
+            let Some((previous, line_moved)) =
+                previous_visible_line_start(eval, current_buffer, target, screen_width)?
+            else {
+                break;
+            };
+            target = previous;
+            if line_moved {
+                moved -= 1;
+            } else {
+                break;
+            }
+        }
+    }
+
+    Ok((target, moved))
+}
+
 /// `(vertical-motion LINES &optional WINDOW CUR-COL)` -> integer
 ///
 /// Move point to the start of the screen line LINES lines down (or up if
@@ -2348,6 +2430,13 @@ pub(crate) fn builtin_vertical_motion(
     let pt = accessible.clamp(buf.point_emacs_byte_pos());
     let pt_lisp = buf.emacs_byte_pos_to_lisp_char_pos(pt);
     let begv = accessible.start();
+
+    if cols.is_none() {
+        let (target, moved) =
+            screen_line_motion_target(eval, current_id, pt, args.get(1).copied(), lines)?;
+        let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, target);
+        return Ok(Value::fixnum(moved));
+    }
 
     if let Some(snapshot_motion) = vertical_motion_from_live_snapshot(
         eval,
