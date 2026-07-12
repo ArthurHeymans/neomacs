@@ -145,6 +145,12 @@ impl OutputFrameBuildState {
                 {
                     info.cell_origin = geometry.cell_origin;
                     info.regions = geometry.regions;
+                    info.tab_line_height =
+                        geometry.regions.tab_line.map_or(0.0, |rect| rect.height);
+                    info.header_line_height =
+                        geometry.regions.header_line.map_or(0.0, |rect| rect.height);
+                    info.mode_line_height =
+                        geometry.regions.mode_line.map_or(0.0, |rect| rect.height);
                 }
             }
             OutputWindowMetadataInstallRequest::RestoreRetryCheckpoint(checkpoint) => {

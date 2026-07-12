@@ -1183,22 +1183,16 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
     pub(crate) fn render_and_apply(self, mut state: FrameOutputTarget<'_>) {
         let track_color = Color::new(0.7, 0.7, 0.7, 1.0);
         let thumb_color = Color::new(0.5, 0.5, 0.5, 1.0);
-        let chrome_top = self.params.header_line_height + self.params.tab_line_height;
-        let chrome_bottom = self.params.mode_line_height + self.params.scroll_bar_pixel_height;
 
         if let Some(ref side) = self.params.vertical_scroll_bar_side {
-            let track_height = (self.params.bounds.height - chrome_top - chrome_bottom).max(0.0);
-            if track_height <= 0.0 {
-                return;
-            }
-            let track_width = self.params.scroll_bar_pixel_width;
-
-            let x = if side == "left" {
-                self.params.bounds.x
+            let track = if side == "left" {
+                self.info.regions.left_scroll_bar
             } else {
-                self.params.bounds.x + self.params.bounds.width - track_width
+                self.info.regions.right_scroll_bar
             };
-            let y = self.params.bounds.y + chrome_top;
+            let Some(track) = track else {
+                return;
+            };
 
             let accessible_start = self.params.accessible_start_charpos().get();
             let accessible_end = self.params.accessible_end_charpos().get();
@@ -1207,7 +1201,7 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 self.info.window_end,
                 accessible_start,
                 accessible_end,
-                track_height,
+                track.height,
             );
 
             state.add_scroll_bar(ScrollBarItem {
@@ -1215,10 +1209,10 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
                 horizontal: false,
-                x,
-                y,
-                width: track_width,
-                height: track_height,
+                x: track.x,
+                y: track.y,
+                width: track.width,
+                height: track.height,
                 position: metrics.position,
                 portion: metrics.portion,
                 whole: metrics.whole,
@@ -1230,12 +1224,10 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
         }
 
         if self.params.horizontal_scroll_bar {
-            let track_width = self.params.bounds.width;
-            let track_height = self.params.scroll_bar_pixel_height;
-            let x = self.params.bounds.x;
-            let y = self.params.bounds.y + self.params.bounds.height
-                - self.params.mode_line_height
-                - self.params.scroll_bar_pixel_height;
+            let Some(track) = self.info.regions.horizontal_scroll_bar else {
+                return;
+            };
+            let track_width = track.width;
 
             let hscroll_px = self.params.hscroll as f32 * self.params.char_width;
             let visible_px = self.params.text_bounds.width.max(1.0);
@@ -1256,10 +1248,10 @@ impl<'a> WindowScrollBarsRenderRequest<'a> {
                 row_role: GlyphRowRole::Text,
                 clip_rect: Some(self.params.bounds),
                 horizontal: true,
-                x,
-                y,
+                x: track.x,
+                y: track.y,
                 width: track_width,
-                height: track_height,
+                height: track.height,
                 position: self.params.hscroll as i64,
                 portion: visible_px.round().max(1.0) as i64,
                 whole: (visible_px + hscroll_px).round().max(1.0) as i64,

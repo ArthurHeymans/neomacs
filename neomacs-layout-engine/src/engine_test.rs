@@ -11468,6 +11468,89 @@ fn layout_frame_rust_grows_mode_line_height_for_tall_display_element() {
     );
 }
 
+#[test]
+fn tall_chrome_publishes_the_same_body_used_by_text_and_scrollbar_rendering() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let format = Value::string_with_text_properties(
+            "MB",
+            vec![StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+                ]),
+            }],
+        );
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("body line\n");
+        buffer.set_buffer_local("mode-line-format", format);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("tall-chrome-regions", 640, 160, buffer_id);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let snapshot = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.window_display_snapshot(selected))
+        .expect("snapshot");
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let info = state
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("window info");
+    assert_eq!(info.mode_line_height, snapshot.mode_line_height as f32);
+
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .expect("window matrix");
+    let body = entry.text_area_clip_rect();
+    assert_eq!(body.y, snapshot.regions.text_body.y);
+    assert_eq!(body.height, snapshot.regions.text_body.height);
+
+    let scroll_bar = state
+        .scroll_bars
+        .iter()
+        .find(|scroll_bar| {
+            scroll_bar.window_id.get() == selected.0 as i64 && !scroll_bar.horizontal
+        })
+        .expect("vertical scroll bar");
+    let published_scroll_bar = snapshot
+        .regions
+        .left_scroll_bar
+        .or(snapshot.regions.right_scroll_bar)
+        .expect("published vertical scroll bar");
+    assert_eq!(scroll_bar.y, published_scroll_bar.y);
+    assert_eq!(scroll_bar.height, published_scroll_bar.height);
+}
+
 /// The single-eval invariant: a full `layout_frame_rust` must evaluate
 /// `mode-line-format` exactly ONCE per window with a mode line. The chrome
 /// rows are laid out once up front (their measured height feeds the geometry)
