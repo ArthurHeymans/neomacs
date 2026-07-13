@@ -413,7 +413,7 @@ impl BufferSourceOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let (mut output, font_metrics, face_resolver, frame_face_id_counter, display_snapshots) =
+        let (mut output, font_metrics, face_resolver, frame_face_id_counter, window_snapshots) =
             state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
         let mut face_ids = FrameFaceIdAllocator::new(*frame_face_id_counter);
@@ -660,7 +660,7 @@ impl BufferSourceOutputSetup {
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
                 measured_chrome_heights,
-                display_snapshots,
+                window_snapshots,
             );
             *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
@@ -851,7 +851,7 @@ impl BufferSourceOutputSetup {
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
                 measured_chrome_heights,
-                display_snapshots,
+                window_snapshots,
             );
             *frame_face_id_counter = face_ids.finish();
             return BufferSourceRenderAttemptOutcome::Finished {
@@ -992,7 +992,7 @@ impl BufferSourceOutputSetup {
                 std::mem::take(&mut walk_setup.hit_rows),
             ),
             measured_chrome_heights,
-            display_snapshots,
+            window_snapshots,
         );
         *frame_face_id_counter = face_ids.finish();
         BufferSourceRenderAttemptOutcome::Finished {

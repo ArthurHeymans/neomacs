@@ -3714,7 +3714,7 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
     ev.frames
         .get_mut(fid)
         .expect("mutable frame")
-        .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
             cell_origin: Default::default(),
             regions: Default::default(),
@@ -3831,7 +3831,7 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
     ev.frames
         .get_mut(fid)
         .expect("mutable frame")
-        .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
             cell_origin: Default::default(),
             regions: Default::default(),
@@ -3933,7 +3933,7 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
     ev.frames
         .get_mut(fid)
         .expect("mutable frame")
-        .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
             cell_origin: Default::default(),
             regions: Default::default(),
@@ -4498,7 +4498,7 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
     ev.frames
         .get_mut(fid)
         .expect("mutable frame")
-        .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
             cell_origin: Default::default(),
             regions: Default::default(),
@@ -4597,7 +4597,7 @@ fn read_key_sequence_prefixes_mode_line_mouse_click_for_lookup() {
     ev.frames
         .get_mut(fid)
         .expect("mutable frame")
-        .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: w2,
             cell_origin: Default::default(),
             regions: Default::default(),

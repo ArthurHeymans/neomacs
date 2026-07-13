@@ -15,11 +15,11 @@ fn publish_selected_gui_window_regions(
         .get(frame_id)
         .expect("frame")
         .selected_window;
-    eval.frame_manager_mut()
-        .get_mut(frame_id)
-        .expect("frame")
-        .publish_display_snapshots(
-            neovm_core::window::geometry::PresentationId::new(1),
+    let presentation = neovm_core::window::geometry::PresentationId::new(1);
+    let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+    frame
+        .prepare_display_presentation(
+            presentation,
             vec![WindowDisplaySnapshot {
                 window_id,
                 regions,
@@ -27,7 +27,10 @@ fn publish_selected_gui_window_regions(
                 ..Default::default()
             }],
         )
-        .expect("presented GUI geometry");
+        .expect("prepare GUI geometry");
+    frame
+        .activate_display_presentation(presentation)
+        .expect("activate GUI geometry");
 }
 
 fn run_neovm_gui_eval(body: &str) -> String {

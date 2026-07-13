@@ -31,7 +31,7 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
     font_metrics: &'a mut Option<FontMetricsService>,
     face_resolver: &'face FaceResolver,
     frame_face_id_counter: &'a mut u32,
-    display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,14 +135,14 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
         frame_face_id_counter: &'a mut u32,
-        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self {
             output: BufferSourceOutputState::from_parts(output, evaluator),
             font_metrics,
             face_resolver,
             frame_face_id_counter,
-            display_snapshots,
+            window_snapshots,
         }
     }
 
@@ -153,7 +153,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         font_metrics: &'a mut Option<FontMetricsService>,
         face_resolver: &'face FaceResolver,
         frame_face_id_counter: &'a mut u32,
-        display_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
     ) -> Self {
         Self::new(
             frame_output.text_window_output_target(),
@@ -161,7 +161,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             font_metrics,
             face_resolver,
             frame_face_id_counter,
-            display_snapshots,
+            window_snapshots,
         )
     }
 
@@ -190,7 +190,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             self.font_metrics,
             self.face_resolver,
             self.frame_face_id_counter,
-            self.display_snapshots,
+            self.window_snapshots,
         )
     }
 }

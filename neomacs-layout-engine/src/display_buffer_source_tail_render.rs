@@ -253,12 +253,12 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         &self,
         finish_state: TextWindowFinishState<'_>,
         measured_chrome_heights: WindowChromeMeasuredHeights,
-        display_snapshots: &mut Vec<WindowDisplaySnapshot>,
+        window_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
         let finished_window = self
             .finish_request(measured_chrome_heights)
             .finish_and_snapshot(finish_state);
-        display_snapshots.push(finished_window.into_snapshot());
+        window_snapshots.push(finished_window.into_snapshot());
     }
 }
 

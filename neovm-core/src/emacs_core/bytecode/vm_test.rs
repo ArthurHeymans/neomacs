@@ -3041,7 +3041,7 @@ fn vm_window_chrome_height_builtins_use_last_redisplay_snapshot() {
                 eval.frames
                     .get_mut(fid)
                     .expect("frame")
-                    .replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+                    .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
                         window_id: wid,
                         mode_line_height: 35,
                         header_line_height: 35,

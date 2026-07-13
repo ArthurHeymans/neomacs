@@ -217,7 +217,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
 }
 
 #[test]
-fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
+fn prepare_activate_replaces_geometry_and_presentation_together() {
     use super::geometry::{PresentationId, PresentationPrepareError};
 
     let mut manager = FrameManager::new();
@@ -226,7 +226,7 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     let window_id = frame.selected_window;
 
     frame
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             PresentationId::new(41),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -244,24 +244,27 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
         8
     );
 
-    frame.remove_presented_window(window_id);
+    frame.remove_redisplay_snapshot(window_id);
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
     assert!(frame.redisplay_snapshot(window_id).is_none());
 
     assert_eq!(
-        frame.publish_display_snapshots(PresentationId::new(41), Vec::new()),
+        frame.prepare_and_activate_display_presentation_for_test(
+            PresentationId::new(41),
+            Vec::new()
+        ),
         Err(PresentationPrepareError::ReusedPresentation(
             PresentationId::new(41)
         ))
     );
 
     frame
-        .publish_display_snapshots(PresentationId::new(42), Vec::new())
+        .prepare_and_activate_display_presentation_for_test(PresentationId::new(42), Vec::new())
         .expect("newer presentation");
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(42)));
     assert!(frame.redisplay_snapshot(window_id).is_none());
 
-    frame.set_display_snapshots(Vec::new());
+    frame.replace_redisplay_cache_for_test(Vec::new());
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(42)));
     assert!(frame.retire_display_presentation(PresentationId::new(42)));
     assert_eq!(frame.active_presentation(), None);
@@ -389,7 +392,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
         root_frame.menu_bar_height = 30;
         root_frame.tool_bar_height = 40;
         root_frame
-            .publish_display_snapshots(PresentationId::new(40), vec![])
+            .prepare_and_activate_display_presentation_for_test(PresentationId::new(40), vec![])
             .unwrap();
     }
     {
@@ -398,7 +401,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
         child_frame.left_pos = 100;
         child_frame.top_pos = 80;
         child_frame
-            .publish_display_snapshots(PresentationId::new(41), vec![])
+            .prepare_and_activate_display_presentation_for_test(PresentationId::new(41), vec![])
             .unwrap();
     }
     {
@@ -407,7 +410,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
         nested_frame.left_pos = 15;
         nested_frame.top_pos = 12;
         nested_frame
-            .publish_display_snapshots(PresentationId::new(42), vec![])
+            .prepare_and_activate_display_presentation_for_test(PresentationId::new(42), vec![])
             .unwrap();
     }
 
@@ -465,7 +468,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
         manager
             .get_mut(root)
             .unwrap()
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 presentation,
                 vec![WindowDisplaySnapshot {
                     window_id: window,
@@ -517,7 +520,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
         popup_frame.left_pos = anchor.0 as i64;
         popup_frame.top_pos = anchor.1 as i64;
         popup_frame
-            .publish_display_snapshots(PresentationId::new(41), vec![])
+            .prepare_and_activate_display_presentation_for_test(PresentationId::new(41), vec![])
             .unwrap();
         let placed = manager
             .place_active_frame(popup, PresentationId::new(41))
@@ -675,7 +678,7 @@ fn duplicate_windows_reject_candidate_without_replacing_publication() {
     let frame = manager.get_mut(frame_id).expect("frame");
     let window_id = frame.selected_window;
     frame
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             PresentationId::new(1),
             vec![WindowDisplaySnapshot {
                 window_id,
@@ -684,7 +687,7 @@ fn duplicate_windows_reject_candidate_without_replacing_publication() {
         )
         .expect("initial publication");
 
-    let result = frame.publish_display_snapshots(
+    let result = frame.prepare_and_activate_display_presentation_for_test(
         PresentationId::new(2),
         vec![
             WindowDisplaySnapshot {
@@ -745,7 +748,7 @@ fn legacy_unowned_snapshots_do_not_create_an_authoritative_geometry_view() {
     let frame_id = manager.create_frame("legacy", 800, 600, BufferId(1));
     let frame = manager.get_mut(frame_id).expect("frame");
     let window_id = frame.selected_window;
-    frame.set_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.replace_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id,
         ..WindowDisplaySnapshot::default()
     }]);
@@ -1726,7 +1729,7 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
     let frame = mgr.get_mut(fid).unwrap();
     frame.char_width = 10.0;
     frame.char_height = 20.0;
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: w1,
         phys_cursor: Some(WindowCursorSnapshot {
             kind: WindowCursorKind::Bar,
@@ -1878,7 +1881,7 @@ fn frame_resize_pixelwise_preserves_flexible_window_proportions() {
 }
 
 #[test]
-fn replace_display_snapshots_syncs_live_window_cursor_state() {
+fn completed_redisplay_syncs_live_window_cursor_state() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
@@ -1900,7 +1903,7 @@ fn replace_display_snapshots_syncs_live_window_cursor_state() {
     };
 
     let frame = mgr.get_mut(fid).unwrap();
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         phys_cursor: Some(cursor.clone()),
         rows: vec![DisplayRowSnapshot {
@@ -1932,13 +1935,13 @@ fn replace_display_snapshots_syncs_live_window_cursor_state() {
 }
 
 #[test]
-fn replace_display_snapshots_replaces_old_output_cursor_progress() {
+fn completed_redisplay_replaces_old_output_cursor_progress() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
     let frame = mgr.get_mut(fid).unwrap();
 
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         rows: vec![DisplayRowSnapshot {
             row: 1,
@@ -1954,7 +1957,7 @@ fn replace_display_snapshots_replaces_old_output_cursor_progress() {
         ..WindowDisplaySnapshot::default()
     }]);
 
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         rows: vec![DisplayRowSnapshot {
             row: 3,
@@ -1986,7 +1989,7 @@ fn replace_display_snapshots_replaces_old_output_cursor_progress() {
 }
 
 #[test]
-fn set_display_snapshots_preserves_live_window_cursor_state() {
+fn cache_only_fixture_preserves_live_window_cursor_state() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
@@ -2027,7 +2030,7 @@ fn set_display_snapshots_preserves_live_window_cursor_state() {
     let frame = mgr.get_mut(fid).unwrap();
     frame.begin_display_output_pass();
     frame.replay_window_output_snapshot(&snapshot);
-    frame.set_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.replace_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         phys_cursor: None,
         ..WindowDisplaySnapshot::default()
@@ -2056,7 +2059,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
     {
         let frame = mgr.get_mut(fid).unwrap();
         frame.set_window_system(Some(Value::symbol("x")));
-        frame.set_display_snapshots(vec![WindowDisplaySnapshot {
+        frame.replace_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
             window_id: wid,
             points: vec![DisplayPointSnapshot {
                 buffer_pos: crate::buffer::LispCharPos1::new(5),
@@ -2097,7 +2100,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
 }
 
 #[test]
-fn replace_display_snapshots_preserves_logical_cursor_without_physical_cursor() {
+fn completed_redisplay_preserves_logical_cursor_without_physical_cursor() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
@@ -2109,7 +2112,7 @@ fn replace_display_snapshots_preserves_logical_cursor_without_physical_cursor() 
     };
 
     let frame = mgr.get_mut(fid).unwrap();
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         logical_cursor: Some(logical_cursor),
         rows: vec![DisplayRowSnapshot {
@@ -2146,7 +2149,7 @@ fn replace_display_snapshots_preserves_logical_cursor_without_physical_cursor() 
 }
 
 #[test]
-fn replace_display_snapshots_commits_last_cursor_visibility_state() {
+fn completed_redisplay_commits_last_cursor_visibility_state() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
@@ -2168,7 +2171,7 @@ fn replace_display_snapshots_commits_last_cursor_visibility_state() {
         .expect("window display state");
     display.cursor_off_p = true;
 
-    frame.replace_display_snapshots(vec![WindowDisplaySnapshot {
+    frame.commit_redisplay_cache_for_test(vec![WindowDisplaySnapshot {
         window_id: wid,
         phys_cursor: Some(cursor),
         ..WindowDisplaySnapshot::default()
@@ -2695,7 +2698,7 @@ fn output_pass_keeps_cursor_target_and_output_progress_separate() {
 }
 
 #[test]
-fn replace_display_snapshots_preserves_output_cursor_for_omitted_windows() {
+fn completed_redisplay_preserves_output_cursor_for_omitted_windows() {
     let mut mgr = FrameManager::new();
     let fid = mgr.create_frame("F1", 800, 600, BufferId(1));
     let wid = mgr.get(fid).unwrap().selected_window;
@@ -2721,7 +2724,7 @@ fn replace_display_snapshots_preserves_output_cursor_for_omitted_windows() {
     display.apply_physical_cursor_snapshot(Some(cursor));
     display.commit_completed_redisplay();
 
-    frame.replace_display_snapshots(Vec::new());
+    frame.commit_redisplay_cache_for_test(Vec::new());
 
     let display = frame
         .find_window(wid)

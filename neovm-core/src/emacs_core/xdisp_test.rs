@@ -2239,7 +2239,7 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: selected_window,
@@ -2339,7 +2339,7 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             tab_line_height: 5,
             header_line_height: 7,
@@ -2437,7 +2437,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
             other => panic!("expected leaf window, got {:?}", other),
         }
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: selected_window,
@@ -2511,7 +2511,7 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             header_line_height: 5,
             tab_line_height: 17,
@@ -2592,7 +2592,7 @@ fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinate
         let frame = eval.frames.get_mut(frame_id).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id,
@@ -2692,7 +2692,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
     }
     {
         let frame = eval.frames.get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![crate::window::DisplayPointSnapshot {
@@ -2831,7 +2831,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![
@@ -2919,7 +2919,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             text_area_left_offset: 8,
             points: vec![
@@ -3001,7 +3001,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_rows() {
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             rows: vec![
                 crate::window::DisplayRowSnapshot {
@@ -3068,7 +3068,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
     }
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: selected_window,
             points: vec![
                 crate::window::DisplayPointSnapshot {

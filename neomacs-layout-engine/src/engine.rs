@@ -198,7 +198,7 @@ pub struct LayoutEngine {
     text_buf: Vec<u8>,
     /// Hit-test data being built for current frame
     /// Authoritative visible glyph geometry published back into core state.
-    display_snapshots: Vec<WindowDisplaySnapshot>,
+    window_snapshots: Vec<WindowDisplaySnapshot>,
     /// Cosmic-text font metrics service.
     ///
     /// Populated by `enable_cosmic_metrics()` at GUI startup. Left
@@ -387,7 +387,7 @@ impl LayoutEngine {
     pub fn new() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024), // 64KB initial
-            display_snapshots: Vec::new(),
+            window_snapshots: Vec::new(),
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -415,7 +415,7 @@ impl LayoutEngine {
     pub fn new_without_font_metrics() -> Self {
         Self {
             text_buf: Vec::with_capacity(64 * 1024),
-            display_snapshots: Vec::new(),
+            window_snapshots: Vec::new(),
             font_metrics: None,
             font_sizing: FontSizing::xft(),
             prev_window_infos: std::collections::HashMap::new(),
@@ -668,7 +668,7 @@ impl LayoutEngine {
                 ));
 
             // Clear hit-test data for new frame
-            self.display_snapshots.clear();
+            self.window_snapshots.clear();
 
             let tab_bar_height = frame_params.tab_bar_height;
             if tab_bar_height > 0.0
@@ -791,7 +791,7 @@ impl LayoutEngine {
                 );
 
                 if let Some(snapshot) = self
-                    .display_snapshots
+                    .window_snapshots
                     .iter_mut()
                     .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
                 {
@@ -1131,7 +1131,7 @@ impl LayoutEngine {
 
         match crate::presentation_spatial::PresentationSpatialPlan::compile(
             &frame_display_state,
-            &self.display_snapshots,
+            &self.window_snapshots,
         )
         .and_then(|plan| plan.seal(&mut frame_display_state))
         {
@@ -1317,7 +1317,7 @@ impl LayoutEngine {
                     // on a later cursor-only pass. A retained window without one
                     // cannot be reused, so skip retention if it is missing.
                     let Some(display_snapshot) = self
-                        .display_snapshots
+                        .window_snapshots
                         .iter()
                         .find(|snapshot| snapshot.window_id.0 as i64 == entry.window_id.get())
                         .cloned()
@@ -1362,7 +1362,7 @@ impl LayoutEngine {
 
         self.prev_window_infos = curr_window_infos;
 
-        let snapshots = std::mem::take(&mut self.display_snapshots);
+        let snapshots = std::mem::take(&mut self.window_snapshots);
         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
             frame
                 .prepare_display_presentation(
@@ -1630,7 +1630,7 @@ impl LayoutEngine {
                 &mut self.font_metrics,
                 face_resolver,
                 &mut self.frame_face_id_counter,
-                &mut self.display_snapshots,
+                &mut self.window_snapshots,
             ),
             &mut self.text_buf,
             remaining_visibility_retries,
@@ -1640,7 +1640,7 @@ impl LayoutEngine {
 
         let redisplay_positions = match render_outcome {
             BufferSourceRenderAttemptOutcome::Skipped => {
-                self.display_snapshots
+                self.window_snapshots
                     .push(neovm_core::window::WindowDisplaySnapshot {
                         window_id,
                         ..neovm_core::window::WindowDisplaySnapshot::default()

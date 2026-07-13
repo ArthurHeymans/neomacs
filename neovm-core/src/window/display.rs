@@ -356,7 +356,7 @@ impl FrameManager {
             *vscroll = next_raw;
             *preserve = preserve_vscroll_p;
             if changed {
-                frame.remove_presented_window(window_id);
+                frame.remove_redisplay_snapshot(window_id);
             }
         }
 

@@ -115,7 +115,7 @@ fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observatio
         let frame = eval.frame_manager_mut().get_mut(frame_id).unwrap();
         frame.set_window_system(Some(Value::symbol("neo")));
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id,

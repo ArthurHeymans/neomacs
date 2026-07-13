@@ -1789,7 +1789,7 @@ pub struct Frame {
     presentation_state: FramePresentationState,
     /// Latest completed layout output used for incremental redisplay and GNU
     /// output bookkeeping. This cache is not renderer-active geometry.
-    redisplay_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
+    redisplay_cache: HashMap<WindowId, WindowDisplaySnapshot>,
     /// Last recorded redisplay state for GNU window change hooks.
     pub(crate) window_hook_record: FrameWindowHookRecord,
     /// GNU `frame-window-state-change` flag.
@@ -1924,7 +1924,7 @@ impl Frame {
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             presentation_state: FramePresentationState::default(),
-            redisplay_snapshots: HashMap::new(),
+            redisplay_cache: HashMap::new(),
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -2373,7 +2373,7 @@ impl Frame {
         }
 
         self.root_window.invalidate_display_state();
-        self.redisplay_snapshots.clear();
+        self.redisplay_cache.clear();
     }
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
@@ -2541,18 +2541,23 @@ impl Frame {
         (self.height as f32 / self.char_height) as u32
     }
 
-    /// Replace the last-redisplay geometry for this frame's live windows.
-    pub fn replace_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
+    /// Test fixture for installing a completed redisplay and replaying its live
+    /// output state. Production redisplay uses the presentation transaction.
+    #[cfg(test)]
+    pub(crate) fn commit_redisplay_cache_for_test(
+        &mut self,
+        snapshots: Vec<WindowDisplaySnapshot>,
+    ) {
         self.begin_display_output_pass();
         for snapshot in &snapshots {
             self.replay_window_output_snapshot(snapshot);
         }
-        self.set_display_snapshots(snapshots);
+        self.replace_redisplay_cache_for_test(snapshots);
     }
 
-    /// Atomically publish authoritative evaluator geometry for one completed
-    /// presentation.
-    pub fn publish_display_snapshots(
+    /// Test fixture for the synchronous prepare/activate lifecycle.
+    #[cfg(test)]
+    pub(crate) fn prepare_and_activate_display_presentation_for_test(
         &mut self,
         presentation: geometry::PresentationId,
         snapshots: Vec<WindowDisplaySnapshot>,
@@ -2604,7 +2609,7 @@ impl Frame {
                 presentation,
             ));
         }
-        self.redisplay_snapshots = prepared
+        self.redisplay_cache = prepared
             .snapshots
             .iter()
             .cloned()
@@ -2724,12 +2729,14 @@ impl Frame {
         }
     }
 
-    /// Replace the authoritative per-window redisplay geometry map without
+    /// Test fixture for replacing only the latest redisplay cache, without
     /// mutating live cursor/output state.
-    pub fn set_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
-        // Geometry installed without an owning presentation cannot retain the
-        // identity of a previous publication.
-        self.redisplay_snapshots = snapshots
+    #[cfg(test)]
+    pub(crate) fn replace_redisplay_cache_for_test(
+        &mut self,
+        snapshots: Vec<WindowDisplaySnapshot>,
+    ) {
+        self.redisplay_cache = snapshots
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
             .map(|snapshot| (snapshot.window_id, snapshot))
@@ -2739,11 +2746,11 @@ impl Frame {
     /// Latest completed redisplay output for WINDOW-ID, independent of which
     /// presentation is renderer-active.
     pub fn redisplay_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.redisplay_snapshots.get(&id)
+        self.redisplay_cache.get(&id)
     }
 
-    pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
-        self.redisplay_snapshots.remove(&id);
+    pub(crate) fn remove_redisplay_snapshot(&mut self, id: WindowId) {
+        self.redisplay_cache.remove(&id);
     }
 
     /// Resize the frame and window tree to new pixel dimensions.

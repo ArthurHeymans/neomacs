@@ -79,7 +79,7 @@ fn publish_selected_gui_window_regions(
     ev.frames
         .get_mut(fid)
         .expect("frame")
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             crate::window::geometry::PresentationId::new(presentation),
             vec![crate::window::WindowDisplaySnapshot {
                 window_id,
@@ -1000,7 +1000,7 @@ fn gui_window_body_geometry_excludes_fringes_and_margins() {
     ev.frames
         .get_mut(fid)
         .expect("frame")
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             crate::window::geometry::PresentationId::new(1),
             vec![crate::window::WindowDisplaySnapshot {
                 window_id,
@@ -1285,7 +1285,7 @@ fn gui_set_window_buffer_applies_buffer_local_display_defaults() {
     ev.frames
         .get_mut(fid)
         .expect("frame")
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             crate::window::geometry::PresentationId::new(1),
             vec![crate::window::WindowDisplaySnapshot {
                 window_id,
@@ -2828,7 +2828,7 @@ fn window_cursor_info_returns_last_redisplay_cursor_geometry() {
     ev.frames.set_window_cursor_type(wid, Value::symbol("bar"));
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: wid,
             phys_cursor: Some(crate::window::WindowCursorSnapshot {
                 kind: crate::window::WindowCursorKind::Bar,
@@ -2867,7 +2867,7 @@ fn window_cursor_info_hides_and_restores_live_cursor_geometry() {
     ev.frames.set_window_cursor_type(wid, Value::symbol("bar"));
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: wid,
             phys_cursor: Some(crate::window::WindowCursorSnapshot {
                 kind: crate::window::WindowCursorKind::Bar,
@@ -6686,7 +6686,7 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
             panic!("selected window should be a leaf");
         }
 
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: wid,
             rows: vec![crate::window::DisplayRowSnapshot {
                 row: 0,
@@ -6760,7 +6760,7 @@ fn window_chrome_height_queries_prefer_last_redisplay_snapshot_when_available() 
 
     {
         let frame = ev.frames.get_mut(fid).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
             window_id: wid,
             mode_line_height: 35,
             header_line_height: 35,
@@ -6796,7 +6796,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
         let frame = ev.frames.get_mut(fid).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(1),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: wid,
@@ -6892,7 +6892,7 @@ fn gnu_lisp_window_edges_use_logical_outer_and_presented_body_regions() {
         frame.char_width = 8.0;
         frame.char_height = 16.0;
         frame
-            .publish_display_snapshots(
+            .prepare_and_activate_display_presentation_for_test(
                 crate::window::geometry::PresentationId::new(presentation),
                 vec![crate::window::WindowDisplaySnapshot {
                     window_id: wid,
@@ -7144,7 +7144,7 @@ fn presented_fringe_geometry_and_scrollbar_tuple_keep_live_gnu_configuration() {
     ev.frames
         .get_mut(frame_id)
         .expect("frame")
-        .publish_display_snapshots(
+        .prepare_and_activate_display_presentation_for_test(
             crate::window::geometry::PresentationId::new(1),
             vec![crate::window::WindowDisplaySnapshot {
                 window_id,
