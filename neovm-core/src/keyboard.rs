@@ -3436,13 +3436,6 @@ impl crate::emacs_core::eval::Context {
                     .is_none()
                 {
                     self.record_input_event(emacs_event);
-                    // GNU `keyboard.c:11635-11640` stores the latest raw key
-                    // sequence event into `last_nonmenu_event` for ordinary
-                    // command dispatch, only preserving an earlier mouse event
-                    // when the command came from a mouse popup menu. neomacs does
-                    // not synthesize mouse-menu command sequences yet, so keep
-                    // the latest raw event here for keyboard/TTY dispatch.
-                    self.record_nonmenu_input_event(emacs_event);
                 }
 
                 tracing::debug!(
@@ -3560,6 +3553,18 @@ impl crate::emacs_core::eval::Context {
                 .keyboard
                 .rewrite_key_sequence_translation(translated_events.clone());
             self.publish_current_key_sequence_as_command_keys();
+
+            // GNU `keyboard.c:11668-11673`: after keyremap / function-key-map
+            // translation, `last_nonmenu_event = key` holds the TRANSLATED key
+            // (e.g. the GUI `<return>` becomes RET/13), not the raw event, unless
+            // a mouse popup menu was used to read it (neomacs does not synthesize
+            // those yet). `last-input-event` (recorded raw above) is unchanged;
+            // only `last-nonmenu-event` takes the translated event -- matching
+            // GNU, where reading an unbound `<return>` yields
+            // last-input-event=return but last-nonmenu-event=13.
+            if let Some(translated_last) = translated_events.last() {
+                self.record_nonmenu_input_event(*translated_last);
+            }
 
             if self
                 .command_loop

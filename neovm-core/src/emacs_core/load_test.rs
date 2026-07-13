@@ -4683,11 +4683,17 @@ fn bootstrap_runtime_command_loop_sets_last_nonmenu_event_for_keyboard_invocatio
     let observed = eval
         .eval_symbol("neo-last-nonmenu-observed")
         .expect("probe var should exist");
+    // GNU semantics for reading an unbound GUI `<return>` (the test queues
+    // `NamedKey::Return`, i.e. the emacs symbol `return`):
+    //   last-command-event = RET/13 (the translated key of the command sequence)
+    //   last-input-event   = return (the RAW event, untranslated)
+    //   last-nonmenu-event = RET/13 (the translated key; see keyboard.rs
+    //                         read_key_sequence + GNU keyboard.c:11673)
     assert_eq!(
         observed,
         Value::list(vec![
             Value::fixnum('\r' as i64),
-            Value::fixnum('\r' as i64),
+            Value::symbol("return"),
             Value::fixnum('\r' as i64),
         ]),
     );
