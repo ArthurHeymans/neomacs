@@ -113,6 +113,13 @@ fn resize_mini_windows_mode_parses_gnu_values() {
 }
 
 #[test]
+fn minibuffer_growth_stops_at_maximum_achievable_rows() {
+    assert_eq!(super::minibuffer_growth_target(8, 4, 10.0), Some(8));
+    assert_eq!(super::minibuffer_growth_target(11, 9, 10.0), Some(10));
+    assert_eq!(super::minibuffer_growth_target(11, 10, 10.0), None);
+}
+
+#[test]
 fn grow_only_minibuffer_shrinks_only_when_visible_region_is_empty() {
     assert!(ResizeMiniWindowsMode::GrowOnly.should_grow());
     assert!(!ResizeMiniWindowsMode::Disabled.should_grow());
@@ -16314,6 +16321,7 @@ fn fido_vertical_explicit_overlay_cursor_is_stable_across_unchanged_redisplay() 
     );
 }
 
+#[tracing_test::traced_test]
 #[test]
 fn mx_tab_completion_materializes_unique_pointer_source_identities() {
     // Reproduce the real GUI command path: M-x text followed by TAB runs
@@ -16358,6 +16366,10 @@ fn mx_tab_completion_materializes_unique_pointer_source_identities() {
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
+    assert!(
+        !logs_contain("layout failed to converge"),
+        "the warm M-x layout must converge before materialization"
+    );
     engine
         .last_frame_display_state
         .as_ref()

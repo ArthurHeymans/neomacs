@@ -164,6 +164,15 @@ fn max_mini_window_lines_for_window(
     max_mini_window_lines_from_value(raw, frame_rows)
 }
 
+fn minibuffer_growth_target(
+    used_rows: usize,
+    allocated_rows: usize,
+    max_lines: f32,
+) -> Option<usize> {
+    let achievable_rows = used_rows.min(max_lines.floor().max(1.0) as usize);
+    (achievable_rows > allocated_rows).then_some(achievable_rows)
+}
+
 fn tab_bar_button_relief_geometry(evaluator: &neovm_core::emacs_core::Context) -> (f32, f32, f32) {
     let margin = evaluator
         .obarray()
@@ -1028,22 +1037,25 @@ impl LayoutEngine {
                     mini_rows_used
                 };
 
-                if mini_rows_used > allocated_rows {
+                if let Some(required_rows) =
+                    minibuffer_growth_target(mini_rows_used, allocated_rows, max_mini_lines)
+                {
                     // --- Grow ---
-                    let delta = (mini_rows_used as i32) - (allocated_rows as i32);
+                    let delta = (required_rows as i32) - (allocated_rows as i32);
 
                     if resize_mode.should_grow() {
                         tracing::debug!(
                             "minibuffer auto-resize: grow by {} rows \
-                                         (used={}, allocated={})",
+                                         (used={}, required={}, allocated={})",
                             delta,
                             mini_rows_used,
+                            required_rows,
                             allocated_rows,
                         );
                         let request = FrameRelayoutRequest::Minibuffer {
                             window_id: DisplayWindowId::new(mini_params.window_id),
                             allocated_rows,
-                            required_rows: mini_rows_used,
+                            required_rows,
                         };
                         if !Self::accept_frame_relayout_request(
                             &mut layout_coordinator,
