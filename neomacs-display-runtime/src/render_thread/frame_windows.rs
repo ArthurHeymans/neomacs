@@ -86,6 +86,27 @@ impl NativeTextInputPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct ActivePresentationTransition {
+    pub activated: neomacs_display_protocol::PresentationId,
+    pub replaced: Option<neomacs_display_protocol::PresentationId>,
+}
+
+impl ActivePresentationTransition {
+    pub(super) fn between(
+        previous: Option<neomacs_display_protocol::PresentationId>,
+        current: neomacs_display_protocol::PresentationId,
+    ) -> Option<Self> {
+        if current.get() == 0 || previous == Some(current) {
+            return None;
+        }
+        Some(Self {
+            activated: current,
+            replaced: previous.filter(|presentation| presentation.get() != 0),
+        })
+    }
+}
+
 /// Frame-owned render, input, overlay, and transient visual state.
 pub(crate) struct GuiFrameRenderState {
     /// The Emacs frame_id that owns this window (used for routing).
@@ -859,7 +880,7 @@ impl GuiFrameRenderState {
         &mut self,
         frame: Option<crate::core::frame_glyphs::FrameGlyphBuffer>,
         row_damage: Option<neomacs_renderer_wgpu::FrameRowDamage>,
-    ) {
+    ) -> Option<ActivePresentationTransition> {
         let before = self.active_pointer_damage();
         let previous_presentation = self
             .compositor
@@ -867,6 +888,9 @@ impl GuiFrameRenderState {
             .as_ref()
             .map(|frame| frame.presentation_id);
         let next_presentation = frame.as_ref().map(|frame| frame.presentation_id);
+        let transition = next_presentation.and_then(|current| {
+            ActivePresentationTransition::between(previous_presentation, current)
+        });
         self.compositor.child_frames.set_root_frame(frame.as_ref());
         self.compositor.current_frame = frame;
         let appearance_changed = if let Some(previous) = previous_presentation
@@ -882,6 +906,7 @@ impl GuiFrameRenderState {
             self.record_pointer_paint_transition(before);
             self.compositor.dirty = true;
         }
+        transition
     }
 
     pub(super) fn with_chrome_interaction_mut(

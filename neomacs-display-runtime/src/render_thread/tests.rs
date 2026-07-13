@@ -27,6 +27,24 @@ fn make_test_app() -> RenderApp {
     )
 }
 
+fn presentation_state(frame_id: u64, parent_id: u64, presentation: u64) -> FrameDisplayState {
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.presentation_id = neomacs_display_protocol::PresentationId::new(presentation);
+    frame.set_frame_identity(
+        neomacs_display_protocol::DisplayFrameId::new(frame_id),
+        neomacs_display_protocol::DisplayFrameId::new(parent_id),
+        0.0,
+        0.0,
+        0,
+        false,
+        0.0,
+        neomacs_display_protocol::Color::BLACK,
+        false,
+        1.0,
+    );
+    FrameDisplayState::from_frame_glyph_buffer(&frame)
+}
+
 fn make_test_device() -> Option<wgpu::Device> {
     let mut instance_descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
     instance_descriptor.backends = wgpu::Backends::all();
@@ -640,7 +658,7 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
     app.frame_windows.adopt_primary_frame_id(0x1000);
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render
-            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None)
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None);
     };
 
     let (x, y, frame_id) = app.pointer_target_at(12.0, 34.0);
@@ -680,7 +698,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     }
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render
-            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None)
+            .set_current_frame(Some(FrameGlyphBuffer::with_size(800.0, 600.0)), None);
     };
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render.compositor.dirty = false
@@ -713,6 +731,92 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
             .map(|frame| frame.width),
         Some(800.0)
     );
+}
+
+#[test]
+fn installing_frame_emits_activation_before_replaced_presentation_retirement() {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    );
+    app.frame_windows.adopt_primary_frame_id(0x42);
+
+    emacs
+        .frame_tx
+        .send(presentation_state(0x42, 0, 41))
+        .expect("queue initial presentation");
+    app.poll_frame();
+    let events = emacs.input_rx.try_iter().collect::<Vec<_>>();
+    assert!(matches!(
+        events.as_slice(),
+        [crate::thread_comm::InputEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x42,
+        }]
+    ));
+
+    emacs
+        .frame_tx
+        .send(presentation_state(0x42, 0, 42))
+        .expect("queue replacement presentation");
+    app.poll_frame();
+    let events = emacs.input_rx.try_iter().collect::<Vec<_>>();
+    assert!(matches!(
+        events.as_slice(),
+        [
+            crate::thread_comm::InputEvent::PresentationActivated {
+                presentation: 42,
+                emacs_frame_id: 0x42,
+            },
+            crate::thread_comm::InputEvent::PresentationRetired { presentation: 41 },
+        ]
+    ));
+}
+
+#[test]
+fn superseded_pending_frame_is_discarded_before_activation() {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    );
+
+    emacs
+        .frame_tx
+        .send(presentation_state(0x51, 0x50, 51))
+        .expect("queue first deferred child");
+    emacs
+        .frame_tx
+        .send(presentation_state(0x51, 0x50, 52))
+        .expect("queue replacement deferred child");
+    app.poll_frame();
+
+    assert_eq!(app.pending_child_frames.len(), 1);
+    let events = emacs.input_rx.try_iter().collect::<Vec<_>>();
+    assert!(matches!(
+        events.as_slice(),
+        [crate::thread_comm::InputEvent::PresentationDiscarded {
+            presentation: 51,
+            emacs_frame_id: 0x51,
+        }]
+    ));
 }
 
 #[test]
@@ -819,7 +923,24 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         assert_eq!(window.render.compositor.child_frames.frames.len(), 2);
     }
     assert!(app.pending_child_frames.is_empty());
-    assert!(emacs.input_rx.is_empty());
+    let events = emacs.input_rx.try_iter().collect::<Vec<_>>();
+    assert!(matches!(
+        events.as_slice(),
+        [
+            crate::thread_comm::InputEvent::PresentationActivated {
+                presentation: 40,
+                emacs_frame_id: 0x42,
+            },
+            crate::thread_comm::InputEvent::PresentationActivated {
+                presentation: 41,
+                emacs_frame_id: 0x50,
+            },
+            crate::thread_comm::InputEvent::PresentationActivated {
+                presentation: 42,
+                emacs_frame_id: 0x51,
+            },
+        ]
+    ));
 
     let mut cyclic_parent = FrameGlyphBuffer::with_size(300.0, 200.0);
     cyclic_parent.presentation_id = neomacs_display_protocol::PresentationId::new(43);
@@ -854,6 +975,14 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         41,
         "invalid cycle must preserve the previously coherent scene"
     );
+    let events = emacs.input_rx.try_iter().collect::<Vec<_>>();
+    assert!(matches!(
+        events.as_slice(),
+        [crate::thread_comm::InputEvent::PresentationDiscarded {
+            presentation: 43,
+            emacs_frame_id: 0x50,
+        }]
+    ));
 
     app.handle_window(WindowCommand::RemoveChildFrame { frame_id: 0x50 });
     let mut retired = emacs
