@@ -352,8 +352,9 @@ fn adopted_primary_frame_id_targets_primary_popup_menu() {
 
     app.handle_ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x1000),
-        x: 10.0,
-        y: 20.0,
+        placement: neomacs_display_protocol::PopupPlacement::at(
+            neomacs_display_protocol::Point::new(10.0, 20.0),
+        ),
         items: vec![PopupMenuItem {
             label: "Open".to_string(),
             shortcut: String::new(),
@@ -491,8 +492,9 @@ fn popup_menu_for_unknown_secondary_does_not_fall_back_to_primary() {
 
     app.handle_ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x2000),
-        x: 10.0,
-        y: 20.0,
+        placement: neomacs_display_protocol::PopupPlacement::at(
+            neomacs_display_protocol::Point::new(10.0, 20.0),
+        ),
         items: vec![PopupMenuItem {
             label: "Open".to_string(),
             shortcut: String::new(),

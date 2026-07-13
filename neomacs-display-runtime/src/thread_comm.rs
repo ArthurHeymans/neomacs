@@ -167,13 +167,7 @@ pub enum InputEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PopupAnchorRect {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
+pub type PopupAnchorRect = neomacs_display_protocol::Rect;
 
 /// Wrapper for effect update closures that implements Debug.
 pub struct EffectUpdater(pub Box<dyn FnOnce(&mut EffectsConfig) + Send>);
@@ -501,12 +495,11 @@ pub enum TerminalCommand {
 /// UI overlay commands.
 #[derive(Debug)]
 pub enum UiCommand {
-    /// Show a popup menu at position (x, y)
+    /// Show a popup menu anchored in the owning frame's logical-pixel space.
     ShowPopupMenu {
         /// Emacs frame_id of the owning top-level frame
         frame: FrameRef,
-        x: f32,
-        y: f32,
+        placement: neomacs_display_protocol::PopupPlacement,
         items: Vec<PopupMenuItem>,
         title: Option<String>,
         /// Menu face colors (sRGB 0.0-1.0). None = use defaults.

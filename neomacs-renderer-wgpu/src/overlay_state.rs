@@ -149,6 +149,30 @@ impl PopupMenuState {
         }
     }
 
+    /// Construct a popup from a semantic anchor after measuring its root
+    /// panel.  Final origin selection belongs here because this module owns
+    /// popup layout and therefore knows the popup's actual extent.
+    pub fn new_placed(
+        placement: neomacs_display_protocol::PopupPlacement,
+        viewport: neomacs_display_protocol::Rect,
+        items: Vec<PopupMenuItem>,
+        title: Option<String>,
+        font_size: f32,
+        line_height: f32,
+        char_width: f32,
+    ) -> Self {
+        let mut state = Self::new(0.0, 0.0, items, title, font_size, line_height, char_width);
+        let (_, _, width, height) = state.root_panel.bounds;
+        let resolved =
+            placement.resolve(neomacs_display_protocol::Size::new(width, height), viewport);
+        let origin = resolved.origin();
+        state.root_panel.x = origin.x;
+        state.root_panel.y = origin.y;
+        state.root_panel.bounds.0 = origin.x;
+        state.root_panel.bounds.1 = origin.y;
+        state
+    }
+
     /// Get the active panel (deepest open submenu, or root)
     pub fn active_panel(&self) -> &MenuPanel {
         self.submenu_panels.last().unwrap_or(&self.root_panel)

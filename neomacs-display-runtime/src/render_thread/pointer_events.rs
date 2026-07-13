@@ -436,12 +436,12 @@ impl RenderApp {
             index: *index,
             key: key.clone(),
             menu_x: bounds.x(),
-            anchor: crate::thread_comm::PopupAnchorRect {
-                x: bounds.x(),
-                y: bounds.y(),
-                width: bounds.width(),
-                height: bounds.height(),
-            },
+            anchor: crate::thread_comm::PopupAnchorRect::new(
+                bounds.x(),
+                bounds.y(),
+                bounds.width(),
+                bounds.height(),
+            ),
         })
     }
 

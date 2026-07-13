@@ -37,10 +37,13 @@ impl DisplayHost for TtyPopupDisplayHost {
 
     fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
         let mut stdout = io::stdout();
-        let row = menu.y.max(0.0) as usize + 2;
-        let col = menu.x.max(0.0) as usize + 1;
+        let origin = menu
+            .placement
+            .preferred_origin(neomacs_display_protocol::Size::ZERO);
+        let row = origin.y.max(0.0) as usize + 2;
+        let col = origin.x.max(0.0) as usize + 1;
         let visible_rows = self
-            .popup_menu_visible_rows(menu.x, menu.y, menu.entries.len())
+            .popup_menu_visible_rows(origin.x, origin.y, menu.entries.len())
             .unwrap_or(menu.entries.len());
         for (idx, entry) in menu.entries.iter().take(visible_rows).enumerate() {
             let marker = if idx == menu.selected { ">" } else { " " };

@@ -1703,8 +1703,7 @@ pub struct PopupMenuEntry {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PopupMenuRequest {
     pub frame_id: crate::window::FrameId,
-    pub x: f32,
-    pub y: f32,
+    pub placement: neomacs_display_protocol::PopupPlacement,
     pub title: Option<String>,
     pub entries: Vec<PopupMenuEntry>,
     pub selected: usize,

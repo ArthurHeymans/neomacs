@@ -39,34 +39,54 @@ impl RenderApp {
         match cmd {
             UiCommand::ShowPopupMenu {
                 frame,
-                x,
-                y,
+                placement,
                 items,
                 title,
                 fg,
                 bg,
             } => {
                 let emacs_frame_id = frame.raw_id();
+                let anchor = placement.anchor();
                 tracing::info!(
-                    "ShowPopupMenu frame=0x{:x} at ({}, {}) with {} items",
+                    "ShowPopupMenu frame=0x{:x} anchor=({}, {}, {}, {}) side={:?} with {} items",
                     emacs_frame_id,
-                    x,
-                    y,
+                    anchor.x,
+                    anchor.y,
+                    anchor.width,
+                    anchor.height,
+                    placement.preferred_side(),
                     items.len()
                 );
-                let (fs, lh, cw) = self
+                let popup_context = |window_state: &super::frame_windows::GuiFrameWindowState| {
+                    let (physical_width, physical_height) = window_state.native_size();
+                    let scale = window_state.scale_factor().max(f64::EPSILON) as f32;
+                    let viewport = neomacs_display_protocol::Rect::new(
+                        0.0,
+                        0.0,
+                        physical_width as f32 / scale,
+                        physical_height as f32 / scale,
+                    );
+                    let (fs, lh, cw) = window_state.render.font_metrics();
+                    (fs, lh, cw, viewport)
+                };
+                let (fs, lh, cw, viewport) = self
                     .frame_windows
                     .get(emacs_frame_id)
-                    .map(|window_state| window_state.render.font_metrics())
+                    .map(popup_context)
                     .or_else(|| {
                         self.frame_windows
                             .primary_window()
-                            .map(|ws| &ws.render)
-                            .map(|primary_frame| primary_frame.font_metrics())
+                            .map(popup_context)
                             .filter(|_| self.frame_windows.is_primary_frame_id(emacs_frame_id))
                     })
-                    .unwrap_or((13.0, 17.0, 13.0 * 0.6));
-                let mut menu = PopupMenuState::new(x, y, items, title, fs, lh, cw);
+                    .unwrap_or((
+                        13.0,
+                        17.0,
+                        13.0 * 0.6,
+                        neomacs_display_protocol::Rect::new(0.0, 0.0, 1.0, 1.0),
+                    ));
+                let mut menu =
+                    PopupMenuState::new_placed(placement, viewport, items, title, fs, lh, cw);
                 menu.face_fg = fg;
                 menu.face_bg = bg;
                 if let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) {

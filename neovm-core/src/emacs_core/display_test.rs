@@ -3532,8 +3532,12 @@ fn x_popup_dialog_interactive_returns_selected_value() {
     let shown = shown.lock().unwrap();
     assert_eq!(shown.len(), 1);
     assert_eq!(shown[0].frame_id, frame_id);
-    assert_eq!(shown[0].x, 400.0);
-    assert_eq!(shown[0].y, 300.0);
+    assert_eq!(
+        shown[0].placement,
+        neomacs_display_protocol::PopupPlacement::at(neomacs_display_protocol::Point::new(
+            400.0, 300.0
+        ),)
+    );
     assert_eq!(shown[0].title.as_deref(), Some("Confirm?"));
     assert_eq!(shown[0].entries.len(), 2);
     assert_eq!(shown[0].entries[0].label, "Yes");
@@ -3805,8 +3809,15 @@ fn x_popup_menu_interactive_menu_bar_position_anchors_below_menu_bar() {
     assert!(result.is_nil());
     let shown = shown.lock().unwrap();
     assert_eq!(shown.len(), 1);
-    assert_eq!(shown[0].x, 96.0);
-    assert_eq!(shown[0].y, 24.0);
+    assert_eq!(
+        shown[0].placement,
+        neomacs_display_protocol::PopupPlacement::new(
+            neomacs_display_protocol::Rect::new(96.0, 0.0, 64.0, 24.0),
+            neomacs_display_protocol::PopupPreferredSide::Below,
+            neomacs_display_protocol::Point::ZERO,
+            neomacs_display_protocol::PopupConstraintPolicy::FlipAndShift { padding: 4.0 },
+        )
+    );
 }
 
 #[test]
@@ -3857,8 +3868,15 @@ fn x_popup_menu_interactive_menu_bar_position_uses_pending_native_anchor() {
     assert!(result.is_nil());
     let shown = shown.lock().unwrap();
     assert_eq!(shown.len(), 1);
-    assert_eq!(shown[0].x, 244.0);
-    assert_eq!(shown[0].y, 24.0);
+    assert_eq!(
+        shown[0].placement,
+        neomacs_display_protocol::PopupPlacement::new(
+            neomacs_display_protocol::Rect::new(244.0, 0.0, 55.0, 18.0),
+            neomacs_display_protocol::PopupPreferredSide::Below,
+            neomacs_display_protocol::Point::ZERO,
+            neomacs_display_protocol::PopupConstraintPolicy::FlipAndShift { padding: 4.0 },
+        )
+    );
 }
 
 #[test]

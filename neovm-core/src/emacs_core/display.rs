@@ -1206,8 +1206,22 @@ fn popup_menu_from_keymap(menu: Value, is_tty: bool) -> Option<(Vec<PopupMenuEnt
 
 #[derive(Clone, Copy)]
 struct PopupMenuPosition {
-    x: f32,
-    y: f32,
+    placement: neomacs_display_protocol::PopupPlacement,
+}
+
+impl PopupMenuPosition {
+    fn at(x: f32, y: f32) -> Self {
+        Self {
+            placement: neomacs_display_protocol::PopupPlacement::at(
+                neomacs_display_protocol::Point::new(x, y),
+            ),
+        }
+    }
+
+    fn estimated_origin(self) -> neomacs_display_protocol::Point {
+        self.placement
+            .preferred_origin(neomacs_display_protocol::Size::ZERO)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1253,13 +1267,13 @@ fn popup_menu_xy(value: Value) -> Option<(f32, f32)> {
 fn popup_menu_position(ctx: &mut Context, position: Value) -> PopupMenuPosition {
     let Some(items) = list_to_vec(&position) else {
         tracing::debug!("x-popup-menu position: non-list position, fallback=(0, 0)");
-        return PopupMenuPosition { x: 0.0, y: 0.0 };
+        return PopupMenuPosition::at(0.0, 0.0);
     };
     if let Some(first) = items.first()
         && let Some((x, y)) = popup_menu_xy(*first)
     {
         tracing::debug!(?x, ?y, "x-popup-menu position: using top-level xy position");
-        return PopupMenuPosition { x, y };
+        return PopupMenuPosition::at(x, y);
     }
     if let Some(second) = items.get(1)
         && let Some(posn) = list_to_vec(second)
@@ -1298,42 +1312,55 @@ fn popup_menu_position(ctx: &mut Context, position: Value) -> PopupMenuPosition 
             used_anchor: false,
             used_pending_anchor: false,
         };
-        if menu_bar {
-            if let Some((anchor_x, anchor_y)) = anchor_xy
-                && (anchor_x != 0.0 || anchor_y != 0.0)
-            {
-                x = anchor_x;
-                y = anchor_y;
-                position_debug.used_anchor = true;
-            } else if let Some(anchor) = ctx.pending_menu_bar_popup_anchor.as_ref()
+        let placement = if menu_bar {
+            let native_anchor = if let Some(anchor) = ctx.pending_menu_bar_popup_anchor.as_ref()
                 && posn_frame_id.map_or(true, |id| id == anchor.frame_id)
             {
-                x = anchor.x as f32;
-                y = anchor.y as f32;
+                let anchor = neomacs_display_protocol::Rect::new(
+                    anchor.x as f32,
+                    anchor.y as f32,
+                    anchor.width.max(0) as f32,
+                    anchor.height.max(0) as f32,
+                );
                 ctx.pending_menu_bar_popup_anchor = None;
                 position_debug.used_pending_anchor = true;
-            }
-            if let Some(height) = frame_menu_bar_height
-                && height > 0
-            {
-                y = height as f32;
-            } else if let Some((_, height)) = width_height {
-                y += height;
-            }
-        }
+                Some(anchor)
+            } else {
+                None
+            };
+            let anchor = native_anchor.unwrap_or_else(|| {
+                let (anchor_x, _anchor_y) = anchor_xy.unwrap_or((x, y));
+                let (width, reported_height) = width_height.unwrap_or((0.0, 0.0));
+                let height = frame_menu_bar_height
+                    .filter(|height| *height > 0)
+                    .map_or(reported_height, |height| height as f32);
+                position_debug.used_anchor = anchor_xy.is_some();
+                neomacs_display_protocol::Rect::new(anchor_x, 0.0, width.max(0.0), height.max(0.0))
+            });
+            x = anchor.x;
+            y = anchor.bottom();
+            neomacs_display_protocol::PopupPlacement::new(
+                anchor,
+                neomacs_display_protocol::PopupPreferredSide::Below,
+                neomacs_display_protocol::Point::ZERO,
+                neomacs_display_protocol::PopupConstraintPolicy::FlipAndShift { padding: 4.0 },
+            )
+        } else {
+            neomacs_display_protocol::PopupPlacement::at(neomacs_display_protocol::Point::new(x, y))
+        };
         tracing::debug!(
             position = ?position_debug,
             final_x = x,
             final_y = y,
             "x-popup-menu position: resolved from event position"
         );
-        return PopupMenuPosition { x, y };
+        return PopupMenuPosition { placement };
     }
     tracing::debug!(
         list_len = items.len(),
         "x-popup-menu position: unsupported position shape, fallback=(0, 0)"
     );
-    PopupMenuPosition { x: 0.0, y: 0.0 }
+    PopupMenuPosition::at(0.0, 0.0)
 }
 
 fn menu_bar_navigation_position(
@@ -1479,6 +1506,8 @@ pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> Eva
     }
 
     let (frame_id, x, y) = popup_dialog_position(ctx, args[0]);
+    let placement =
+        neomacs_display_protocol::PopupPlacement::at(neomacs_display_protocol::Point::new(x, y));
     let visible_rows = ctx
         .display_host
         .as_ref()
@@ -1521,8 +1550,7 @@ pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> Eva
         &entries,
         &values,
         visible_rows,
-        x,
-        y,
+        placement,
         frame_id,
         Some(&title),
         &mut selected,
@@ -1561,7 +1589,9 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
     }
 
     let popup_position = popup_menu_position(ctx, position);
-    let (x, y) = (popup_position.x, popup_position.y);
+    let placement = popup_position.placement;
+    let estimated_origin = popup_position.estimated_origin();
+    let (x, y) = (estimated_origin.x, estimated_origin.y);
     let visible_rows = ctx
         .display_host
         .as_ref()
@@ -1608,8 +1638,7 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
         &entries,
         &events,
         visible_rows,
-        x,
-        y,
+        placement,
         frame_id,
         None,
         &mut selected,
@@ -1629,13 +1658,12 @@ fn x_popup_menu_interactive_loop(
     entries: &[PopupMenuEntry],
     events: &[Value],
     visible_rows: usize,
-    x: f32,
-    y: f32,
+    placement: neomacs_display_protocol::PopupPlacement,
     frame_id: FrameId,
     title: Option<&str>,
     selected: &mut usize,
 ) -> EvalResult {
-    show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
+    show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
 
     loop {
         let (keys, binding) = ctx.read_key_sequence()?;
@@ -1654,11 +1682,11 @@ fn x_popup_menu_interactive_loop(
         match command {
             Some(TtyMenuNavigationCommand::TtyMenuNextItem) => {
                 *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
-                show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
+                show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuPrevItem) => {
                 *selected = (*selected).saturating_sub(1);
-                show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
+                show_popup_menu_selection(ctx, frame_id, placement, title, entries, *selected)?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuNextMenu) => {
                 if let Some(new_position) =
@@ -1694,8 +1722,7 @@ fn x_popup_menu_interactive_loop(
 fn show_popup_menu_selection(
     ctx: &mut Context,
     frame_id: FrameId,
-    x: f32,
-    y: f32,
+    placement: neomacs_display_protocol::PopupPlacement,
     title: Option<&str>,
     entries: &[PopupMenuEntry],
     selected: usize,
@@ -1705,8 +1732,7 @@ fn show_popup_menu_selection(
     };
     host.show_popup_menu(PopupMenuRequest {
         frame_id,
-        x,
-        y,
+        placement,
         title: title.map(str::to_owned),
         entries: entries.to_vec(),
         selected,

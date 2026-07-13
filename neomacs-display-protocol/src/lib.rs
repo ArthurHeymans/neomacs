@@ -15,6 +15,7 @@ pub mod frame_chrome;
 pub mod frame_glyphs;
 pub mod glyph_matrix;
 pub mod gradient;
+pub mod popup_placement;
 pub mod presented_frame;
 pub mod presented_pointer;
 pub mod scene;
@@ -32,6 +33,7 @@ pub use face::*;
 pub use frame_chrome::*;
 pub use frame_glyphs::*;
 pub use gradient::*;
+pub use popup_placement::*;
 pub use presented_frame::*;
 pub use presented_pointer::*;
 pub use scene::*;
@@ -47,3 +49,7 @@ mod frame_chrome_test;
 #[cfg(test)]
 #[path = "presented_pointer_test.rs"]
 mod presented_pointer_test;
+
+#[cfg(test)]
+#[path = "popup_placement_test.rs"]
+mod popup_placement_test;

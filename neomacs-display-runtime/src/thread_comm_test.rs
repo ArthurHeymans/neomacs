@@ -1140,8 +1140,9 @@ fn render_command_show_popup_menu() {
 
     let cmd = RenderCommand::Ui(UiCommand::ShowPopupMenu {
         frame: FrameRef::Frame(0x1000),
-        x: 100.0,
-        y: 200.0,
+        placement: neomacs_display_protocol::PopupPlacement::at(
+            neomacs_display_protocol::Point::new(100.0, 200.0),
+        ),
         items: items.clone(),
         title: Some("File".to_string()),
         fg: Some((1.0, 1.0, 1.0)),
@@ -1150,16 +1151,19 @@ fn render_command_show_popup_menu() {
     match cmd {
         RenderCommand::Ui(UiCommand::ShowPopupMenu {
             frame,
-            x,
-            y,
+            placement,
             items: menu_items,
             title,
             fg,
             bg,
         }) => {
             assert_eq!(frame.raw_id(), 0x1000);
-            assert_eq!(x, 100.0);
-            assert_eq!(y, 200.0);
+            assert_eq!(
+                placement,
+                neomacs_display_protocol::PopupPlacement::at(neomacs_display_protocol::Point::new(
+                    100.0, 200.0
+                ),)
+            );
             assert_eq!(menu_items.len(), 3);
             assert_eq!(menu_items[0].label, "Open");
             assert_eq!(menu_items[0].shortcut, "C-x C-f");

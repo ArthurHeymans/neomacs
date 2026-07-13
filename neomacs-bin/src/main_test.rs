@@ -839,8 +839,9 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
             &mut host,
             PopupMenuRequest {
                 frame_id,
-                x: 10.0,
-                y: 20.0,
+                placement: neomacs_display_protocol::PopupPlacement::at(
+                    neomacs_display_protocol::Point::new(10.0, 20.0),
+                ),
                 title: Some("File".to_string()),
                 entries: vec![entry.clone()],
                 selected: 0,

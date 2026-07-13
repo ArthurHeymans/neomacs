@@ -83,6 +83,27 @@ fn layout_panel_bounds_position() {
 }
 
 #[test]
+fn popup_state_resolves_semantic_placement_after_measuring_panel() {
+    let state = PopupMenuState::new_placed(
+        neomacs_display_protocol::PopupPlacement::new(
+            neomacs_display_protocol::Rect::new(180.0, 90.0, 16.0, 10.0),
+            neomacs_display_protocol::PopupPreferredSide::Below,
+            neomacs_display_protocol::Point::ZERO,
+            neomacs_display_protocol::PopupConstraintPolicy::FlipAndShift { padding: 4.0 },
+        ),
+        neomacs_display_protocol::Rect::new(0.0, 0.0, 200.0, 120.0),
+        vec![item("Open", true, 0)],
+        None,
+        FONT_SIZE,
+        LINE_HEIGHT,
+        CHAR_WIDTH,
+    );
+
+    assert_eq!(state.root_panel.bounds.0, 46.0);
+    assert!(state.root_panel.bounds.1 < 90.0);
+}
+
+#[test]
 fn layout_panel_hover_starts_at_minus_one() {
     let items = vec![item("Open", true, 0)];
     let indices: Vec<usize> = vec![0];
