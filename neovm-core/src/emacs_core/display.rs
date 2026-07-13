@@ -1763,6 +1763,13 @@ fn native_popup_navigation_command(keys: &[Value]) -> Option<TtyMenuNavigationCo
             "up" => Some(TtyMenuNavigationCommand::TtyMenuPrevItem),
             "right" => Some(TtyMenuNavigationCommand::TtyMenuNextMenu),
             "left" => Some(TtyMenuNavigationCommand::TtyMenuPrevMenu),
+            // Named forms of the RET/ESC characters. Since 220938220 ("preserve
+            // named GUI key events") a GUI `<return>`/`<escape>` is delivered as
+            // the symbol, not char 13/27, and `function-key-map` may not have
+            // translated it (e.g. a raw menu read), so treat the symbol the same
+            // as its control character below.
+            "return" | "kp-enter" => Some(TtyMenuNavigationCommand::TtyMenuSelect),
+            "escape" => Some(TtyMenuNavigationCommand::KeyboardEscapeQuit),
             _ => None,
         };
     }
