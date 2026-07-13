@@ -904,6 +904,16 @@ pub enum InputEvent {
         y: f32,
         emacs_frame_id: u64,
     },
+    /// Renderer installed this presentation as its drawing and hit-test source.
+    PresentationActivated {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
+    /// Renderer rejected or superseded this presentation before activation.
+    PresentationDiscarded {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
     /// Renderer no longer displays or generates hits for this presentation.
     PresentationRetired { presentation: u64 },
     /// Menu-bar item click.  `key` is the exact rendered top-level menu key;
@@ -2238,6 +2248,10 @@ impl crate::emacs_core::eval::Context {
                     presentation,
                 } => {
                     self.retire_interaction_presentation(presentation);
+                    crate::frontend_events::InternalEventEffects::default()
+                }
+                crate::frontend_events::InternalFrontendEvent::PresentationActivated { .. }
+                | crate::frontend_events::InternalFrontendEvent::PresentationDiscarded { .. } => {
                     crate::frontend_events::InternalEventEffects::default()
                 }
                 crate::frontend_events::InternalFrontendEvent::LayoutInvalidated => {
@@ -4110,7 +4124,9 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
-            InputEvent::PresentationRetired { .. } => {
+            InputEvent::PresentationActivated { .. }
+            | InputEvent::PresentationDiscarded { .. }
+            | InputEvent::PresentationRetired { .. } => {
                 unreachable!("internal frontend events are serviced before read_char")
             }
             InputEvent::MenuBarClick {

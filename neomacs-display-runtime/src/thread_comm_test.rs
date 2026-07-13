@@ -289,6 +289,41 @@ fn thread_comms_input_channel_bounded_capacity() {
     );
 }
 
+#[test]
+fn presentation_lifecycle_events_roundtrip_without_losing_frame_identity() {
+    let comms = ThreadComms::new().unwrap();
+
+    comms
+        .input_tx
+        .send(InputEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x1_0000_0000,
+        })
+        .unwrap();
+    comms
+        .input_tx
+        .send(InputEvent::PresentationDiscarded {
+            presentation: 42,
+            emacs_frame_id: 0x1_0000_0000,
+        })
+        .unwrap();
+
+    assert!(matches!(
+        comms.input_rx.try_recv().unwrap(),
+        InputEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x1_0000_0000,
+        }
+    ));
+    assert!(matches!(
+        comms.input_rx.try_recv().unwrap(),
+        InputEvent::PresentationDiscarded {
+            presentation: 42,
+            emacs_frame_id: 0x1_0000_0000,
+        }
+    ));
+}
+
 // ===================================================================
 // ThreadComms::split()
 // ===================================================================

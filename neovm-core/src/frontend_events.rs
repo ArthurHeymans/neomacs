@@ -50,6 +50,20 @@ impl FrontendEventQueue {
         }
         let event = self.events.pop_front().expect("queue front was present");
         Some(match event {
+            InputEvent::PresentationActivated {
+                presentation,
+                emacs_frame_id,
+            } => InternalFrontendEvent::PresentationActivated {
+                presentation,
+                emacs_frame_id,
+            },
+            InputEvent::PresentationDiscarded {
+                presentation,
+                emacs_frame_id,
+            } => InternalFrontendEvent::PresentationDiscarded {
+                presentation,
+                emacs_frame_id,
+            },
             InputEvent::PresentationRetired { presentation } => {
                 InternalFrontendEvent::PresentationRetired { presentation }
             }
@@ -72,7 +86,17 @@ impl FrontendEventQueue {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InternalFrontendEvent {
-    PresentationRetired { presentation: u64 },
+    PresentationActivated {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
+    PresentationDiscarded {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
+    PresentationRetired {
+        presentation: u64,
+    },
     LayoutInvalidated,
 }
 
@@ -157,7 +181,9 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         InputEvent::MenuSelection { .. } => command(),
         InputEvent::ToolBarClick { .. } => command(),
         InputEvent::PresentedPointer { .. } => command(),
-        InputEvent::PresentationRetired { .. } => FrontendEventSemantics {
+        InputEvent::PresentationActivated { .. }
+        | InputEvent::PresentationDiscarded { .. }
+        | InputEvent::PresentationRetired { .. } => FrontendEventSemantics {
             class: FrontendEventClass::Internal,
             pending: PendingPolicy::Never,
             interrupts: false,
@@ -391,6 +417,54 @@ mod tests {
         assert_eq!(policy.pending, PendingPolicy::Never);
         assert!(!policy.interrupts);
         assert!(!policy.wait_special);
+    }
+
+    #[test]
+    fn presentation_activation_and_discard_are_internal_service_actions() {
+        let mut queue = FrontendEventQueue::default();
+        queue.push_back(InputEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x1_0000_0000,
+        });
+        queue.push_back(InputEvent::PresentationDiscarded {
+            presentation: 42,
+            emacs_frame_id: 0x1_0000_0000,
+        });
+
+        for event in [
+            InputEvent::PresentationActivated {
+                presentation: 41,
+                emacs_frame_id: 0x1_0000_0000,
+            },
+            InputEvent::PresentationDiscarded {
+                presentation: 42,
+                emacs_frame_id: 0x1_0000_0000,
+            },
+        ] {
+            assert_policy(
+                event,
+                FrontendEventClass::Internal,
+                PendingPolicy::Never,
+                false,
+                false,
+            );
+        }
+
+        assert_eq!(
+            queue.take_leading_internal(),
+            Some(InternalFrontendEvent::PresentationActivated {
+                presentation: 41,
+                emacs_frame_id: 0x1_0000_0000,
+            })
+        );
+        assert_eq!(
+            queue.take_leading_internal(),
+            Some(InternalFrontendEvent::PresentationDiscarded {
+                presentation: 42,
+                emacs_frame_id: 0x1_0000_0000,
+            })
+        );
+        assert!(queue.is_empty());
     }
 
     #[test]

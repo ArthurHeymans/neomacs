@@ -179,6 +179,20 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             y: *y,
             emacs_frame_id: *emacs_frame_id,
         }),
+        DisplayEvent::PresentationActivated {
+            presentation,
+            emacs_frame_id,
+        } => Some(KbInputEvent::PresentationActivated {
+            presentation: *presentation,
+            emacs_frame_id: *emacs_frame_id,
+        }),
+        DisplayEvent::PresentationDiscarded {
+            presentation,
+            emacs_frame_id,
+        } => Some(KbInputEvent::PresentationDiscarded {
+            presentation: *presentation,
+            emacs_frame_id: *emacs_frame_id,
+        }),
         DisplayEvent::PresentationRetired { presentation } => {
             Some(KbInputEvent::PresentationRetired {
                 presentation: *presentation,

@@ -142,6 +142,16 @@ pub enum InputEvent {
         y: f32,
         emacs_frame_id: u64,
     },
+    /// Renderer installed this presentation as its drawing and hit-test source.
+    PresentationActivated {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
+    /// Renderer rejected or superseded this presentation before activation.
+    PresentationDiscarded {
+        presentation: u64,
+        emacs_frame_id: u64,
+    },
     /// Renderer no longer displays or generates hits for this presentation.
     PresentationRetired { presentation: u64 },
     /// Menu bar item clicked. `menu_x` is the Emacs menu-bar column used by
@@ -873,6 +883,8 @@ impl RenderComms {
             InputEvent::FileDrop { .. } => "file-drop",
             InputEvent::ToolBarClick { .. } => "toolbar-click",
             InputEvent::PresentedPointer { .. } => "presented-pointer",
+            InputEvent::PresentationActivated { .. } => "presentation-activated",
+            InputEvent::PresentationDiscarded { .. } => "presentation-discarded",
             InputEvent::PresentationRetired { .. } => "presentation-retired",
             InputEvent::MenuBarClick { .. } => "menubar-click",
             #[cfg(feature = "neo-term")]

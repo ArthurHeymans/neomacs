@@ -34,6 +34,30 @@ fn image_dimension_completion_becomes_layout_invalidation_instead_of_being_dropp
 }
 
 #[test]
+fn presentation_lifecycle_events_reach_the_evaluator_losslessly() {
+    assert!(matches!(
+        convert_display_event(&DisplayEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x1_0000_0000,
+        }),
+        Some(KbInputEvent::PresentationActivated {
+            presentation: 41,
+            emacs_frame_id: 0x1_0000_0000,
+        })
+    ));
+    assert!(matches!(
+        convert_display_event(&DisplayEvent::PresentationDiscarded {
+            presentation: 42,
+            emacs_frame_id: 0x1_0000_0000,
+        }),
+        Some(KbInputEvent::PresentationDiscarded {
+            presentation: 42,
+            emacs_frame_id: 0x1_0000_0000,
+        })
+    ));
+}
+
+#[test]
 fn key_release_is_dropped_by_core_transport_owner() {
     let display_event = DisplayEvent::Key {
         keysym: keyboard::XK_RETURN,
