@@ -199,6 +199,52 @@ fn spatial_projection_validation_rejects_body_outside_window_allocation() {
 }
 
 #[test]
+fn spatial_projection_validation_rejects_overlapping_body_and_mode_line() {
+    let mut state = FrameDisplayState::new(10, 4, 8.0, 16.0);
+    state.presentation_id = PresentationId::new(23);
+    let window = DisplayWindowId::new(1);
+    let outer = Rect::new(0.0, 0.0, 80.0, 64.0);
+    let body = Rect::new(0.0, 16.0, 80.0, 32.0);
+    let mode_line = Rect::new(0.0, 44.0, 80.0, 20.0);
+    install_complete_window_geometry(&mut state, window, outer);
+    let crate::PresentedWindowGeometry::Complete { regions, .. } =
+        &mut state.window_infos[0].geometry
+    else {
+        panic!("complete window geometry");
+    };
+    regions.text_body = body;
+    regions.mode_line = Some(mode_line);
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![
+            crate::PresentedHitRegion::new(
+                Some(window),
+                crate::PresentedRegionKind::TextBody,
+                crate::FrameRect::new(body.x, body.y, body.width, body.height).unwrap(),
+                0,
+            ),
+            crate::PresentedHitRegion::new(
+                Some(window),
+                crate::PresentedRegionKind::ModeLine,
+                crate::FrameRect::new(mode_line.x, mode_line.y, mode_line.width, mode_line.height)
+                    .unwrap(),
+                0,
+            ),
+        ],
+        Vec::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        state.validate_spatial_projections(),
+        Err(crate::PresentedHitError::WindowGeometryMismatch {
+            window,
+            region: crate::PresentedRegionKind::ModeLine,
+        })
+    );
+}
+
+#[test]
 fn spatial_projection_validation_rejects_matrix_body_clip_divergence() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.presentation_id = PresentationId::new(23);

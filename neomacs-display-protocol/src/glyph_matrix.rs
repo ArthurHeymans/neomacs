@@ -1054,6 +1054,91 @@ impl FrameDisplayState {
                     });
                 }
             }
+
+            // A complete window geometry is a partition, not merely a set of
+            // rectangles that happen to fit inside `outer`. Enforce the same
+            // top-to-bottom ordering used by GNU redisplay so an internally
+            // consistent producer bug cannot seal overlapping chrome/body or
+            // divider geometry.
+            let mut previous_bottom = regions.outer.y;
+            for (kind, rect) in [
+                (PresentedRegionKind::TabLine, regions.tab_line),
+                (PresentedRegionKind::HeaderLine, regions.header_line),
+                (PresentedRegionKind::TextBody, Some(regions.text_body)),
+                (
+                    PresentedRegionKind::HorizontalScrollBar,
+                    regions.horizontal_scroll_bar,
+                ),
+                (PresentedRegionKind::ModeLine, regions.mode_line),
+                (PresentedRegionKind::BottomDivider, regions.bottom_divider),
+            ] {
+                let Some(rect) = rect else {
+                    continue;
+                };
+                if rect.y < previous_bottom {
+                    return Err(PresentedHitError::WindowGeometryMismatch {
+                        window: info.window_id,
+                        region: kind,
+                    });
+                }
+                previous_bottom = rect.y + rect.height;
+            }
+
+            let overlaps = |left: crate::types::Rect, right: crate::types::Rect| {
+                left.x < right.x + right.width
+                    && right.x < left.x + left.width
+                    && left.y < right.y + right.height
+                    && right.y < left.y + left.height
+            };
+            if let Some(right_divider) = regions.right_divider {
+                for (kind, rect) in [
+                    (PresentedRegionKind::TabLine, regions.tab_line),
+                    (PresentedRegionKind::HeaderLine, regions.header_line),
+                    (PresentedRegionKind::TextBody, Some(regions.text_body)),
+                    (
+                        PresentedRegionKind::HorizontalScrollBar,
+                        regions.horizontal_scroll_bar,
+                    ),
+                    (PresentedRegionKind::ModeLine, regions.mode_line),
+                    (PresentedRegionKind::BottomDivider, regions.bottom_divider),
+                ] {
+                    if rect.is_some_and(|rect| overlaps(rect, right_divider)) {
+                        return Err(PresentedHitError::WindowGeometryMismatch {
+                            window: info.window_id,
+                            region: kind,
+                        });
+                    }
+                }
+            }
+            let mut horizontal_bands = vec![(PresentedRegionKind::TextBody, regions.text_body)];
+            horizontal_bands.extend(
+                [
+                    (PresentedRegionKind::LeftScrollBar, regions.left_scroll_bar),
+                    (PresentedRegionKind::LeftMargin, regions.left_margin),
+                    (PresentedRegionKind::LeftFringe, regions.left_fringe),
+                    (PresentedRegionKind::RightFringe, regions.right_fringe),
+                    (PresentedRegionKind::RightMargin, regions.right_margin),
+                    (
+                        PresentedRegionKind::RightScrollBar,
+                        regions.right_scroll_bar,
+                    ),
+                    (PresentedRegionKind::RightDivider, regions.right_divider),
+                ]
+                .into_iter()
+                .filter_map(|(kind, rect)| rect.map(|rect| (kind, rect))),
+            );
+            horizontal_bands.sort_by(|(_, left), (_, right)| left.x.total_cmp(&right.x));
+            for pair in horizontal_bands.windows(2) {
+                let [(_, left), (right_kind, right)] = pair else {
+                    unreachable!("windows(2) always yields two entries");
+                };
+                if overlaps(*left, *right) {
+                    return Err(PresentedHitError::WindowGeometryMismatch {
+                        window: info.window_id,
+                        region: *right_kind,
+                    });
+                }
+            }
             if let Some(matrix) = self
                 .window_matrices
                 .iter()
