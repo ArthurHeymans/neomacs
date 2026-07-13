@@ -2619,12 +2619,8 @@ pub(crate) fn builtin_window_pixel_left(
     let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
     let cw = frame.map(|frame| frame.char_width).unwrap_or(8.0);
     let left = if graphical {
-        presented_gui_known_geometry(frames, fid, wid)?
-            .expect("graphical backend must return presented geometry")
-            .outer()
-            .origin()
-            .x()
-            .get() as i64
+        // GNU `Fwindow_pixel_left` returns `w->pixel_left` directly.
+        w.bounds().x as i64
     } else {
         tty_batch_pixel_left(w, cw)
     };
@@ -2649,12 +2645,8 @@ pub(crate) fn builtin_window_pixel_top(
     let graphical = frame.is_some_and(|frame| frame.effective_window_system().is_some());
     let ch = frame.map(|frame| frame.char_height).unwrap_or(16.0);
     let top = if graphical {
-        presented_gui_known_geometry(frames, fid, wid)?
-            .expect("graphical backend must return presented geometry")
-            .outer()
-            .origin()
-            .y()
-            .get() as i64
+        // GNU `Fwindow_pixel_top` returns `w->pixel_top` directly.
+        w.bounds().y as i64
     } else {
         tty_batch_pixel_top(w, ch)
     };
@@ -3264,11 +3256,10 @@ pub(crate) fn builtin_window_pixel_height(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let height = match presented_gui_known_geometry(frames, fid, wid)? {
-        Some(geometry) => geometry.outer().height().get() as i64,
-        None => window_height_pixels(w),
-    };
-    Ok(Value::fixnum(height))
+    // GNU `Fwindow_pixel_height` returns `w->pixel_height` directly.  This is
+    // synchronous window-layout state and exists before the first redisplay;
+    // it is not a query against the last frame presented by the renderer.
+    Ok(Value::fixnum(window_height_pixels(w)))
 }
 /// `(window-pixel-width &optional WINDOW)` -> integer.
 ///
@@ -3284,11 +3275,9 @@ pub(crate) fn builtin_window_pixel_width(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let width = match presented_gui_known_geometry(frames, fid, wid)? {
-        Some(geometry) => geometry.outer().width().get() as i64,
-        None => window_width_pixels(w),
-    };
-    Ok(Value::fixnum(width))
+    // GNU `Fwindow_pixel_width` returns `w->pixel_width` directly.  Keep this
+    // public Lisp primitive on the logical-layout side of the geometry seam.
+    Ok(Value::fixnum(window_width_pixels(w)))
 }
 /// `(window-body-height &optional WINDOW PIXELWISE)` -> integer.
 ///

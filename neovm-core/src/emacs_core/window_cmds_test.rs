@@ -6866,7 +6866,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
 }
 
 #[test]
-fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
+fn gnu_lisp_window_edges_use_logical_outer_and_presented_body_regions() {
     crate::test_utils::init_test_tracing();
     for (presentation, scrollbar_left, body_left, body_right) in
         [(1, true, 173.0, 756.0), (2, false, 160.0, 743.0)]
@@ -6997,11 +6997,11 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
         assert_eq!(
             crate::emacs_core::print::print_value(&result),
             format!(
-                "(144 32 18 2 (144 32 784 512) ({} 54 {} 492) ({} 3 {} 31) 72 72 27 27 {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
-                body_left as i64,
-                body_right as i64,
-                (body_left / 8.0).floor() as i64,
-                (body_right / 8.0).ceil() as i64,
+                "(0 0 18 2 (0 0 80 24) ({} 22 {} 460) ({} 1 {} 29) 72 72 27 27 {} 438 (#<window {}> 1 (72 . 34) 0 nil 1 (9 . 2) nil (0 . 0) (7 . 17)))",
+                (body_left - outer.x) as i64,
+                (body_right - outer.x) as i64,
+                ((body_left - outer.x) / 8.0).floor() as i64,
+                ((body_right - outer.x) / 8.0).ceil() as i64,
                 (body_right - body_left) as i64,
                 wid.0,
             )
@@ -7010,7 +7010,7 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
 }
 
 #[test]
-fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_bounds() {
+fn gui_geometry_queries_distinguish_logical_layout_from_presented_output() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buffer = ev.buffers.create_buffer("*geometry-invariant*");
@@ -7024,9 +7024,31 @@ fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_b
         .expect("window")
         .set_bounds(crate::window::Rect::new(901.0, 902.0, 903.0, 904.0));
 
-    assert!(
-        super::builtin_window_pixel_left(&mut ev, vec![]).is_err(),
-        "a GUI primitive must not disguise a missing presentation as live geometry"
+    assert_eq!(
+        super::builtin_window_pixel_width(&mut ev, vec![])
+            .expect("GNU exposes the synchronous logical pixel width")
+            .as_int(),
+        Some(903),
+        "window-pixel-width reads the window's current layout before first presentation"
+    );
+    assert_eq!(
+        super::builtin_window_pixel_height(&mut ev, vec![])
+            .expect("GNU exposes the synchronous logical pixel height")
+            .as_int(),
+        Some(904),
+        "window-pixel-height reads the window's current layout before first presentation"
+    );
+    assert_eq!(
+        super::builtin_window_pixel_left(&mut ev, vec![])
+            .expect("GNU exposes the synchronous logical pixel origin")
+            .as_int(),
+        Some(901)
+    );
+    assert_eq!(
+        super::builtin_window_pixel_top(&mut ev, vec![])
+            .expect("GNU exposes the synchronous logical pixel origin")
+            .as_int(),
+        Some(902)
     );
     assert!(
         super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T]).is_err(),
