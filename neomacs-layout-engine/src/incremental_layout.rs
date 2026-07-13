@@ -13,11 +13,13 @@
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
 use crate::types::{LineWrapMode, WindowParams};
+use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
+#[cfg(test)]
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::position::LispCharPos1;
 use neovm_core::window::{DisplayPointSnapshot, DisplayRowSnapshot};
@@ -75,8 +77,7 @@ pub struct RetainedWindowKey {
     pub point: i64,
     pub buffer_begv: i64,
     pub buffer_size: i64,
-    pub text_bounds: Rect,
-    pub bounds: Rect,
+    pub(crate) partition: WindowPartitionSignature,
     pub hscroll: i32,
     pub vscroll: i32,
     pub wrap_mode: LineWrapMode,
@@ -85,11 +86,6 @@ pub struct RetainedWindowKey {
     pub char_width: f32,
     pub char_height: f32,
     pub font_pixel_size: f32,
-    /// Canonical accepted window partition metrics.  Reusing body rows laid
-    /// out under different chrome heights would preserve a stale body origin.
-    pub tab_line_height: f32,
-    pub header_line_height: f32,
-    pub mode_line_height: f32,
     // --- Additional layout-affecting inputs (adversarial-review fixes). These
     // are read fresh from buffer-locals / window state each frame but do NOT
     // bump any of the four ticks below; a change must still force a full rebuild,
@@ -110,11 +106,9 @@ pub struct RetainedWindowKey {
     /// rendering.
     pub nobreak_char_display: i32,
     pub glyphless_char_fg: u32,
-    /// `indicate-empty-lines` + fringe widths (text-area offset / empty-line
-    /// fringe glyphs baked into reused rows).
+    /// `indicate-empty-lines` controls empty-line fringe glyphs baked into
+    /// reused rows. Physical fringe allocation lives in `partition`.
     pub indicate_empty_lines: i32,
-    pub left_fringe_width: f32,
-    pub right_fringe_width: f32,
     /// `line-prefix` / `wrap-prefix` (prepended glyphs on each line / wrap).
     pub line_prefix: Vec<u8>,
     pub wrap_prefix: Vec<u8>,
@@ -147,7 +141,11 @@ impl RetainedWindowKey {
     /// reading the per-buffer invalidation ticks + global face counter from the
     /// evaluator. A missing buffer falls back to zero ticks (it will not match a
     /// real retained key, so it harmlessly forces a full rebuild).
-    pub fn from_params(p: &WindowParams, evaluator: &neovm_core::emacs_core::Context) -> Self {
+    pub(crate) fn from_params(
+        p: &WindowParams,
+        layout_box: WindowLayoutBox,
+        evaluator: &neovm_core::emacs_core::Context,
+    ) -> Self {
         // Read buffer_size FRESH (same accessor as WindowParams, neovm_bridge.rs)
         // alongside the ticks, so the key is internally consistent: if Lisp edits
         // the buffer mid-render (after window params were captured), the fresh
@@ -178,8 +176,7 @@ impl RetainedWindowKey {
             point: p.point,
             buffer_begv: p.buffer_begv,
             buffer_size,
-            text_bounds: p.text_bounds,
-            bounds: p.bounds,
+            partition: WindowPartitionSignature::from_layout_box(layout_box),
             hscroll: p.hscroll,
             vscroll: p.vscroll,
             wrap_mode: p.wrap_mode,
@@ -188,9 +185,6 @@ impl RetainedWindowKey {
             char_width: p.char_width,
             char_height: p.char_height,
             font_pixel_size: p.font_pixel_size,
-            tab_line_height: p.tab_line_height,
-            header_line_height: p.header_line_height,
-            mode_line_height: p.mode_line_height,
             tab_stop_list: p.tab_stop_list.clone(),
             extra_line_spacing: p.extra_line_spacing,
             selective_display: p.selective_display,
@@ -200,8 +194,6 @@ impl RetainedWindowKey {
             nobreak_char_display: p.nobreak_char_display,
             glyphless_char_fg: p.glyphless_char_fg,
             indicate_empty_lines: p.indicate_empty_lines,
-            left_fringe_width: p.left_fringe_width,
-            right_fringe_width: p.right_fringe_width,
             line_prefix: p.line_prefix.clone(),
             wrap_prefix: p.wrap_prefix.clone(),
             is_multibyte,
@@ -677,7 +669,7 @@ impl RetainedWindowMatrix {
             // already guarantees the inserted chars are simple/char_width (the
             // caller's ASCII check), so `(cols + delta) * char_width` is exact.
             let stays_one_row = (text_glyphs.len() as f32 + delta as f32) * curr.char_width
-                <= curr.text_bounds.width;
+                <= curr.partition.text_body().width;
             if delta > 0 && first_dirty + 1 < body.len() && monospace && stays_one_row {
                 let shift = |p: LispCharPos1| {
                     LispCharPos1::from_one_based_usize(
@@ -825,8 +817,14 @@ mod scroll_classifier_tests {
             point,
             buffer_begv: 0,
             buffer_size: 1000,
-            text_bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
-            bounds: Rect::new(0.0, 0.0, 800.0, 616.0),
+            partition: WindowPartitionSignature::from_regions(
+                neovm_core::window::PresentedWindowRegions {
+                    outer: Rect::new(0.0, 0.0, 800.0, 616.0),
+                    text_body: Rect::new(0.0, 0.0, 800.0, 600.0),
+                    mode_line: Some(Rect::new(0.0, 600.0, 800.0, 16.0)),
+                    ..Default::default()
+                },
+            ),
             hscroll: 0,
             vscroll: 0,
             wrap_mode: LineWrapMode::Truncate,
@@ -835,9 +833,6 @@ mod scroll_classifier_tests {
             char_width: 8.0,
             char_height: 16.0,
             font_pixel_size: 16.0,
-            tab_line_height: 0.0,
-            header_line_height: 0.0,
-            mode_line_height: 16.0,
             tab_stop_list: Vec::new(),
             extra_line_spacing: 0.0,
             selective_display: 0,
@@ -847,8 +842,6 @@ mod scroll_classifier_tests {
             nobreak_char_display: 0,
             glyphless_char_fg: 0,
             indicate_empty_lines: 0,
-            left_fringe_width: 0.0,
-            right_fringe_width: 0.0,
             line_prefix: Vec::new(),
             wrap_prefix: Vec::new(),
             is_multibyte: true,
@@ -991,8 +984,22 @@ mod scroll_classifier_tests {
             ("nobreak_char_display", |k| k.nobreak_char_display = 1),
             ("glyphless_char_fg", |k| k.glyphless_char_fg = 0x00ff_ffff),
             ("indicate_empty_lines", |k| k.indicate_empty_lines = 1),
-            ("left_fringe_width", |k| k.left_fringe_width = 8.0),
-            ("right_fringe_width", |k| k.right_fringe_width = 8.0),
+            ("left_fringe", |k| {
+                k.partition.regions_mut().left_fringe = Some(Rect::new(0.0, 0.0, 8.0, 600.0))
+            }),
+            ("right_fringe", |k| {
+                k.partition.regions_mut().right_fringe = Some(Rect::new(792.0, 0.0, 8.0, 600.0))
+            }),
+            ("left_margin", |k| {
+                k.partition.regions_mut().left_margin = Some(Rect::new(0.0, 0.0, 16.0, 600.0))
+            }),
+            ("horizontal_scroll_bar", |k| {
+                k.partition.regions_mut().horizontal_scroll_bar =
+                    Some(Rect::new(0.0, 592.0, 800.0, 8.0))
+            }),
+            ("text_body_origin", |k| {
+                k.partition.regions_mut().text_body.x += 8.0
+            }),
             ("line_prefix", |k| k.line_prefix = vec![b'>', b' ']),
             ("wrap_prefix", |k| k.wrap_prefix = vec![b' ', b' ']),
             ("is_multibyte", |k| k.is_multibyte = false),

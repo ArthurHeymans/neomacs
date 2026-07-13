@@ -115,7 +115,7 @@ fn geometry_request(
             header_line_height,
             mode_line_height,
         },
-        WindowDividerLayout::none(params),
+        WindowDividerLayout::without_dividers(params),
     );
     BufferWindowGeometryRequest::new(params, &layout_box, char_width, char_height)
 }

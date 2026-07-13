@@ -41,7 +41,7 @@ use crate::display_frame_output::{
     FrameLineAnimationHintsRenderRequest, FrameOutputIdentity, FrameOutputOwner,
     FrameOutputStateRenderRequest, FrameThemeTransitionHintRenderRequest,
     FrameTopologyTransitionHintRenderRequest, FrameWindowSwitchHintRenderRequest,
-    WindowFrameDecorationsRenderRequest, WindowFrameGeometryRequest,
+    WindowFrameDecorationsRenderRequest, WindowFrameGeometry, WindowFrameGeometryRequest,
     WindowFrameInfoEffectsRenderRequest, WindowFrameInfoRenderRequest, WindowFrameMetadata,
 };
 use crate::display_mock_frame::layout_mock_frame_content;
@@ -620,20 +620,6 @@ impl LayoutEngine {
                 }
             }
 
-            // Snapshot each window's layout inputs for the incremental-layout
-            // retained key (Phase 0a). Built by reference before the params are
-            // consumed by layout below; only the accepted iteration's snapshot
-            // escapes via the `break`, so a resize-retry `continue` discards it.
-            let retained_keys: Vec<(DisplayWindowId, RetainedWindowKey)> = window_params_list
-                .iter()
-                .map(|p| {
-                    (
-                        DisplayWindowId::new(p.window_id),
-                        RetainedWindowKey::from_params(p, evaluator),
-                    )
-                })
-                .collect();
-
             // --- Fontification pass ---
             // Run fontification for each window's visible region BEFORE the
             // read-only layout pass.  This triggers jit-lock / font-lock to set
@@ -734,6 +720,38 @@ impl LayoutEngine {
                 .filter(|params| !params.is_minibuffer())
                 .map(|params| params.bounds.y + params.bounds.height)
                 .fold(0.0_f32, f32::max);
+            let window_layout_inputs: Vec<(WindowFrameGeometry, WindowLayoutBox)> =
+                window_params_list
+                    .iter()
+                    .map(|params| {
+                        let geometry = WindowFrameGeometryRequest::new(
+                            params,
+                            &frame_params,
+                            main_area_bottom,
+                        )
+                        .resolve();
+                        let layout_box = WindowLayoutBox::resolve(
+                            params,
+                            WindowChromeMetrics::from_params(params),
+                            WindowDividerLayout::resolve(params, &frame_params, geometry),
+                        );
+                        (geometry, layout_box)
+                    })
+                    .collect();
+
+            // Snapshot the exact accepted partition along with the other
+            // incremental-layout inputs. A retry discards this vector, so only
+            // signatures derived from a converged WindowLayoutBox are retained.
+            let retained_keys: Vec<(DisplayWindowId, RetainedWindowKey)> = window_params_list
+                .iter()
+                .zip(&window_layout_inputs)
+                .map(|(params, (_, layout_box))| {
+                    (
+                        DisplayWindowId::new(params.window_id),
+                        RetainedWindowKey::from_params(params, *layout_box, evaluator),
+                    )
+                })
+                .collect();
 
             // --- Phase A (single-threaded gather, spec §4.5) ---
             //
@@ -748,13 +766,19 @@ impl LayoutEngine {
             let window_plans: Vec<(Option<CursorOnlyReplay>, Option<ScrollReplay>, bool)> =
                 window_params_list
                     .iter()
-                    .map(|params| {
-                        let cursor_only = self.build_cursor_only_replay(params, evaluator);
+                    .zip(&window_layout_inputs)
+                    .map(|(params, (_, layout_box))| {
+                        let cursor_only =
+                            self.build_cursor_only_replay(params, *layout_box, evaluator);
                         let mut is_edit = false;
                         let scroll = if cursor_only.is_none() {
-                            if let Some(scroll) = self.build_scroll_replay(params, evaluator) {
+                            if let Some(scroll) =
+                                self.build_scroll_replay(params, *layout_box, evaluator)
+                            {
                                 Some(scroll)
-                            } else if let Some(edit) = self.build_edit_replay(params, evaluator) {
+                            } else if let Some(edit) =
+                                self.build_edit_replay(params, *layout_box, evaluator)
+                            {
                                 is_edit = true;
                                 Some(edit)
                             } else {
@@ -768,8 +792,13 @@ impl LayoutEngine {
                     .collect();
 
             // --- Phase B (per-window layout; single-threaded today) ---
-            for (params, (cursor_only_replay, scroll_replay, is_edit)) in
-                window_params_list.iter().zip(window_plans)
+            for (
+                (params, (cursor_only_replay, scroll_replay, is_edit)),
+                (window_geometry, layout_box),
+            ) in window_params_list
+                .iter()
+                .zip(window_plans)
+                .zip(window_layout_inputs)
             {
                 tracing::debug!(
                     "layout window: id={} buf={} bounds=({:.0},{:.0},{:.0},{:.0}) mini={} selected={} mode_line_h={:.0}",
@@ -782,14 +811,6 @@ impl LayoutEngine {
                     params.is_minibuffer(),
                     params.selected,
                     params.mode_line_height,
-                );
-                let window_geometry =
-                    WindowFrameGeometryRequest::new(params, &frame_params, main_area_bottom)
-                        .resolve();
-                let layout_box = WindowLayoutBox::resolve(
-                    params,
-                    WindowChromeMetrics::from_params(params),
-                    WindowDividerLayout::resolve(params, &frame_params, window_geometry),
                 );
                 let metadata = {
                     let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
@@ -1435,6 +1456,7 @@ impl LayoutEngine {
     fn build_cursor_only_replay(
         &self,
         params: &WindowParams,
+        layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
     ) -> Option<CursorOnlyReplay> {
         // The cursor-only fast path applies to ANY window. The render cursor branch
@@ -1447,7 +1469,7 @@ impl LayoutEngine {
         // another window is edited.
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
-        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         prev.cursor_only_replay(&curr_key)
     }
 
@@ -1530,6 +1552,7 @@ impl LayoutEngine {
     fn build_scroll_replay(
         &self,
         params: &WindowParams,
+        layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
     ) -> Option<ScrollReplay> {
         if !params.selected {
@@ -1537,7 +1560,7 @@ impl LayoutEngine {
         }
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
-        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         prev.scroll_replay(&curr_key)
     }
 
@@ -1549,6 +1572,7 @@ impl LayoutEngine {
     fn build_edit_replay(
         &self,
         params: &WindowParams,
+        layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
     ) -> Option<ScrollReplay> {
         if !params.selected {
@@ -1556,7 +1580,7 @@ impl LayoutEngine {
         }
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
-        let curr_key = RetainedWindowKey::from_params(params, evaluator);
+        let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         let buffer = evaluator
             .buffer_manager()
             .get(neovm_core::buffer::BufferId(params.buffer_id))?;

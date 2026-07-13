@@ -224,6 +224,7 @@ impl BufferSourceOutputSetup {
         window_id: WindowId,
         params: &WindowParams,
         geometry: &BufferWindowGeometry,
+        layout_box: &WindowLayoutBox,
         max_rows: usize,
         walk_setup: &BufferSourceWalkSetup,
     ) -> Self {
@@ -237,12 +238,7 @@ impl BufferSourceOutputSetup {
             geometry.cols,
             params.bounds,
             params.text_bounds,
-            Rect::new(
-                geometry.text_x,
-                geometry.text_y,
-                geometry.text_width,
-                geometry.text_height,
-            ),
+            layout_box.body(),
             params.selected,
             geometry.text_y,
             geometry.text_height,

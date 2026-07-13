@@ -107,13 +107,45 @@ impl WindowDividerLayout {
     }
 
     #[cfg(test)]
-    pub(crate) fn none(params: &WindowParams) -> Self {
+    pub(crate) fn without_dividers(params: &WindowParams) -> Self {
         Self {
             right_edge: params.bounds.x + params.bounds.width,
             bottom_edge: params.bounds.y + params.bounds.height,
             right_width: 0.0,
             bottom_height: 0.0,
         }
+    }
+}
+
+/// Exact physical partition under which retained rows were produced.
+///
+/// Equality is the cache reuse gate.  Keeping the whole partition together
+/// prevents a new margin, fringe ordering, scroll bar, or chrome height from
+/// accidentally reusing rows whose origin/clip belonged to an older layout.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WindowPartitionSignature {
+    regions: PresentedWindowRegions,
+}
+
+impl WindowPartitionSignature {
+    pub(crate) fn from_layout_box(layout_box: WindowLayoutBox) -> Self {
+        Self {
+            regions: layout_box.regions(),
+        }
+    }
+
+    pub(crate) fn text_body(self) -> Rect {
+        self.regions.text_body
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_regions(regions: PresentedWindowRegions) -> Self {
+        Self { regions }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn regions_mut(&mut self) -> &mut PresentedWindowRegions {
+        &mut self.regions
     }
 }
 

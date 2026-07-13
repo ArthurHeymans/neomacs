@@ -227,6 +227,7 @@ where
             window_id,
             params,
             &geometry,
+            layout_box,
             geometry.max_rows,
             &walk_setup,
         );
