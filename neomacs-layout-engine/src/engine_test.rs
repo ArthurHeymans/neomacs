@@ -2117,6 +2117,70 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
 }
 
 #[test]
+fn presentation_spatial_maps_blank_body_rows_to_their_buffer_position() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.eval_str("(progn (erase-buffer) (insert \"a\\n\\nb\\n\") (goto-char 1))")
+        .expect("blank-line fixture");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("blank-row-hit", 672, 720, buffer_id);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let selected = frame.selected_window;
+    let snapshot = frame
+        .redisplay_snapshot(selected)
+        .expect("selected redisplay snapshot");
+    let blank_position = LispCharPos1::from_one_based_usize(3);
+    let blank_row = snapshot
+        .rows
+        .iter()
+        .find(|row| row.start_buffer_pos == Some(blank_position))
+        .expect("blank line has a semantic row anchor");
+    let (body_row, body_y) = snapshot.text_body_position(blank_row.row, blank_row.y);
+    let renderer = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("renderer presentation");
+    let regions = match renderer
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("selected renderer window")
+        .geometry
+    {
+        neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
+        other => panic!("expected complete geometry, got {other:?}"),
+    };
+
+    let hit = renderer
+        .presented_hit_index
+        .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+            renderer.presentation_id,
+            regions.text_body.x + 1.0,
+            regions.text_body.y + body_y as f32 + blank_row.height as f32 / 2.0,
+        ))
+        .expect("current presentation")
+        .expect("text-body hit");
+    let text = hit
+        .text_position()
+        .expect("every visible body row must publish a semantic source position");
+    assert_eq!(text.buffer_position(), blank_position.as_i64());
+    assert_eq!(text.row(), body_row);
+}
+
+#[test]
 fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     let mut eval = Context::new();
     let buffer_id = eval

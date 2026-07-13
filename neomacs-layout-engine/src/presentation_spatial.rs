@@ -154,6 +154,12 @@ impl PresentationSpatialPlan {
                     point.col,
                 ));
             }
+            push_row_fallback_positions(
+                &mut positions,
+                info.window_id,
+                snapshot,
+                window_regions.text_body,
+            )?;
         }
 
         for band in state.frame_chrome.bands() {
@@ -205,6 +211,121 @@ impl PresentationSpatialPlan {
         state.presented_hit_index = self.hit_index;
         state.validate_spatial_projections()
     }
+}
+
+/// Fill the source-position gaps that have no glyph rectangle of their own.
+///
+/// Newlines and empty display rows do not produce glyphs, while the area after
+/// the last glyph on a row is still clickable.  These spans make the sealed
+/// presentation's hit map total over every visible body row.  Exact glyph
+/// positions are installed first and therefore win if a font's ink/advance
+/// geometry overlaps one of these fallback spans.
+fn push_row_fallback_positions(
+    positions: &mut Vec<PresentedTextPosition>,
+    window: DisplayWindowId,
+    snapshot: &WindowDisplaySnapshot,
+    text_body: neomacs_display_protocol::Rect,
+) -> Result<(), PresentedHitError> {
+    if text_body.width <= 0.0 || text_body.height <= 0.0 {
+        return Ok(());
+    }
+    let body_left = text_body.x;
+    let body_right = text_body.x + text_body.width;
+
+    for row in &snapshot.rows {
+        let Some(row_anchor) = row.start_buffer_pos.or(row.end_buffer_pos) else {
+            continue;
+        };
+        let (body_row, body_y) = snapshot.text_body_position(row.row, row.y);
+        let top = (text_body.y + body_y as f32).max(text_body.y);
+        let bottom = (text_body.y + body_y as f32 + row.height.max(1) as f32)
+            .min(text_body.y + text_body.height);
+        if bottom <= top {
+            continue;
+        }
+
+        let mut row_points = snapshot
+            .points
+            .iter()
+            .filter(|point| point.row == row.row)
+            .collect::<Vec<_>>();
+        row_points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
+
+        let mut covered_right = body_left;
+        let mut preceding = None;
+        for point in row_points {
+            let point_left = (text_body.x + point.x as f32).clamp(body_left, body_right);
+            let point_right = (text_body.x + point.x as f32 + point.width.max(1) as f32)
+                .clamp(body_left, body_right);
+            if point_left > covered_right {
+                let (buffer_position, column) = preceding.map_or(
+                    (point.buffer_pos.as_i64(), point.col),
+                    |previous: &neovm_core::window::DisplayPointSnapshot| {
+                        (previous.buffer_pos.as_i64(), previous.col)
+                    },
+                );
+                push_text_position_span(
+                    positions,
+                    window,
+                    covered_right,
+                    top,
+                    point_left - covered_right,
+                    bottom - top,
+                    buffer_position,
+                    body_row,
+                    column,
+                )?;
+            }
+            covered_right = covered_right.max(point_right);
+            preceding = Some(point);
+        }
+
+        if covered_right < body_right {
+            let (buffer_position, column) = preceding
+                .map_or((row_anchor.as_i64(), row.start_col), |point| {
+                    (point.buffer_pos.as_i64(), point.col)
+                });
+            push_text_position_span(
+                positions,
+                window,
+                covered_right,
+                top,
+                body_right - covered_right,
+                bottom - top,
+                buffer_position,
+                body_row,
+                column,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_text_position_span(
+    positions: &mut Vec<PresentedTextPosition>,
+    window: DisplayWindowId,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    buffer_position: i64,
+    row: i64,
+    column: i64,
+) -> Result<(), PresentedHitError> {
+    if width <= 0.0 || height <= 0.0 {
+        return Ok(());
+    }
+    let bounds = FrameRect::new(x, y, width, height)
+        .map_err(|_| PresentedHitError::InvalidTextPositionGeometry)?;
+    positions.push(PresentedTextPosition::new(
+        window,
+        bounds,
+        buffer_position,
+        row,
+        column,
+    ));
+    Ok(())
 }
 
 fn push_region(
