@@ -3265,7 +3265,14 @@ pub(crate) fn builtin_profiler_cpu_start(
             vec![Value::string("Invalid sampling interval")],
         ));
     };
-    debug_assert!(ctx.profiler_cpu_start(interval as u64));
+    // NOTE: the actual start MUST run in every build. Do not wrap it in
+    // `debug_assert!`, which is stripped in release builds and would leave the
+    // CPU profiler silently disabled in the shipped (release-only) runtime.
+    let started = ctx.profiler_cpu_start(interval as u64);
+    debug_assert!(
+        started,
+        "profiler-cpu-start must engage after the running/interval guards above"
+    );
     Ok(Value::T)
 }
 
