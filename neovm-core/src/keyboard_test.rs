@@ -506,7 +506,18 @@ fn key_event_description() {
     let e = KeyEvent::char_with_mods('g', Modifiers::ctrl_meta());
     assert_eq!(e.to_description(), "C-M-g");
 
+    // GNU distinguishes the <return> FUNCTION KEY from the RET character.
+    // `(single-key-description 'return)` => "<return>" and
+    // `(single-key-description ?\r)` => "RET" in real GNU Emacs. Since
+    // 220938220 ("preserve named GUI key events"), `NamedKey::Return` models the
+    // GUI `<return>` key (emacs symbol `return`), so it describes as "<return>";
+    // the RET character is `Key::Char('\r')` and describes as "RET". (When an
+    // unbound `<return>` is read, `read_key_sequence` falls back to ASCII 13 via
+    // function-key-map -- see the read_key_sequence_* tests in eval_test.rs.)
     let e = KeyEvent::named(NamedKey::Return);
+    assert_eq!(e.to_description(), "<return>");
+
+    let e = KeyEvent::char('\r');
     assert_eq!(e.to_description(), "RET");
 }
 
