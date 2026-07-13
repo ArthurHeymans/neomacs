@@ -6,8 +6,8 @@
 //! handoff.
 
 use super::display_status_line::{
-    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeMeasuredHeights,
-    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
+    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderRequest,
+    WindowChromeRowsRenderState,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
@@ -42,6 +42,7 @@ use crate::display_text_output_install::{
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
+use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -181,6 +182,7 @@ pub(crate) struct TextWindowBegin {
     pub(crate) cols: usize,
     pub(crate) bounds: Rect,
     pub(crate) text_bounds: Rect,
+    pub(crate) text_clip_bounds: Rect,
     pub(crate) selected: bool,
     pub(crate) first_row: DisplayTextRowBegin,
 }
@@ -192,6 +194,7 @@ pub(crate) struct TextWindowOutputBegin {
     pub(crate) cols: usize,
     pub(crate) bounds: Rect,
     pub(crate) text_bounds: Rect,
+    pub(crate) text_clip_bounds: Rect,
     pub(crate) selected: bool,
 }
 
@@ -203,6 +206,7 @@ impl From<TextWindowBegin> for TextWindowOutputBegin {
             cols: request.cols,
             bounds: request.bounds,
             text_bounds: request.text_bounds,
+            text_clip_bounds: request.text_clip_bounds,
             selected: request.selected,
         }
     }
@@ -216,6 +220,7 @@ impl TextWindowOutputBegin {
             self.cols,
             self.bounds,
             self.text_bounds,
+            self.text_clip_bounds,
             self.selected,
         )
     }
@@ -507,7 +512,7 @@ pub(crate) fn render_window_chrome_rows(
     evaluator: &mut Context,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
-) -> WindowChromeMeasuredHeights {
+) -> WindowChromeMetrics {
     request.render(&mut WindowChromeRowsRenderState::new(
         output,
         output_emitter,

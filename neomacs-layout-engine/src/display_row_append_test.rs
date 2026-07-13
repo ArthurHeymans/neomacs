@@ -7663,6 +7663,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
         8,
         Rect::new(3.0, 5.0, 80.0, 64.0),
         Rect::new(10.0, 9.0, 64.0, 48.0),
+        Rect::new(10.0, 9.0, 64.0, 48.0),
         true,
         crate::window_output::DisplayTextRowBegin {
             display_row_index: 2,

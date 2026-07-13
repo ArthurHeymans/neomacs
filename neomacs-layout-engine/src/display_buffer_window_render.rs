@@ -18,6 +18,7 @@ use crate::display_status_line::{
 };
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::{FrameParams, WindowParams};
+use crate::window_layout::WindowLayoutBox;
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
@@ -29,6 +30,7 @@ where
     window_id: WindowId,
     params: &'a WindowParams,
     frame_params: &'a FrameParams,
+    layout_box: &'a WindowLayoutBox,
     buffer_id: BufferId,
     buffer: &'a B,
     buffer_name: &'a str,
@@ -44,6 +46,7 @@ where
         window_id: WindowId,
         params: &'a WindowParams,
         frame_params: &'a FrameParams,
+        layout_box: &'a WindowLayoutBox,
         buffer_id: BufferId,
         buffer: &'a B,
         buffer_name: &'a str,
@@ -54,6 +57,7 @@ where
             window_id,
             params,
             frame_params,
+            layout_box,
             buffer_id,
             buffer,
             buffer_name,
@@ -74,6 +78,7 @@ where
             window_id,
             params,
             frame_params,
+            layout_box,
             buffer_id,
             buffer,
             buffer_name,
@@ -128,16 +133,9 @@ where
         let BufferWindowGeometryPlan {
             mut geometry,
             line_number_columns,
-        } = BufferWindowGeometryRequest::new(
-            params,
-            char_w,
-            char_h,
-            chrome_plan.mode_line_height(),
-            chrome_plan.header_line_height(),
-            chrome_plan.tab_line_height(),
-        )
-        .with_max_mini_window_rows(max_mini_window_rows)
-        .into_window_plan(&local_display_policy, &buf_access);
+        } = BufferWindowGeometryRequest::new(params, layout_box, char_w, char_h)
+            .with_max_mini_window_rows(max_mini_window_rows)
+            .into_window_plan(&local_display_policy, &buf_access);
 
         // Phase 2 pure-scroll: lay ONLY the newly-exposed rows. Start the body
         // walk at the exposed region (`text_y` + first row index); the unchanged

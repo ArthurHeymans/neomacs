@@ -115,7 +115,7 @@ fn frame_params() -> FrameParams {
 
 #[test]
 fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
-    use crate::display_status_line::WindowChromeMeasuredHeights;
+    use crate::window_layout::{WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox};
     use neomacs_display_protocol::types::Rect as EvaluatorRect;
 
     let mut params = window_params();
@@ -141,13 +141,18 @@ fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
         is_bottommost: false,
         reserve_terminal_right_border_col: false,
     };
-    let measured = WindowChromeMeasuredHeights {
+    let measured = WindowChromeMetrics {
         mode_line_height: 17.0,
         header_line_height: 7.0,
         tab_line_height: 5.0,
     };
 
-    let regions = PresentedWindowRegionRequest::new(&params, &frame, geometry, measured).resolve();
+    let regions = WindowLayoutBox::resolve(
+        &params,
+        measured,
+        WindowDividerLayout::resolve(&params, &frame, geometry),
+    )
+    .regions();
 
     assert_eq!(regions.outer, EvaluatorRect::new(144.0, 24.0, 400.0, 300.0));
     assert_eq!(regions.left_margin_columns, 2);

@@ -11,7 +11,6 @@ use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_source_progress::DisplaySourceRowProgressState;
-use crate::display_status_line::WindowChromeMeasuredHeights;
 use crate::display_text_window_row_lifecycle::{
     TextWindowBodyInstallRenderContext, TextWindowBodyInstallRequest, TextWindowFinishRequest,
     TextWindowFinishState, TextWindowTailFinalizeContext, TextWindowTailFinalizeRequest,
@@ -21,6 +20,7 @@ use crate::display_text_window_row_lifecycle::{
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
+use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
 
@@ -236,7 +236,7 @@ impl<'a> BufferSourceTailRequestContext<'a> {
 
     pub(crate) fn finish_request(
         &self,
-        measured_chrome_heights: WindowChromeMeasuredHeights,
+        measured_chrome_heights: WindowChromeMetrics,
     ) -> TextWindowFinishRequest {
         // Report the chrome rows' *measured* heights (GNU `w->mode_line_height`)
         // — a tall `display` element grows these past the face-only estimate the
@@ -252,7 +252,7 @@ impl<'a> BufferSourceTailRequestContext<'a> {
     pub(crate) fn finish_and_install(
         &self,
         finish_state: TextWindowFinishState<'_>,
-        measured_chrome_heights: WindowChromeMeasuredHeights,
+        measured_chrome_heights: WindowChromeMetrics,
         window_snapshots: &mut Vec<WindowDisplaySnapshot>,
     ) {
         let finished_window = self

@@ -4,6 +4,7 @@ use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_render_plan::BufferSourceOutputSetup;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::types::WindowKind;
+use crate::window_layout::{WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox};
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::window::{FrameId, WindowId};
 
@@ -99,17 +100,37 @@ fn setup_request() -> BufferSourceWalkSetupRequest<'static> {
     )
 }
 
+fn geometry_request(
+    params: &WindowParams,
+    char_width: f32,
+    char_height: f32,
+    mode_line_height: f32,
+    header_line_height: f32,
+    tab_line_height: f32,
+) -> BufferWindowGeometryRequest {
+    let layout_box = WindowLayoutBox::resolve(
+        params,
+        WindowChromeMetrics {
+            tab_line_height,
+            header_line_height,
+            mode_line_height,
+        },
+        WindowDividerLayout::none(params),
+    );
+    BufferWindowGeometryRequest::new(params, &layout_box, char_width, char_height)
+}
+
 #[test]
 fn geometry_request_derives_text_area_and_matrix_rows() {
     let params = window_params();
-    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 12.0, 10.0, 6.0);
+    let request = geometry_request(&params, 8.0, 16.0, 12.0, 10.0, 6.0);
 
     assert_eq!(request.line_number_row_capacity(), 5);
 
     let geometry = request.into_geometry(3);
 
     assert_eq!(geometry.text_x, 16.0);
-    assert_eq!(geometry.text_y, 48.0);
+    assert_eq!(geometry.text_y, 24.0);
     assert_eq!(geometry.text_width, 160.0);
     assert_eq!(geometry.text_height, 92.0);
     assert_eq!(geometry.char_width, 8.0);
@@ -130,13 +151,11 @@ fn geometry_request_only_forces_fractional_row_for_minibuffer() {
     params.bounds.height = 15.0;
     params.text_bounds.height = 15.0;
 
-    let ordinary =
-        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
+    let ordinary = geometry_request(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(ordinary.max_rows, 0);
 
     params.kind = WindowKind::Minibuffer;
-    let minibuffer =
-        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
+    let minibuffer = geometry_request(&params, 8.0, 16.0, 0.0, 0.0, 0.0).into_geometry(0);
     assert_eq!(minibuffer.max_rows, 1);
 }
 
@@ -150,8 +169,7 @@ fn geometry_request_measures_minibuffer_up_to_max_mini_window_rows() {
     // One physical row tall (16px), but a ceiling of 3 rows.
     params.bounds.height = 16.0;
     params.text_bounds.height = 16.0;
-    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
-        .with_max_mini_window_rows(3);
+    let request = geometry_request(&params, 8.0, 16.0, 0.0, 0.0, 0.0).with_max_mini_window_rows(3);
 
     let geometry = request.into_geometry(0);
 
@@ -168,8 +186,7 @@ fn geometry_request_does_not_apply_max_mini_window_rows_to_ordinary_windows() {
     let mut params = window_params();
     params.bounds.height = 16.0;
     params.text_bounds.height = 16.0;
-    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 0.0, 0.0, 0.0)
-        .with_max_mini_window_rows(5);
+    let request = geometry_request(&params, 8.0, 16.0, 0.0, 0.0, 0.0).with_max_mini_window_rows(5);
 
     let geometry = request.into_geometry(0);
 
@@ -190,24 +207,24 @@ fn ordinary_window_vscroll_shifts_row_origin_and_keeps_full_height() {
     params.vscroll = -8;
     // mode-line only (no header/tab) => text_height is a clean multiple of the
     // row height: 120 - 8 = 112 = 7 rows.
-    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
+    let request = geometry_request(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
     let geometry = request.into_geometry(0);
 
     // Full height is retained (NOT shrunk by vscroll) for an ordinary window.
-    assert_eq!(geometry.text_y, 32.0);
+    assert_eq!(geometry.text_y, 8.0);
     assert_eq!(geometry.text_height, 112.0);
     // The applied content-up shift and the shifted walk origin.
     assert_eq!(geometry.vscroll, 8.0);
-    assert_eq!(geometry.row_origin_y(), 24.0);
+    assert_eq!(geometry.row_origin_y(), 0.0);
     // base rows (7) + one exposed bottom row = 8.
     assert_eq!(geometry.max_rows, 8);
     assert_eq!(geometry.display_text_rows, 8);
     // Walk bottom lifted to the shifted last-row edge so the extra bottom row is
     // emitted; the visible/clip band still ends at text_y + text_height = 144.
-    assert_eq!(geometry.visibility_bottom_y, 152.0);
+    assert_eq!(geometry.visibility_bottom_y, 128.0);
     assert_eq!(
         geometry.row_origin_y() + geometry.max_rows as f32 * 16.0,
-        152.0
+        128.0
     );
 }
 
@@ -219,15 +236,15 @@ fn minibuffer_vscroll_preserves_shrink_and_unshifted_origin() {
     let mut params = window_params();
     params.kind = WindowKind::Minibuffer;
     params.vscroll = -8;
-    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
+    let request = geometry_request(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
     let geometry = request.into_geometry(0);
 
     // Height IS shrunk by vscroll for a minibuffer: 112 - 8 = 104.
-    assert_eq!(geometry.text_y, 32.0);
+    assert_eq!(geometry.text_y, 8.0);
     assert_eq!(geometry.text_height, 104.0);
     // No content-up shift applied to the origin.
     assert_eq!(geometry.vscroll, 0.0);
-    assert_eq!(geometry.row_origin_y(), 32.0);
+    assert_eq!(geometry.row_origin_y(), 8.0);
     // floor(104 / 16) = 6 physical rows.
     assert_eq!(geometry.max_rows, 6);
 }
@@ -241,8 +258,7 @@ fn tty_window_vscroll_keeps_historical_shrink_not_shift() {
     let mut params = window_params();
     params.window_system = false;
     params.vscroll = -8;
-    let geometry =
-        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
+    let geometry = geometry_request(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
 
     // Shrunk like before (112 - 8 = 104); NO origin shift; physical row count.
     assert_eq!(geometry.text_height, 104.0);
@@ -258,8 +274,7 @@ fn ordinary_window_zero_vscroll_is_unchanged() {
     // extra row, visibility bottom at the physical text-area bottom.
     let params = window_params();
     assert_eq!(params.vscroll, 0);
-    let geometry =
-        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
+    let geometry = geometry_request(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
 
     assert_eq!(geometry.vscroll, 0.0);
     assert_eq!(geometry.text_height, 112.0);
@@ -314,6 +329,7 @@ fn output_setup_derives_begin_request_and_row_limits_from_walk_setup() {
         0,
         Rect::new(0.0, 8.0, 240.0, 120.0),
         Rect::new(16.0, 32.0, 160.0, 80.0),
+        Rect::new(16.0, 32.0, 160.0, 48.0),
         true,
         32.0,
         48.0,
@@ -344,6 +360,7 @@ fn loop_request_context_carries_buffer_and_window_policy() {
         20,
         params.bounds,
         params.text_bounds,
+        Rect::new(16.0, 32.0, 160.0, 48.0),
         params.selected,
         32.0,
         48.0,

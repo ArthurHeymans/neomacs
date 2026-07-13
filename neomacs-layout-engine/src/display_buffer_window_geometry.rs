@@ -9,6 +9,7 @@ use crate::neovm_bridge::{
 #[cfg(test)]
 use crate::types::LineWrapMode;
 use crate::types::{WindowKind, WindowParams};
+use crate::window_layout::WindowLayoutBox;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferWindowGeometryRequest {
@@ -99,17 +100,16 @@ pub(crate) struct BufferWindowLocalDisplayPolicy {
 impl BufferWindowGeometryRequest {
     pub(crate) fn new(
         params: &WindowParams,
+        layout_box: &WindowLayoutBox,
         char_width: f32,
         char_height: f32,
-        mode_line_height: f32,
-        header_line_height: f32,
-        tab_line_height: f32,
     ) -> Self {
-        let text_x = params.text_bounds.x;
-        let text_y = params.text_bounds.y + header_line_height + tab_line_height;
-        let text_width = params.text_bounds.width;
-        let text_height =
-            params.bounds.height - mode_line_height - header_line_height - tab_line_height;
+        let body = layout_box.body();
+        let chrome = layout_box.chrome();
+        let text_x = body.x;
+        let text_y = body.y;
+        let text_width = body.width;
+        let text_height = body.height;
 
         // In Emacs, w->vscroll is negative when content is shifted up.
         let vscroll = (-params.vscroll).max(0) as f32;
@@ -134,9 +134,9 @@ impl BufferWindowGeometryRequest {
             vscroll,
             kind: params.kind,
             window_system: params.window_system,
-            top_chrome_rows: usize::from(tab_line_height > 0.0)
-                + usize::from(header_line_height > 0.0),
-            bottom_chrome_rows: usize::from(mode_line_height > 0.0),
+            top_chrome_rows: usize::from(chrome.tab_line_height > 0.0)
+                + usize::from(chrome.header_line_height > 0.0),
+            bottom_chrome_rows: usize::from(chrome.mode_line_height > 0.0),
             char_width,
             char_height,
             max_mini_window_rows: None,

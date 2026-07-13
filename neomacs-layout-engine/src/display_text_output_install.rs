@@ -36,6 +36,7 @@ pub(crate) struct DisplayOutputTextWindowBeginInstallRequest {
     cols: usize,
     bounds: Rect,
     text_bounds: Rect,
+    text_clip_bounds: Rect,
     selected: bool,
 }
 
@@ -70,6 +71,7 @@ impl DisplayOutputTextWindowBeginInstallRequest {
         cols: usize,
         bounds: Rect,
         text_bounds: Rect,
+        text_clip_bounds: Rect,
         selected: bool,
     ) -> Self {
         Self {
@@ -78,6 +80,7 @@ impl DisplayOutputTextWindowBeginInstallRequest {
             cols,
             bounds,
             text_bounds,
+            text_clip_bounds,
             selected,
         }
     }
@@ -89,6 +92,7 @@ impl DisplayOutputTextWindowBeginInstallRequest {
             self.cols,
             self.bounds,
             self.text_bounds,
+            self.text_clip_bounds,
             self.selected,
         ));
     }

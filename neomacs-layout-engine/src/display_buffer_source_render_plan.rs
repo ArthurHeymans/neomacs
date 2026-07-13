@@ -236,6 +236,12 @@ impl BufferSourceOutputSetup {
             geometry.cols,
             params.bounds,
             params.text_bounds,
+            Rect::new(
+                geometry.text_x,
+                geometry.text_y,
+                geometry.text_width,
+                geometry.text_height,
+            ),
             params.selected,
             geometry.text_y,
             geometry.text_height,
@@ -256,6 +262,7 @@ impl BufferSourceOutputSetup {
         cols: usize,
         bounds: Rect,
         text_bounds: Rect,
+        text_clip_bounds: Rect,
         selected: bool,
         text_y: f32,
         text_height: f32,
@@ -276,6 +283,7 @@ impl BufferSourceOutputSetup {
                 output_cols,
                 bounds,
                 text_bounds,
+                text_clip_bounds,
                 selected,
                 walk_setup.row_geometry.display_text_row_begin(
                     display_text_row_base,

@@ -723,6 +723,12 @@ pub struct WindowMatrixEntry {
     /// origin when converting them to frame pixels.  Header/mode-line
     /// rows remain window-wide and continue to use `pixel_bounds`.
     pub text_pixel_bounds: Rect,
+    /// Canonical frame-relative clip for body-text primitives.  Production
+    /// presentations install this from the sealed window partition instead of
+    /// reconstructing it from glyph rows.  `None` is retained only for
+    /// standalone protocol fixtures built without a layout transaction.
+    #[serde(default)]
+    pub text_clip_bounds: Option<Rect>,
     /// True when this window is the frame's selected window at the
     /// time the display state was built. The TTY rasterizer uses
     /// this to decide which window owns the physical terminal
@@ -2140,6 +2146,9 @@ impl WindowMatrixEntry {
     /// with no chrome rows this reproduces `text_pixel_bounds` byte-for-byte —
     /// the clip only narrows vertically, and only when chrome rows are present.
     pub fn text_area_clip_rect(&self) -> Rect {
+        if let Some(clip) = self.text_clip_bounds {
+            return clip;
+        }
         let win = self.pixel_bounds;
         let text = self.text_pixel_bounds;
         let mut top = win.y;

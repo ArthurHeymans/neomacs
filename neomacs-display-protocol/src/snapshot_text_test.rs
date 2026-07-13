@@ -57,6 +57,7 @@ fn golden_state() -> FrameDisplayState {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 128.0, 32.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 128.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 

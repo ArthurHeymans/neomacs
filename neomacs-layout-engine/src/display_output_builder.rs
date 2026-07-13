@@ -132,6 +132,7 @@ impl DisplayOutputBuilder {
             ncols,
             pixel_bounds,
             text_pixel_bounds,
+            text_pixel_bounds,
             selected,
         ));
     }

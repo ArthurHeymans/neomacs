@@ -9,6 +9,7 @@ pub(crate) struct OutputWindowBeginRequest {
     pub(crate) ncols: usize,
     pub(crate) pixel_bounds: Rect,
     pub(crate) text_pixel_bounds: Rect,
+    pub(crate) text_clip_bounds: Rect,
     pub(crate) selected: bool,
 }
 
@@ -25,6 +26,7 @@ impl OutputWindowBeginRequest {
         ncols: usize,
         pixel_bounds: Rect,
         text_pixel_bounds: Rect,
+        text_clip_bounds: Rect,
         selected: bool,
     ) -> Self {
         Self {
@@ -33,6 +35,7 @@ impl OutputWindowBeginRequest {
             ncols,
             pixel_bounds,
             text_pixel_bounds,
+            text_clip_bounds,
             selected,
         }
     }
@@ -45,6 +48,7 @@ impl OutputWindowLifecycleRequest {
         ncols: usize,
         pixel_bounds: Rect,
         text_pixel_bounds: Rect,
+        text_clip_bounds: Rect,
         selected: bool,
     ) -> Self {
         Self::Begin(OutputWindowBeginRequest::new(
@@ -53,6 +57,7 @@ impl OutputWindowLifecycleRequest {
             ncols,
             pixel_bounds,
             text_pixel_bounds,
+            text_clip_bounds,
             selected,
         ))
     }

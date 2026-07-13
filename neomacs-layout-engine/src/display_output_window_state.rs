@@ -18,6 +18,7 @@ pub(crate) struct OutputWindowBuildState {
     current_window_id: u64,
     current_pixel_bounds: Rect,
     current_text_pixel_bounds: Rect,
+    current_text_clip_bounds: Rect,
     current_selected: bool,
     current_row: usize,
 }
@@ -30,6 +31,7 @@ impl OutputWindowBuildState {
             current_window_id: 0,
             current_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
             current_text_pixel_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
+            current_text_clip_bounds: Rect::new(0.0, 0.0, 0.0, 0.0),
             current_selected: false,
             current_row: 0,
         }
@@ -50,6 +52,7 @@ impl OutputWindowBuildState {
                 self.current_window_id = begin.window_id;
                 self.current_pixel_bounds = begin.pixel_bounds;
                 self.current_text_pixel_bounds = begin.text_pixel_bounds;
+                self.current_text_clip_bounds = begin.text_clip_bounds;
                 self.current_selected = begin.selected;
                 self.current_row = 0;
             }
@@ -60,6 +63,7 @@ impl OutputWindowBuildState {
                         grid,
                         self.current_pixel_bounds,
                         self.current_text_pixel_bounds,
+                        self.current_text_clip_bounds,
                         self.current_selected,
                     ));
                 }
@@ -305,6 +309,7 @@ pub(crate) struct OutputWindowGridEntry {
     grid: OutputWindowRowGrid,
     pixel_bounds: Rect,
     text_pixel_bounds: Rect,
+    text_clip_bounds: Rect,
     selected: bool,
 }
 
@@ -496,6 +501,7 @@ impl OutputWindowGridEntry {
         grid: OutputWindowRowGrid,
         pixel_bounds: Rect,
         text_pixel_bounds: Rect,
+        text_clip_bounds: Rect,
         selected: bool,
     ) -> Self {
         Self {
@@ -503,6 +509,7 @@ impl OutputWindowGridEntry {
             grid,
             pixel_bounds,
             text_pixel_bounds,
+            text_clip_bounds,
             selected,
         }
     }
@@ -525,6 +532,7 @@ impl OutputWindowGridEntry {
             matrix: self.grid.into_matrix(),
             pixel_bounds: self.pixel_bounds,
             text_pixel_bounds: self.text_pixel_bounds,
+            text_clip_bounds: Some(self.text_clip_bounds),
             selected: self.selected,
             // Per-row damage is filled in by the engine commit (which knows the
             // window's fast-path class); empty here = "not yet computed".

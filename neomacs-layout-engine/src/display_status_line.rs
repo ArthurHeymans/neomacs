@@ -42,6 +42,7 @@ use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
 use crate::types::WindowParams;
+use crate::window_layout::WindowChromeMetrics;
 #[cfg(test)]
 use neomacs_display_protocol::FrameGlyphBuffer;
 #[cfg(test)]
@@ -522,18 +523,6 @@ impl WindowChromeRowsPlan {
         }
     }
 
-    pub(crate) fn mode_line_height(&self) -> f32 {
-        self.mode_line_height
-    }
-
-    pub(crate) fn header_line_height(&self) -> f32 {
-        self.header_line_height
-    }
-
-    pub(crate) fn tab_line_height(&self) -> f32 {
-        self.tab_line_height
-    }
-
     pub(crate) fn render_request<'face, 'params>(
         &'face self,
         params: &'params WindowParams,
@@ -584,7 +573,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) fn render(
         self,
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
-    ) -> WindowChromeMeasuredHeights {
+    ) -> WindowChromeMetrics {
         let params = self.params;
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
@@ -602,7 +591,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         );
         let text_area_left_px = (params.text_bounds.x - params.bounds.x).max(0.0);
         let target_cols = self.target_cols();
-        let mut measured = WindowChromeMeasuredHeights {
+        let mut measured = WindowChromeMetrics {
             tab_line_height: self.tab_line_height,
             header_line_height: self.header_line_height,
             mode_line_height: self.mode_line_height,
@@ -743,17 +732,6 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
 
         measured
     }
-}
-
-/// The measured chrome row heights produced by a single chrome-render pass.
-/// These are the laid-out rows' real heights (GNU `glyph_row->height`), which
-/// the window snapshot reports as `window-mode-line-height` / header / tab. A
-/// tall `display` element grows them past the face-only estimate.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct WindowChromeMeasuredHeights {
-    pub(crate) tab_line_height: f32,
-    pub(crate) header_line_height: f32,
-    pub(crate) mode_line_height: f32,
 }
 
 struct ChromeDisplayRowRenderRequest<'face> {

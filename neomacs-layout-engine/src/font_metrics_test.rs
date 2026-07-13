@@ -1710,6 +1710,7 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1807,6 +1808,7 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 

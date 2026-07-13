@@ -1862,6 +1862,16 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => regions,
         _ => panic!("selected complete geometry"),
     };
+    let selected_matrix = renderer
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .expect("selected renderer matrix");
+    assert_eq!(
+        selected_matrix.text_area_clip_rect(),
+        selected_regions.text_body,
+        "the matrix clip and published body must come from one canonical window partition"
+    );
     for (kind, bounds) in [
         (
             neomacs_display_protocol::PresentedRegionKind::TextBody,

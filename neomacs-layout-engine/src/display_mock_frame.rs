@@ -414,6 +414,7 @@ pub(crate) fn layout_mock_frame_content(
                 cols: ncols,
                 bounds: window.pixel_bounds,
                 text_bounds: window.pixel_bounds,
+                text_clip_bounds: window.pixel_bounds,
                 selected: window.selected,
             },
         );
@@ -472,6 +473,7 @@ pub(crate) fn layout_mock_frame_content(
                 cols: ncols,
                 bounds: mini.pixel_bounds,
                 text_bounds: mini.pixel_bounds,
+                text_clip_bounds: mini.pixel_bounds,
                 selected: mini.selected,
             },
         );
@@ -562,6 +564,7 @@ pub(crate) fn layout_mock_frame_content(
                 cols: ncols,
                 bounds: cf.window.pixel_bounds,
                 text_bounds: cf.window.pixel_bounds,
+                text_clip_bounds: cf.window.pixel_bounds,
                 selected: false,
             },
         );

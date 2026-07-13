@@ -71,7 +71,9 @@ use crate::incremental_layout::{
     CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
-use crate::window_layout::{WindowChromeMetrics, WindowLayoutOutcome};
+use crate::window_layout::{
+    WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox, WindowLayoutOutcome,
+};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
@@ -784,6 +786,11 @@ impl LayoutEngine {
                 let window_geometry =
                     WindowFrameGeometryRequest::new(params, &frame_params, main_area_bottom)
                         .resolve();
+                let layout_box = WindowLayoutBox::resolve(
+                    params,
+                    WindowChromeMetrics::from_params(params),
+                    WindowDividerLayout::resolve(params, &frame_params, window_geometry),
+                );
                 let metadata = {
                     let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
                     let buffer = evaluator.buffer_manager().get(buf_id);
@@ -806,6 +813,7 @@ impl LayoutEngine {
                     frame_id,
                     params,
                     &frame_params,
+                    &layout_box,
                     &face_resolver,
                     window_geometry.reserve_terminal_right_border_col,
                     MAX_WINDOW_VISIBILITY_RETRIES,
@@ -813,12 +821,13 @@ impl LayoutEngine {
                     scroll_replay,
                     is_edit,
                 );
-                match window_layout {
-                    WindowLayoutOutcome::Stable(measured) => {
+                let accepted_layout_box = match window_layout {
+                    WindowLayoutOutcome::Stable(layout_box) => {
                         window_chrome_metrics
-                            .insert(DisplayWindowId::new(params.window_id), measured);
+                            .insert(DisplayWindowId::new(params.window_id), layout_box.chrome());
+                        layout_box
                     }
-                    WindowLayoutOutcome::Skipped => {}
+                    WindowLayoutOutcome::Skipped => layout_box,
                     WindowLayoutOutcome::NeedsRelayout { assumed, measured } => {
                         if window_chrome_layout_retries >= MAX_WINDOW_CHROME_LAYOUT_RETRIES {
                             tracing::error!(
@@ -836,7 +845,7 @@ impl LayoutEngine {
                             .insert(DisplayWindowId::new(params.window_id), measured);
                         continue 'frame_layout;
                     }
-                }
+                };
 
                 if let Some(snapshot) = self
                     .window_snapshots
@@ -844,18 +853,7 @@ impl LayoutEngine {
                     .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
                 {
                     let regions = if snapshot.regions_materialized {
-                        let measured = crate::display_status_line::WindowChromeMeasuredHeights {
-                            tab_line_height: snapshot.tab_line_height as f32,
-                            header_line_height: snapshot.header_line_height as f32,
-                            mode_line_height: snapshot.mode_line_height as f32,
-                        };
-                        crate::display_frame_output::PresentedWindowRegionRequest::new(
-                            params,
-                            &frame_params,
-                            window_geometry,
-                            measured,
-                        )
-                        .resolve()
+                        accepted_layout_box.regions()
                     } else {
                         neovm_core::window::PresentedWindowRegions {
                             outer: neomacs_display_protocol::types::Rect::new(
@@ -1605,6 +1603,7 @@ impl LayoutEngine {
         frame_id: neovm_core::window::FrameId,
         params: &WindowParams,
         frame_params: &FrameParams,
+        layout_box: &WindowLayoutBox,
         face_resolver: &super::neovm_bridge::FaceResolver,
         reserve_right_border_col: bool,
         remaining_visibility_retries: usize,
@@ -1685,6 +1684,7 @@ impl LayoutEngine {
             window_id,
             params,
             frame_params,
+            layout_box,
             buf_id,
             buffer,
             &buffer_name,
@@ -1726,6 +1726,7 @@ impl LayoutEngine {
                     frame_id,
                     &retry_params,
                     frame_params,
+                    layout_box,
                     face_resolver,
                     reserve_right_border_col,
                     remaining_visibility_retries.saturating_sub(1),
@@ -1770,7 +1771,7 @@ impl LayoutEngine {
             .find(|snapshot| snapshot.window_id == window_id)
             .map(WindowChromeMetrics::from_snapshot)
             .unwrap_or(assumed);
-        let outcome = WindowLayoutOutcome::from_metrics(assumed, measured);
+        let outcome = WindowLayoutOutcome::from_measurement(*layout_box, measured);
         if let WindowLayoutOutcome::NeedsRelayout { assumed, measured } = outcome {
             tracing::debug!(
                 window = params.window_id,

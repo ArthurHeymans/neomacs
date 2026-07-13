@@ -186,6 +186,7 @@ fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
     state.presented_hit_index = crate::PresentedHitIndex::from_parts(
@@ -465,6 +466,7 @@ fn frame_display_state_add_window_matrix() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 640.0, 320.0),
+        text_clip_bounds: None,
         selected: true,
     });
     assert_eq!(state.window_matrices.len(), 1);
@@ -501,6 +503,7 @@ fn state_with_text(text: &str) -> FrameDisplayState {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_clip_bounds: None,
         selected: true,
     });
     state
@@ -552,6 +555,7 @@ fn materialize_emits_tab_line_row_at_window_top() {
         damage: Vec::new(),
         pixel_bounds: win,
         text_pixel_bounds: text_area,
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -633,6 +637,7 @@ fn materialize_right_aligns_reversed_row() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_clip_bounds: None,
         selected: true,
     });
     let buf = state.materialize();
@@ -828,6 +833,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
         text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32 * char_w, char_h),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -908,6 +914,7 @@ fn materialize_pixel_positions_from_grid() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
         text_pixel_bounds: Rect::new(win_x, win_y, cols as f32 * char_w, rows as f32 * char_h),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -973,6 +980,7 @@ fn materialize_preserves_char_bidi_level() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1010,6 +1018,7 @@ fn materialize_preserves_stretch_bidi_level() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1046,6 +1055,7 @@ fn materialize_uses_explicit_row_metrics() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
         text_pixel_bounds: Rect::new(5.0, 3.0, 20.0, 18.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1088,6 +1098,7 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 20.0, 20.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1153,6 +1164,7 @@ fn materialize_disabled_rows_are_skipped() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 32.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1187,6 +1199,7 @@ fn materialize_padding_glyphs_are_skipped() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1232,6 +1245,7 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1283,6 +1297,7 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 24.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1331,6 +1346,7 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         text_pixel_bounds: Rect::new(8.0, 0.0, 64.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1390,6 +1406,7 @@ fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        text_clip_bounds: None,
         selected: true,
     };
 
@@ -1420,6 +1437,7 @@ fn text_area_clip_rect_equals_text_pixel_bounds_without_chrome() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         text_pixel_bounds,
+        text_clip_bounds: None,
         selected: true,
     };
 
@@ -1461,6 +1479,7 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1523,6 +1542,7 @@ fn materialize_stretch_glyph() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1557,6 +1577,7 @@ fn materialize_uses_explicit_stretch_geometry() {
         damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
         text_pixel_bounds: Rect::new(0.0, 10.0, 80.0, 40.0),
+        text_clip_bounds: None,
         selected: true,
     });
 
@@ -1796,6 +1817,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
         damage: Vec::new(),
         pixel_bounds: win,
         text_pixel_bounds: text_area,
+        text_clip_bounds: None,
         selected: true,
     });
 

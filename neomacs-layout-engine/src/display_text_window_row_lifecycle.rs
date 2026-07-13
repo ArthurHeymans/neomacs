@@ -180,6 +180,7 @@ pub(crate) struct TextWindowBeginRequest {
     output_cols: usize,
     bounds: neomacs_display_protocol::types::Rect,
     text_bounds: neomacs_display_protocol::types::Rect,
+    text_clip_bounds: neomacs_display_protocol::types::Rect,
     selected: bool,
     first_row: DisplayTextRowBegin,
 }
@@ -426,6 +427,7 @@ impl TextWindowBeginRequest {
         output_cols: usize,
         bounds: neomacs_display_protocol::types::Rect,
         text_bounds: neomacs_display_protocol::types::Rect,
+        text_clip_bounds: neomacs_display_protocol::types::Rect,
         selected: bool,
         first_row: DisplayTextRowBegin,
     ) -> Self {
@@ -440,6 +442,7 @@ impl TextWindowBeginRequest {
             output_cols,
             bounds,
             text_bounds,
+            text_clip_bounds,
             selected,
             first_row,
         }
@@ -468,6 +471,7 @@ impl TextWindowBeginRequest {
                 cols: self.output_cols,
                 bounds: self.bounds,
                 text_bounds: self.text_bounds,
+                text_clip_bounds: self.text_clip_bounds,
                 selected: self.selected,
                 first_row: self.first_row,
             },
