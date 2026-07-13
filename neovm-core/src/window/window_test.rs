@@ -218,7 +218,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
 
 #[test]
 fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
-    use super::geometry::{PresentationId, PresentationPublishError};
+    use super::geometry::{PresentationId, PresentationPrepareError};
 
     let mut manager = FrameManager::new();
     let frame_id = manager.create_frame("F1", 800, 600, BufferId(1));
@@ -256,7 +256,7 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
                 ..WindowDisplaySnapshot::default()
             }],
         ),
-        Err(PresentationPublishError::ReusedPresentation(
+        Err(PresentationPrepareError::ReusedPresentation(
             PresentationId::new(41)
         ))
     );
@@ -268,7 +268,93 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     assert!(frame.window_display_snapshot(window_id).is_none());
 
     frame.set_display_snapshots(Vec::new());
+    assert_eq!(frame.active_presentation(), None);
+}
+
+#[test]
+fn prepared_display_presentation_does_not_replace_active_geometry() {
+    use super::geometry::PresentationId;
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("prepared-presentation", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+
+    frame
+        .prepare_display_presentation(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                text_area_left_offset: 8,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("prepare first presentation");
     assert_eq!(frame.display_presentation(), None);
+    assert!(frame.window_display_snapshot(window_id).is_none());
+
+    assert_eq!(
+        frame
+            .activate_display_presentation(PresentationId::new(41))
+            .expect("activate first presentation"),
+        None
+    );
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
+    assert_eq!(
+        frame
+            .window_display_snapshot(window_id)
+            .expect("active snapshot")
+            .text_area_left_offset,
+        8
+    );
+
+    frame
+        .prepare_display_presentation(
+            PresentationId::new(42),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                text_area_left_offset: 24,
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("prepare replacement");
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
+    assert_eq!(
+        frame
+            .window_display_snapshot(window_id)
+            .expect("old presentation remains active")
+            .text_area_left_offset,
+        8
+    );
+
+    assert!(frame.discard_display_presentation(PresentationId::new(42)));
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
+}
+
+#[test]
+fn discarded_display_presentation_cannot_be_activated() {
+    use super::geometry::{PresentationActivateError, PresentationId, PresentationPrepareError};
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("discarded-presentation", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+
+    frame
+        .prepare_display_presentation(PresentationId::new(41), Vec::new())
+        .expect("prepare presentation");
+    assert!(frame.discard_display_presentation(PresentationId::new(41)));
+    assert_eq!(
+        frame.prepare_display_presentation(PresentationId::new(41), Vec::new()),
+        Err(PresentationPrepareError::ReusedPresentation(
+            PresentationId::new(41)
+        ))
+    );
+    assert_eq!(
+        frame.activate_display_presentation(PresentationId::new(41)),
+        Err(PresentationActivateError::UnknownPresentation(
+            PresentationId::new(41)
+        ))
+    );
 }
 
 #[test]
@@ -455,7 +541,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
 
 #[test]
 fn duplicate_windows_reject_candidate_without_replacing_publication() {
-    use super::geometry::{GeometryError, PresentationId, PresentationPublishError};
+    use super::geometry::{GeometryError, PresentationId, PresentationPrepareError};
 
     let mut manager = FrameManager::new();
     let frame_id = manager.create_frame("duplicate-publication", 800, 600, BufferId(1));
@@ -487,7 +573,7 @@ fn duplicate_windows_reject_candidate_without_replacing_publication() {
 
     assert_eq!(
         result,
-        Err(PresentationPublishError::InvalidGeometry(
+        Err(PresentationPrepareError::InvalidGeometry(
             GeometryError::DuplicateWindow(window_id)
         ))
     );

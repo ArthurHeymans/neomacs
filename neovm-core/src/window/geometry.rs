@@ -37,9 +37,14 @@ impl PresentationId {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PresentationPublishError {
+pub enum PresentationPrepareError {
     ReusedPresentation(PresentationId),
     InvalidGeometry(GeometryError),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentationActivateError {
+    UnknownPresentation(PresentationId),
 }
 
 /// One immutable, presentation-owned publication of all evaluator window geometry.
