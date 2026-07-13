@@ -4095,7 +4095,7 @@ impl crate::emacs_core::eval::Context {
                 let Some(frame) = self.frames.get(frame_id) else {
                     return Ok(None);
                 };
-                if frame.display_presentation().map(|id| id.get()) != Some(presentation) {
+                if frame.active_presentation().map(|id| id.get()) != Some(presentation) {
                     return Ok(None);
                 }
                 self.command_loop
@@ -4425,7 +4425,7 @@ impl crate::emacs_core::eval::Context {
                 observation.frame_id == frame_id.0
                     && observation.x.round() as i64 == x
                     && observation.y.round() as i64 == y
-                    && frame.display_presentation().map(|id| id.get())
+                    && frame.active_presentation().map(|id| id.get())
                         == Some(observation.presentation)
             });
         let (window_id, buffer_position) = if let Some(observation) = observation {
@@ -4439,8 +4439,7 @@ impl crate::emacs_core::eval::Context {
                 crate::window::WindowId(window.get() as u64),
                 position.buffer_position(),
             )
-        } else if frame.effective_window_system().is_some()
-            && frame.display_presentation().is_some()
+        } else if frame.effective_window_system().is_some() && frame.active_presentation().is_some()
         {
             // GUI pointer observations are delivered from the renderer's exact
             // presentation. Missing/mismatched observations must not silently
@@ -4448,7 +4447,7 @@ impl crate::emacs_core::eval::Context {
             return None;
         } else {
             let window_id = frame.window_at(x as f32, y as f32)?;
-            let snapshot = frame.window_display_snapshot(window_id)?;
+            let snapshot = frame.redisplay_snapshot(window_id)?;
             let window = frame.find_window(window_id)?;
             let bounds = window.bounds();
             let query_x = x - bounds.x.round() as i64 - snapshot.text_area_left_offset;
@@ -5216,7 +5215,7 @@ impl crate::emacs_core::eval::Context {
 
         let frame_x = x.round() as i64;
         let frame_y = y.round() as i64;
-        if frame.effective_window_system().is_some() && frame.display_presentation().is_some() {
+        if frame.effective_window_system().is_some() && frame.active_presentation().is_some() {
             return Self::mouse_posn_descriptor_value(MousePosnDescriptor {
                 window_or_frame: Value::make_frame(frame.id.0),
                 area: None,
@@ -5339,7 +5338,7 @@ impl crate::emacs_core::eval::Context {
             anchor_y: None,
         };
 
-        if let Some(snapshot) = frame.window_display_snapshot(window_id) {
+        if let Some(snapshot) = frame.redisplay_snapshot(window_id) {
             let tab_line_bottom = snapshot.tab_line_height.max(0);
             let header_line_bottom =
                 snapshot.tab_line_height.max(0) + snapshot.header_line_height.max(0);
@@ -5428,7 +5427,7 @@ impl crate::emacs_core::eval::Context {
         if observation.frame_id != frame_id
             || observation.x.to_bits() != x.to_bits()
             || observation.y.to_bits() != y.to_bits()
-            || frame.display_presentation().map(|id| id.get()) != Some(observation.presentation)
+            || frame.active_presentation().map(|id| id.get()) != Some(observation.presentation)
         {
             return None;
         }
@@ -5477,7 +5476,7 @@ impl crate::emacs_core::eval::Context {
             }));
         };
         let window_id = crate::window::WindowId(window_id.get() as u64);
-        let publication = frame.presented_geometry()?;
+        let publication = frame.active_presented_geometry()?;
         let presented = publication
             .resolve(crate::window::geometry::WindowGeometryQuery::new(
                 crate::window::geometry::PresentationId::new(observation.presentation),

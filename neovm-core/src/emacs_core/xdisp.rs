@@ -3537,7 +3537,7 @@ fn window_line_height_impl(
     validate_optional_window_designator_in_state(&*frames, args.get(1), "window-live-p")?;
     if let Some((fid, wid)) = resolve_live_window_identity(frames, args.get(1))? {
         if let Some(frame) = frames.get(fid) {
-            if let Some(snapshot) = frame.window_display_snapshot(wid) {
+            if let Some(snapshot) = frame.redisplay_snapshot(wid) {
                 let line_spec = args.first().copied().unwrap_or(Value::NIL);
                 let metrics = if line_spec.is_nil() {
                     resolve_exact_visible_metrics(frames, buffers, args.get(1), None)?.and_then(
@@ -4770,6 +4770,24 @@ fn exact_metrics_from_point(
     }
 }
 
+fn exact_metrics_from_redisplay_point(
+    snapshot: &WindowDisplaySnapshot,
+    point: &crate::window::DisplayPointSnapshot,
+) -> ExactVisibleMetrics {
+    let (body_row, body_y) = snapshot.text_body_position(point.row, point.y);
+    ExactVisibleMetrics {
+        point: point.buffer_pos,
+        x: point.x,
+        y: body_y,
+        dx: 0,
+        dy: 0,
+        width: point.width.max(1),
+        height: point.height.max(1),
+        row: body_row,
+        col: point.col,
+    }
+}
+
 fn approximate_point_at_coords(
     ctx: &ApproxWindowDisplayContext,
     x: i64,
@@ -4854,13 +4872,21 @@ fn resolve_exact_visible_metrics(
     let Some(frame) = frames.get(fid) else {
         return Ok(None);
     };
-    let Some(publication) = frame.presented_geometry() else {
-        return Ok(None);
-    };
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, window)? else {
         return Ok(None);
     };
     let Some(pos_lisp) = resolve_pos_visible_target_lisp_pos(&ctx, pos)? else {
+        return Ok(None);
+    };
+    if frame.effective_window_system().is_none() {
+        let Some(snapshot) = frame.redisplay_snapshot(wid) else {
+            return Ok(None);
+        };
+        return Ok(snapshot
+            .point_for_buffer_pos(pos_lisp)
+            .map(|point| (wid, exact_metrics_from_redisplay_point(snapshot, point))));
+    }
+    let Some(publication) = frame.active_presented_geometry() else {
         return Ok(None);
     };
     let point = match publication.resolve(crate::window::geometry::BufferPositionQuery::new(
@@ -5187,7 +5213,7 @@ fn posn_at_x_y_impl(
     };
 
     if frame.effective_window_system().is_some() {
-        let publication = frame.presented_geometry().ok_or_else(|| {
+        let publication = frame.active_presented_geometry().ok_or_else(|| {
             signal(
                 LispCondition::Error,
                 vec![Value::string("GUI frame has no presented geometry")],
@@ -5231,6 +5257,20 @@ fn posn_at_x_y_impl(
 
     let (query_x, query_y) =
         tty_batch_posn_query_coordinates(window_ref, x, y, window_relative_input);
+    if let Some(snapshot) = frame.redisplay_snapshot(wid) {
+        let snapshot_x = if window_relative_input && !whole {
+            x
+        } else {
+            query_x.saturating_sub(snapshot.text_area_left_offset)
+        };
+        if let Some(point) = snapshot.point_at_coords(snapshot_x, query_y) {
+            return Ok(make_text_area_position(
+                wid,
+                exact_metrics_from_redisplay_point(snapshot, &point),
+            ));
+        }
+        return Ok(Value::NIL);
+    }
     let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
         return Ok(Value::NIL);
     };

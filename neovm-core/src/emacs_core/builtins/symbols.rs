@@ -2285,7 +2285,7 @@ fn live_vertical_motion_snapshot<'a>(
     if live_window.buffer_id()? != current_buffer {
         return None;
     }
-    frame.window_display_snapshot(window_id)
+    frame.redisplay_snapshot(window_id)
 }
 
 fn snapshot_text_rows(snapshot: &WindowDisplaySnapshot) -> Vec<&DisplayRowSnapshot> {

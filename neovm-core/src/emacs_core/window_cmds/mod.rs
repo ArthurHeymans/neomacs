@@ -2082,7 +2082,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
                 .max(1);
             if let Some(snapshot_end) = frames
                 .get(fid)
-                .and_then(|frame| frame.window_display_snapshot(wid))
+                .and_then(|frame| frame.redisplay_snapshot(wid))
                 .and_then(|snapshot| snapshot.visible_buffer_span().map(|span| span.end()))
             {
                 return Ok(Value::fixnum(snapshot_end.as_i64()));
@@ -2535,57 +2535,41 @@ fn geometry_invariant(message: impl Into<String>) -> Flow {
     )
 }
 
-/// Return the latest renderer publication when one exists.
+/// Return regions from the latest completed redisplay, independent of which
+/// presentation the renderer currently has active.
 ///
-/// Public GNU `window-*` geometry primitives describe the editor's current
-/// synchronous window layout and are valid before the first redisplay.  A
-/// publication can refine body/chrome measurements after redisplay, but its
-/// absence is a normal lifecycle state here, not an invariant violation.
-fn presented_gui_publication_if_available(
+/// GNU `window-*` primitives query synchronous editor/current-matrix state;
+/// they do not wait for a compositor or renderer acknowledgement.
+fn redisplay_window_regions(
     frames: &FrameManager,
     fid: FrameId,
-) -> Result<Option<&crate::window::geometry::PresentedGeometry>, Flow> {
+    wid: WindowId,
+) -> Result<Option<crate::window::geometry::WindowRegions>, Flow> {
     let frame = frames
         .get(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    if frame.effective_window_system().is_none() {
+    let Some(snapshot) = frame.redisplay_snapshot(wid) else {
+        return Ok(None);
+    };
+    if !snapshot.regions_materialized {
         return Ok(None);
     }
-    Ok(frame.presented_geometry())
-}
-
-fn presented_gui_known_geometry(
-    frames: &FrameManager,
-    fid: FrameId,
-    wid: WindowId,
-) -> Result<Option<crate::window::geometry::KnownWindowGeometry>, Flow> {
-    let Some(publication) = presented_gui_publication_if_available(frames, fid)? else {
-        return Ok(None);
-    };
-    publication
-        .resolve(crate::window::geometry::KnownWindowGeometryQuery::new(
-            publication.presentation(),
-            wid,
-        ))
+    crate::window::geometry::WindowRegions::from_transport(&snapshot.regions)
         .map(Some)
         .map_err(|error| geometry_invariant(format!("{error:?}")))
 }
 
-fn presented_gui_window_geometry(
+fn redisplay_window_outer(
     frames: &FrameManager,
     fid: FrameId,
     wid: WindowId,
-) -> Result<Option<crate::window::geometry::SnapshotWindowGeometry<'_>>, Flow> {
-    let Some(publication) = presented_gui_publication_if_available(frames, fid)? else {
-        return Ok(None);
-    };
-    publication
-        .resolve(crate::window::geometry::WindowGeometryQuery::new(
-            publication.presentation(),
-            wid,
-        ))
-        .map(Some)
-        .map_err(|error| geometry_invariant(format!("{error:?}")))
+) -> Result<Option<neomacs_display_protocol::types::Rect>, Flow> {
+    let frame = frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    Ok(frame
+        .redisplay_snapshot(wid)
+        .map(|snapshot| snapshot.regions.outer))
 }
 
 fn tty_batch_pixel_left(window: &Window, char_width: f32) -> i64 {
@@ -2884,8 +2868,8 @@ pub(crate) fn builtin_window_margins(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-        let regions = geometry.regions();
+    if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+        let regions = geometry;
         let left = regions.left_margin_columns();
         let right = regions.right_margin_columns();
         return Ok(Value::cons(
@@ -2930,8 +2914,8 @@ pub(crate) fn builtin_window_fringes(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-        let regions = geometry.regions();
+    if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+        let regions = geometry;
         let left = regions
             .left_fringe()
             .map_or(0, |rect| rect.width().get() as i64);
@@ -3121,8 +3105,8 @@ pub(crate) fn builtin_window_scroll_bar_width(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-        let regions = geometry.regions();
+    if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+        let regions = geometry;
         let width = regions
             .left_scroll_bar()
             .or(regions.right_scroll_bar())
@@ -3142,9 +3126,8 @@ pub(crate) fn builtin_window_scroll_bar_height(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
+    if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
         let height = geometry
-            .regions()
             .horizontal_scroll_bar()
             .map_or(0, |rect| rect.height().get() as i64);
         return Ok(Value::fixnum(height));
@@ -3225,8 +3208,8 @@ fn window_chrome_height_in_state(
     metric: WindowChromeMetric,
     fallback: i64,
 ) -> Result<i64, Flow> {
-    if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-        let regions = geometry.regions();
+    if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+        let regions = geometry;
         return Ok(match metric {
             WindowChromeMetric::ModeLine => regions.mode_line(),
             WindowChromeMetric::HeaderLine => regions.header_line(),
@@ -3236,7 +3219,7 @@ fn window_chrome_height_in_state(
     }
     Ok(frames
         .get(fid)
-        .and_then(|frame| frame.window_display_snapshot(wid))
+        .and_then(|frame| frame.redisplay_snapshot(wid))
         .map(|snapshot| match metric {
             WindowChromeMetric::ModeLine => snapshot.mode_line_height,
             WindowChromeMetric::HeaderLine => snapshot.header_line_height,
@@ -3307,10 +3290,8 @@ fn window_body_height_impl(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-            return Ok(Value::fixnum(
-                geometry.regions().text_body().height().get() as i64
-            ));
+        if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+            return Ok(Value::fixnum(geometry.text_body().height().get() as i64));
         }
         let total = window_height_pixels(w);
         let body = if is_minibuffer_window(frames, fid, wid) {
@@ -3328,10 +3309,8 @@ fn window_body_height_impl(
             .get(fid)
             .map(|frame| frame.char_height.max(1.0))
             .unwrap_or(16.0);
-        let body_lines = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => {
-                (geometry.regions().text_body().height().get() / char_height).floor() as i64
-            }
+        let body_lines = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => (geometry.text_body().height().get() / char_height).floor() as i64,
             None => window_body_height_lines(frames, fid, wid, w),
         };
         Ok(Value::fixnum(body_lines))
@@ -3354,8 +3333,8 @@ pub(crate) fn builtin_window_body_width(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        let width = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+        let width = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => geometry.text_body().width().get() as i64,
             None => window_body_width_pixels(frames, fid, w),
         };
         Ok(Value::fixnum(width))
@@ -3364,8 +3343,8 @@ pub(crate) fn builtin_window_body_width(
             .get(fid)
             .map(|f| f.char_width.max(1.0))
             .unwrap_or(8.0);
-        let width = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+        let width = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => geometry.text_body().width().get() as i64,
             None => window_body_width_pixels(frames, fid, w),
         };
         Ok(Value::fixnum((width as f32 / cw).floor() as i64))
@@ -3385,8 +3364,8 @@ pub(crate) fn builtin_window_text_height(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        let body = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => geometry.regions().text_body().height().get() as i64,
+        let body = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => geometry.text_body().height().get() as i64,
             None => {
                 let total = window_height_pixels(w);
                 if is_minibuffer_window(frames, fid, wid) {
@@ -3406,10 +3385,8 @@ pub(crate) fn builtin_window_text_height(
             .get(fid)
             .map(|frame| frame.char_height.max(1.0))
             .unwrap_or(16.0);
-        let height = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => {
-                (geometry.regions().text_body().height().get() / char_height).floor() as i64
-            }
+        let height = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => (geometry.text_body().height().get() / char_height).floor() as i64,
             None => window_body_height_lines(frames, fid, wid, w),
         };
         Ok(Value::fixnum(height))
@@ -3429,8 +3406,8 @@ pub(crate) fn builtin_window_text_width(
     let w = get_leaf(frames, fid, wid)?;
     let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
     if pixelwise {
-        let width = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+        let width = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => geometry.text_body().width().get() as i64,
             None => window_body_width_pixels(frames, fid, w),
         };
         Ok(Value::fixnum(width))
@@ -3439,8 +3416,8 @@ pub(crate) fn builtin_window_text_width(
             .get(fid)
             .map(|f| f.char_width.max(1.0))
             .unwrap_or(8.0);
-        let width = match presented_gui_window_geometry(frames, fid, wid)? {
-            Some(geometry) => geometry.regions().text_body().width().get() as i64,
+        let width = match redisplay_window_regions(frames, fid, wid)? {
+            Some(geometry) => geometry.text_body().width().get() as i64,
             None => window_body_width_pixels(frames, fid, w),
         };
         Ok(Value::fixnum((width as f32 / cw).floor() as i64))
@@ -3472,11 +3449,11 @@ pub(crate) fn builtin_window_edges(
 
     if pixelwise {
         let (left, top, right, bottom) =
-            if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
+            if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
                 let rect = if body {
-                    geometry.regions().text_body()
+                    geometry.text_body()
                 } else {
-                    geometry.outer_in_frame()
+                    geometry.outer()
                 };
                 let origin = rect.origin();
                 (
@@ -3499,8 +3476,8 @@ pub(crate) fn builtin_window_edges(
     }
 
     let (left, top, right, bottom) = if body {
-        if let Some(geometry) = presented_gui_window_geometry(frames, fid, wid)? {
-            let rect = geometry.regions().text_body();
+        if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
+            let rect = geometry.text_body();
             let origin = rect.origin();
             let char_width = frame.char_width.max(1.0);
             let char_height = frame.char_height.max(1.0);
@@ -3534,17 +3511,13 @@ pub(crate) fn builtin_window_pixel_edges(
     let Some(w) = w else {
         return Ok(Value::NIL);
     };
-    let (left, top, right, bottom) = match presented_gui_known_geometry(&eval.frames, fid, wid)? {
-        Some(geometry) => {
-            let rect = geometry.outer();
-            let origin = rect.origin();
-            (
-                origin.x().get() as i64,
-                origin.y().get() as i64,
-                (origin.x().get() + rect.width().get()) as i64,
-                (origin.y().get() + rect.height().get()) as i64,
-            )
-        }
+    let (left, top, right, bottom) = match redisplay_window_outer(&eval.frames, fid, wid)? {
+        Some(rect) => (
+            rect.x as i64,
+            rect.y as i64,
+            (rect.x + rect.width) as i64,
+            (rect.y + rect.height) as i64,
+        ),
         None => window_edges_pixels(w),
     };
     Ok(Value::list(vec![

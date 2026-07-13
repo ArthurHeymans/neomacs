@@ -2564,36 +2564,6 @@ fn tty_posn_at_x_y_uses_the_named_live_grid_approximation() {
         let buf = eval.buffers.get_mut(buf_id).expect("buffer");
         buf.insert("abcdef\n");
     }
-    {
-        let frame = eval.frames.get_mut(frame_id).expect("frame");
-        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
-            window_id: selected_window,
-            header_line_height: 5,
-            tab_line_height: 17,
-            points: vec![crate::window::DisplayPointSnapshot {
-                buffer_pos: crate::buffer::LispCharPos1::new(5),
-                x: 24,
-                y: 40,
-                width: 21,
-                height: 30,
-                row: 3,
-                col: 3,
-            }],
-            rows: vec![crate::window::DisplayRowSnapshot {
-                row: 3,
-                y: 40,
-                height: 30,
-                start_x: 0,
-                start_col: 0,
-                end_x: 45,
-                end_col: 4,
-                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
-                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
-            }],
-            ..crate::window::WindowDisplaySnapshot::default()
-        }]);
-    }
-
     let result = builtin_posn_at_x_y(
         &mut eval,
         vec![
@@ -2688,10 +2658,12 @@ fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinate
         );
     }
 
-    eval.frames
-        .get_mut(frame_id)
-        .expect("frame")
-        .set_display_snapshots(Vec::new());
+    assert!(
+        eval.frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .retire_display_presentation(crate::window::geometry::PresentationId::new(1))
+    );
     assert!(
         builtin_posn_at_x_y(
             &mut eval,

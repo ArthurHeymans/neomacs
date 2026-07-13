@@ -68,6 +68,7 @@ pub struct PresentedWindow {
     outer: PixelRect<FrameLogicalSpace>,
     regions: Option<WindowRegions>,
     positions: Vec<PresentedPosition>,
+    cursor: Option<PresentedCursor>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -99,6 +100,14 @@ struct PresentedPosition {
     height: i64,
     body_row: i64,
     col: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PresentedCursor {
+    x: i64,
+    body_y: i64,
+    width: i64,
+    height: i64,
 }
 
 impl PresentedGeometry {
@@ -223,18 +232,37 @@ impl PresentedWindow {
                 })
             })
             .collect::<Result<Vec<_>, GeometryError>>()?;
+        let cursor = snapshot.logical_cursor_pos().and_then(|cursor| {
+            let point = positions
+                .iter()
+                .find(|point| point.body_row == cursor.row && point.col == cursor.col);
+            let physical = snapshot.phys_cursor.as_ref();
+            let width = physical
+                .map(|cursor| cursor.width)
+                .or_else(|| point.map(|p| p.width))?;
+            let height = physical
+                .map(|cursor| cursor.height)
+                .or_else(|| point.map(|p| p.height))?;
+            Some(PresentedCursor {
+                x: cursor.x,
+                body_y: cursor.y,
+                width,
+                height,
+            })
+        });
         Ok(Self {
             id: snapshot.window_id,
             cell_origin: snapshot.cell_origin,
             outer,
             regions,
             positions,
+            cursor,
         })
     }
 }
 
 impl WindowRegions {
-    fn from_transport(regions: &PresentedWindowRegions) -> Result<Self, GeometryError> {
+    pub(crate) fn from_transport(regions: &PresentedWindowRegions) -> Result<Self, GeometryError> {
         let optional = |rect: Option<TransportRect>| {
             rect.map(|rect| PixelRect::from_transport(&rect))
                 .transpose()
@@ -332,6 +360,9 @@ pub trait GeometryQuery: query_seal::Sealed {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GeometryQueryError {
+    NotYetActive {
+        frame: FrameId,
+    },
     StalePresentation {
         requested: PresentationId,
         available: PresentationId,
@@ -351,7 +382,187 @@ pub enum GeometryQueryError {
         x: i64,
         y: i64,
     },
+    VisualAnchorUnavailable(VisualAnchor),
     InvalidGeometry(GeometryError),
+}
+
+/// Semantic edge used to attach a popup or child frame to active geometry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AnchorEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+/// A durable description of what should be anchored, independent of pixels.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VisualAnchor {
+    CursorBottom {
+        window: WindowId,
+    },
+    BufferPositionBottom {
+        window: WindowId,
+        position: LispCharPos1,
+    },
+    WindowRegionEdge {
+        window: WindowId,
+        region: WindowRegion,
+        edge: AnchorEdge,
+    },
+}
+
+impl VisualAnchor {
+    const fn window(self) -> WindowId {
+        match self {
+            Self::CursorBottom { window }
+            | Self::BufferPositionBottom { window, .. }
+            | Self::WindowRegionEdge { window, .. } => window,
+        }
+    }
+}
+
+/// Resolve one semantic anchor against one explicitly named presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VisualAnchorQuery {
+    presentation: PresentationId,
+    anchor: VisualAnchor,
+}
+
+impl VisualAnchorQuery {
+    pub const fn new(presentation: PresentationId, anchor: VisualAnchor) -> Self {
+        Self {
+            presentation,
+            anchor,
+        }
+    }
+
+    pub const fn presentation(self) -> PresentationId {
+        self.presentation
+    }
+}
+
+impl query_seal::Sealed for VisualAnchorQuery {}
+
+impl GeometryQuery for VisualAnchorQuery {
+    type Output<'a> = VisualAnchorGeometry;
+
+    fn presentation(&self) -> PresentationId {
+        self.presentation
+    }
+
+    fn resolve_presented<'a>(
+        self,
+        geometry: &'a PresentedGeometry,
+    ) -> Result<Self::Output<'a>, GeometryQueryError> {
+        let window_id = self.anchor.window();
+        let (bounds, edge) = match self.anchor {
+            VisualAnchor::CursorBottom { window } => {
+                let view = geometry.resolve(WindowGeometryQuery::new(self.presentation, window))?;
+                let cursor = view
+                    .window_geometry
+                    .cursor
+                    .ok_or(GeometryQueryError::VisualAnchorUnavailable(self.anchor))?;
+                let body = view
+                    .text_body_origin_in_frame()
+                    .map_err(GeometryQueryError::InvalidGeometry)?;
+                (
+                    PixelRect {
+                        origin: PixelPoint::new(
+                            body.x().get() + cursor.x as f32,
+                            body.y().get() + cursor.body_y as f32,
+                        )
+                        .map_err(GeometryQueryError::InvalidGeometry)?,
+                        width: LogicalPx::from_i64(cursor.width.max(0)),
+                        height: LogicalPx::from_i64(cursor.height.max(0)),
+                    },
+                    AnchorEdge::Bottom,
+                )
+            }
+            VisualAnchor::BufferPositionBottom { window, position } => {
+                let point = geometry.resolve(BufferPositionQuery::new(
+                    self.presentation,
+                    window,
+                    position,
+                ))?;
+                (
+                    PixelRect {
+                        origin: point.in_frame().point,
+                        width: point.width(),
+                        height: point.height(),
+                    },
+                    AnchorEdge::Bottom,
+                )
+            }
+            VisualAnchor::WindowRegionEdge {
+                window,
+                region,
+                edge,
+            } => (
+                geometry.resolve(WindowRegionBoundsQuery::new(
+                    self.presentation,
+                    window,
+                    region,
+                ))?,
+                edge,
+            ),
+        };
+        Ok(VisualAnchorGeometry {
+            presentation: self.presentation,
+            frame: geometry.frame.id,
+            window: window_id,
+            bounds,
+            edge,
+        })
+    }
+}
+
+/// Presentation-qualified, frame-local placement result for a semantic anchor.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VisualAnchorGeometry {
+    presentation: PresentationId,
+    frame: FrameId,
+    window: WindowId,
+    bounds: PixelRect<FrameLogicalSpace>,
+    edge: AnchorEdge,
+}
+
+impl VisualAnchorGeometry {
+    pub const fn presentation(self) -> PresentationId {
+        self.presentation
+    }
+
+    pub const fn frame(self) -> FrameId {
+        self.frame
+    }
+
+    pub const fn window(self) -> WindowId {
+        self.window
+    }
+
+    pub const fn bounds_in_frame(self) -> PixelRect<FrameLogicalSpace> {
+        self.bounds
+    }
+
+    pub const fn edge(self) -> AnchorEdge {
+        self.edge
+    }
+
+    /// Edge attachment point. Horizontal edges attach at their left endpoint;
+    /// vertical edges attach at their top endpoint.
+    pub const fn x(self) -> LogicalPx {
+        match self.edge {
+            AnchorEdge::Left | AnchorEdge::Top | AnchorEdge::Bottom => self.bounds.origin.x,
+            AnchorEdge::Right => LogicalPx(self.bounds.origin.x.0 + self.bounds.width.0),
+        }
+    }
+
+    pub const fn y(self) -> LogicalPx {
+        match self.edge {
+            AnchorEdge::Top | AnchorEdge::Left | AnchorEdge::Right => self.bounds.origin.y,
+            AnchorEdge::Bottom => LogicalPx(self.bounds.origin.y.0 + self.bounds.height.0),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

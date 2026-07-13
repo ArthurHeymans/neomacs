@@ -1675,7 +1675,7 @@ fn assert_replacement_slot_between_neighbors(
 ) -> DisplayPointSnapshot {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(frame.selected_window)
+        .redisplay_snapshot(frame.selected_window)
         .expect("display snapshot");
     let before = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(
@@ -1779,7 +1779,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let first_publication = frame
-        .presented_geometry()
+        .active_presented_geometry()
         .expect("first immutable publication")
         .clone();
     let renderer = engine
@@ -1941,7 +1941,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .iter()
         .filter_map(|info| {
             frame
-                .window_display_snapshot(neovm_core::window::WindowId(info.window_id.get() as u64))
+                .redisplay_snapshot(neovm_core::window::WindowId(info.window_id.get() as u64))
                 .cloned()
         })
         .collect::<Vec<_>>();
@@ -2145,10 +2145,10 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     activate_last_engine_presentation(&mut eval, &engine, frame_id);
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
-    assert!(frame.display_presentation().is_some());
-    let presentation = frame.display_presentation().expect("presentation");
+    assert!(frame.active_presentation().is_some());
+    let presentation = frame.active_presentation().expect("presentation");
     let presented_window = frame
-        .presented_geometry()
+        .active_presented_geometry()
         .expect("geometry")
         .resolve(neovm_core::window::geometry::KnownWindowGeometryQuery::new(
             presentation,
@@ -2163,7 +2163,7 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     assert_eq!(presented_window.cell_origin().line().get(), 2);
     assert!(matches!(
         frame
-            .presented_geometry()
+            .active_presented_geometry()
             .expect("geometry")
             .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
                 presentation,
@@ -2427,7 +2427,7 @@ fn window_layout_trace(
         .find(|entry| entry.window_id.get() == selected_window.0 as i64)
         .expect("selected window matrix");
     let display_snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let (window_start, window_point, window_end_pos, window_end_bytepos) =
         match frame.find_window(selected_window).expect("selected window") {
@@ -2810,9 +2810,9 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
     activate_last_engine_presentation(&mut eval, &engine, frame_id);
     let (first_presentation, first_regions, first_cell_origin) = {
         let frame = eval.frame_manager().get(frame_id).expect("frame");
-        let snapshot = frame.window_display_snapshot(selected).expect("snapshot");
+        let snapshot = frame.redisplay_snapshot(selected).expect("snapshot");
         (
-            frame.display_presentation().expect("presentation"),
+            frame.active_presentation().expect("presentation"),
             snapshot.regions,
             snapshot.cell_origin,
         )
@@ -2827,8 +2827,8 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
 
     assert_eq!(engine.last_layout_stats().cursor_only_windows, 1);
     let frame = eval.frame_manager().get(frame_id).expect("frame");
-    let second_presentation = frame.display_presentation().expect("presentation");
-    let snapshot = frame.window_display_snapshot(selected).expect("snapshot");
+    let second_presentation = frame.active_presentation().expect("presentation");
+    let snapshot = frame.redisplay_snapshot(selected).expect("snapshot");
     assert_ne!(second_presentation, first_presentation);
     assert_eq!(snapshot.regions, first_regions);
     assert_eq!(snapshot.cell_origin, first_cell_origin);
@@ -5585,7 +5585,7 @@ fn layout_frame_rust_publishes_increasing_display_positions() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let a = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
@@ -5648,7 +5648,7 @@ fn layout_frame_rust_tracks_multibyte_sample_positions() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
     let a = snapshot
@@ -7015,7 +7015,7 @@ fn layout_frame_rust_publishes_face_scaled_advances_for_inline_plist_faces() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
     let a = snapshot
@@ -7149,7 +7149,7 @@ fn layout_frame_rust_cursor_width_uses_current_glyph_advance_not_next_glyph() {
         "test requires proportional metrics for i and W"
     );
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let i_point = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
@@ -7216,7 +7216,7 @@ fn layout_frame_rust_places_cursor_at_newline_terminated_row_end() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let last_char = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(newline_byte))
@@ -7275,7 +7275,7 @@ fn layout_frame_rust_emits_neomacs_visual_cursors_without_moving_phys_cursor() {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let selected_window = frame.selected_window;
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let phys = snapshot.phys_cursor.as_ref().expect("phys cursor");
     assert_eq!(phys.x, 0, "visual cursor must not move GNU point");
@@ -7366,7 +7366,7 @@ fn layout_frame_rust_visual_cursor_uses_display_point_geometry() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let i_point = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
@@ -7437,7 +7437,7 @@ fn layout_frame_rust_visual_hbar_uses_full_display_point_box() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let b_point = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(2))
@@ -7585,7 +7585,7 @@ fn layout_frame_rust_applies_extra_line_spacing_once_to_newline_rows() {
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let selected_window = frame.selected_window;
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let first_row = snapshot.row_metrics(0).expect("first text row");
     let second_row = snapshot.row_metrics(1).expect("second text row");
@@ -7903,7 +7903,7 @@ fn layout_frame_rust_captures_cursor_inside_invisible_text_without_rescan() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let next_visible = snapshot
@@ -7959,7 +7959,7 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let logical_cursor = snapshot.logical_cursor.expect("logical cursor");
     let point = snapshot
@@ -8046,7 +8046,7 @@ fn display_replacement_cursor_probe_at_height(height: i64) -> (i64, i64, i64, i6
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot
         .phys_cursor
@@ -8158,7 +8158,7 @@ fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan(
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let c = snapshot
@@ -8208,7 +8208,7 @@ fn layout_frame_rust_records_display_point_for_display_replacement_slot() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let c = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
@@ -8860,7 +8860,7 @@ fn layout_frame_rust_captures_cursor_inside_hscroll_skipped_text_without_rescan(
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     assert_eq!(cursor.x, 0);
@@ -8919,7 +8919,7 @@ fn assert_layout_frame_rust_tab_cursor_width(x_stretch_cursor: bool, cursor_type
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let a = snapshot
@@ -9695,7 +9695,7 @@ fn assert_layout_frame_rust_display_space_cursor_width(x_stretch_cursor: bool, c
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let a = snapshot
@@ -9770,7 +9770,7 @@ fn layout_frame_rust_display_space_width_uses_canonical_column_width() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let a = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
@@ -9831,7 +9831,7 @@ fn layout_frame_rust_records_display_point_for_display_space_slot() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let a = snapshot
         .point_for_buffer_pos(LispCharPos1::from_one_based_usize(1))
@@ -9935,7 +9935,7 @@ fn layout_frame_rust_keeps_mixed_width_advances_correct_after_mid_line_face_chan
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
     let a = snapshot
@@ -10061,7 +10061,7 @@ fn layout_frame_rust_keeps_face_positions_after_truncated_multibyte_line() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let all_points = snapshot.points.clone();
     let a = snapshot
@@ -10241,7 +10241,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_after_sequential_window
 
         let frame = eval.frame_manager().get(frame_id).expect("frame");
         let snapshot = frame
-            .window_display_snapshot(selected_window)
+            .redisplay_snapshot(selected_window)
             .expect("display snapshot");
         let all_points = snapshot.points.clone();
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -10474,7 +10474,7 @@ fn layout_frame_rust_keeps_mixed_width_positions_correct_across_family_switches(
 
         let frame = eval.frame_manager().get(frame_id).expect("frame");
         let snapshot = frame
-            .window_display_snapshot(selected_window)
+            .redisplay_snapshot(selected_window)
             .expect("display snapshot");
         let all_points = snapshot.points.clone();
         let visible_span = snapshot.visible_buffer_span();
@@ -10654,7 +10654,7 @@ fn layout_frame_rust_word_wrap_snapshot_stays_sorted_after_rewind() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     assert!(
         snapshot.points.iter().any(|point| point.row > 0),
@@ -10743,7 +10743,7 @@ fn layout_frame_rust_reads_far_enough_for_last_visible_truncated_line() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let target = snapshot.point_for_buffer_pos(LispCharPos1::from_one_based_usize(target_pos));
     assert!(
@@ -10809,7 +10809,7 @@ fn layout_frame_rust_retries_window_when_point_starts_below_visible_span() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let window = frame.find_window(selected_window).expect("selected window");
 
@@ -11322,7 +11322,7 @@ fn layout_frame_rust_converges_visibility_for_wrapped_rows_in_one_redisplay() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let window = frame.find_window(selected_window).expect("selected window");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -11408,7 +11408,7 @@ fn layout_frame_rust_converges_visibility_for_point_line_tail_clipping() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     assert!(
         snapshot
@@ -11464,7 +11464,7 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let window = frame.find_window(selected_window).expect("selected window");
 
@@ -11534,7 +11534,7 @@ fn layout_frame_rust_keeps_default_scratch_message_at_top_when_eob_is_visible() 
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let window = frame.find_window(selected_window).expect("selected window");
 
@@ -11700,7 +11700,7 @@ fn layout_frame_rust_honors_window_mode_line_format_none() {
     let snapshot = eval
         .frame_manager()
         .get(frame_id)
-        .and_then(|frame| frame.window_display_snapshot(selected_window))
+        .and_then(|frame| frame.redisplay_snapshot(selected_window))
         .expect("display snapshot");
 
     assert_eq!(
@@ -11763,7 +11763,7 @@ fn layout_frame_rust_uses_window_mode_line_format_override() {
     let snapshot = eval
         .frame_manager()
         .get(frame_id)
-        .and_then(|frame| frame.window_display_snapshot(selected_window))
+        .and_then(|frame| frame.redisplay_snapshot(selected_window))
         .expect("display snapshot");
 
     assert!(
@@ -11813,7 +11813,7 @@ fn layout_frame_rust_grows_mode_line_height_for_tall_display_element() {
 
         eval.frame_manager()
             .get(frame_id)
-            .and_then(|frame| frame.window_display_snapshot(selected_window))
+            .and_then(|frame| frame.redisplay_snapshot(selected_window))
             .expect("display snapshot")
             .mode_line_height
     }
@@ -11886,7 +11886,7 @@ fn tall_chrome_publishes_the_same_body_used_by_text_and_scrollbar_rendering() {
     let snapshot = eval
         .frame_manager()
         .get(frame_id)
-        .and_then(|frame| frame.window_display_snapshot(selected))
+        .and_then(|frame| frame.redisplay_snapshot(selected))
         .expect("snapshot");
     let state = engine
         .last_frame_display_state
@@ -12079,7 +12079,7 @@ fn layout_frame_rust_uses_full_window_row_space_for_header_text_and_mode_line() 
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("window display snapshot");
     let display = frame
         .find_window(selected_window)
@@ -12137,7 +12137,7 @@ fn layout_frame_rust_advances_live_output_through_tab_line_rows() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("window display snapshot");
     let display = frame
         .find_window(selected_window)
@@ -12479,7 +12479,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("window display snapshot");
     let display = frame
         .find_window(selected_window)
@@ -12922,7 +12922,7 @@ fn layout_frame_rust_places_cursor_inside_overlay_string_text_run() {
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let snapshot = frame
-        .window_display_snapshot(selected_window)
+        .redisplay_snapshot(selected_window)
         .expect("display snapshot");
     let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
     let x_point = snapshot
@@ -14515,7 +14515,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
         eval.frame_manager()
             .get(frame_id)
             .expect("frame")
-            .display_presentation()
+            .active_presentation()
             .expect("evaluator display presentation")
             .get(),
         state.presentation_id.get(),

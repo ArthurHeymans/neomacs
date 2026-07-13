@@ -235,18 +235,18 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
             }],
         )
         .expect("first presentation");
-    assert_eq!(frame.display_presentation(), Some(PresentationId::new(41)));
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
     assert_eq!(
         frame
-            .window_display_snapshot(window_id)
+            .redisplay_snapshot(window_id)
             .expect("published snapshot")
             .text_area_left_offset,
         8
     );
 
     frame.remove_presented_window(window_id);
-    assert_eq!(frame.display_presentation(), Some(PresentationId::new(41)));
-    assert!(frame.window_display_snapshot(window_id).is_none());
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
+    assert!(frame.redisplay_snapshot(window_id).is_none());
 
     assert_eq!(
         frame.publish_display_snapshots(PresentationId::new(41), Vec::new()),
@@ -258,8 +258,8 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     frame
         .publish_display_snapshots(PresentationId::new(42), Vec::new())
         .expect("newer presentation");
-    assert_eq!(frame.display_presentation(), Some(PresentationId::new(42)));
-    assert!(frame.window_display_snapshot(window_id).is_none());
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(42)));
+    assert!(frame.redisplay_snapshot(window_id).is_none());
 
     frame.set_display_snapshots(Vec::new());
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(42)));
@@ -286,7 +286,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
             }],
         )
         .expect("prepare first presentation");
-    assert_eq!(frame.display_presentation(), None);
+    assert_eq!(frame.active_presentation(), None);
     assert_eq!(
         frame
             .redisplay_snapshot(window_id)
@@ -304,7 +304,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
     assert_eq!(
         frame
-            .window_display_snapshot(window_id)
+            .redisplay_snapshot(window_id)
             .expect("active snapshot")
             .text_area_left_offset,
         8
@@ -412,7 +412,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
     }
 
     let child_place = manager
-        .place_presented_frame(child, PresentationId::new(41))
+        .place_active_frame(child, PresentationId::new(41))
         .unwrap();
     assert_eq!(
         (
@@ -429,7 +429,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
         (100.0, 80.0)
     );
     let nested_place = manager
-        .place_presented_frame(nested, PresentationId::new(42))
+        .place_active_frame(nested, PresentationId::new(42))
         .unwrap();
     assert_eq!(
         (
@@ -446,7 +446,7 @@ fn presented_child_placement_uses_immediate_parent_coordinates_without_chrome_or
         (115.0, 92.0)
     );
     assert!(matches!(
-        manager.place_presented_frame(nested, PresentationId::new(41)),
+        manager.place_active_frame(nested, PresentationId::new(41)),
         Err(neomacs_display_protocol::PlaceChildError::StalePresentation { .. })
     ));
 }
@@ -497,7 +497,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
         let geometry = manager
             .get(root)
             .unwrap()
-            .presented_geometry()
+            .active_presented_geometry()
             .unwrap()
             .resolve(WindowGeometryQuery::new(presentation, window))
             .unwrap();
@@ -520,7 +520,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
             .publish_display_snapshots(PresentationId::new(41), vec![])
             .unwrap();
         let placed = manager
-            .place_presented_frame(popup, PresentationId::new(41))
+            .place_active_frame(popup, PresentationId::new(41))
             .unwrap();
 
         (
@@ -546,6 +546,124 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
     assert_eq!(without_side.2, (104.0, 162.0));
     assert_eq!(without_side.1.0 - with_side.1.0, -240.0);
     assert_eq!(without_side.2.0 - with_side.2.0, -240.0);
+}
+
+#[test]
+fn active_visual_anchors_are_semantic_and_presentation_qualified() {
+    use super::geometry::{
+        AnchorEdge, GeometryQueryError, PresentationId, VisualAnchor, VisualAnchorQuery,
+        WindowRegion,
+    };
+    use neomacs_display_protocol::types::Rect as TransportRect;
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("anchor-parent", 800, 600, BufferId(1));
+    let window = manager.get(frame_id).unwrap().selected_window;
+    let presentation = PresentationId::new(51);
+    manager
+        .get_mut(frame_id)
+        .unwrap()
+        .prepare_display_presentation(
+            presentation,
+            vec![WindowDisplaySnapshot {
+                window_id: window,
+                regions: PresentedWindowRegions {
+                    outer: TransportRect::new(240.0, 40.0, 560.0, 520.0),
+                    text_body: TransportRect::new(264.0, 50.0, 536.0, 500.0),
+                    ..PresentedWindowRegions::default()
+                },
+                regions_materialized: true,
+                logical_cursor: Some(WindowCursorPos {
+                    x: 80,
+                    y: 96,
+                    row: 6,
+                    col: 10,
+                }),
+                points: vec![DisplayPointSnapshot {
+                    buffer_pos: LispCharPos1::ONE,
+                    x: 80,
+                    y: 96,
+                    width: 8,
+                    height: 16,
+                    row: 6,
+                    col: 10,
+                }],
+                body_rows: vec![PresentedBodyRowSnapshot {
+                    output_row: 6,
+                    body_row: 6,
+                    body_y: 96,
+                }],
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .unwrap();
+
+    let cursor_query = VisualAnchorQuery::new(presentation, VisualAnchor::CursorBottom { window });
+    assert_eq!(
+        manager
+            .get(frame_id)
+            .unwrap()
+            .resolve_active_visual_anchor(cursor_query),
+        Err(GeometryQueryError::NotYetActive { frame: frame_id })
+    );
+
+    manager
+        .get_mut(frame_id)
+        .unwrap()
+        .activate_display_presentation(presentation)
+        .unwrap();
+    let cursor = manager
+        .get(frame_id)
+        .unwrap()
+        .resolve_active_visual_anchor(cursor_query)
+        .unwrap();
+    assert_eq!(cursor.edge(), AnchorEdge::Bottom);
+    assert_eq!(
+        (cursor.x().get(), cursor.y().get()),
+        (344.0, 162.0),
+        "cursor bottom includes side-window translation and text-body origin"
+    );
+
+    let position = manager
+        .get(frame_id)
+        .unwrap()
+        .resolve_active_visual_anchor(VisualAnchorQuery::new(
+            presentation,
+            VisualAnchor::BufferPositionBottom {
+                window,
+                position: LispCharPos1::ONE,
+            },
+        ))
+        .unwrap();
+    assert_eq!(position, cursor);
+
+    let right_edge = manager
+        .get(frame_id)
+        .unwrap()
+        .resolve_active_visual_anchor(VisualAnchorQuery::new(
+            presentation,
+            VisualAnchor::WindowRegionEdge {
+                window,
+                region: WindowRegion::TextBody,
+                edge: AnchorEdge::Right,
+            },
+        ))
+        .unwrap();
+    assert_eq!((right_edge.x().get(), right_edge.y().get()), (800.0, 50.0));
+
+    assert_eq!(
+        manager
+            .get(frame_id)
+            .unwrap()
+            .resolve_active_visual_anchor(VisualAnchorQuery::new(
+                PresentationId::new(50),
+                VisualAnchor::CursorBottom { window },
+            )),
+        Err(GeometryQueryError::StalePresentation {
+            requested: PresentationId::new(50),
+            available: PresentationId::new(51),
+        })
+    );
 }
 
 #[test]
@@ -586,7 +704,7 @@ fn duplicate_windows_reject_candidate_without_replacing_publication() {
             GeometryError::DuplicateWindow(window_id)
         ))
     );
-    assert_eq!(frame.display_presentation(), Some(PresentationId::new(1)));
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(1)));
 }
 
 #[test]
@@ -632,8 +750,8 @@ fn legacy_unowned_snapshots_do_not_create_an_authoritative_geometry_view() {
         ..WindowDisplaySnapshot::default()
     }]);
 
-    assert!(frame.window_display_snapshot(window_id).is_some());
-    assert!(frame.presented_geometry().is_none());
+    assert!(frame.redisplay_snapshot(window_id).is_some());
+    assert!(frame.active_presented_geometry().is_none());
 }
 use crate::buffer::LispCharPos1;
 
@@ -1648,8 +1766,8 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
 
     assert_eq!(frame.width, 400);
     assert_eq!(frame.height, 260);
-    assert!(frame.window_display_snapshot(w1).is_none());
-    assert!(frame.window_display_snapshot(w2).is_none());
+    assert!(frame.redisplay_snapshot(w1).is_none());
+    assert!(frame.redisplay_snapshot(w2).is_none());
     assert!(
         frame
             .find_window(w1)
@@ -1924,7 +2042,7 @@ fn set_display_snapshots_preserves_live_window_cursor_state() {
     assert_eq!(display.phys_cursor.as_ref(), Some(&cursor));
     assert_eq!(
         frame
-            .window_display_snapshot(wid)
+            .redisplay_snapshot(wid)
             .and_then(|snapshot| snapshot.phys_cursor.as_ref()),
         None
     );
@@ -1969,7 +2087,7 @@ fn no_op_set_window_vscroll_preserves_display_snapshot() {
     assert_eq!(returned, Some(Value::fixnum(0)));
     assert!(
         mgr.get(fid)
-            .and_then(|frame| frame.window_display_snapshot(wid))
+            .and_then(|frame| frame.redisplay_snapshot(wid))
             .and_then(|snapshot| {
                 snapshot.point_for_buffer_pos(crate::buffer::LispCharPos1::new(5))
             })

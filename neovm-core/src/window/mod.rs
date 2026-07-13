@@ -1457,6 +1457,26 @@ impl WindowDisplaySnapshot {
         window_relative_row.saturating_sub(self.top_chrome_rows())
     }
 
+    /// Resolve the body-local coordinates published for an output row.
+    ///
+    /// New redisplay producers publish this mapping directly.  The chrome
+    /// subtraction is retained only for snapshots from producers that do not
+    /// yet materialize body rows (notably the synchronous TTY path).
+    pub fn text_body_position(&self, output_row: i64, window_y: i64) -> (i64, i64) {
+        self.body_rows
+            .iter()
+            .find(|row| row.output_row == output_row)
+            .map_or_else(
+                || {
+                    (
+                        self.text_area_relative_row(output_row),
+                        self.text_area_relative_y(window_y),
+                    )
+                },
+                |row| (row.body_row, row.body_y),
+            )
+    }
+
     pub fn logical_cursor_pos(&self) -> Option<WindowCursorPos> {
         self.logical_cursor.or_else(|| {
             self.phys_cursor
@@ -2669,14 +2689,15 @@ impl Frame {
         self.presentation_state.active.as_ref()
     }
 
-    /// Transitional name retained while presentation consumers migrate.
-    pub const fn display_presentation(&self) -> Option<geometry::PresentationId> {
-        self.active_presentation()
-    }
-
-    /// Transitional name retained while presentation consumers migrate.
-    pub const fn presented_geometry(&self) -> Option<&geometry::PresentedGeometry> {
-        self.active_presented_geometry()
+    /// Resolve an exact visual anchor only from renderer-active geometry.
+    pub fn resolve_active_visual_anchor(
+        &self,
+        query: geometry::VisualAnchorQuery,
+    ) -> Result<geometry::VisualAnchorGeometry, geometry::GeometryQueryError> {
+        let geometry = self
+            .active_presented_geometry()
+            .ok_or(geometry::GeometryQueryError::NotYetActive { frame: self.id })?;
+        geometry.resolve(query)
     }
 
     /// Begin a GNU-shaped output pass for all live windows on this frame.
@@ -2719,11 +2740,6 @@ impl Frame {
     /// presentation is renderer-active.
     pub fn redisplay_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
         self.redisplay_snapshots.get(&id)
-    }
-
-    /// Transitional name retained for incremental redisplay consumers.
-    pub fn window_display_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.redisplay_snapshot(id)
     }
 
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
@@ -3369,7 +3385,7 @@ impl FrameManager {
     /// Resolve immutable parent-relative child placement through only accepted
     /// frame presentations. Parent chrome and root desktop offsets never enter
     /// this composition.
-    pub fn place_presented_frame(
+    pub fn place_active_frame(
         &self,
         frame: FrameId,
         presentation: geometry::PresentationId,
@@ -3378,7 +3394,7 @@ impl FrameManager {
         let scene = neomacs_display_protocol::PresentedFrameScene::from_placements(
             self.frames.values().filter_map(|frame| {
                 frame
-                    .presented_geometry()
+                    .active_presented_geometry()
                     .map(|geometry| geometry.frame_placement())
             }),
         )?;
