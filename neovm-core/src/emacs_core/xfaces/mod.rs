@@ -18,6 +18,7 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
         "face--new-frame-defaults",
         bootstrap_face_new_frame_defaults_table(),
     );
+    stamp_face_id_properties(obarray);
     obarray.set_symbol_value("face-default-stipple", Value::string("gray3"));
     obarray.set_symbol_value("tty-defined-color-alist", Value::NIL);
     obarray.set_symbol_value("scalable-fonts-allowed", Value::NIL);
@@ -43,6 +44,11 @@ pub(crate) fn ensure_startup_compat_variables(eval: &mut crate::emacs_core::eval
             bootstrap_face_new_frame_defaults_table(),
         ),
     }
+    // Establish the `face` id property alongside the registry seed above, now
+    // that every defface has run and all faces are known. This is the startup
+    // sync point that fixes `face-id` for bootstrap faces (see
+    // stamp_face_id_properties).
+    stamp_face_id_properties(eval.obarray_mut());
 
     let defaults = [
         ("face-filters-always-match", Value::NIL),
@@ -134,6 +140,25 @@ pub(crate) fn init_frame_lisp_faces(frame: &mut crate::window::Frame) {
     }
 }
 
+/// Stamp every defined face's numeric id onto its `face` symbol property, the
+/// store that `face-id` / `(get FACE 'face)` read (faces.el `face-id`).
+///
+/// GNU assigns this property in `internal-make-lisp-face`, which `make-face`
+/// invokes from its `(dolist (frame (frame-list)) ...)` loop. Neomacs registers
+/// the standard faces during the bootstrap image build, before any frame
+/// exists, so that loop is a no-op there and only the `face--new-frame-defaults`
+/// registry entry (whose CAR holds the id) got populated -- leaving `face-id` to
+/// signal "Not a face: nil" for every bootstrap face. Establishing the property
+/// alongside the registry seed, from the same face set and id source
+/// (`face_id_for_name`), keeps the entry and the id property from ever drifting.
+pub(crate) fn stamp_face_id_properties(obarray: &mut Obarray) {
+    for face_name in crate::emacs_core::font::all_defined_face_names_sorted_by_id_desc().iter() {
+        if let Some(face_id) = crate::emacs_core::font::face_id_for_name(face_name.as_str()) {
+            let _ = obarray.put_property(face_name.as_str(), "face", Value::fixnum(face_id));
+        }
+    }
+}
+
 pub(crate) fn seed_face_new_frame_defaults_table(table: Value) {
     let face_names = crate::emacs_core::font::all_defined_face_names_sorted_by_id_desc();
     let face_entries: Vec<(Value, Value)> = face_names
@@ -176,6 +201,17 @@ pub(crate) fn ensure_face_new_frame_defaults_entry(
     }
 
     let face_id = crate::emacs_core::font::face_id_for_name(face_name)?;
+    // Restore GNU's invariant that a known face carries its numeric id as the
+    // `face` symbol property -- this is what `face-id` and `(get FACE 'face)`
+    // read (faces.el `face-id`). GNU assigns it in `internal-make-lisp-face`,
+    // invoked by `make-face`'s `(dolist (frame (frame-list)) ...)` loop. Neomacs
+    // defines the standard faces during the bootstrap image build, before any
+    // frame exists, so that loop is a no-op there and only the entry CAR held
+    // the id. Stamp the property at the point the face first becomes known so
+    // the id survives for bootstrap faces too, not just runtime `defface`s.
+    eval.obarray_mut()
+        .put_property(face_name, "face", Value::fixnum(face_id))
+        .ok();
     let entry = Value::cons(
         Value::fixnum(face_id),
         crate::emacs_core::font::make_lisp_face_vector(),
