@@ -164,6 +164,43 @@ fn spatial_projection_validation_rejects_window_and_hit_region_divergence() {
 }
 
 #[test]
+fn spatial_projection_validation_rejects_matrix_body_clip_divergence() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.presentation_id = PresentationId::new(23);
+    let window = DisplayWindowId::new(1);
+    let body = Rect::new(0.0, 0.0, 80.0, 16.0);
+    install_complete_window_geometry(&mut state, window, body);
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(window),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(body.x, body.y, body.width, body.height).unwrap(),
+            0,
+        )],
+        Vec::new(),
+    )
+    .unwrap();
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: window,
+        matrix: GlyphMatrix::new(1, 10),
+        damage: Vec::new(),
+        pixel_bounds: body,
+        text_pixel_bounds: body,
+        text_clip_bounds: Some(Rect::new(8.0, 0.0, 72.0, 16.0)),
+        selected: true,
+    });
+
+    assert_eq!(
+        state.validate_spatial_projections(),
+        Err(crate::PresentedHitError::WindowGeometryMismatch {
+            window,
+            region: crate::PresentedRegionKind::TextBody,
+        })
+    );
+}
+
+#[test]
 fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     install_complete_window_geometry(

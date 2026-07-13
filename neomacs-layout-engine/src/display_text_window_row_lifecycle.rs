@@ -33,7 +33,10 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
-use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};
+use neovm_core::window::{
+    DisplayRowSnapshot, FrameId, PresentedWindowRegions, WindowDisplaySnapshot, WindowId,
+    geometry::CellOrigin,
+};
 
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_cursor::{
@@ -255,7 +258,8 @@ pub(crate) struct TextWindowVisibilityRetryRequest<'a, 'buf, B: LayoutBufferView
 }
 
 pub(crate) struct TextWindowFinishRequest {
-    text_area_left_offset: i64,
+    cell_origin: CellOrigin,
+    regions: PresentedWindowRegions,
     mode_line_height: i64,
     header_line_height: i64,
     tab_line_height: i64,
@@ -397,15 +401,17 @@ impl<'a> TextWindowFinishState<'a> {
 
     fn finish_snapshot(
         self,
-        text_area_left_offset: i64,
+        cell_origin: CellOrigin,
+        regions: PresentedWindowRegions,
         mode_line_height: i64,
         header_line_height: i64,
         tab_line_height: i64,
     ) -> (Vec<HitRow>, WindowDisplaySnapshot) {
         close_text_window_output(self.output);
-        let snapshot = self.output_emitter.finish_snapshot(
+        let snapshot = self.output_emitter.finish_snapshot_with_geometry(
             self.evaluator,
-            text_area_left_offset,
+            cell_origin,
+            regions,
             mode_line_height,
             header_line_height,
             tab_line_height,
@@ -780,13 +786,15 @@ impl<'a, 'buf, B: LayoutBufferView> TextWindowVisibilityRetryRequest<'a, 'buf, B
 
 impl TextWindowFinishRequest {
     pub(crate) fn new(
-        text_area_left_offset: i64,
+        cell_origin: CellOrigin,
+        regions: PresentedWindowRegions,
         mode_line_height: i64,
         header_line_height: i64,
         tab_line_height: i64,
     ) -> Self {
         Self {
-            text_area_left_offset,
+            cell_origin,
+            regions,
             mode_line_height,
             header_line_height,
             tab_line_height,
@@ -798,7 +806,8 @@ impl TextWindowFinishRequest {
         state: TextWindowFinishState<'_>,
     ) -> TextWindowFinishOutput {
         let (_hit_rows, snapshot) = state.finish_snapshot(
-            self.text_area_left_offset,
+            self.cell_origin,
+            self.regions,
             self.mode_line_height,
             self.header_line_height,
             self.tab_line_height,

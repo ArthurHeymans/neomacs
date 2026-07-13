@@ -462,8 +462,8 @@ impl DisplayOutputBuilder {
         self.window_state.current_window_pixel_bounds()
     }
 
-    pub(crate) fn current_window_text_pixel_bounds(&self) -> Rect {
-        self.window_state.current_window_text_pixel_bounds()
+    pub(crate) fn current_window_text_clip_bounds(&self) -> Rect {
+        self.window_state.current_window_text_clip_bounds()
     }
 
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {

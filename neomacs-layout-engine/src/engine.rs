@@ -849,38 +849,19 @@ impl LayoutEngine {
 
                 if let Some(snapshot) = self
                     .window_snapshots
-                    .iter_mut()
+                    .iter()
                     .find(|snapshot| snapshot.window_id.0 as i64 == params.window_id)
                 {
-                    let regions = if snapshot.regions_materialized {
-                        accepted_layout_box.regions()
-                    } else {
-                        neovm_core::window::PresentedWindowRegions {
-                            outer: neomacs_display_protocol::types::Rect::new(
-                                params.bounds.x,
-                                params.bounds.y,
-                                params.bounds.width,
-                                params.bounds.height,
-                            ),
-                            text_body: neomacs_display_protocol::types::Rect::new(
-                                params.text_bounds.x,
-                                params.bounds.y,
-                                0.0,
-                                0.0,
-                            ),
-                            ..neovm_core::window::PresentedWindowRegions::default()
-                        }
-                    };
-                    snapshot.cell_origin = neovm_core::window::geometry::CellOrigin::new(
-                        params.left_col,
-                        params.top_line,
-                    );
-                    snapshot.regions = regions;
+                    debug_assert_eq!(snapshot.cell_origin.column().get(), params.left_col);
+                    debug_assert_eq!(snapshot.cell_origin.line().get(), params.top_line);
+                    if snapshot.regions_materialized {
+                        debug_assert_eq!(snapshot.regions, accepted_layout_box.regions());
+                    }
                     self.frame_output.publish_window_geometry(
                         params.window_id,
                         params.left_col,
                         params.top_line,
-                        &regions,
+                        &snapshot.regions,
                         snapshot.regions_materialized,
                     );
                 }
@@ -1649,6 +1630,17 @@ impl LayoutEngine {
             ),
             None => {
                 tracing::debug!("layout_window_rust: buffer {} not found", params.buffer_id);
+                self.window_snapshots
+                    .push(neovm_core::window::WindowDisplaySnapshot {
+                        window_id,
+                        cell_origin: neovm_core::window::geometry::CellOrigin::new(
+                            params.left_col,
+                            params.top_line,
+                        ),
+                        regions: layout_box.regions(),
+                        regions_materialized: false,
+                        ..Default::default()
+                    });
                 return WindowLayoutOutcome::Skipped;
             }
         };
@@ -1710,6 +1702,12 @@ impl LayoutEngine {
                 self.window_snapshots
                     .push(neovm_core::window::WindowDisplaySnapshot {
                         window_id,
+                        cell_origin: neovm_core::window::geometry::CellOrigin::new(
+                            params.left_col,
+                            params.top_line,
+                        ),
+                        regions: layout_box.regions(),
+                        regions_materialized: false,
                         ..neovm_core::window::WindowDisplaySnapshot::default()
                     });
                 return WindowLayoutOutcome::Skipped;

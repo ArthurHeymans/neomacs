@@ -1006,9 +1006,21 @@ impl FrameDisplayState {
         };
 
         for info in &self.window_infos {
-            let PresentedWindowGeometry::Complete { .. } = info.geometry else {
+            let PresentedWindowGeometry::Complete { regions, .. } = info.geometry else {
                 continue;
             };
+            if let Some(matrix) = self
+                .window_matrices
+                .iter()
+                .find(|matrix| matrix.window_id == info.window_id)
+                && (matrix.pixel_bounds != regions.outer
+                    || matrix.text_area_clip_rect() != regions.text_body)
+            {
+                return Err(PresentedHitError::WindowGeometryMismatch {
+                    window: info.window_id,
+                    region: PresentedRegionKind::TextBody,
+                });
+            }
             for kind in [
                 PresentedRegionKind::TextBody,
                 PresentedRegionKind::LeftMargin,

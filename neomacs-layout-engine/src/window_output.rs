@@ -1452,6 +1452,7 @@ impl WindowOutputEmitter {
         self.phys_cursor = Some(cursor);
     }
 
+    #[cfg(test)]
     pub(crate) fn finish_snapshot(
         self,
         evaluator: &mut Context,

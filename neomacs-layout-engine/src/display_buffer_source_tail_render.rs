@@ -22,7 +22,9 @@ use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::types::FaceId;
-use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
+use neovm_core::window::{
+    DisplayRowSnapshot, PresentedWindowRegions, WindowDisplaySnapshot, geometry::CellOrigin,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferSourceBodyInstallContext {
@@ -55,6 +57,8 @@ pub(crate) struct BufferSourceTailRequestContext<'a> {
     body_install_context: BufferSourceBodyInstallContext,
     reserve_right_special_col: bool,
     reserve_right_border_col: bool,
+    cell_origin: CellOrigin,
+    regions: PresentedWindowRegions,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +152,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         body_install_context: BufferSourceBodyInstallContext,
         reserve_right_special_col: bool,
         reserve_right_border_col: bool,
+        cell_origin: CellOrigin,
+        regions: PresentedWindowRegions,
     ) -> Self {
         Self {
             params,
@@ -167,6 +173,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
             body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
+            cell_origin,
+            regions,
         }
     }
 
@@ -242,7 +250,8 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         // — a tall `display` element grows these past the face-only estimate the
         // text-area geometry was reserved from.
         TextWindowFinishRequest::new(
-            (self.text_area_left - self.params.bounds.x).round() as i64,
+            self.cell_origin,
+            self.regions,
             measured_chrome_heights.mode_line_height.round() as i64,
             measured_chrome_heights.header_line_height.round() as i64,
             measured_chrome_heights.tab_line_height.round() as i64,

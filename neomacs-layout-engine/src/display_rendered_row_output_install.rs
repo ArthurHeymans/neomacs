@@ -271,7 +271,7 @@ impl DisplayRowMediaInstallTarget {
         match target {
             RenderedDisplayRowAssetInstallTarget::CurrentWindowRow(display_row_index) => {
                 let window_id = DisplayWindowId::new(builder.current_window_id_i64());
-                let clip = builder.current_window_text_pixel_bounds();
+                let clip = builder.current_window_text_clip_bounds();
                 let row = display_row_index.min(u32::MAX as usize) as u32;
                 Self {
                     window_id,

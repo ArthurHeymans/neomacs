@@ -245,6 +245,7 @@ where
             local_display_policy,
             line_number_columns,
             &geometry,
+            layout_box,
             buffer,
             buffer_id,
             text_source,

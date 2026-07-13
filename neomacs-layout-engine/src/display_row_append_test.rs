@@ -7915,14 +7915,29 @@ fn buffer_text_window_finish_request_closes_window_and_returns_snapshot_artifact
         charpos_end: 9,
     }];
 
-    let finished =
-        TextWindowFinishRequest::new(2, 11, 7, 5).finish_and_snapshot(TextWindowFinishState::new(
-            TextWindowOutputTarget::from_builder(&mut builder),
-            output_emitter,
-            &mut eval,
-            hit_rows,
-        ));
+    let finished = TextWindowFinishRequest::new(
+        neovm_core::window::geometry::CellOrigin::new(0, 0),
+        neovm_core::window::PresentedWindowRegions {
+            outer: Rect::new(0.0, 0.0, 40.0, 20.0),
+            text_body: Rect::new(2.0, 0.0, 38.0, 20.0),
+            ..Default::default()
+        },
+        11,
+        7,
+        5,
+    )
+    .finish_and_snapshot(TextWindowFinishState::new(
+        TextWindowOutputTarget::from_builder(&mut builder),
+        output_emitter,
+        &mut eval,
+        hit_rows,
+    ));
     let snapshot = finished.into_snapshot();
+    assert_eq!(snapshot.cell_origin.column().get(), 0);
+    assert_eq!(snapshot.cell_origin.line().get(), 0);
+    assert_eq!(snapshot.regions.outer, Rect::new(0.0, 0.0, 40.0, 20.0));
+    assert_eq!(snapshot.regions.text_body, Rect::new(2.0, 0.0, 38.0, 20.0));
+    assert!(snapshot.regions_materialized);
     assert_eq!(snapshot.text_area_left_offset, 2);
     assert_eq!(snapshot.mode_line_height, 11);
     assert_eq!(snapshot.header_line_height, 7);

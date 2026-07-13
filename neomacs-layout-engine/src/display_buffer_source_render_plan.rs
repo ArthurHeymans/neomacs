@@ -29,6 +29,7 @@ use crate::hit_test::HitRow;
 use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
+use crate::window_layout::WindowLayoutBox;
 use crate::window_output::{
     TextWindowCursor, TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
     publish_text_window_cursor, record_text_window_display_range, render_window_chrome_rows,
@@ -402,6 +403,7 @@ impl BufferSourceOutputSetup {
         local_display_policy: BufferWindowLocalDisplayPolicy,
         line_number_cols: i32,
         geometry: &BufferWindowGeometry,
+        layout_box: &WindowLayoutBox,
         buffer: &'a B,
         buffer_id: BufferId,
         source: BufferWindowSource,
@@ -488,6 +490,8 @@ impl BufferSourceOutputSetup {
             self.body_install_context,
             reserve_right_special_col,
             reserve_right_border_col,
+            neovm_core::window::geometry::CellOrigin::new(params.left_col, params.top_line),
+            layout_box.regions(),
         );
         let publish_request = BufferSourceRedisplayPublishRequest::new(
             self.begin_request.frame_id(),
