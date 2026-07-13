@@ -205,12 +205,26 @@ impl RawTtyDecoder {
         };
 
         if byte < 0x80 {
-            if modifiers & NEOMACS_META_MASK != 0 {
+            let is_meta = modifiers & NEOMACS_META_MASK != 0;
+            if is_meta {
                 self.pending.drain(0..2);
             } else {
                 self.pending.pop_front();
             }
-            events.push(raw_key_event(raw_tty_byte_keysym(byte), modifiers));
+            // An ESC-prefixed ASCII control byte is GNU's `meta-<char>`: on a
+            // terminal, `ESC RET` is M-RET (meta + char 13), `ESC TAB` is M-TAB
+            // (meta + char 9) -- NOT `M-<return>` / `M-<tab>` function keys. Only
+            // the UNPREFIXED byte maps to the RET/TAB keysyms (whose `return`/
+            // `tab` symbols `function-key-map` then translates back to 13/9);
+            // there is no `[M-return]`/`[M-tab]` fkm entry, so a modified control
+            // byte must carry the control character itself or bindings like
+            // org-mode's M-RET (org-meta-return) never resolve.
+            let keysym = if is_meta {
+                u32::from(byte)
+            } else {
+                raw_tty_byte_keysym(byte)
+            };
+            events.push(raw_key_event(keysym, modifiers));
             return true;
         }
 
@@ -590,6 +604,43 @@ mod tests {
                 }
                 _ => panic!("expected key event"),
             }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn raw_tty_decoder_maps_meta_ret_and_meta_tab_to_control_chars() {
+        // ESC RET / ESC TAB are GNU's M-RET / M-TAB: meta + the control CHAR
+        // (13 / 9), not `M-<return>` / `M-<tab>` function keys (there is no
+        // [M-return]/[M-tab] function-key-map entry to translate those back).
+        let mut decoder = RawTtyDecoder::default();
+        let mut events = Vec::new();
+        decoder.push_bytes(&[0x1b, b'\r', 0x1b, b'\t'], &mut events);
+        assert_eq!(events.len(), 2);
+        match events[0] {
+            InputEvent::Key {
+                keysym, modifiers, ..
+            } => {
+                assert_eq!(keysym, u32::from(b'\r'));
+                assert_eq!(modifiers, NEOMACS_META_MASK);
+            }
+            _ => panic!("expected key event"),
+        }
+        match events[1] {
+            InputEvent::Key {
+                keysym, modifiers, ..
+            } => {
+                assert_eq!(keysym, u32::from(b'\t'));
+                assert_eq!(modifiers, NEOMACS_META_MASK);
+            }
+            _ => panic!("expected key event"),
+        }
+        // The UNPREFIXED RET/TAB bytes still map to the function-key symbols.
+        let mut plain = Vec::new();
+        RawTtyDecoder::default().push_bytes(&[b'\r'], &mut plain);
+        match plain[0] {
+            InputEvent::Key { keysym, .. } => assert_eq!(keysym, XK_RETURN),
+            _ => panic!("expected key event"),
         }
     }
 
