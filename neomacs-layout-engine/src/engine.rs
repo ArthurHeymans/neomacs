@@ -71,6 +71,7 @@ use crate::incremental_layout::{
     CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
+use crate::window_layout::{WindowChromeMetrics, WindowLayoutOutcome};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_chrome::{
     ChromeBandRequest, FrameChromeContent, FrameChromeKind as ProtocolFrameChromeKind,
@@ -89,6 +90,9 @@ use neovm_core::window::WindowDisplaySnapshot;
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
+/// Bound intrinsic chrome convergence so oscillating status-line Lisp can
+/// never publish mismatched geometry or spin forever.
+const MAX_WINDOW_CHROME_LAYOUT_RETRIES: usize = 8;
 
 #[cfg(test)]
 #[inline]
@@ -251,6 +255,10 @@ pub struct LayoutEngine {
     /// engine still rebuilds every window every cycle. The container a later
     /// phase reuses rows out of.
     retained_window_matrices: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix>,
+    /// Accepted intrinsic chrome metrics, the Rust equivalent of GNU's
+    /// current-matrix tab/header/mode-line heights.  They seed the next
+    /// speculative layout and are replaced only by a sealed frame.
+    retained_window_chrome_metrics: std::collections::HashMap<DisplayWindowId, WindowChromeMetrics>,
     /// Windows that took the Phase 1 cursor-only fast path this frame (their body
     /// rows were reused, not relaid). Populated as each window is laid out, read
     /// by the commit path to attribute rows to `reused_rows` and classify the
@@ -398,6 +406,7 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
             retained_window_matrices: std::collections::HashMap::new(),
+            retained_window_chrome_metrics: std::collections::HashMap::new(),
             cursor_only_window_ids: std::collections::HashSet::new(),
             scroll_window_ids: std::collections::HashMap::new(),
             edit_window_ids: std::collections::HashMap::new(),
@@ -426,6 +435,7 @@ impl LayoutEngine {
             last_frame_display_state: None,
             frame_face_id_counter: BasicFaceId::SENTINEL,
             retained_window_matrices: std::collections::HashMap::new(),
+            retained_window_chrome_metrics: std::collections::HashMap::new(),
             cursor_only_window_ids: std::collections::HashSet::new(),
             scroll_window_ids: std::collections::HashMap::new(),
             edit_window_ids: std::collections::HashMap::new(),
@@ -576,10 +586,12 @@ impl LayoutEngine {
         // limits this to a single retry to prevent infinite loops.
         let mut mini_resize_attempted = false;
         let mut tab_bar_resize_attempted = false;
+        let mut window_chrome_layout_retries = 0usize;
+        let mut window_chrome_metrics = self.retained_window_chrome_metrics.clone();
 
-        let (frame_params, curr_window_infos, retained_keys) = loop {
+        let (frame_params, curr_window_infos, retained_keys, accepted_window_chrome_metrics) = 'frame_layout: loop {
             // Collect window and frame params from neovm-core
-            let (frame_params, window_params_list) =
+            let (frame_params, mut window_params_list) =
                 match super::neovm_bridge::collect_layout_params_with_font_sizing(
                     evaluator,
                     frame_id,
@@ -593,6 +605,18 @@ impl LayoutEngine {
                         return;
                     }
                 };
+
+            // GNU seeds desired-window layout from the current matrix's
+            // accepted chrome heights, falling back to a face estimate when a
+            // row is new.  Apply the same single authority before cache
+            // classification, body allocation, and chrome shaping.
+            for params in &mut window_params_list {
+                if let Some(metrics) =
+                    window_chrome_metrics.get(&DisplayWindowId::new(params.window_id))
+                {
+                    metrics.seed_params(params);
+                }
+            }
 
             // Snapshot each window's layout inputs for the incremental-layout
             // retained key (Phase 0a). Built by reference before the params are
@@ -777,7 +801,7 @@ impl LayoutEngine {
                     .render_window_info(WindowFrameInfoRenderRequest::new(params, metadata));
 
                 // Simplified layout for this window (no face resolution, no overlays)
-                self.layout_window_rust(
+                let window_layout = self.layout_window_rust(
                     evaluator,
                     frame_id,
                     params,
@@ -789,6 +813,30 @@ impl LayoutEngine {
                     scroll_replay,
                     is_edit,
                 );
+                match window_layout {
+                    WindowLayoutOutcome::Stable(measured) => {
+                        window_chrome_metrics
+                            .insert(DisplayWindowId::new(params.window_id), measured);
+                    }
+                    WindowLayoutOutcome::Skipped => {}
+                    WindowLayoutOutcome::NeedsRelayout { assumed, measured } => {
+                        if window_chrome_layout_retries >= MAX_WINDOW_CHROME_LAYOUT_RETRIES {
+                            tracing::error!(
+                                window = params.window_id,
+                                ?assumed,
+                                ?measured,
+                                attempts = window_chrome_layout_retries,
+                                "rejecting frame whose window chrome failed to converge"
+                            );
+                            evaluator.retire_interaction_presentation(presentation_id);
+                            return;
+                        }
+                        window_chrome_layout_retries += 1;
+                        window_chrome_metrics
+                            .insert(DisplayWindowId::new(params.window_id), measured);
+                        continue 'frame_layout;
+                    }
+                }
 
                 if let Some(snapshot) = self
                     .window_snapshots
@@ -997,7 +1045,22 @@ impl LayoutEngine {
 
             self.render_frame_output_hints(&curr_window_infos, &frame_params);
 
-            break (frame_params, curr_window_infos, retained_keys);
+            let accepted_window_chrome_metrics = window_params_list
+                .iter()
+                .filter_map(|params| {
+                    let window = DisplayWindowId::new(params.window_id);
+                    window_chrome_metrics
+                        .get(&window)
+                        .copied()
+                        .map(|metrics| (window, metrics))
+                })
+                .collect();
+            break (
+                frame_params,
+                curr_window_infos,
+                retained_keys,
+                accepted_window_chrome_metrics,
+            );
         };
 
         // Collect semantic GUI chrome before publishing the frame. FrameChrome
@@ -1166,6 +1229,10 @@ impl LayoutEngine {
         // FrameGlyphBuffer no longer receives glyph output; the DisplayOutputBuilder
         // is now the sole output path.
 
+        // Commit intrinsic metrics only after the visual and spatial products
+        // have both sealed successfully.  Retry attempts never replace the GNU
+        // "current matrix" analogue used to seed future layout.
+        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
         self.last_frame_display_state = Some(frame_display_state);
 
         // --- Incremental-layout commit (Phase 0a) ---
@@ -1549,7 +1616,7 @@ impl LayoutEngine {
         cursor_only_replay: Option<CursorOnlyReplay>,
         scroll_replay: Option<ScrollReplay>,
         is_edit: bool,
-    ) {
+    ) -> WindowLayoutOutcome {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
         let scroll_dvpos = scroll_replay
             .as_ref()
@@ -1583,7 +1650,7 @@ impl LayoutEngine {
             ),
             None => {
                 tracing::debug!("layout_window_rust: buffer {} not found", params.buffer_id);
-                return;
+                return WindowLayoutOutcome::Skipped;
             }
         };
         let buffer = &layout_buffer;
@@ -1645,7 +1712,7 @@ impl LayoutEngine {
                         window_id,
                         ..neovm_core::window::WindowDisplaySnapshot::default()
                     });
-                return;
+                return WindowLayoutOutcome::Skipped;
             }
             BufferSourceRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();
@@ -1654,7 +1721,7 @@ impl LayoutEngine {
                 // A visibility retry re-flows the window from a new window_start,
                 // so the Phase A fast-path plan (snapshotted against the original
                 // window_start) no longer applies — re-lay from scratch.
-                self.layout_window_rust(
+                return self.layout_window_rust(
                     evaluator,
                     frame_id,
                     &retry_params,
@@ -1666,7 +1733,6 @@ impl LayoutEngine {
                     None,
                     false,
                 );
-                return;
             }
             BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
@@ -1695,6 +1761,25 @@ impl LayoutEngine {
             redisplay_positions.window_start.as_i64(),
             redisplay_positions.window_end.as_i64()
         );
+
+        let assumed = WindowChromeMetrics::from_params(params);
+        let measured = self
+            .window_snapshots
+            .iter()
+            .rev()
+            .find(|snapshot| snapshot.window_id == window_id)
+            .map(WindowChromeMetrics::from_snapshot)
+            .unwrap_or(assumed);
+        let outcome = WindowLayoutOutcome::from_metrics(assumed, measured);
+        if let WindowLayoutOutcome::NeedsRelayout { assumed, measured } = outcome {
+            tracing::debug!(
+                window = params.window_id,
+                ?assumed,
+                ?measured,
+                "window chrome metrics changed; rejecting speculative layout"
+            );
+        }
+        outcome
     }
 
     /// Trigger fontification for a buffer region via the Rust Context.

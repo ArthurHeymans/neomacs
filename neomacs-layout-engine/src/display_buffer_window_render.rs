@@ -112,8 +112,8 @@ where
             char_h,
         );
 
-        let chrome_plan = state.with_face_services(|face_resolver, font_metrics| {
-            WindowChromeRowsPlan::new(params, face_resolver, font_metrics, default_face.metrics())
+        let chrome_plan = state.with_face_services(|face_resolver, _font_metrics| {
+            WindowChromeRowsPlan::new(params, face_resolver)
         });
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);

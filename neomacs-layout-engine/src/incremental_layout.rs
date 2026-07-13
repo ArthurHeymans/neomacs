@@ -85,6 +85,11 @@ pub struct RetainedWindowKey {
     pub char_width: f32,
     pub char_height: f32,
     pub font_pixel_size: f32,
+    /// Canonical accepted window partition metrics.  Reusing body rows laid
+    /// out under different chrome heights would preserve a stale body origin.
+    pub tab_line_height: f32,
+    pub header_line_height: f32,
+    pub mode_line_height: f32,
     // --- Additional layout-affecting inputs (adversarial-review fixes). These
     // are read fresh from buffer-locals / window state each frame but do NOT
     // bump any of the four ticks below; a change must still force a full rebuild,
@@ -183,6 +188,9 @@ impl RetainedWindowKey {
             char_width: p.char_width,
             char_height: p.char_height,
             font_pixel_size: p.font_pixel_size,
+            tab_line_height: p.tab_line_height,
+            header_line_height: p.header_line_height,
+            mode_line_height: p.mode_line_height,
             tab_stop_list: p.tab_stop_list.clone(),
             extra_line_spacing: p.extra_line_spacing,
             selective_display: p.selective_display,
@@ -827,6 +835,9 @@ mod scroll_classifier_tests {
             char_width: 8.0,
             char_height: 16.0,
             font_pixel_size: 16.0,
+            tab_line_height: 0.0,
+            header_line_height: 0.0,
+            mode_line_height: 16.0,
             tab_stop_list: Vec::new(),
             extra_line_spacing: 0.0,
             selective_display: 0,

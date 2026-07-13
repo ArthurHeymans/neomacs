@@ -11988,6 +11988,100 @@ fn tall_chrome_publishes_the_same_body_used_by_text_and_scrollbar_rendering() {
     assert_eq!(scroll_bar.height, published_scroll_bar.height);
 }
 
+/// A chrome row whose intrinsic height exceeds its retained/face estimate must
+/// invalidate the speculative frame.  The published body is from the retry
+/// that uses the measured tab-line height, never from the stale first attempt.
+///
+/// GNU `redisplay_window` compares CURRENT_TAB_LINE_HEIGHT with the desired
+/// matrix row and immediately retries before `update_frame` on a mismatch.
+#[test]
+fn layout_frame_rust_retries_tall_tab_line_before_publishing_body_geometry() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let format = Value::string_with_text_properties(
+            "TB",
+            vec![StringTextPropertyRun {
+                start: 1,
+                end: 2,
+                plist: Value::list(vec![
+                    Value::symbol("display"),
+                    Value::list(vec![Value::symbol("height"), Value::make_float(2.0)]),
+                ]),
+            }],
+        );
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("first body line\nsecond body line\n");
+        buffer.set_buffer_local("tab-line-format", format);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("tall-tab-line-layout-retry", 640, 240, buffer_id);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("stable display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .unwrap_or_else(|| {
+            panic!(
+                "selected window matrix; selected={}, matrices={:?}",
+                selected.0,
+                state
+                    .window_matrices
+                    .iter()
+                    .map(|entry| entry.window_id.get())
+                    .collect::<Vec<_>>()
+            )
+        });
+    let tab_line = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("tab-line row");
+    let first_body = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("first body row");
+
+    assert_eq!(
+        first_body.pixel_y,
+        tab_line.pixel_y + tab_line.height_px,
+        "published body must begin at the measured tab-line bottom; stale estimated geometry \
+         would place it inside the tab-line"
+    );
+    assert_eq!(
+        entry.pixel_bounds.y + first_body.pixel_y,
+        entry.text_area_clip_rect().y,
+        "published body row and canonical text clip must have the same origin"
+    );
+}
+
 /// The single-eval invariant: a full `layout_frame_rust` must evaluate
 /// `mode-line-format` exactly ONCE per window with a mode line. The chrome
 /// rows are laid out once up front (their measured height feeds the geometry)

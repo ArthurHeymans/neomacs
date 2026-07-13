@@ -44,6 +44,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) box_border_style: BoxBorderStyle,
     pub(crate) box_border_speed: f32,
     pub(crate) box_color2: Option<Color>,
+    #[cfg(test)]
     pub(crate) box_h_line_width: i32,
     pub(crate) terminal_inverse_video: bool,
     pub(crate) metrics: DisplayRowFaceMetrics,
@@ -180,6 +181,7 @@ impl DisplayRowFace {
             box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
             box_color2: None,
+            #[cfg(test)]
             box_h_line_width: face.box_line_width,
             terminal_inverse_video: face.terminal_inverse_video,
             lisp_name: face.lisp_name.clone(),
@@ -304,6 +306,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         face
     }
 
+    #[cfg(test)]
     pub(crate) fn row_height_for_face(
         &mut self,
         face: &ResolvedFace,

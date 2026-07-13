@@ -26,6 +26,7 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest,
 };
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
+#[cfg(test)]
 pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
 use crate::display_row_measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
@@ -482,12 +483,7 @@ pub(crate) struct WindowChromeRowsPlan {
 }
 
 impl WindowChromeRowsPlan {
-    pub(crate) fn new(
-        params: &WindowParams,
-        face_resolver: &FaceResolver,
-        font_metrics: &mut Option<FontMetricsService>,
-        fallback_metrics: DisplayRowFallbackMetrics,
-    ) -> Self {
+    pub(crate) fn new(params: &WindowParams, face_resolver: &FaceResolver) -> Self {
         let mode_line_face = (params.mode_line_height > 0.0).then(|| {
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
                 selected: params.selected,
@@ -502,15 +498,19 @@ impl WindowChromeRowsPlan {
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabLine)
         });
 
-        let mode_line_height = mode_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
-        });
-        let header_line_height = header_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
-        });
-        let tab_line_height = tab_line_face.as_ref().map_or(0.0, |face| {
-            window_chrome_row_height_for_face(font_metrics, face, fallback_metrics)
-        });
+        // `WindowParams` carries the frame attempt's canonical assumed
+        // metrics: retained measured heights when known, otherwise the
+        // bridge's face estimate.  Do not independently re-estimate here;
+        // body allocation and chrome shaping must begin from one authority.
+        let mode_line_height = mode_line_face
+            .as_ref()
+            .map_or(0.0, |_| params.mode_line_height.max(0.0));
+        let header_line_height = header_line_face
+            .as_ref()
+            .map_or(0.0, |_| params.header_line_height.max(0.0));
+        let tab_line_height = tab_line_face
+            .as_ref()
+            .map_or(0.0, |_| params.tab_line_height.max(0.0));
 
         Self {
             tab_line_face,
@@ -902,7 +902,13 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         ChromeLispStringRowRequest::new(
             self.bounds.y,
             self.bounds.width,
-            self.metrics.with_row_height(self.bounds.height),
+            // Intrinsic display properties such as `(height 2.0)` are
+            // relative to the row's face/font metrics, not to the retained
+            // allocation being validated.  Feeding `bounds.height` back into
+            // shaping makes every retry multiply the previous measurement
+            // (3 -> 6 -> 12 -> ...), so intrinsic measurement could never
+            // converge.
+            self.metrics,
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
@@ -1989,6 +1995,7 @@ fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> Displ
     }
 }
 
+#[cfg(test)]
 pub(crate) fn window_chrome_row_height_for_face(
     font_metrics: &mut Option<FontMetricsService>,
     face: &ResolvedFace,
