@@ -6962,10 +6962,10 @@ fn gnu_lisp_window_body_pixel_edges_use_presented_left_and_right_scrollbars() {
                 }],
             )
             .expect("presented GUI geometry");
-        frame
-            .find_window_mut(wid)
-            .expect("live window")
-            .set_bounds(crate::window::Rect::new(0.0, 0.0, 80.0, 24.0));
+        let logical_window = frame.find_window_mut(wid).expect("live window");
+        logical_window.set_bounds(crate::window::Rect::new(0.0, 0.0, 80.0, 24.0));
+        logical_window.set_left_col(18);
+        logical_window.set_top_line(2);
         let display = frame
             .find_window_mut(wid)
             .expect("live window")
@@ -7031,6 +7031,49 @@ fn gui_geometry_primitives_reject_a_missing_presentation_instead_of_using_live_b
     assert!(
         super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T]).is_err(),
         "materialized GUI body geometry is mandatory for pixelwise body queries"
+    );
+}
+
+#[test]
+fn graphical_logical_window_origin_is_available_before_first_presentation() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_with_gui_frame("(list (window-left-column) (window-top-line))"),
+        ["OK (0 0)"],
+        "GNU logical window edges exist before redisplay publishes pixel geometry"
+    );
+}
+
+#[test]
+fn winner_can_capture_a_graphical_startup_layout_before_first_presentation() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    ev.eval_str("(require 'winner)")
+        .expect("load Winner before the synthetic frame becomes graphical");
+    let frame_id = ev.frames.selected_frame().expect("selected frame").id;
+    ev.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    assert!(
+        ev.frames
+            .get(frame_id)
+            .expect("frame")
+            .presented_geometry()
+            .is_none(),
+        "the regression requires Winner to run before the first redisplay publication"
+    );
+
+    let result = ev.eval_str(
+        "(progn
+           (winner-mode 1)
+           (winner-save-old-configurations)
+           (window-edges))",
+    );
+    assert!(
+        result.is_ok(),
+        "Winner startup must not require rendered geometry: {}",
+        format_eval_result(&result)
     );
 }
 

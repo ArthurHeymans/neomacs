@@ -2503,9 +2503,6 @@ pub(crate) fn builtin_window_left_column(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    if let Some(geometry) = presented_gui_known_geometry(frames, fid, wid)? {
-        return Ok(Value::fixnum(geometry.cell_origin().column().get()));
-    }
     // GNU `Fwindow_left_column` returns `w->left_col` directly. See
     // `Window::left_col`.
     Ok(Value::fixnum(w.left_col()))
@@ -2521,9 +2518,6 @@ pub(crate) fn builtin_window_top_line(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    if let Some(geometry) = presented_gui_known_geometry(frames, fid, wid)? {
-        return Ok(Value::fixnum(geometry.cell_origin().line().get()));
-    }
     // GNU `Fwindow_top_line` returns `w->top_line` directly (the stored
     // character-line edge maintained by the resize passes, decoupled from pixel
     // geometry -- it includes FRAME_TOP_MARGIN, which has no pixel height in
