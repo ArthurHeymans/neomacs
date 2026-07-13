@@ -10,9 +10,7 @@ use crate::window_output::{
     WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
-use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
-};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
@@ -75,25 +73,6 @@ pub(crate) struct CapturedCursorPlacement {
 
 pub(crate) fn cursor_window_matches_current(cursor_window_id: i64, current_window_id: u64) -> bool {
     cursor_window_id >= 0 && cursor_window_id as u64 == current_window_id
-}
-
-/// Number of grid columns `glyph` advances the materialize column counter.
-///
-/// Must stay in lock-step with `FrameDisplayState::materialize_grid_row`'s
-/// `col +=` rule (glyph_matrix.rs): a stretch advances by its `width_cols`, a
-/// double-width glyph by 2, everything else by 1. Used to place the physical
-/// cursor on the same column index materialize assigns to the glyph at point.
-fn glyph_cell_span(glyph: &Glyph) -> u16 {
-    match glyph.glyph_type {
-        GlyphType::Stretch { width_cols } => width_cols,
-        _ => {
-            if glyph.wide {
-                2
-            } else {
-                1
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -197,7 +176,7 @@ impl CursorVisualColumnResolutionRequest {
             if glyph.padding {
                 continue;
             }
-            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+            col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
         }
 
         // Trim the trailing `:extend` fill glyphs from the Text area. The blank
@@ -227,7 +206,7 @@ impl CursorVisualColumnResolutionRequest {
             {
                 nearest_after = Some((glyph.charpos, col_acc));
             }
-            col_acc = col_acc.saturating_add(glyph_cell_span(glyph));
+            col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
         }
         // No glyph carries point's charpos. Point is either before the first
         // visible glyph (a hidden prefix -- use the first following glyph's

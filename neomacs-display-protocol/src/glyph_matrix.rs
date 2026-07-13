@@ -289,6 +289,25 @@ impl Glyph {
         };
         self
     }
+
+    /// Number of source-identity slots occupied by this displayed primitive.
+    ///
+    /// Pixel-sized stretch glyphs can be narrower than one nominal character
+    /// cell, so their rounded `width_cols` is zero even though they still
+    /// materialize as an addressable primitive.  Such a primitive owns one
+    /// slot; otherwise the following glyph would receive the same
+    /// [`DisplaySlotId`].  Keep every consumer of visual columns on this one
+    /// rule so rendering, pointer paint, and cursor lookup cannot diverge.
+    pub fn materialized_slot_span(&self) -> u16 {
+        if self.padding {
+            return 0;
+        }
+        match self.glyph_type {
+            GlyphType::Stretch { width_cols } => width_cols.max(1),
+            _ if self.wide => 2,
+            _ => 1,
+        }
+    }
 }
 
 /// One screen row. Equivalent to GNU's `struct glyph_row`.
@@ -540,11 +559,7 @@ impl GlyphRow {
                     continue;
                 }
                 let width = glyph_pixel_width(glyph, char_width);
-                let col_width = match &glyph.glyph_type {
-                    GlyphType::Stretch { width_cols } => u32::from(*width_cols),
-                    _ if glyph.wide => 2,
-                    _ => 1,
-                };
+                let col_width = u32::from(glyph.materialized_slot_span());
                 if let Some(appearance) = glyph.pointer_appearance {
                     if let Some(previous) = self.pointer_runs.last_mut()
                         && previous.appearance == appearance
@@ -1587,26 +1602,16 @@ impl FrameDisplayState {
         }
         for fill in &self.face_fills {
             let face_data = self.resolve_face_for_materialize(fill.face_id);
-            push(FrameGlyph::Stretch {
-                window_id: fill.window_id,
-                row_role: fill.row_role,
-                clip_rect: fill.clip_rect,
-                slot_id: DisplaySlotId::from_pixels(
-                    fill.window_id,
-                    Px(fill.bounds.x),
-                    Px(fill.bounds.y),
-                    Px(self.char_width),
-                    Px(self.char_height),
-                ),
-                bidi_level: 0,
-                x: fill.bounds.x,
-                y: fill.bounds.y,
-                width: fill.bounds.width,
-                height: fill.bounds.height,
-                bg: face_data.bg,
-                face_id: fill.face_id,
-                stipple_id: 0,
-                stipple_fg: None,
+            // A face fill is non-grid window background, not a displayed
+            // stretch glyph.  Giving it a pixel-derived DisplaySlotId places
+            // frame-space geometry in the same identity namespace as the
+            // window-local glyph matrix and can collide with a real glyph
+            // (for example a completion candidate at row 7, column 0).
+            // TTY materialization still consumes FaceFillItem directly and
+            // therefore retains its face-aware terminal semantics.
+            push(FrameGlyph::Background {
+                bounds: fill.bounds,
+                color: face_data.bg,
             });
         }
 
@@ -2213,16 +2218,7 @@ impl FrameDisplayState {
                         });
                     }
                 }
-                col += match &glyph.glyph_type {
-                    GlyphType::Stretch { width_cols } => *width_cols as usize,
-                    _ => {
-                        if glyph.wide {
-                            2
-                        } else {
-                            1
-                        }
-                    }
-                };
+                col += usize::from(glyph.materialized_slot_span());
                 x_cursor += glyph_width;
             }
         }

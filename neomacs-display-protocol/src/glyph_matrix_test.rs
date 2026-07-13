@@ -355,6 +355,184 @@ fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
 }
 
 #[test]
+fn subcell_stretch_and_following_char_have_unique_materialized_pointer_slots() {
+    let window_id = DisplayWindowId::new(6);
+    let body = Rect::new(0.0, 0.0, 80.0, 16.0);
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    install_complete_window_geometry(&mut state, window_id, body);
+    state.faces.insert(FaceId::new(0), Face::default());
+
+    // `:align-to` can legitimately produce a positive pixel advance smaller
+    // than half a cell.  Its rounded logical width is zero, but the stretch is
+    // still a materialized primitive immediately followed by buffer text.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    row.glyphs[GlyphArea::Text.index()].extend([
+        Glyph::stretch(0, FaceId::new(0)).with_pixel_width(2.0),
+        Glyph::char('x', FaceId::new(0), 0).with_pixel_width(8.0),
+    ]);
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0] = row;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id,
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: body,
+        text_pixel_bounds: body,
+        text_clip_bounds: None,
+        selected: true,
+    });
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(window_id),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(body.x, body.y, body.width, body.height).unwrap(),
+            0,
+        )],
+        vec![],
+    )
+    .unwrap();
+
+    let paint_bounds = crate::FrameRect::new(0.0, 0.0, 10.0, 16.0).unwrap();
+    let appearance = crate::PresentedPointerSourceAppearance::new(
+        vec![crate::PresentedSourcePaintSpan::new_run(
+            crate::PresentedPrimitiveKind::Glyph,
+            GlyphRowRole::Text,
+            DisplaySlotId {
+                window_id,
+                row: 0,
+                col: 0,
+            },
+            2,
+            paint_bounds,
+        )],
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+    );
+    state.presented_pointer_source = crate::PresentedPointerSourceMap::new(
+        vec![crate::PresentedPointerRegion::new_owned(
+            crate::PresentedRegionId::new(Some(window_id), crate::PresentedRegionKind::TextBody),
+            paint_bounds,
+            Some(crate::InteractionId::new(7)),
+            Some(crate::PointerAppearanceId::try_from(0usize).unwrap()),
+        )],
+        vec![appearance],
+    );
+
+    let materialized = state.materialize();
+    let slots = materialized
+        .glyphs
+        .iter()
+        .filter_map(|glyph| glyph.slot_id())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        slots,
+        vec![
+            DisplaySlotId {
+                window_id,
+                row: 0,
+                col: 0,
+            },
+            DisplaySlotId {
+                window_id,
+                row: 0,
+                col: 1,
+            },
+        ]
+    );
+}
+
+#[test]
+fn face_fill_does_not_claim_the_pointer_slot_of_a_grid_glyph() {
+    let window_id = DisplayWindowId::new(6);
+    let window_bounds = Rect::new(0.0, 0.0, 80.0, 128.0);
+    let row_bounds = Rect::new(0.0, 112.0, 80.0, 16.0);
+    let mut state = FrameDisplayState::new(10, 8, 8.0, 16.0);
+    install_complete_window_geometry(&mut state, window_id, window_bounds);
+    state.faces.insert(FaceId::new(0), Face::default());
+    state.face_fills.push(FaceFillItem {
+        window_id,
+        row_role: GlyphRowRole::Text,
+        clip_rect: Some(window_bounds),
+        bounds: row_bounds,
+        face_id: FaceId::new(0),
+    });
+
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    row.pixel_y = 112.0;
+    row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::char('2', FaceId::new(0), 0).with_pixel_width(8.0));
+    let mut matrix = GlyphMatrix::new(8, 10);
+    matrix.rows[7] = row;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id,
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: window_bounds,
+        text_pixel_bounds: window_bounds,
+        text_clip_bounds: None,
+        selected: true,
+    });
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(window_id),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(
+                window_bounds.x,
+                window_bounds.y,
+                window_bounds.width,
+                window_bounds.height,
+            )
+            .unwrap(),
+            0,
+        )],
+        vec![],
+    )
+    .unwrap();
+
+    let paint_bounds = crate::FrameRect::new(0.0, 112.0, 8.0, 16.0).unwrap();
+    let appearance = crate::PresentedPointerSourceAppearance::new(
+        vec![crate::PresentedSourcePaintSpan::new(
+            crate::PresentedPrimitiveKind::Glyph,
+            GlyphRowRole::Text,
+            DisplaySlotId {
+                window_id,
+                row: 7,
+                col: 0,
+            },
+            paint_bounds,
+        )],
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+        crate::PointerDrawMode::Face(FaceId::new(0)),
+    );
+    state.presented_pointer_source = crate::PresentedPointerSourceMap::new(
+        vec![crate::PresentedPointerRegion::new_owned(
+            crate::PresentedRegionId::new(Some(window_id), crate::PresentedRegionKind::TextBody),
+            paint_bounds,
+            Some(crate::InteractionId::new(7)),
+            Some(crate::PointerAppearanceId::try_from(0usize).unwrap()),
+        )],
+        vec![appearance],
+    );
+
+    let materialized = state.materialize();
+    assert!(matches!(
+        materialized.glyphs.as_slice(),
+        [
+            FrameGlyph::Background { .. },
+            FrameGlyph::Char { char: '2', .. }
+        ]
+    ));
+}
+
+#[test]
 fn glyph_type_kind_codes_match_gnu_glyph_type() {
     let cases = [
         (GlyphTypeKind::Char, 0),

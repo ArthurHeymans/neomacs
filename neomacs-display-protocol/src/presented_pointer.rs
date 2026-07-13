@@ -1395,10 +1395,17 @@ impl PresentedPointerSourceMap {
             if !referenced.contains(&(kind, row_role, slot)) {
                 continue;
             }
-            if primitive_index
-                .insert((kind, row_role, slot), index)
-                .is_some()
-            {
+            if let Some(previous_index) = primitive_index.insert((kind, row_role, slot), index) {
+                tracing::error!(
+                    ?kind,
+                    ?row_role,
+                    ?slot,
+                    previous_index,
+                    index,
+                    previous = ?frame.glyphs[previous_index],
+                    duplicate = ?primitive,
+                    "presented pointer source identity resolves to multiple materialized primitives"
+                );
                 return Err(PresentedPointerMapError::DuplicateSourceIdentity {
                     kind,
                     row_role,

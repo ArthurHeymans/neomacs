@@ -50,7 +50,7 @@ use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_chrome::{
     BandRect, ChromeAction, ChromeHitRegion, InteractionId,
 };
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 use neomacs_display_protocol::{
     FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
@@ -1520,12 +1520,7 @@ fn glyph_at_visual_column(row: &GlyphRow, target_col: u16) -> Option<&Glyph> {
         if col == target_col {
             return Some(glyph);
         }
-        let width = match glyph.glyph_type {
-            GlyphType::Stretch { width_cols } => width_cols,
-            _ if glyph.wide => 2,
-            _ => 1,
-        };
-        col = col.saturating_add(width);
+        col = col.saturating_add(glyph.materialized_slot_span());
     }
     None
 }
