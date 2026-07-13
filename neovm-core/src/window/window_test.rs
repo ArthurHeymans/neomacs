@@ -245,17 +245,11 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     );
 
     frame.remove_presented_window(window_id);
-    assert_eq!(frame.display_presentation(), None);
+    assert_eq!(frame.display_presentation(), Some(PresentationId::new(41)));
     assert!(frame.window_display_snapshot(window_id).is_none());
 
     assert_eq!(
-        frame.publish_display_snapshots(
-            PresentationId::new(41),
-            vec![WindowDisplaySnapshot {
-                window_id,
-                ..WindowDisplaySnapshot::default()
-            }],
-        ),
+        frame.publish_display_snapshots(PresentationId::new(41), Vec::new()),
         Err(PresentationPrepareError::ReusedPresentation(
             PresentationId::new(41)
         ))
@@ -268,6 +262,8 @@ fn publishing_display_snapshots_replaces_geometry_and_presentation_together() {
     assert!(frame.window_display_snapshot(window_id).is_none());
 
     frame.set_display_snapshots(Vec::new());
+    assert_eq!(frame.active_presentation(), Some(PresentationId::new(42)));
+    assert!(frame.retire_display_presentation(PresentationId::new(42)));
     assert_eq!(frame.active_presentation(), None);
 }
 
@@ -291,7 +287,13 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
         )
         .expect("prepare first presentation");
     assert_eq!(frame.display_presentation(), None);
-    assert!(frame.window_display_snapshot(window_id).is_none());
+    assert_eq!(
+        frame
+            .redisplay_snapshot(window_id)
+            .expect("prepared redisplay cache")
+            .text_area_left_offset,
+        8
+    );
 
     assert_eq!(
         frame
@@ -321,10 +323,17 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     assert_eq!(frame.active_presentation(), Some(PresentationId::new(41)));
     assert_eq!(
         frame
-            .window_display_snapshot(window_id)
-            .expect("old presentation remains active")
+            .redisplay_snapshot(window_id)
+            .expect("latest redisplay cache")
             .text_area_left_offset,
-        8
+        24
+    );
+    assert_eq!(
+        frame
+            .active_presented_geometry()
+            .expect("old presentation remains active")
+            .presentation(),
+        PresentationId::new(41)
     );
 
     assert!(frame.discard_display_presentation(PresentationId::new(42)));

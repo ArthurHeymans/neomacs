@@ -388,6 +388,94 @@ fn layout_invalidation_forces_redisplay_when_evaluator_signature_is_unchanged() 
     assert_eq!(redisplays.get(), 2);
 }
 
+#[test]
+fn presentation_activation_event_atomically_exposes_prepared_geometry() {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("activation-event");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("activation-event", 200, 100, buffer);
+    let presentation = crate::window::geometry::PresentationId::new(41);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .prepare_display_presentation(presentation, Vec::new())
+        .expect("prepare presentation");
+
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentationActivated {
+            presentation: presentation.get(),
+            emacs_frame_id: frame_id.0,
+        });
+    eval.service_leading_internal_frontend_events();
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(frame.active_presentation(), Some(presentation));
+    assert!(!frame.is_display_presentation_prepared(presentation));
+
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentationRetired {
+            presentation: presentation.get(),
+        });
+    eval.service_leading_internal_frontend_events();
+    assert_eq!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .active_presentation(),
+        None
+    );
+}
+
+#[test]
+fn presentation_discard_event_removes_only_prepared_geometry() {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("discard-event");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("discard-event", 200, 100, buffer);
+    let active = crate::window::geometry::PresentationId::new(41);
+    let discarded = crate::window::geometry::PresentationId::new(42);
+    let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+    frame
+        .prepare_display_presentation(active, Vec::new())
+        .expect("prepare active presentation");
+    frame
+        .activate_display_presentation(active)
+        .expect("activate presentation");
+    frame
+        .prepare_display_presentation(discarded, Vec::new())
+        .expect("prepare discarded presentation");
+    let interaction = eval.register_presented_mouse_target(
+        discarded.get(),
+        PresentedMouseTarget {
+            area: PresentedMouseArea::TabBar,
+            posn_string: Value::string("discarded"),
+        },
+    );
+
+    eval.command_loop
+        .keyboard
+        .pending_input_events
+        .push_back(InputEvent::PresentationDiscarded {
+            presentation: discarded.get(),
+            emacs_frame_id: frame_id.0,
+        });
+    eval.service_leading_internal_frontend_events();
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    assert_eq!(frame.active_presentation(), Some(active));
+    assert!(!frame.is_display_presentation_prepared(discarded));
+    assert!(
+        eval.resolve_presented_mouse_target(discarded.get(), interaction)
+            .is_none()
+    );
+}
+
 fn reset_keyboard_test_terminals() {
     crate::emacs_core::terminal::pure::reset_terminal_thread_locals();
 }

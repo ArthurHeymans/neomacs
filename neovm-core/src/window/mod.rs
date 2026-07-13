@@ -1653,13 +1653,6 @@ struct FramePresentationState {
     last_identity: Option<geometry::PresentationId>,
 }
 
-impl FramePresentationState {
-    fn invalidate_geometry(&mut self) {
-        self.prepared.clear();
-        self.active = None;
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Frame
 // ---------------------------------------------------------------------------
@@ -1774,9 +1767,9 @@ pub struct Frame {
     /// neomacs-side equivalents — adding the GNU names verbatim is
     /// tracked as future work in the audit's Phase 4 plan.
     presentation_state: FramePresentationState,
-    /// Compatibility snapshots used by transitional GNU adapters and output
-    /// lifecycle consumers. They are not an authoritative geometry publication.
-    display_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
+    /// Latest completed layout output used for incremental redisplay and GNU
+    /// output bookkeeping. This cache is not renderer-active geometry.
+    redisplay_snapshots: HashMap<WindowId, WindowDisplaySnapshot>,
     /// Last recorded redisplay state for GNU window change hooks.
     pub(crate) window_hook_record: FrameWindowHookRecord,
     /// GNU `frame-window-state-change` flag.
@@ -1911,7 +1904,7 @@ impl Frame {
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             presentation_state: FramePresentationState::default(),
-            display_snapshots: HashMap::new(),
+            redisplay_snapshots: HashMap::new(),
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -2360,8 +2353,7 @@ impl Frame {
         }
 
         self.root_window.invalidate_display_state();
-        self.presentation_state.invalidate_geometry();
-        self.display_snapshots.clear();
+        self.redisplay_snapshots.clear();
     }
 
     pub fn sync_tab_bar_height_from_parameters(&mut self) {
@@ -2592,6 +2584,12 @@ impl Frame {
                 presentation,
             ));
         }
+        self.redisplay_snapshots = prepared
+            .snapshots
+            .iter()
+            .cloned()
+            .map(|snapshot| (snapshot.window_id, snapshot))
+            .collect();
         self.presentation_state
             .prepared
             .insert(presentation, prepared);
@@ -2620,11 +2618,6 @@ impl Frame {
             .ok_or(geometry::PresentationActivateError::UnknownPresentation(
                 presentation,
             ))?;
-        self.display_snapshots = prepared
-            .snapshots
-            .into_iter()
-            .map(|snapshot| (snapshot.window_id, snapshot))
-            .collect();
         let replaced = self
             .presentation_state
             .active
@@ -2639,6 +2632,28 @@ impl Frame {
             .prepared
             .remove(&presentation)
             .is_some()
+    }
+
+    pub fn retire_display_presentation(&mut self, presentation: geometry::PresentationId) -> bool {
+        if self
+            .presentation_state
+            .active
+            .as_ref()
+            .is_some_and(|active| active.presentation() == presentation)
+        {
+            self.presentation_state.active = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_display_presentation_prepared(&self, presentation: geometry::PresentationId) -> bool {
+        self.presentation_state.prepared.contains_key(&presentation)
+    }
+
+    pub fn has_prepared_display_presentations(&self) -> bool {
+        !self.presentation_state.prepared.is_empty()
     }
 
     pub const fn active_presentation(&self) -> Option<geometry::PresentationId> {
@@ -2693,32 +2708,26 @@ impl Frame {
     pub fn set_display_snapshots(&mut self, snapshots: Vec<WindowDisplaySnapshot>) {
         // Geometry installed without an owning presentation cannot retain the
         // identity of a previous publication.
-        self.display_snapshots = snapshots
+        self.redisplay_snapshots = snapshots
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
             .map(|snapshot| (snapshot.window_id, snapshot))
             .collect();
-        self.presentation_state.invalidate_geometry();
     }
 
-    /// Last redisplay geometry for WINDOW-ID, if available.
+    /// Latest completed redisplay output for WINDOW-ID, independent of which
+    /// presentation is renderer-active.
+    pub fn redisplay_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
+        self.redisplay_snapshots.get(&id)
+    }
+
+    /// Transitional name retained for incremental redisplay consumers.
     pub fn window_display_snapshot(&self, id: WindowId) -> Option<&WindowDisplaySnapshot> {
-        self.display_snapshots.get(&id)
+        self.redisplay_snapshot(id)
     }
 
     pub(crate) fn remove_presented_window(&mut self, id: WindowId) {
-        self.presentation_state
-            .prepared
-            .retain(|_, prepared| !prepared.geometry.contains_window(id));
-        if self
-            .presentation_state
-            .active
-            .as_ref()
-            .is_some_and(|geometry| geometry.contains_window(id))
-        {
-            self.presentation_state.invalidate_geometry();
-            self.display_snapshots.clear();
-        }
+        self.redisplay_snapshots.remove(&id);
     }
 
     /// Resize the frame and window tree to new pixel dimensions.

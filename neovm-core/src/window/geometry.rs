@@ -169,10 +169,6 @@ impl PresentedGeometry {
         self.presentation
     }
 
-    pub(crate) fn contains_window(&self, window: WindowId) -> bool {
-        self.frame.windows.contains_key(&window)
-    }
-
     fn window(&self, window: WindowId) -> Option<&PresentedWindow> {
         self.frame.windows.get(&window)
     }

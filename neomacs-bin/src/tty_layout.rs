@@ -26,6 +26,73 @@ thread_local! {
 
 // ── Layout helpers ────────────────────────────────────────────────────────
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PreparedPresentationTicket {
+    frame_id: FrameId,
+    presentation: neovm_core::window::geometry::PresentationId,
+}
+
+impl PreparedPresentationTicket {
+    pub fn activate(
+        self,
+        evaluator: &mut Context,
+    ) -> Result<
+        Option<neovm_core::window::geometry::PresentationId>,
+        neovm_core::window::geometry::PresentationActivateError,
+    > {
+        evaluator
+            .frame_manager_mut()
+            .get_mut(self.frame_id)
+            .ok_or(
+                neovm_core::window::geometry::PresentationActivateError::UnknownPresentation(
+                    self.presentation,
+                ),
+            )?
+            .activate_display_presentation(self.presentation)
+    }
+
+    pub fn discard(self, evaluator: &mut Context) -> bool {
+        evaluator.retire_interaction_presentation(self.presentation.get());
+        evaluator
+            .frame_manager_mut()
+            .get_mut(self.frame_id)
+            .is_some_and(|frame| frame.discard_display_presentation(self.presentation))
+    }
+}
+
+#[must_use = "a prepared display must be submitted, activated, or discarded"]
+pub struct PreparedFrameDisplay {
+    ticket: PreparedPresentationTicket,
+    state: FrameDisplayState,
+}
+
+impl PreparedFrameDisplay {
+    pub fn into_submission(self) -> (PreparedPresentationTicket, FrameDisplayState) {
+        (self.ticket, self.state)
+    }
+
+    pub fn activate(
+        self,
+        evaluator: &mut Context,
+    ) -> Result<FrameDisplayState, neovm_core::window::geometry::PresentationActivateError> {
+        self.ticket.activate(evaluator)?;
+        Ok(self.state)
+    }
+
+    pub fn discard(self, evaluator: &mut Context) -> FrameDisplayState {
+        self.ticket.discard(evaluator);
+        self.state
+    }
+}
+
+impl std::ops::Deref for PreparedFrameDisplay {
+    type Target = FrameDisplayState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.state
+    }
+}
+
 pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
     evaluator
         .frame_manager()
@@ -36,7 +103,7 @@ pub(crate) fn current_layout_frame_id(evaluator: &Context) -> Option<FrameId> {
 pub fn layout_frame_display_state(
     evaluator: &mut Context,
     frame_id: FrameId,
-) -> Option<FrameDisplayState> {
+) -> Option<PreparedFrameDisplay> {
     LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
@@ -53,7 +120,16 @@ pub fn layout_frame_display_state(
             let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
         }
         engine.layout_frame_rust(evaluator, frame_id);
-        engine.last_frame_display_state.take()
+        let state = engine.last_frame_display_state.take()?;
+        Some(PreparedFrameDisplay {
+            ticket: PreparedPresentationTicket {
+                frame_id,
+                presentation: neovm_core::window::geometry::PresentationId::new(
+                    state.presentation_id.get(),
+                ),
+            },
+            state,
+        })
     })
 }
 
@@ -84,19 +160,19 @@ pub fn collect_snapshot_states(
         if !keep {
             continue;
         }
-        let Some(state) = layout_frame_display_state(evaluator, node.frame_id) else {
+        let Some(prepared) = layout_frame_display_state(evaluator, node.frame_id) else {
             continue;
         };
-        states.push(state);
+        states.push(prepared.discard(evaluator));
     }
 
     // A live frame outside the selected frame's tree (another top-level
     // frame): lay it out directly with its canonical root placement.
     if states.is_empty()
         && let SnapshotTarget::Frame(id) = target
-        && let Some(state) = layout_frame_display_state(evaluator, FrameId(*id))
+        && let Some(prepared) = layout_frame_display_state(evaluator, FrameId(*id))
     {
-        states.push(state);
+        states.push(prepared.discard(evaluator));
     }
 
     if states.is_empty() {
@@ -153,14 +229,19 @@ pub fn run_tty_layout_tree(
         .frame_manager()
         .frames_in_reverse_z_order(root_id, true);
 
-    let root_state = layout_frame_display_state(evaluator, root_id)?;
+    let root_state = layout_frame_display_state(evaluator, root_id)?
+        .activate(evaluator)
+        .ok()?;
 
     let mut child_states = Vec::new();
     for frame_id in frame_order {
         if frame_id == root_id {
             continue;
         }
-        let Some(state) = layout_frame_display_state(evaluator, frame_id) else {
+        let Some(prepared) = layout_frame_display_state(evaluator, frame_id) else {
+            continue;
+        };
+        let Ok(state) = prepared.activate(evaluator) else {
             continue;
         };
         child_states.push(state);

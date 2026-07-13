@@ -1509,7 +1509,7 @@ impl LayoutEngine {
         let snapshots = std::mem::take(&mut self.display_snapshots);
         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
             frame
-                .publish_display_snapshots(
+                .prepare_display_presentation(
                     neovm_core::window::geometry::PresentationId::new(presentation_id),
                     snapshots,
                 )

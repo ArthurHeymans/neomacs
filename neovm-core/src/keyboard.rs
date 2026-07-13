@@ -2248,10 +2248,47 @@ impl crate::emacs_core::eval::Context {
                     presentation,
                 } => {
                     self.retire_interaction_presentation(presentation);
+                    if let Some(presentation) =
+                        crate::window::geometry::PresentationId::try_new(presentation)
+                    {
+                        for frame in self.frame_manager_mut().frames_mut() {
+                            frame.retire_display_presentation(presentation);
+                        }
+                    }
                     crate::frontend_events::InternalEventEffects::default()
                 }
-                crate::frontend_events::InternalFrontendEvent::PresentationActivated { .. }
-                | crate::frontend_events::InternalFrontendEvent::PresentationDiscarded { .. } => {
+                crate::frontend_events::InternalFrontendEvent::PresentationActivated {
+                    presentation,
+                    emacs_frame_id,
+                } => {
+                    if let Some(presentation) =
+                        crate::window::geometry::PresentationId::try_new(presentation)
+                        && let Some(frame) = self
+                            .frame_manager_mut()
+                            .get_mut(crate::window::FrameId(emacs_frame_id))
+                        && let Err(error) = frame.activate_display_presentation(presentation)
+                    {
+                        tracing::debug!(
+                            ?error,
+                            emacs_frame_id,
+                            "ignored activation for a presentation no longer prepared"
+                        );
+                    }
+                    crate::frontend_events::InternalEventEffects::default()
+                }
+                crate::frontend_events::InternalFrontendEvent::PresentationDiscarded {
+                    presentation,
+                    emacs_frame_id,
+                } => {
+                    self.retire_interaction_presentation(presentation);
+                    if let Some(presentation) =
+                        crate::window::geometry::PresentationId::try_new(presentation)
+                        && let Some(frame) = self
+                            .frame_manager_mut()
+                            .get_mut(crate::window::FrameId(emacs_frame_id))
+                    {
+                        frame.discard_display_presentation(presentation);
+                    }
                     crate::frontend_events::InternalEventEffects::default()
                 }
                 crate::frontend_events::InternalFrontendEvent::LayoutInvalidated => {

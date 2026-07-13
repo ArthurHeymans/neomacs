@@ -1566,6 +1566,10 @@ fn publish_gui_frame_sends_opening_frame_before_startup_lisp() {
         engine.borrow_mut().enable_cosmic_metrics();
     });
     let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
+    let active_before = eval
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.active_presentation());
 
     publish_gui_frame(&mut eval, &frame_tx, None);
 
@@ -1580,6 +1584,36 @@ fn publish_gui_frame_sends_opening_frame_before_startup_lisp() {
         !display_state.window_matrices.is_empty(),
         "opening GUI frame should carry at least one window matrix"
     );
+    let presentation =
+        neovm_core::window::geometry::PresentationId::new(display_state.presentation_id.get());
+    let frame = eval.frame_manager().get(frame_id).expect("published frame");
+    assert_eq!(frame.active_presentation(), active_before);
+    assert!(frame.is_display_presentation_prepared(presentation));
+}
+
+#[test]
+fn rejected_gui_frame_is_discarded_instead_of_becoming_active() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
+
+    LAYOUT_ENGINE.with(|engine| {
+        engine.borrow_mut().enable_cosmic_metrics();
+    });
+    let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
+    drop(frame_rx);
+
+    publish_gui_frame(&mut eval, &frame_tx, None);
+
+    let frame = eval.frame_manager().get(frame_id).expect("rejected frame");
+    assert_eq!(frame.active_presentation(), None);
+    assert!(!frame.has_prepared_display_presentations());
 }
 
 #[test]

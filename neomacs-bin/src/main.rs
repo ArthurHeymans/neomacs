@@ -3797,12 +3797,19 @@ fn publish_gui_frame(
 
     let mut sent_any = false;
     for node in tree.frames_bottom_to_top {
-        let display_state = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
-        let Some(display_state) = display_state else {
+        let prepared = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
+        let Some(prepared) = prepared else {
             continue;
         };
-        if frame_tx.try_send(display_state).is_ok() {
-            sent_any = true;
+        let (ticket, display_state) = prepared.into_submission();
+        match frame_tx.try_send(display_state) {
+            Ok(()) => sent_any = true,
+            Err(error) => {
+                ticket.discard(evaluator);
+                tracing::debug!(
+                    "discarded GUI presentation because render submission failed: {error}"
+                );
+            }
         }
     }
 

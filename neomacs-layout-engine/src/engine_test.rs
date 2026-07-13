@@ -70,6 +70,28 @@ impl BufferTextPropertyTestExt for neovm_core::buffer::Buffer {
     }
 }
 
+fn activate_last_engine_presentation(
+    evaluator: &mut Context,
+    engine: &LayoutEngine,
+    frame_id: neovm_core::window::FrameId,
+) -> neovm_core::window::geometry::PresentationId {
+    let presentation = neovm_core::window::geometry::PresentationId::new(
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("prepared renderer presentation")
+            .presentation_id
+            .get(),
+    );
+    evaluator
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("presentation frame")
+        .activate_display_presentation(presentation)
+        .expect("activate prepared renderer presentation");
+    presentation
+}
+
 #[test]
 fn resize_mini_windows_mode_parses_gnu_values() {
     assert_eq!(
@@ -1753,11 +1775,9 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
+    let evaluator_presentation = activate_last_engine_presentation(&mut eval, &engine, frame_id);
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
-    let evaluator_presentation = frame
-        .display_presentation()
-        .expect("evaluator presentation");
     let first_publication = frame
         .presented_geometry()
         .expect("first immutable publication")
@@ -2052,13 +2072,12 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .regions();
 
     engine.layout_frame_rust(&mut eval, frame_id);
+    let replacement = activate_last_engine_presentation(&mut eval, &engine, frame_id);
     let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
-    assert_ne!(
-        frame.display_presentation(),
-        Some(first_publication.presentation())
-    );
+    assert_eq!(frame.active_presentation(), Some(replacement));
+    assert_ne!(replacement, first_publication.presentation());
     frame.resize_pixelwise(1600, 900);
-    assert!(frame.presented_geometry().is_none());
+    assert_eq!(frame.active_presentation(), Some(replacement));
     assert_eq!(
         first_publication
             .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
@@ -2097,6 +2116,7 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     assert!(frame.display_presentation().is_some());
@@ -2761,6 +2781,7 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
     let (mut eval, frame_id, buf_id, selected) = incr_editing_frame(&text, 800, 600);
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
     let (first_presentation, first_regions, first_cell_origin) = {
         let frame = eval.frame_manager().get(frame_id).expect("frame");
         let snapshot = frame.window_display_snapshot(selected).expect("snapshot");
@@ -2776,6 +2797,7 @@ fn cursor_only_replay_republishes_the_window_regions_with_the_new_presentation()
         .expect("buffer")
         .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
     engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
 
     assert_eq!(engine.last_layout_stats().cursor_only_windows, 1);
     let frame = eval.frame_manager().get(frame_id).expect("frame");
@@ -14451,6 +14473,7 @@ fn layout_frame_rust_renders_tab_bar_text_from_lisp_tab_bar_keymap() {
     let mut engine = LayoutEngine::new();
     neomacs_display_protocol::glyph_matrix::reset_materialize_call_count_for_current_thread();
     engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
     assert_eq!(
         neomacs_display_protocol::glyph_matrix::materialize_call_count_for_current_thread(),
         0,
