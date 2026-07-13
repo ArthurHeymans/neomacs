@@ -3263,7 +3263,14 @@ fn scroll_to_top_does_not_match_trailing_placeholder_row() {
     let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
-    scroll_window_to(&mut eval, frame_id, win, buf_id, down_start, 30 * line.len());
+    scroll_window_to(
+        &mut eval,
+        frame_id,
+        win,
+        buf_id,
+        down_start,
+        30 * line.len(),
+    );
     engine.layout_frame_rust(&mut eval, frame_id);
     scroll_window_to(&mut eval, frame_id, win, buf_id, 1, 0);
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -4176,12 +4183,7 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
     // ('\n' at 4), "BBB" at 5. The `display` = "X\n" covers "AAA\n" (0..4).
     let text = "AAA\n\nBBB\n";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
-        assert!(buffer.put_text_property(
-            0,
-            4,
-            Value::symbol("display"),
-            Value::string("X\n"),
-        ));
+        assert!(buffer.put_text_property(0, 4, Value::symbol("display"), Value::string("X\n"),));
     };
     let trace = layout_trace_with_buffer_setup(text, 400, 240, setup);
 
@@ -4194,7 +4196,9 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
             row.glyph_areas[1]
                 .iter()
                 .filter_map(|glyph| match &glyph.kind {
-                    GlyphKindTrace::Char(ch) | GlyphKindTrace::Glyphless(ch) => Some(ch.to_string()),
+                    GlyphKindTrace::Char(ch) | GlyphKindTrace::Glyphless(ch) => {
+                        Some(ch.to_string())
+                    }
                     GlyphKindTrace::Composite(text) => Some(text.clone()),
                     _ => None,
                 })
@@ -4218,7 +4222,8 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
         "display-string newline must leave a blank row for the empty buffer line, rows={row_texts:?}"
     );
     assert_eq!(
-        row_texts[x_row + 1], "",
+        row_texts[x_row + 1],
+        "",
         "the row between `X` and `BBB` must be the blank empty-line row, rows={row_texts:?}"
     );
 }

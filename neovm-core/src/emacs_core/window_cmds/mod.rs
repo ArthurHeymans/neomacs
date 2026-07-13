@@ -5355,7 +5355,9 @@ fn set_top_level_non_window_pixelwise_totals(
     // The terminal-resize FRAME_LINES fix lives in `Frame::resize_pixelwise`
     // (window/mod.rs), a separate path, and is unaffected.
     let minibuffer_lines = i64::from(frame.minibuffer_leaf.is_some());
-    let frame_lines = text_height.saturating_add(minibuffer_lines).min(u32::MAX as i64);
+    let frame_lines = text_height
+        .saturating_add(minibuffer_lines)
+        .min(u32::MAX as i64);
     // Only realized (displayed) chrome adds rows over FRAME_LINES; a
     // non-displayed frame (--batch) keeps FRAME_TOTAL_LINES == FRAME_LINES,
     // matching GNU's batch geometry that the oracle pins.

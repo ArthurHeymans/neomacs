@@ -980,16 +980,16 @@ impl DisplayPropertyReplacementAppendPlanItem {
                 position,
                 pointer_appearance,
             ),
-            Self::Item(item) => DisplayReplacementAppendResult::without_row_break(
-                item.append_to_text_row(
+            Self::Item(item) => {
+                DisplayReplacementAppendResult::without_row_break(item.append_to_text_row(
                     replacement_append_context,
                     row_geometry,
                     state,
                     face_ids,
                     position,
                     pointer_appearance,
-                ),
-            ),
+                ))
+            }
         }
     }
 }

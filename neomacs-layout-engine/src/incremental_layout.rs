@@ -514,9 +514,9 @@ impl RetainedWindowMatrix {
         // placeholder as the new top and emits a phantom leading blank row + a
         // one-column-clipped first line (the recenter-to-top corruption). Match
         // only real text rows so scroll-up correctly bails to a full rebuild.
-        let s = body
-            .iter()
-            .position(|(_, row)| row.displays_text && row.start_charpos as i64 == curr.window_start)?;
+        let s = body.iter().position(|(_, row)| {
+            row.displays_text && row.start_charpos as i64 == curr.window_start
+        })?;
         if s == 0 {
             return None;
         }
