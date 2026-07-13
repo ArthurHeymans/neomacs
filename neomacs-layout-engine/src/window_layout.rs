@@ -20,8 +20,6 @@ pub(crate) struct WindowChromeMetrics {
 }
 
 impl WindowChromeMetrics {
-    const STABLE_PIXEL_EPSILON: f32 = 0.01;
-
     pub(crate) fn from_params(params: &WindowParams) -> Self {
         Self {
             tab_line_height: params.tab_line_height,
@@ -159,17 +157,21 @@ impl WindowLayoutBox {
         let tab_h = chrome.tab_line_height.max(0.0);
         let header_h = chrome.header_line_height.max(0.0);
         let mode_h = chrome.mode_line_height.max(0.0);
+        let right_divider_w = dividers.right_width.max(0.0).min(outer.width.max(0.0));
+        let bottom_divider_h = dividers.bottom_height.max(0.0).min(outer.height.max(0.0));
+        let content_width = (outer.width - right_divider_w).max(0.0);
+        let content_height = (outer.height - bottom_divider_h).max(0.0);
         let hscroll_h = if params.horizontal_scroll_bar {
             params.scroll_bar_pixel_height.max(0.0)
         } else {
             0.0
         };
         let body_y = outer.y + tab_h + header_h;
-        let body_h = (outer.height - tab_h - header_h - hscroll_h - mode_h).max(0.0);
+        let body_h = (content_height - tab_h - header_h - hscroll_h - mode_h).max(0.0);
         let body = Rect::new(
             params.text_bounds.x,
             body_y,
-            params.text_bounds.width,
+            (params.text_bounds.width - right_divider_w).max(0.0),
             body_h,
         );
         let band = |x: f32, width: f32| (width > 0.0).then(|| Rect::new(x, body_y, width, body_h));
@@ -217,28 +219,33 @@ impl WindowLayoutBox {
         let right_scroll_bar = band(right_x, right_sb_w);
 
         let optional_rect = |rect: Rect| (rect.width > 0.0 && rect.height > 0.0).then_some(rect);
-        let tab_line = optional_rect(Rect::new(outer.x, outer.y, outer.width, tab_h));
-        let header_line = optional_rect(Rect::new(outer.x, outer.y + tab_h, outer.width, header_h));
-        let horizontal_scroll_bar =
-            optional_rect(Rect::new(outer.x, body_y + body_h, outer.width, hscroll_h));
+        let tab_line = optional_rect(Rect::new(outer.x, outer.y, content_width, tab_h));
+        let header_line =
+            optional_rect(Rect::new(outer.x, outer.y + tab_h, content_width, header_h));
+        let horizontal_scroll_bar = optional_rect(Rect::new(
+            outer.x,
+            body_y + body_h,
+            content_width,
+            hscroll_h,
+        ));
         let mode_line = optional_rect(Rect::new(
             outer.x,
-            outer.y + outer.height - mode_h,
-            outer.width,
+            outer.y + content_height - mode_h,
+            content_width,
             mode_h,
         ));
 
         let right_divider = optional_rect(Rect::new(
             dividers.right_edge - dividers.right_width,
             outer.y,
-            dividers.right_width,
-            (outer.height - dividers.bottom_height).max(0.0),
+            right_divider_w,
+            content_height,
         ));
         let bottom_divider = optional_rect(Rect::new(
             outer.x,
-            dividers.bottom_edge - dividers.bottom_height,
-            (outer.width - dividers.right_width).max(0.0),
-            dividers.bottom_height,
+            dividers.bottom_edge - bottom_divider_h,
+            content_width,
+            bottom_divider_h,
         ));
 
         Self {
@@ -286,7 +293,11 @@ fn retained_or_estimated(estimated: f32, retained: f32) -> f32 {
 }
 
 fn metric_is_stable(assumed: f32, measured: f32) -> bool {
-    (assumed - measured).abs() <= WindowChromeMetrics::STABLE_PIXEL_EPSILON
+    // Measured display rows cross the layout boundary as integral logical
+    // pixels (see `stable_pixel_ceil`).  Keep convergence exact here: treating
+    // two distinct allocations as equivalent would let the body and chrome
+    // publish rectangles derived from different partitions.
+    assumed == measured
 }
 
 /// Publication outcome for one leaf-window attempt.
@@ -315,5 +326,16 @@ impl WindowLayoutOutcome {
         } else {
             Self::NeedsRelayout { assumed, measured }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::metric_is_stable;
+
+    #[test]
+    fn chrome_convergence_requires_the_same_canonical_pixel_height() {
+        assert!(metric_is_stable(17.0, 17.0));
+        assert!(!metric_is_stable(17.0, 17.001));
     }
 }

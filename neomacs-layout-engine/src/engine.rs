@@ -294,10 +294,39 @@ impl Default for LayoutEngine {
 }
 
 impl LayoutEngine {
-    fn reset_frame_output_state(&mut self) {
+    /// Discard every value owned by one speculative frame-layout attempt.
+    ///
+    /// A retry must not inherit output or fast-path classifications from the
+    /// rejected attempt. Retained matrices and accepted chrome metrics live
+    /// outside this boundary and are updated only after sealing.
+    fn reset_frame_attempt_state(&mut self) {
         self.frame_output.reset();
         self.pending_tab_bar_pointer = None;
         self.frame_face_id_counter = BasicFaceId::SENTINEL;
+        self.window_snapshots.clear();
+        self.cursor_only_window_ids.clear();
+        self.scroll_window_ids.clear();
+        self.edit_window_ids.clear();
+    }
+
+    fn accept_frame_relayout_request(
+        coordinator: &mut FrameLayoutCoordinator,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        presentation_id: u64,
+        request: FrameRelayoutRequest,
+    ) -> bool {
+        match coordinator.request_retry(request) {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::error!(
+                    presentation = presentation_id,
+                    ?error,
+                    "rejecting frame whose layout failed to converge"
+                );
+                evaluator.retire_interaction_presentation(presentation_id);
+                false
+            }
+        }
     }
 
     fn latest_output_window_info(&self, window_id: i64) -> Option<WindowInfo> {
@@ -503,12 +532,6 @@ impl LayoutEngine {
         // Incremental-layout instrumentation (Phase 0a): start each frame from
         // a clean slate; populated as the accepted frame is committed below.
         self.layout_stats = LayoutStats::default();
-        // Phase 1/2: forget which windows took an incremental fast path last
-        // frame; repopulated as windows are laid out this frame.
-        self.cursor_only_window_ids.clear();
-        self.scroll_window_ids.clear();
-        self.edit_window_ids.clear();
-
         // The font service can exist on the engine even while laying out a
         // terminal frame in tests. Match GNU's redisplay split: window-system
         // frames use realized font pixels, terminal frames stay on cell
@@ -642,7 +665,7 @@ impl LayoutEngine {
                 Self::ensure_fontified_rust(evaluator, buf_id, window_start, fontify_end);
             }
 
-            self.reset_frame_output_state();
+            self.reset_frame_attempt_state();
             self.frame_output.set_presentation_id(presentation_id);
             let mut curr_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo> =
                 std::collections::HashMap::new();
@@ -680,9 +703,6 @@ impl LayoutEngine {
                     default_metrics,
                 ));
 
-            // Clear hit-test data for new frame
-            self.window_snapshots.clear();
-
             let tab_bar_height = frame_params.tab_bar_height;
             if tab_bar_height > 0.0
                 && let Some(actual_tab_bar_height) = self.render_frame_tab_bar_rust(
@@ -693,23 +713,22 @@ impl LayoutEngine {
                     tab_bar_height,
                     presentation_id,
                 )
-                && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
+                && actual_tab_bar_height != tab_bar_height
             {
                 let request = FrameRelayoutRequest::FrameTabBar {
                     assumed_height: tab_bar_height,
                     measured_height: actual_tab_bar_height,
                 };
-                if let Err(error) = layout_coordinator.request_retry(request) {
-                    tracing::error!(
-                        presentation = presentation_id,
-                        ?error,
-                        "rejecting frame whose layout failed to converge"
-                    );
-                    evaluator.retire_interaction_presentation(presentation_id);
+                if !Self::accept_frame_relayout_request(
+                    &mut layout_coordinator,
+                    evaluator,
+                    presentation_id,
+                    request,
+                ) {
                     return;
                 }
                 if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                    frame.tab_bar_height = actual_tab_bar_height.round().max(1.0) as u32;
+                    frame.tab_bar_height = actual_tab_bar_height.max(1.0) as u32;
                     frame.sync_window_area_bounds();
                 }
                 continue;
@@ -867,13 +886,12 @@ impl LayoutEngine {
                             assumed,
                             measured,
                         };
-                        if let Err(error) = layout_coordinator.request_retry(request) {
-                            tracing::error!(
-                                presentation = presentation_id,
-                                ?error,
-                                "rejecting frame whose layout failed to converge"
-                            );
-                            evaluator.retire_interaction_presentation(presentation_id);
+                        if !Self::accept_frame_relayout_request(
+                            &mut layout_coordinator,
+                            evaluator,
+                            presentation_id,
+                            request,
+                        ) {
                             return;
                         }
                         window_chrome_metrics
@@ -1030,13 +1048,12 @@ impl LayoutEngine {
                             allocated_rows,
                             required_rows: mini_rows_used,
                         };
-                        if let Err(error) = layout_coordinator.request_retry(request) {
-                            tracing::error!(
-                                presentation = presentation_id,
-                                ?error,
-                                "rejecting frame whose layout failed to converge"
-                            );
-                            evaluator.retire_interaction_presentation(presentation_id);
+                        if !Self::accept_frame_relayout_request(
+                            &mut layout_coordinator,
+                            evaluator,
+                            presentation_id,
+                            request,
+                        ) {
                             return;
                         }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
@@ -1065,13 +1082,12 @@ impl LayoutEngine {
                             allocated_rows,
                             required_rows: mini_rows_used,
                         };
-                        if let Err(error) = layout_coordinator.request_retry(request) {
-                            tracing::error!(
-                                presentation = presentation_id,
-                                ?error,
-                                "rejecting frame whose layout failed to converge"
-                            );
-                            evaluator.retire_interaction_presentation(presentation_id);
+                        if !Self::accept_frame_relayout_request(
+                            &mut layout_coordinator,
+                            evaluator,
+                            presentation_id,
+                            request,
+                        ) {
                             return;
                         }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {

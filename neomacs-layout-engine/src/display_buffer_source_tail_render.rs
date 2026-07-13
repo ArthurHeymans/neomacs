@@ -252,9 +252,9 @@ impl<'a> BufferSourceTailRequestContext<'a> {
         TextWindowFinishRequest::new(
             self.cell_origin,
             self.regions,
-            measured_chrome_heights.mode_line_height.round() as i64,
-            measured_chrome_heights.header_line_height.round() as i64,
-            measured_chrome_heights.tab_line_height.round() as i64,
+            measured_chrome_heights.mode_line_height as i64,
+            measured_chrome_heights.header_line_height as i64,
+            measured_chrome_heights.tab_line_height as i64,
         )
     }
 

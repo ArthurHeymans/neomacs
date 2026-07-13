@@ -159,44 +159,44 @@ fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
     assert_eq!(regions.right_margin_columns, 3);
     assert_eq!(
         regions.left_scroll_bar,
-        Some(EvaluatorRect::new(144.0, 36.0, 12.0, 263.0))
+        Some(EvaluatorRect::new(144.0, 36.0, 12.0, 258.0))
     );
     assert_eq!(
         regions.left_fringe,
-        Some(EvaluatorRect::new(156.0, 36.0, 8.0, 263.0))
+        Some(EvaluatorRect::new(156.0, 36.0, 8.0, 258.0))
     );
     assert_eq!(
         regions.left_margin,
-        Some(EvaluatorRect::new(164.0, 36.0, 16.0, 263.0))
+        Some(EvaluatorRect::new(164.0, 36.0, 16.0, 258.0))
     );
     assert_eq!(
         regions.text_body,
-        EvaluatorRect::new(180.0, 36.0, 330.0, 263.0)
+        EvaluatorRect::new(180.0, 36.0, 324.0, 258.0)
     );
     assert_eq!(
         regions.right_margin,
-        Some(EvaluatorRect::new(510.0, 36.0, 24.0, 263.0))
+        Some(EvaluatorRect::new(504.0, 36.0, 24.0, 258.0))
     );
     assert_eq!(
         regions.right_fringe,
-        Some(EvaluatorRect::new(534.0, 36.0, 10.0, 263.0))
+        Some(EvaluatorRect::new(528.0, 36.0, 10.0, 258.0))
     );
     assert_eq!(regions.right_scroll_bar, None);
     assert_eq!(
         regions.tab_line,
-        Some(EvaluatorRect::new(144.0, 24.0, 400.0, 5.0))
+        Some(EvaluatorRect::new(144.0, 24.0, 394.0, 5.0))
     );
     assert_eq!(
         regions.header_line,
-        Some(EvaluatorRect::new(144.0, 29.0, 400.0, 7.0))
+        Some(EvaluatorRect::new(144.0, 29.0, 394.0, 7.0))
     );
     assert_eq!(
         regions.horizontal_scroll_bar,
-        Some(EvaluatorRect::new(144.0, 299.0, 400.0, 8.0))
+        Some(EvaluatorRect::new(144.0, 294.0, 394.0, 8.0))
     );
     assert_eq!(
         regions.mode_line,
-        Some(EvaluatorRect::new(144.0, 307.0, 400.0, 17.0))
+        Some(EvaluatorRect::new(144.0, 302.0, 394.0, 17.0))
     );
     assert_eq!(
         regions.right_divider,
@@ -205,6 +205,27 @@ fn presented_window_regions_resolve_all_bands_from_measured_geometry() {
     assert_eq!(
         regions.bottom_divider,
         Some(EvaluatorRect::new(144.0, 319.0, 394.0, 5.0))
+    );
+    let right_divider = regions.right_divider.expect("right divider");
+    for region in [
+        regions.tab_line.expect("tab line"),
+        regions.header_line.expect("header line"),
+        regions.mode_line.expect("mode line"),
+        regions
+            .horizontal_scroll_bar
+            .expect("horizontal scroll bar"),
+        regions.right_fringe.expect("right fringe"),
+    ] {
+        assert!(
+            region.x + region.width <= right_divider.x,
+            "window content must not overlap its right divider: {region:?} vs {right_divider:?}"
+        );
+    }
+    let bottom_divider = regions.bottom_divider.expect("bottom divider");
+    assert!(
+        regions.mode_line.expect("mode line").y + regions.mode_line.expect("mode line").height
+            <= bottom_divider.y,
+        "window chrome must not overlap its bottom divider"
     );
 }
 

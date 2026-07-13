@@ -14379,6 +14379,70 @@ fn active_minibuffer_grows_for_multiline_content_gui() {
 }
 
 #[test]
+fn minibuffer_relayout_discards_fast_path_classification_from_rejected_attempt() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::fixnum(10));
+
+    let root_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let minibuffer = eval.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("minibuffer-retry-fast-path", 120, 40, root_buffer);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.shrink_mini_window();
+    }
+    eval.activate_minibuffer_window_for_buffer(minibuffer, LispString::from_utf8(""), None)
+        .expect("activate minibuffer")
+        .expect("minibuffer window");
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(minibuffer)
+            .expect("minibuffer buffer");
+        buffer.insert("Find file: cand\nalpha.el\nbeta.el\ngamma.el");
+        let eob = buffer.point_max_emacs_byte_pos();
+        buffer.goto_emacs_byte_pos(eob);
+    }
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        0,
+        "the root window was cursor-only only in the rejected pre-resize attempt"
+    );
+    assert_eq!(engine.last_layout_stats().full_windows, 2);
+}
+
+#[test]
+fn resetting_speculative_frame_output_discards_fast_path_classification() {
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    let window = neomacs_display_protocol::DisplayWindowId::new(7);
+    engine.cursor_only_window_ids.insert(window);
+    engine.scroll_window_ids.insert(window, (3, 16.0));
+    engine.edit_window_ids.insert(window, 2);
+
+    engine.reset_frame_attempt_state();
+
+    assert!(engine.cursor_only_window_ids.is_empty());
+    assert!(engine.scroll_window_ids.is_empty());
+    assert!(engine.edit_window_ids.is_empty());
+}
+
+#[test]
 fn active_minibuffer_resize_uses_buffer_local_max_mini_window_height() {
     let mut eval = Context::new();
     eval.obarray_mut()

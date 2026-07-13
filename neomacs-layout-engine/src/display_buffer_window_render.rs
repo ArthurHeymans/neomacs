@@ -237,6 +237,7 @@ where
             state,
             chrome_plan.render_request(
                 params,
+                *layout_box,
                 geometry.mode_line_display_row,
                 reserve_right_border_col,
                 window_metrics,

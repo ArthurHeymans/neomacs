@@ -42,7 +42,7 @@ use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
 use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
 use crate::types::WindowParams;
-use crate::window_layout::WindowChromeMetrics;
+use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
 #[cfg(test)]
 use neomacs_display_protocol::FrameGlyphBuffer;
 #[cfg(test)]
@@ -439,6 +439,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
 
 pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
     pub(crate) params: &'params WindowParams,
+    pub(crate) layout_box: WindowLayoutBox,
     pub(crate) tab_line_face: Option<&'face ResolvedFace>,
     pub(crate) header_line_face: Option<&'face ResolvedFace>,
     pub(crate) mode_line_face: Option<&'face ResolvedFace>,
@@ -526,6 +527,7 @@ impl WindowChromeRowsPlan {
     pub(crate) fn render_request<'face, 'params>(
         &'face self,
         params: &'params WindowParams,
+        layout_box: WindowLayoutBox,
         mode_line_display_row: usize,
         reserve_right_border_col: bool,
         metrics: DisplayRowFallbackMetrics,
@@ -533,6 +535,7 @@ impl WindowChromeRowsPlan {
     ) -> WindowChromeRowsRenderRequest<'face, 'params> {
         WindowChromeRowsRenderRequest {
             params,
+            layout_box,
             tab_line_face: self.tab_line_face.as_ref(),
             header_line_face: self.header_line_face.as_ref(),
             mode_line_face: self.mode_line_face.as_ref(),
@@ -549,8 +552,14 @@ impl WindowChromeRowsPlan {
 
 impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
     fn target_columns(&self) -> WindowChromeTargetColumns {
+        let regions = self.layout_box.regions();
+        let chrome_width = regions
+            .mode_line
+            .or(regions.header_line)
+            .or(regions.tab_line)
+            .map_or(regions.outer.width, |bounds| bounds.width);
         WindowChromeTargetColumns::new(
-            self.params.bounds.width,
+            chrome_width,
             self.metrics.char_width(),
             self.reserve_right_border_col,
         )
@@ -575,6 +584,12 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
     ) -> WindowChromeMetrics {
         let params = self.params;
+        let regions = self.layout_box.regions();
+        let chrome_width = regions
+            .mode_line
+            .or(regions.header_line)
+            .or(regions.tab_line)
+            .map_or(regions.outer.width, |bounds| bounds.width);
         let mut status_line_symbol_values = std::collections::HashMap::new();
         if let Some(buffer) = state
             .evaluator
@@ -598,7 +613,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         };
 
         if params.tab_line_height > 0.0 {
-            let tab_line_y = params.bounds.y;
+            let tab_line_y = regions.tab_line.map_or(regions.outer.y, |bounds| bounds.y);
             let tab_line_text = eval_status_line_format_value(
                 state.evaluator,
                 "tab-line-format",
@@ -615,9 +630,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     display_row_index: 0,
                     output: ChromeRowOutput::new(0, tab_line_y),
                     bounds: Rect::new(
-                        params.bounds.x,
+                        regions.outer.x,
                         tab_line_y,
-                        params.bounds.width,
+                        chrome_width,
                         self.tab_line_height,
                     ),
                     text_area_left_px,
@@ -637,7 +652,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
 
         if params.header_line_height > 0.0 {
             // The header line sits directly below the (measured) tab line.
-            let header_line_y = params.bounds.y + measured.tab_line_height;
+            let header_line_y = regions.outer.y + measured.tab_line_height;
             let header_line_text = eval_status_line_format_value(
                 state.evaluator,
                 "header-line-format",
@@ -657,9 +672,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         header_line_y,
                     ),
                     bounds: Rect::new(
-                        params.bounds.x,
+                        regions.outer.x,
                         header_line_y,
-                        params.bounds.width,
+                        chrome_width,
                         self.header_line_height,
                     ),
                     text_area_left_px,
@@ -678,7 +693,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         }
 
         if params.mode_line_height > 0.0 {
-            let window_bottom = params.bounds.y + params.bounds.height;
+            let window_bottom = regions
+                .bottom_divider
+                .map_or(regions.outer.y + regions.outer.height, |bounds| bounds.y);
             // Provisional Y from the face estimate; `render_and_apply` re-pins
             // the row to `window_bottom − measured_height` once it knows the
             // real height.
@@ -710,9 +727,9 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     display_row_index: self.mode_line_display_row,
                     output: ChromeRowOutput::new(self.mode_line_display_row as i64, mode_line_y),
                     bounds: Rect::new(
-                        params.bounds.x,
+                        regions.outer.x,
                         mode_line_y,
-                        params.bounds.width,
+                        chrome_width,
                         self.mode_line_height,
                     ),
                     text_area_left_px,
