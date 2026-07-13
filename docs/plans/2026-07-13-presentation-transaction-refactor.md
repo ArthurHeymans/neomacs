@@ -175,8 +175,8 @@ private state holder conceptually shaped as:
 
 ```rust
 struct FramePresentationState {
-    prepared: BTreeMap<PresentationId, PresentedGeometry>,
-    active: Option<PresentedGeometry>,
+    prepared: BTreeMap<PresentationId, PresentationGeometry>,
+    active: Option<PresentationGeometry>,
     last_identity: Option<PresentationId>,
 }
 ```
@@ -190,7 +190,7 @@ fn activate_display_presentation(PresentationId)
     -> Result<Option<PresentationId>, PresentationActivateError>;
 fn discard_display_presentation(PresentationId) -> bool;
 fn active_presentation(&self) -> Option<PresentationId>;
-fn active_presented_geometry(&self) -> Option<&PresentedGeometry>;
+fn active_presentation_geometry(&self) -> Option<&PresentationGeometry>;
 ```
 
 Keep at most a small bounded set of in-flight prepared presentations. Do not
@@ -276,8 +276,8 @@ cargo nextest run -p neomacs-bin \
   'rejected_gui_frame_is_not_published_as_presented|submitted_gui_frame_is_only_prepared'
 ```
 
-Expected: the first assertion fails because layout currently calls
-`publish_display_snapshots` before `try_send`.
+Expected: the first assertion fails because the old layout path installs
+evaluator geometry before `try_send`.
 
 **Step 3: Introduce `PreparedFramePresentation`**
 

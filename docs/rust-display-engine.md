@@ -31,9 +31,12 @@ The official Emacs was designed in 1984 for single-core CPUs, text terminals, an
 - GPU-side glyph rasterization (currently cosmic-text rasterizes on CPU, uploads to GPU)
 - Compute shader for glyph positioning (minor — CPU layout is fast enough)
 
-### 3. Persistent Pixel Buffers vs Immediate Mode
+### 3. Persistent Pixel Buffers vs Scheduled GPU Rendering
 
-**The problem**: Official Emacs backends (X11, GTK) use **retained mode** — draw once to a pixel buffer, only redraw changed regions. This was optimal for 1990s X11 (network-transparent, slow connections). But modern GPUs prefer **immediate mode** — clear and redraw everything each frame. GPU rendering is so fast that the complexity of tracking dirty regions isn't worth it.
+Official Emacs backends retain pixels and update changed regions. Neomacs uses
+GPU command generation, but that does not imply an unconditional redraw loop.
+The renderer retains the active presentation and resource caches, schedules a
+frame after invalidation or animation, and tracks coarse composition damage.
 
 ```
 Official Emacs (retained):
@@ -42,14 +45,16 @@ Official Emacs (retained):
   Frame 3: Diff → redraw 1 changed row
   Cost: O(changed) per frame, but complex bookkeeping (~7k LOC in dispnew.c)
 
-Neomacs (immediate):
-  Frame 1: Clear → draw everything
-  Frame 2: Clear → draw everything
-  Frame 3: Clear → draw everything
-  Cost: O(total) per frame, but trivial code and GPU handles it in <1ms
+Neomacs (scheduled GPU composition):
+  Logical change → prepare and activate a presentation → damage content
+  Cursor animation → damage cursor composition → schedule animation frame
+  No change → keep active presentation/resources → no content rebuild
 ```
 
-**What neomacs does well**: Already uses immediate mode. The entire `dispnew.c` matrix diffing system (~7.6k LOC) becomes unnecessary.
+**What neomacs does well**: Correctness does not depend on backend pixel-copy
+operations. Retained layout, glyph, texture, and composition caches are
+performance mechanisms; the active presentation remains the semantic source
+for drawing and hit testing.
 
 ### 4. Character-Cell Thinking
 
@@ -217,6 +222,61 @@ Modern CPUs can do 10 billion operations/second but only 10 million cache misses
 # Rust Display Engine (Strategy 4)
 
 Replace Emacs's C display engine (`xdisp.c`, `dispnew.c`, ~40k LOC) with a Rust layout engine that reads buffer data directly and produces GPU-ready glyph batches.
+
+## Current Presentation Transaction
+
+The evaluator and renderer advance independently, so “latest redisplay” and
+“currently drawable” are intentionally different concepts:
+
+```text
+GNU-compatible Frame/Window logical state
+                 |
+                 v
+redisplay builds Presentation N
+  - glyph/render projection
+  - window regions and source positions
+  - hit-test projection
+  - frame ancestry/transforms/clips
+                 |
+                 v
+Prepared N -- send rejected/superseded --> Discarded N
+                 |
+                 v
+Active N (renderer drawing + hit testing)
+                 |
+                 v
+Retired N
+```
+
+Platform scanout feedback is a later physical `Presented | Discarded` outcome;
+renderer activation does not claim that pixels reached the display.
+
+The important ownership boundaries are:
+
+- `Frame` and `Window` remain the synchronous GNU logical model. Logical
+  `window-*` geometry queries do not require a renderer presentation.
+- `prepare_display_presentation` constructs immutable
+  `PresentationGeometry` and a renderer submission with one monotonic
+  `PresentationId`. It does not change active visual geometry.
+- `PresentationActivated`, `PresentationDiscarded`, and
+  `PresentationRetired` events move evaluator state through the renderer-owned
+  lifecycle. Exact `posn-*`, pointer, and visual-anchor operations use only the
+  active identity and reject stale queries.
+- `PresentationSpatialPlan` compiles window regions, transforms, clipping,
+  source positions, and hit-test metadata from one sealed spatial input.
+  Render and interaction indexes may differ, but their spatial facts cannot.
+- The latest redisplay cache supports GNU logical/TTY behavior. It is private
+  state populated by preparation, not an independently published visual truth.
+
+Popup placement follows the same rule. A request carries an anchor rectangle,
+preferred side, offset, and constraint policy. Popup layout measures the
+content, then resolves flip/shift constraints against the owning frame's
+logical viewport. Raw `(x, y)` remains only a GNU-compatible explicit-position
+form represented as `AtAnchor`; it is not the internal placement abstraction.
+
+There are deliberately no “prefer presented” getters or fallback publication
+APIs. A caller chooses one of two interfaces: synchronous logical geometry or
+presentation-qualified active visual geometry.
 
 ## How the Official Emacs Display Engine Works
 

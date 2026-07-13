@@ -240,3 +240,30 @@ following practices:
 The ideal interface is therefore one **presentation transaction**, not
 necessarily one physical scene structure.  Multiple projections are healthy;
 independent identities, transforms, publication, or lifecycle are not.
+
+## Neomacs implementation result
+
+The 2026-07-13 refactor applies this synthesis as follows:
+
+- `FramePresentationState` owns monotonic prepared and active
+  `PresentationGeometry`; preparing never changes active geometry.
+- The render thread emits ordered activation, discard, and retirement events.
+  Rejected submissions are discarded on the evaluator as well.
+- `PresentationSpatialPlan` seals window regions, frame placement, transforms,
+  clips, source positions, and hit-test metadata from one plan. Protocol and
+  renderer validation reject divergent projections.
+- Logical GNU window queries read `Frame`/`Window` state or the latest private
+  redisplay cache. Exact visual queries require the active presentation and
+  use presentation-qualified semantic queries.
+- Pointer observations carry the presentation used for renderer hit testing;
+  stale observations are ignored instead of falling back to mutable live
+  arithmetic.
+- Native popup commands preserve anchor rectangle, preferred side, offset, and
+  flip/shift policy through to popup layout, which resolves the final origin
+  only after measuring content against the owning viewport.
+- Legacy independent snapshot-publication and implicit geometry fallback APIs
+  have been removed. Test-only cache fixtures are excluded from production.
+
+The remaining lifecycle extension is platform presentation feedback with
+scanout timing. It should attach to the existing presentation identity; it
+does not require another scene, coordinate model, or fallback query path.
