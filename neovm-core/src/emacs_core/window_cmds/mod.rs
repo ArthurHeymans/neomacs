@@ -2535,7 +2535,13 @@ fn geometry_invariant(message: impl Into<String>) -> Flow {
     )
 }
 
-fn presented_gui_publication(
+/// Return the latest renderer publication when one exists.
+///
+/// Public GNU `window-*` geometry primitives describe the editor's current
+/// synchronous window layout and are valid before the first redisplay.  A
+/// publication can refine body/chrome measurements after redisplay, but its
+/// absence is a normal lifecycle state here, not an invariant violation.
+fn presented_gui_publication_if_available(
     frames: &FrameManager,
     fid: FrameId,
 ) -> Result<Option<&crate::window::geometry::PresentedGeometry>, Flow> {
@@ -2545,10 +2551,7 @@ fn presented_gui_publication(
     if frame.effective_window_system().is_none() {
         return Ok(None);
     }
-    frame
-        .presented_geometry()
-        .map(Some)
-        .ok_or_else(|| geometry_invariant(format!("frame {} has no presented geometry", fid.0)))
+    Ok(frame.presented_geometry())
 }
 
 fn presented_gui_known_geometry(
@@ -2556,7 +2559,7 @@ fn presented_gui_known_geometry(
     fid: FrameId,
     wid: WindowId,
 ) -> Result<Option<crate::window::geometry::KnownWindowGeometry>, Flow> {
-    let Some(publication) = presented_gui_publication(frames, fid)? else {
+    let Some(publication) = presented_gui_publication_if_available(frames, fid)? else {
         return Ok(None);
     };
     publication
@@ -2573,7 +2576,7 @@ fn presented_gui_window_geometry(
     fid: FrameId,
     wid: WindowId,
 ) -> Result<Option<crate::window::geometry::SnapshotWindowGeometry<'_>>, Flow> {
-    let Some(publication) = presented_gui_publication(frames, fid)? else {
+    let Some(publication) = presented_gui_publication_if_available(frames, fid)? else {
         return Ok(None);
     };
     publication

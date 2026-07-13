@@ -7050,9 +7050,12 @@ fn gui_geometry_queries_distinguish_logical_layout_from_presented_output() {
             .as_int(),
         Some(902)
     );
-    assert!(
-        super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T]).is_err(),
-        "materialized GUI body geometry is mandatory for pixelwise body queries"
+    assert_eq!(
+        super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T])
+            .expect("logical body geometry exists before first presentation")
+            .as_int(),
+        Some(888),
+        "pre-presentation body height derives from synchronous layout and chrome state"
     );
 }
 
