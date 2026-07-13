@@ -29,8 +29,8 @@ use super::value::*;
 use crate::buffer::{Buffer, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::SymId;
 use crate::face::{
-    BoxStyle, Color, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight,
-    FontWidth, LFACE_ATTRS, LFACE_VECTOR_SIZE, LFaceAttr, UnderlineStyle,
+    BoxStyle, Face as RuntimeFace, FaceHeight, FaceRemapping, FontSlant, FontWeight, FontWidth,
+    LFACE_ATTRS, LFACE_VECTOR_SIZE, LFaceAttr, UnderlineStyle,
 };
 use crate::heap_types::LispString;
 use crate::tagged::header::store_value_atomic;
@@ -5642,139 +5642,6 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
         LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => None,
     }
 }
-
-fn runtime_color_to_lisp_value(color: &Color) -> Value {
-    match (color.r, color.g, color.b) {
-        (0, 0, 0) => Value::string("black"),
-        (255, 255, 255) => Value::string("white"),
-        (r, g, b) if r == g && g == b => {
-            let percent = ((r as i32 * 100) + 127) / 255;
-            Value::string(format!("grey{percent}"))
-        }
-        _ => Value::string(color.to_hex()),
-    }
-}
-
-fn runtime_weight_to_lisp_value(weight: FontWeight) -> Value {
-    Value::symbol(weight.symbol_name())
-}
-
-fn runtime_slant_to_lisp_value(slant: FontSlant) -> Value {
-    Value::symbol(slant.symbol_name())
-}
-
-fn runtime_width_to_lisp_value(width: FontWidth) -> Value {
-    Value::symbol(width.symbol_name())
-}
-
-pub(crate) fn runtime_face_attribute_value(face: &RuntimeFace, attr: LFaceAttr) -> Value {
-    match attr {
-        LFaceAttr::Family => face
-            .family
-            .filter(|value| value.is_string())
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Foundry => face
-            .foundry
-            .filter(|value| value.is_string())
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Height => match face.height {
-            Some(FaceHeight::Absolute(n)) => Value::fixnum(n as i64),
-            Some(FaceHeight::Relative(f)) => Value::make_float(f),
-            None => Value::symbol("unspecified"),
-        },
-        LFaceAttr::Weight => face
-            .weight
-            .map(runtime_weight_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Slant => face
-            .slant
-            .map(runtime_slant_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Width => face
-            .width
-            .map(runtime_width_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Underline => match &face.underline {
-            None => Value::symbol("unspecified"),
-            Some(underline)
-                if underline.color.is_none()
-                    && underline.position.is_none()
-                    && underline.style == UnderlineStyle::Line =>
-            {
-                Value::T
-            }
-            Some(underline) => {
-                let mut plist = Vec::new();
-                plist.push(Value::keyword(":style"));
-                plist.push(Value::symbol(underline.style.symbol_name()));
-                if let Some(color) = underline.color {
-                    plist.push(Value::keyword(":color"));
-                    plist.push(runtime_color_to_lisp_value(&color));
-                }
-                if let Some(position) = underline.position {
-                    plist.push(Value::keyword(":position"));
-                    plist.push(Value::fixnum(position as i64));
-                }
-                Value::list(plist)
-            }
-        },
-        LFaceAttr::Overline => match (face.overline, face.overline_color) {
-            (Some(true), Some(color)) => runtime_color_to_lisp_value(&color),
-            (Some(value), None) => Value::bool_val(value),
-            _ => Value::symbol("unspecified"),
-        },
-        LFaceAttr::StrikeThrough => match (face.strike_through, face.strike_through_color) {
-            (Some(true), Some(color)) => runtime_color_to_lisp_value(&color),
-            (Some(value), None) => Value::bool_val(value),
-            _ => Value::symbol("unspecified"),
-        },
-        LFaceAttr::Box => match &face.box_border {
-            None => Value::symbol("unspecified"),
-            Some(border) => Value::list({
-                let mut plist = Vec::new();
-                plist.push(Value::keyword(":line-width"));
-                plist.push(Value::fixnum(border.width as i64));
-                if let Some(color) = border.color {
-                    plist.push(Value::keyword(":color"));
-                    plist.push(runtime_color_to_lisp_value(&color));
-                }
-                plist.push(Value::keyword(":style"));
-                plist.push(Value::symbol(border.style.symbol_name()));
-                plist
-            }),
-        },
-        LFaceAttr::InverseVideo => face
-            .inverse_video
-            .map(Value::bool)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Foreground => face
-            .foreground
-            .as_ref()
-            .map(runtime_color_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::DistantForeground => face
-            .distant_foreground
-            .as_ref()
-            .map(runtime_color_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Background => face
-            .background
-            .as_ref()
-            .map(runtime_color_to_lisp_value)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Stipple | LFaceAttr::Font | LFaceAttr::Fontset => Value::symbol("unspecified"),
-        // GNU initializes every lface slot — including LFACE_INHERIT_INDEX — to
-        // `Qunspecified`, so an unset `:inherit` reports as `unspecified`, not
-        // nil (matching every sibling arm here). The `default` face's explicit
-        // nil inherit comes from `default_face_attribute_value`, a separate path.
-        LFaceAttr::Inherit => face.inherit.unwrap_or_else(|| Value::symbol("unspecified")),
-        LFaceAttr::Extend => face
-            .extend
-            .map(Value::bool)
-            .unwrap_or_else(|| Value::symbol("unspecified")),
-    }
-}
-
 pub(crate) fn builtin_internal_get_lisp_face_attribute(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5850,22 +5717,15 @@ pub(crate) fn builtin_internal_get_lisp_face_attribute(
         })
         .and_then(|vector| lisp_face_vector_attr(vector, attr_name))
         .unwrap_or_else(|| lisp_face_attribute_value(&face_name, attr_name, false));
-    let lisp_value_unspecified = lisp_value.is_symbol_named("unspecified")
-        || (attr_name == LFaceAttr::Foreground
-            && lisp_value.as_utf8_str() == Some("unspecified-fg"))
-        || (attr_name == LFaceAttr::Background
-            && lisp_value.as_utf8_str() == Some("unspecified-bg"));
-    if !lisp_value_unspecified {
-        return Ok(lisp_value);
-    }
-
-    if let Some(face) = eval.face_table().get(&face_name) {
-        let runtime_value = runtime_face_attribute_value(face, attr_name);
-        if !runtime_value.is_symbol_named("unspecified") {
-            return Ok(runtime_value);
-        }
-    }
-
+    // GNU `internal-get-lisp-face-attribute` (xfaces.c) returns the LISP face
+    // attribute (`LFACE_*` of `lface_from_face_name`), never the *realized*
+    // face. Do NOT fall back to the runtime realized face here: the realized
+    // face on this batch/mono frame still carries colors realized for a
+    // color-capable display during the bootstrap image build (e.g. `error`
+    // :foreground "#ff0000"), whereas GNU returns `unspecified` because no
+    // display clause of the defface spec matched a mono terminal. The lisp face
+    // value above (frame lisp vector slot, falling back to the base/override
+    // value) is the GNU-faithful answer.
     Ok(lisp_value)
 }
 
