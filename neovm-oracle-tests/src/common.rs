@@ -282,11 +282,23 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                  ;; Fixed test dates (never equal to today on both days) are left
                  ;; intact.
                  (today (regexp-quote (format-time-string "%Y-%m-%d")))
+                 ;; Frame/icon title product branding is a DELIBERATE Neomacs
+                 ;; divergence: GNU titles read "%b - GNU Emacs at HOST" while
+                 ;; Neomacs -- which must never advertise "GNU Emacs" -- reads
+                 ;; "%b - NEO Emacs at HOST" (see frame_vars.rs). Canonicalize the
+                 ;; product name on BOTH engines so the frame-title-format
+                 ;; STRUCTURE stays a real parity lock while this one intentional
+                 ;; brand difference is ignored.
+                 (brand-normalized
+                  (replace-regexp-in-string
+                   "%b - \\(?:GNU\\|NEO\\) Emacs at "
+                   "%b - [EMACS-PRODUCT] at "
+                   v))
                  (caption-normalized
                   (replace-regexp-in-string
                    (concat hash "\\+CAPTION: Clock summary at \\[[^]]+\\]")
                    (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
-                   v)))
+                   brand-normalized)))
             (replace-regexp-in-string
              ;; Bare today ISO date (e.g. an Org feed's pubdate).
              today "[FIXED-TODAY-DATE]"

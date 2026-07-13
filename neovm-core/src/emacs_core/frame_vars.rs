@@ -17,9 +17,20 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // and icon-title-format the same structured default: `(multiple-frames "%b"
     // ("" "%b - GNU Emacs at " system-name))`, where the inner tail's last
     // element is the `system-name` symbol (resolved at title-render time).
+    //
+    // Neomacs is NOT GNU Emacs: this is a DELIBERATE product-branding
+    // divergence. The title bar must advertise "NEO Emacs", never "GNU Emacs".
+    // We keep the structure (the `multiple-frames` form plus the trailing
+    // `system-name` symbol) byte-for-byte identical to GNU and change only the
+    // product name inside the literal. The oracle parity probe still locks that
+    // structure: the shared normalizer canonicalizes the product name to
+    // `[EMACS-PRODUCT]` on both engines, so the intentional brand difference is
+    // ignored while every other part stays a parity assertion (see
+    // neovm-oracle-tests/src/divergence/combos/strict/modeline_lnum_fringe_windowtree.rs
+    // and the EMACS-PRODUCT rule in neovm-oracle-tests/src/common.rs).
     let icon_title_name_format = Value::list(vec![
         Value::string(""),
-        Value::string("%b - GNU Emacs at "),
+        Value::string("%b - NEO Emacs at "),
         Value::symbol("system-name"),
     ]);
     let title_format = Value::list(vec![
