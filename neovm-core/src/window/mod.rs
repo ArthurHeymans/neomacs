@@ -2548,10 +2548,7 @@ impl Frame {
         &mut self,
         snapshots: Vec<WindowDisplaySnapshot>,
     ) {
-        self.begin_display_output_pass();
-        for snapshot in &snapshots {
-            self.replay_window_output_snapshot(snapshot);
-        }
+        self.commit_completed_window_output(&snapshots);
         self.replace_redisplay_cache_for_test(snapshots);
     }
 
@@ -2609,6 +2606,7 @@ impl Frame {
                 presentation,
             ));
         }
+        self.commit_completed_window_output(&prepared.snapshots);
         self.redisplay_cache = prepared
             .snapshots
             .iter()
@@ -2726,6 +2724,17 @@ impl Frame {
     pub fn replay_window_output_snapshot(&mut self, snapshot: &WindowDisplaySnapshot) {
         if let Some(mut update) = self.window_output_update(snapshot.window_id) {
             update.replay_snapshot(snapshot);
+        }
+    }
+
+    /// Commit one accepted redisplay attempt into GNU-shaped live per-window
+    /// output state. Speculative layout never calls this; all window cursors
+    /// and output progress become visible together at the presentation prepare
+    /// boundary.
+    fn commit_completed_window_output(&mut self, snapshots: &[WindowDisplaySnapshot]) {
+        self.begin_display_output_pass();
+        for snapshot in snapshots {
+            self.replay_window_output_snapshot(snapshot);
         }
     }
 

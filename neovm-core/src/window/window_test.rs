@@ -344,6 +344,51 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
 }
 
 #[test]
+fn preparing_accepted_presentation_commits_live_window_output() {
+    use super::geometry::PresentationId;
+
+    let mut manager = FrameManager::new();
+    let frame_id = manager.create_frame("accepted-output", 800, 600, BufferId(1));
+    let frame = manager.get_mut(frame_id).expect("frame");
+    let window_id = frame.selected_window;
+    let logical_cursor = WindowCursorPos {
+        x: 44,
+        y: 29,
+        row: 1,
+        col: 8,
+    };
+
+    frame
+        .prepare_display_presentation(
+            PresentationId::new(41),
+            vec![WindowDisplaySnapshot {
+                window_id,
+                logical_cursor: Some(logical_cursor),
+                rows: vec![DisplayRowSnapshot {
+                    row: 1,
+                    y: 29,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 44,
+                    end_col: 8,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::ONE),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(8)),
+                }],
+                ..WindowDisplaySnapshot::default()
+            }],
+        )
+        .expect("accepted presentation");
+
+    let display = frame
+        .find_window(window_id)
+        .and_then(|window| window.display())
+        .expect("window display state");
+    assert_eq!(display.cursor, Some(logical_cursor));
+    assert_eq!(display.output_cursor, Some(logical_cursor));
+}
+
+#[test]
 fn discarded_display_presentation_cannot_be_activated() {
     use super::geometry::{PresentationActivateError, PresentationId, PresentationPrepareError};
 

@@ -743,9 +743,6 @@ impl LayoutEngine {
                 window_params_list.len()
             );
 
-            if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
-                frame.begin_display_output_pass();
-            }
             let main_area_bottom = window_params_list
                 .iter()
                 .filter(|params| !params.is_minibuffer())

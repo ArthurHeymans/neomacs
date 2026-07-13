@@ -459,7 +459,7 @@ impl TextWindowBeginRequest {
         output: TextWindowOutputTarget<'_>,
         evaluator: &mut Context,
     ) -> WindowOutputEmitter {
-        let mut output_emitter = WindowOutputEmitter::new(
+        let mut output_emitter = WindowOutputEmitter::new_speculative(
             self.frame_id,
             self.window_id,
             self.display_text_row_base,

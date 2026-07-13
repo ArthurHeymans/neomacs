@@ -968,6 +968,11 @@ pub(crate) trait DisplayProgressSink {
 }
 
 pub(crate) struct WindowOutputEmitter {
+    /// Whether output-cursor updates are mirrored into the live evaluator
+    /// window while this emitter is being built. Production frame layout is
+    /// speculative and keeps this false; focused lifecycle tests can use the
+    /// live mode to exercise GNU-shaped output-cursor operations directly.
+    publish_live: bool,
     frame_id: neovm_core::window::FrameId,
     window_id: neovm_core::window::WindowId,
     text_row_base: i64,
@@ -1030,6 +1035,7 @@ impl WindowOutputEmitter {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn new(
         frame_id: neovm_core::window::FrameId,
         window_id: neovm_core::window::WindowId,
@@ -1037,7 +1043,43 @@ impl WindowOutputEmitter {
         text_x: f32,
         window_top: f32,
     ) -> Self {
+        Self::new_with_publication_mode(
+            frame_id,
+            window_id,
+            text_row_base,
+            text_x,
+            window_top,
+            true,
+        )
+    }
+
+    pub(crate) fn new_speculative(
+        frame_id: neovm_core::window::FrameId,
+        window_id: neovm_core::window::WindowId,
+        text_row_base: usize,
+        text_x: f32,
+        window_top: f32,
+    ) -> Self {
+        Self::new_with_publication_mode(
+            frame_id,
+            window_id,
+            text_row_base,
+            text_x,
+            window_top,
+            false,
+        )
+    }
+
+    fn new_with_publication_mode(
+        frame_id: neovm_core::window::FrameId,
+        window_id: neovm_core::window::WindowId,
+        text_row_base: usize,
+        text_x: f32,
+        window_top: f32,
+        publish_live: bool,
+    ) -> Self {
         Self {
+            publish_live,
             frame_id,
             window_id,
             text_row_base: text_row_base as i64,
@@ -1192,6 +1234,9 @@ impl WindowOutputEmitter {
         evaluator: &mut Context,
         f: impl FnOnce(&mut neovm_core::window::WindowOutputUpdate<'_>) -> T,
     ) -> Option<T> {
+        if !self.publish_live {
+            return None;
+        }
         let frame = evaluator.frame_manager_mut().get_mut(self.frame_id)?;
         let mut update = frame.window_output_update(self.window_id)?;
         Some(f(&mut update))
@@ -1495,7 +1540,8 @@ impl WindowOutputEmitter {
             points: self.points,
             rows: self.rows,
         };
-        if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id)
+        if self.publish_live
+            && let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id)
             && let Some(mut update) = frame.window_output_update(window_id)
         {
             update.finalize_live_update(logical_cursor, phys_cursor);
