@@ -1009,6 +1009,51 @@ impl FrameDisplayState {
             let PresentedWindowGeometry::Complete { regions, .. } = info.geometry else {
                 continue;
             };
+            let valid_rect = |rect: crate::types::Rect| {
+                crate::FrameRect::new(rect.x, rect.y, rect.width, rect.height)
+                    .map(|_| ())
+                    .map_err(|_| PresentedHitError::InvalidRegionGeometry)
+            };
+            valid_rect(regions.outer)?;
+            let is_contained = |rect: crate::types::Rect| {
+                const EDGE_EPSILON: f32 = 0.01;
+                rect.x + EDGE_EPSILON >= regions.outer.x
+                    && rect.y + EDGE_EPSILON >= regions.outer.y
+                    && rect.x + rect.width <= regions.outer.x + regions.outer.width + EDGE_EPSILON
+                    && rect.y + rect.height <= regions.outer.y + regions.outer.height + EDGE_EPSILON
+            };
+            for (kind, rect) in [
+                (PresentedRegionKind::TextBody, Some(regions.text_body)),
+                (PresentedRegionKind::LeftMargin, regions.left_margin),
+                (PresentedRegionKind::RightMargin, regions.right_margin),
+                (PresentedRegionKind::LeftFringe, regions.left_fringe),
+                (PresentedRegionKind::RightFringe, regions.right_fringe),
+                (PresentedRegionKind::LeftScrollBar, regions.left_scroll_bar),
+                (
+                    PresentedRegionKind::RightScrollBar,
+                    regions.right_scroll_bar,
+                ),
+                (
+                    PresentedRegionKind::HorizontalScrollBar,
+                    regions.horizontal_scroll_bar,
+                ),
+                (PresentedRegionKind::TabLine, regions.tab_line),
+                (PresentedRegionKind::HeaderLine, regions.header_line),
+                (PresentedRegionKind::ModeLine, regions.mode_line),
+                (PresentedRegionKind::RightDivider, regions.right_divider),
+                (PresentedRegionKind::BottomDivider, regions.bottom_divider),
+            ] {
+                let Some(rect) = rect else {
+                    continue;
+                };
+                valid_rect(rect)?;
+                if !is_contained(rect) {
+                    return Err(PresentedHitError::WindowGeometryMismatch {
+                        window: info.window_id,
+                        region: kind,
+                    });
+                }
+            }
             if let Some(matrix) = self
                 .window_matrices
                 .iter()
