@@ -1,6 +1,6 @@
 //! Coordinate-safe views over redisplay's existing window snapshots.
 //!
-//! A `PresentedGeometry` owns one immutable frame publication and exposes typed
+//! A `PresentationGeometry` owns one immutable frame publication and exposes typed
 //! pixel and cell views so consumers cannot silently combine body-local,
 //! window-local, frame-local, and cell-grid values.
 
@@ -49,26 +49,26 @@ pub enum PresentationActivateError {
 
 /// One immutable, presentation-owned publication of all evaluator window geometry.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PresentedGeometry {
+pub struct PresentationGeometry {
     presentation: PresentationId,
-    frame: PresentedFrame,
+    frame: PresentationFrame,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PresentedFrame {
+pub struct PresentationFrame {
     id: FrameId,
     placement: neomacs_display_protocol::PresentedFramePlacement,
-    windows: HashMap<WindowId, PresentedWindow>,
+    windows: HashMap<WindowId, PresentationWindow>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PresentedWindow {
+pub struct PresentationWindow {
     id: WindowId,
     cell_origin: CellOrigin,
     outer: PixelRect<FrameLogicalSpace>,
     regions: Option<WindowRegions>,
-    positions: Vec<PresentedPosition>,
-    cursor: Option<PresentedCursor>,
+    positions: Vec<PresentationPosition>,
+    cursor: Option<PresentationCursor>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -92,7 +92,7 @@ pub struct WindowRegions {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PresentedPosition {
+struct PresentationPosition {
     buffer_pos: LispCharPos1,
     x: i64,
     body_y: i64,
@@ -103,14 +103,14 @@ struct PresentedPosition {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct PresentedCursor {
+struct PresentationCursor {
     x: i64,
     body_y: i64,
     width: i64,
     height: i64,
 }
 
-impl PresentedGeometry {
+impl PresentationGeometry {
     pub(crate) fn new(
         frame: FrameId,
         presentation: PresentationId,
@@ -118,7 +118,7 @@ impl PresentedGeometry {
     ) -> Result<Self, GeometryError> {
         let mut windows = HashMap::new();
         for snapshot in snapshots {
-            let window = PresentedWindow::from_snapshot(snapshot)?;
+            let window = PresentationWindow::from_snapshot(snapshot)?;
             let id = window.id;
             if windows.insert(id, window).is_some() {
                 return Err(GeometryError::DuplicateWindow(id));
@@ -134,7 +134,7 @@ impl PresentedGeometry {
         );
         Ok(Self {
             presentation,
-            frame: PresentedFrame {
+            frame: PresentationFrame {
                 id: frame,
                 placement,
                 windows,
@@ -178,7 +178,7 @@ impl PresentedGeometry {
         self.presentation
     }
 
-    fn window(&self, window: WindowId) -> Option<&PresentedWindow> {
+    fn window(&self, window: WindowId) -> Option<&PresentationWindow> {
         self.frame.windows.get(&window)
     }
 
@@ -195,7 +195,7 @@ impl PresentedGeometry {
     }
 }
 
-impl PresentedWindow {
+impl PresentationWindow {
     fn from_snapshot(snapshot: WindowDisplaySnapshot) -> Result<Self, GeometryError> {
         let outer = PixelRect::from_transport(&snapshot.regions.outer)?;
         let regions = snapshot
@@ -221,7 +221,7 @@ impl PresentedWindow {
                         window: snapshot.window_id,
                         output_row: point.row,
                     })?;
-                Ok(PresentedPosition {
+                Ok(PresentationPosition {
                     buffer_pos: point.buffer_pos,
                     x: point.x,
                     body_y: body_row.body_y,
@@ -243,7 +243,7 @@ impl PresentedWindow {
             let height = physical
                 .map(|cursor| cursor.height)
                 .or_else(|| point.map(|p| p.height))?;
-            Some(PresentedCursor {
+            Some(PresentationCursor {
                 x: cursor.x,
                 body_y: cursor.y,
                 width,
@@ -354,7 +354,7 @@ pub trait GeometryQuery: query_seal::Sealed {
     #[doc(hidden)]
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError>;
 }
 
@@ -453,7 +453,7 @@ impl GeometryQuery for VisualAnchorQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window_id = self.anchor.window();
         let (bounds, edge) = match self.anchor {
@@ -591,7 +591,7 @@ impl GeometryQuery for WindowGeometryQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window = geometry
             .window(self.window)
@@ -647,7 +647,7 @@ impl GeometryQuery for KnownWindowGeometryQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window = geometry
             .window(self.window)
@@ -705,7 +705,7 @@ impl GeometryQuery for WindowRegionBoundsQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window = geometry
             .window(self.window)
@@ -770,7 +770,7 @@ impl GeometryQuery for BufferPositionQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window = geometry.resolve(WindowGeometryQuery::new(self.presentation, self.window))?;
         window
@@ -854,7 +854,7 @@ impl GeometryQuery for WindowCoordinateQuery {
 
     fn resolve_presented<'a>(
         self,
-        geometry: &'a PresentedGeometry,
+        geometry: &'a PresentationGeometry,
     ) -> Result<Self::Output<'a>, GeometryQueryError> {
         let window = geometry.resolve(WindowGeometryQuery::new(self.presentation, self.window))?;
         let body_origin = window.text_body_origin_in_window();
@@ -1119,13 +1119,13 @@ impl SnapshotPointGeometry {
     }
 }
 
-/// A borrowed, coordinate-safe view into one immutable presented geometry.
+/// A borrowed, coordinate-safe view into one immutable presentation geometry.
 #[derive(Debug)]
 pub struct SnapshotWindowGeometry<'a> {
     presentation: PresentationId,
     frame: FrameId,
     window: WindowId,
-    window_geometry: &'a PresentedWindow,
+    window_geometry: &'a PresentationWindow,
     regions: &'a WindowRegions,
     outer: PixelRect<FrameLogicalSpace>,
 }
@@ -1135,7 +1135,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
         presentation: PresentationId,
         frame: FrameId,
         window: WindowId,
-        window_geometry: &'a PresentedWindow,
+        window_geometry: &'a PresentationWindow,
     ) -> Option<Self> {
         let regions = window_geometry.regions.as_ref()?;
         Some(Self {
@@ -1241,7 +1241,7 @@ impl<'a> SnapshotWindowGeometry<'a> {
 
     fn materialize_point(
         &self,
-        point: &PresentedPosition,
+        point: &PresentationPosition,
     ) -> Result<SnapshotPointGeometry, GeometryError> {
         let body_point = WindowPoint {
             window: self.window,

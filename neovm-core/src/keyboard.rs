@@ -5476,7 +5476,7 @@ impl crate::emacs_core::eval::Context {
             }));
         };
         let window_id = crate::window::WindowId(window_id.get() as u64);
-        let publication = frame.active_presented_geometry()?;
+        let publication = frame.active_presentation_geometry()?;
         let presented = publication
             .resolve(crate::window::geometry::WindowGeometryQuery::new(
                 crate::window::geometry::PresentationId::new(observation.presentation),

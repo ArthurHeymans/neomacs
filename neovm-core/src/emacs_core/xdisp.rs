@@ -4886,7 +4886,7 @@ fn resolve_exact_visible_metrics(
             .point_for_buffer_pos(pos_lisp)
             .map(|point| (wid, exact_metrics_from_redisplay_point(snapshot, point))));
     }
-    let Some(publication) = frame.active_presented_geometry() else {
+    let Some(publication) = frame.active_presentation_geometry() else {
         return Ok(None);
     };
     let point = match publication.resolve(crate::window::geometry::BufferPositionQuery::new(
@@ -5213,7 +5213,7 @@ fn posn_at_x_y_impl(
     };
 
     if frame.effective_window_system().is_some() {
-        let publication = frame.active_presented_geometry().ok_or_else(|| {
+        let publication = frame.active_presentation_geometry().ok_or_else(|| {
             signal(
                 LispCondition::Error,
                 vec![Value::string("GUI frame has no presented geometry")],

@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
-    use super::geometry::{Column, Line, PresentationId, PresentedGeometry};
+    use super::geometry::{Column, Line, PresentationGeometry, PresentationId};
     use neomacs_display_protocol::types::Rect as TransportRect;
 
     let mut window = Window::new_leaf(
@@ -47,7 +47,7 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
     window.set_bounds(Rect::new(999.0, 999.0, 1.0, 1.0));
     window.set_left_col(99);
     window.set_top_line(99);
-    let presented = PresentedGeometry::new(FrameId(7), PresentationId::new(41), [snapshot])
+    let presented = PresentationGeometry::new(FrameId(7), PresentationId::new(41), [snapshot])
         .expect("valid presented geometry");
     let geometry = presented
         .resolve(super::geometry::WindowGeometryQuery::new(
@@ -87,14 +87,14 @@ fn snapshot_window_geometry_keeps_pixel_spaces_and_cell_origin_distinct() {
 #[test]
 fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions() {
     use super::geometry::{
-        GeometryQueryError, PresentationId, PresentedGeometry, WindowCoordinateQuery,
+        GeometryQueryError, PresentationGeometry, PresentationId, WindowCoordinateQuery,
         WindowGeometryQuery, WindowRegion, WindowRegionBoundsQuery,
     };
     use neomacs_display_protocol::types::Rect as TransportRect;
 
     let window_id = WindowId(11);
     let presentation = PresentationId::new(41);
-    let publication = PresentedGeometry::new(
+    let publication = PresentationGeometry::new(
         FrameId(7),
         presentation,
         [WindowDisplaySnapshot {
@@ -150,7 +150,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
         GeometryQueryError::MissingWindow(WindowId(99))
     );
 
-    let skipped = PresentedGeometry::new(
+    let skipped = PresentationGeometry::new(
         FrameId(7),
         PresentationId::new(42),
         [WindowDisplaySnapshot {
@@ -330,7 +330,7 @@ fn prepared_display_presentation_does_not_replace_active_geometry() {
     );
     assert_eq!(
         frame
-            .active_presented_geometry()
+            .active_presentation_geometry()
             .expect("old presentation remains active")
             .presentation(),
         PresentationId::new(41)
@@ -497,7 +497,7 @@ fn popup_anchor_translates_with_side_window_without_changing_body_local_cursor_g
         let geometry = manager
             .get(root)
             .unwrap()
-            .active_presented_geometry()
+            .active_presentation_geometry()
             .unwrap()
             .resolve(WindowGeometryQuery::new(presentation, window))
             .unwrap();
@@ -709,10 +709,10 @@ fn duplicate_windows_reject_candidate_without_replacing_publication() {
 
 #[test]
 fn presented_positions_require_body_local_row_facts() {
-    use super::geometry::{GeometryError, PresentationId, PresentedGeometry};
+    use super::geometry::{GeometryError, PresentationGeometry, PresentationId};
 
     let window_id = WindowId(11);
-    let result = PresentedGeometry::new(
+    let result = PresentationGeometry::new(
         FrameId(7),
         PresentationId::new(1),
         [WindowDisplaySnapshot {
@@ -751,7 +751,7 @@ fn legacy_unowned_snapshots_do_not_create_an_authoritative_geometry_view() {
     }]);
 
     assert!(frame.redisplay_snapshot(window_id).is_some());
-    assert!(frame.active_presented_geometry().is_none());
+    assert!(frame.active_presentation_geometry().is_none());
 }
 use crate::buffer::LispCharPos1;
 

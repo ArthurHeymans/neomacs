@@ -1662,14 +1662,14 @@ pub struct GuiFrameGeometryHints {
 
 #[derive(Clone, Debug, PartialEq)]
 struct PreparedDisplayPresentation {
-    geometry: geometry::PresentedGeometry,
+    geometry: geometry::PresentationGeometry,
     snapshots: Vec<WindowDisplaySnapshot>,
 }
 
 #[derive(Default)]
 struct FramePresentationState {
     prepared: HashMap<geometry::PresentationId, PreparedDisplayPresentation>,
-    active: Option<geometry::PresentedGeometry>,
+    active: Option<geometry::PresentationGeometry>,
     last_identity: Option<geometry::PresentationId>,
 }
 
@@ -2574,7 +2574,7 @@ impl Frame {
             .into_iter()
             .filter(|snapshot| self.find_window(snapshot.window_id).is_some())
             .collect();
-        let candidate = geometry::PresentedGeometry::new_with_frame_placement(
+        let candidate = geometry::PresentationGeometry::new_with_frame_placement(
             self.id,
             presentation,
             self.parent_frame.as_frame_id().map(FrameId),
@@ -2685,7 +2685,7 @@ impl Frame {
 
     /// Geometry for the presentation currently used by renderer drawing and
     /// hit testing. Prepared geometry is deliberately inaccessible here.
-    pub const fn active_presented_geometry(&self) -> Option<&geometry::PresentedGeometry> {
+    pub const fn active_presentation_geometry(&self) -> Option<&geometry::PresentationGeometry> {
         self.presentation_state.active.as_ref()
     }
 
@@ -2695,7 +2695,7 @@ impl Frame {
         query: geometry::VisualAnchorQuery,
     ) -> Result<geometry::VisualAnchorGeometry, geometry::GeometryQueryError> {
         let geometry = self
-            .active_presented_geometry()
+            .active_presentation_geometry()
             .ok_or(geometry::GeometryQueryError::NotYetActive { frame: self.id })?;
         geometry.resolve(query)
     }
@@ -3394,7 +3394,7 @@ impl FrameManager {
         let scene = neomacs_display_protocol::PresentedFrameScene::from_placements(
             self.frames.values().filter_map(|frame| {
                 frame
-                    .active_presented_geometry()
+                    .active_presentation_geometry()
                     .map(|geometry| geometry.frame_placement())
             }),
         )?;

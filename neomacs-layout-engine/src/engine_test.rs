@@ -1779,7 +1779,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
 
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let first_publication = frame
-        .active_presented_geometry()
+        .active_presentation_geometry()
         .expect("first immutable publication")
         .clone();
     let renderer = engine
@@ -2148,7 +2148,7 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     assert!(frame.active_presentation().is_some());
     let presentation = frame.active_presentation().expect("presentation");
     let presented_window = frame
-        .active_presented_geometry()
+        .active_presentation_geometry()
         .expect("geometry")
         .resolve(neovm_core::window::geometry::KnownWindowGeometryQuery::new(
             presentation,
@@ -2163,7 +2163,7 @@ fn skipped_zero_body_window_still_publishes_known_regions_and_cell_origin() {
     assert_eq!(presented_window.cell_origin().line().get(), 2);
     assert!(matches!(
         frame
-            .active_presented_geometry()
+            .active_presentation_geometry()
             .expect("geometry")
             .resolve(neovm_core::window::geometry::WindowGeometryQuery::new(
                 presentation,

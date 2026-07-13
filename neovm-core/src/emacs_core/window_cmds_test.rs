@@ -7084,7 +7084,7 @@ fn winner_can_capture_a_graphical_startup_layout_before_first_presentation() {
         ev.frames
             .get(frame_id)
             .expect("frame")
-            .active_presented_geometry()
+            .active_presentation_geometry()
             .is_none(),
         "the regression requires Winner to run before the first redisplay publication"
     );
