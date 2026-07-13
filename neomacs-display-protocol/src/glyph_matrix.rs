@@ -939,6 +939,120 @@ pub fn materialize_call_count_for_current_thread() -> u32 {
 }
 
 impl FrameDisplayState {
+    /// Verify that window metadata and semantic hit regions are projections of
+    /// the same immutable presentation geometry.
+    ///
+    /// The layout producer calls this while sealing a presentation. It lives
+    /// at the protocol boundary so another producer cannot publish internally
+    /// coherent, but mutually divergent, spatial products.
+    pub fn validate_spatial_projections(&self) -> Result<(), crate::PresentedHitError> {
+        use crate::frame_glyphs::PresentedWindowGeometry;
+        use crate::{PresentedHitError, PresentedRegionKind};
+
+        if self.presented_hit_index.presentation() != self.presentation_id {
+            return Err(PresentedHitError::StalePresentation {
+                expected: self.presentation_id,
+                requested: self.presented_hit_index.presentation(),
+            });
+        }
+
+        let expected_bounds = |window: DisplayWindowId,
+                               kind: PresentedRegionKind|
+         -> Result<Option<crate::FrameRect>, PresentedHitError> {
+            let Some(info) = self
+                .window_infos
+                .iter()
+                .find(|info| info.window_id == window)
+            else {
+                return Ok(None);
+            };
+            let PresentedWindowGeometry::Complete { regions, .. } = info.geometry else {
+                return Ok(None);
+            };
+            let rect = match kind {
+                PresentedRegionKind::TextBody => Some(regions.text_body),
+                PresentedRegionKind::LeftMargin => regions.left_margin,
+                PresentedRegionKind::RightMargin => regions.right_margin,
+                PresentedRegionKind::LeftFringe => regions.left_fringe,
+                PresentedRegionKind::RightFringe => regions.right_fringe,
+                PresentedRegionKind::LeftScrollBar => regions.left_scroll_bar,
+                PresentedRegionKind::RightScrollBar => regions.right_scroll_bar,
+                PresentedRegionKind::HorizontalScrollBar => regions.horizontal_scroll_bar,
+                PresentedRegionKind::TabLine => regions.tab_line,
+                PresentedRegionKind::HeaderLine => regions.header_line,
+                PresentedRegionKind::ModeLine => regions.mode_line,
+                PresentedRegionKind::RightDivider => regions.right_divider,
+                PresentedRegionKind::BottomDivider => regions.bottom_divider,
+                PresentedRegionKind::MenuBar
+                | PresentedRegionKind::ToolBar
+                | PresentedRegionKind::CompactBar
+                | PresentedRegionKind::TabBar => None,
+            };
+            let Some(rect) = rect else {
+                return Ok(None);
+            };
+            if rect.width == 0.0 || rect.height == 0.0 {
+                return Ok(None);
+            }
+            crate::FrameRect::new(rect.x, rect.y, rect.width, rect.height)
+                .map(Some)
+                .map_err(|_| PresentedHitError::InvalidRegionGeometry)
+        };
+
+        for info in &self.window_infos {
+            let PresentedWindowGeometry::Complete { .. } = info.geometry else {
+                continue;
+            };
+            for kind in [
+                PresentedRegionKind::TextBody,
+                PresentedRegionKind::LeftMargin,
+                PresentedRegionKind::RightMargin,
+                PresentedRegionKind::LeftFringe,
+                PresentedRegionKind::RightFringe,
+                PresentedRegionKind::LeftScrollBar,
+                PresentedRegionKind::RightScrollBar,
+                PresentedRegionKind::HorizontalScrollBar,
+                PresentedRegionKind::TabLine,
+                PresentedRegionKind::HeaderLine,
+                PresentedRegionKind::ModeLine,
+                PresentedRegionKind::RightDivider,
+                PresentedRegionKind::BottomDivider,
+            ] {
+                let Some(expected) = expected_bounds(info.window_id, kind)? else {
+                    continue;
+                };
+                let mut matching = self.presented_hit_index.regions().iter().filter(|region| {
+                    region.window() == Some(info.window_id) && region.kind() == kind
+                });
+                if matching.next().map(|region| region.bounds()) != Some(expected)
+                    || matching.next().is_some()
+                {
+                    return Err(PresentedHitError::WindowGeometryMismatch {
+                        window: info.window_id,
+                        region: kind,
+                    });
+                }
+            }
+        }
+
+        for region in self
+            .presented_hit_index
+            .regions()
+            .iter()
+            .filter(|region| region.window().is_some())
+        {
+            let window = region.window().expect("filtered window region");
+            if expected_bounds(window, region.kind())? != Some(region.bounds()) {
+                return Err(PresentedHitError::WindowGeometryMismatch {
+                    window,
+                    region: region.kind(),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
             presentation_id: PresentationId::default(),
@@ -1288,6 +1402,10 @@ impl FrameDisplayState {
         if !self.presented_pointer_source.is_empty() {
             buf.install_presented_pointer_source_map(&self.presented_pointer_source)
                 .expect("FrameDisplayState pointer map must match its materialized primitives");
+        }
+        if !self.presented_hit_index.is_empty() {
+            self.validate_spatial_projections()
+                .expect("FrameDisplayState spatial projections must share canonical geometry");
         }
         let hit_index = if self.presented_hit_index.is_empty()
             && self.presented_hit_index.presentation() != self.presentation_id

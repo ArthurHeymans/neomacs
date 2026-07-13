@@ -18,6 +18,38 @@ fn test_pointer_appearance() -> GlyphPointerAppearance {
     }
 }
 
+fn install_complete_window_geometry(
+    state: &mut FrameDisplayState,
+    window_id: DisplayWindowId,
+    text_body: Rect,
+) {
+    state.window_infos.push(crate::WindowInfo {
+        window_id,
+        buffer_id: 1,
+        window_start: 1,
+        window_end: 1,
+        buffer_size: 1,
+        bounds: text_body,
+        geometry: crate::PresentedWindowGeometry::Complete {
+            cell_origin: crate::PresentedCellOrigin::default(),
+            regions: crate::PresentedWindowRegions {
+                outer: text_body,
+                text_body,
+                ..crate::PresentedWindowRegions::default()
+            },
+        },
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        selected: true,
+        is_minibuffer: false,
+        char_height: 16.0,
+        buffer_name: String::new(),
+        buffer_file_name: String::new(),
+        modified: false,
+    });
+}
+
 #[test]
 fn glyph_pointer_token_has_small_niche_sized_overhead() {
     assert_eq!(std::mem::size_of::<Option<GlyphPointerAppearanceId>>(), 4);
@@ -102,8 +134,43 @@ fn frame_display_state_carries_the_interaction_presentation_that_matches_its_pix
 }
 
 #[test]
+fn spatial_projection_validation_rejects_window_and_hit_region_divergence() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.presentation_id = PresentationId::new(23);
+    install_complete_window_geometry(
+        &mut state,
+        DisplayWindowId::new(1),
+        Rect::new(0.0, 0.0, 80.0, 16.0),
+    );
+    state.presented_hit_index = crate::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![crate::PresentedHitRegion::new(
+            Some(DisplayWindowId::new(1)),
+            crate::PresentedRegionKind::TextBody,
+            crate::FrameRect::new(8.0, 0.0, 72.0, 16.0).unwrap(),
+            0,
+        )],
+        Vec::new(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        state.validate_spatial_projections(),
+        Err(crate::PresentedHitError::WindowGeometryMismatch {
+            window: DisplayWindowId::new(1),
+            region: crate::PresentedRegionKind::TextBody,
+        })
+    );
+}
+
+#[test]
 fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    install_complete_window_geometry(
+        &mut state,
+        DisplayWindowId::new(1),
+        Rect::new(0.0, 0.0, 80.0, 16.0),
+    );
     state.faces.insert(FaceId::new(0), Face::default());
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;
@@ -1962,6 +2029,7 @@ fn semantic_hit_index_survives_transport_and_materialization() {
     let window = crate::DisplayWindowId::new(4);
     let mut state = FrameDisplayState::new(20, 10, 8.0, 16.0);
     state.presentation_id = presentation;
+    install_complete_window_geometry(&mut state, window, Rect::new(8.0, 16.0, 80.0, 32.0));
     state.presented_hit_index = crate::PresentedHitIndex::from_parts(
         presentation,
         vec![crate::PresentedHitRegion::new(

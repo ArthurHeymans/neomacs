@@ -257,6 +257,10 @@ pub enum PresentedHitError {
         window: DisplayWindowId,
         output_row: i64,
     },
+    WindowGeometryMismatch {
+        window: DisplayWindowId,
+        region: PresentedRegionKind,
+    },
     PointerOutsideSemanticRegion,
     MissingPointerSemanticOwner,
     UnknownPointerSemanticOwner(PresentedRegionId),
@@ -281,6 +285,10 @@ impl std::fmt::Display for PresentedHitError {
             Self::MissingBodyRow { window, output_row } => write!(
                 formatter,
                 "window {window} has no canonical body row for output row {output_row}"
+            ),
+            Self::WindowGeometryMismatch { window, region } => write!(
+                formatter,
+                "window {window} has divergent geometry for semantic region {region:?}"
             ),
             Self::PointerOutsideSemanticRegion => formatter.write_str(
                 "pointer interaction/appearance region is outside semantic presentation geometry",

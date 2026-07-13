@@ -1978,7 +1978,26 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         selected_regions.text_body.y > selected_regions.outer.y,
         "fixture must contain top chrome"
     );
-    let rebuilt = build_presented_hit_index(&poisoned_transport, &snapshots).unwrap();
+    let spatial = crate::presentation_spatial::PresentationSpatialPlan::compile(
+        &poisoned_transport,
+        &snapshots,
+    )
+    .unwrap();
+    spatial.seal(&mut poisoned_transport).unwrap();
+    let rebuilt = &poisoned_transport.presented_hit_index;
+    let neomacs_display_protocol::PresentedWindowGeometry::Complete {
+        regions: repaired_regions,
+        ..
+    } = poisoned_transport
+        .window_infos
+        .iter()
+        .find(|info| info.window_id.get() == selected.0 as i64)
+        .expect("selected repaired transport window")
+        .geometry
+    else {
+        panic!("complete repaired transport geometry");
+    };
+    assert_eq!(repaired_regions, selected_regions);
     let canonical = rebuilt
         .text_positions()
         .iter()
@@ -2001,7 +2020,11 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .text_body
         .width = -1.0;
     assert_eq!(
-        build_presented_hit_index(renderer, &invalid_snapshots),
+        crate::presentation_spatial::PresentationSpatialPlan::compile(
+            renderer,
+            &invalid_snapshots,
+        )
+        .map(|plan| plan.hit_index().clone()),
         Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)
     );
     let mut zero_snapshots = snapshots.clone();
@@ -2011,7 +2034,10 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .expect("selected zero-area snapshot");
     zero.points.clear();
     zero.regions.text_body.width = 0.0;
-    let zero_index = build_presented_hit_index(renderer, &zero_snapshots).unwrap();
+    let zero_index =
+        crate::presentation_spatial::PresentationSpatialPlan::compile(renderer, &zero_snapshots)
+            .unwrap();
+    let zero_index = zero_index.hit_index();
     assert!(!zero_index.regions().iter().any(|region| {
         region.id()
             == neomacs_display_protocol::PresentedRegionId::new(

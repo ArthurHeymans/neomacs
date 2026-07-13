@@ -10,6 +10,46 @@ fn install_test_text_body_hit_index(
     window_id: i64,
     bounds: Rect,
 ) {
+    if !state
+        .window_infos
+        .iter()
+        .any(|info| info.window_id.get() == window_id)
+    {
+        state
+            .window_infos
+            .push(neomacs_display_protocol::WindowInfo {
+                window_id: neomacs_display_protocol::DisplayWindowId::new(window_id),
+                buffer_id: 0,
+                window_start: 0,
+                window_end: 0,
+                buffer_size: 0,
+                bounds,
+                geometry: neomacs_display_protocol::PresentedWindowGeometry::default(),
+                mode_line_height: 0.0,
+                header_line_height: 0.0,
+                tab_line_height: 0.0,
+                selected: true,
+                is_minibuffer: false,
+                char_height: state.char_height,
+                buffer_name: String::new(),
+                buffer_file_name: String::new(),
+                modified: false,
+            });
+    }
+    let info = state
+        .window_infos
+        .iter_mut()
+        .find(|info| info.window_id.get() == window_id)
+        .expect("installed test window metadata");
+    info.bounds = bounds;
+    info.geometry = neomacs_display_protocol::PresentedWindowGeometry::Complete {
+        cell_origin: neomacs_display_protocol::PresentedCellOrigin::default(),
+        regions: neomacs_display_protocol::PresentedWindowRegions {
+            outer: bounds,
+            text_body: bounds,
+            ..neomacs_display_protocol::PresentedWindowRegions::default()
+        },
+    };
     state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(
         state.presentation_id,
         vec![neomacs_display_protocol::PresentedHitRegion::new(
