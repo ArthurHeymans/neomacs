@@ -102,6 +102,7 @@ pub mod font_match;
 pub mod font_metrics;
 pub mod font_probe;
 pub mod fontconfig;
+pub(crate) mod frame_layout_transaction;
 pub(crate) mod glyph_advance;
 pub(crate) mod glyph_row_writer;
 pub mod gui_chrome;

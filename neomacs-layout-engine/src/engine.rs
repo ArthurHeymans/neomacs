@@ -67,6 +67,7 @@ use crate::display_row_walk_state::{
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
 use crate::fontconfig::FontSizing;
+use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutRequest};
 use crate::incremental_layout::{
     CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
@@ -94,7 +95,7 @@ use neovm_core::window::WindowDisplaySnapshot;
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 /// Bound intrinsic chrome convergence so oscillating status-line Lisp can
 /// never publish mismatched geometry or spin forever.
-const MAX_WINDOW_CHROME_LAYOUT_RETRIES: usize = 8;
+const MAX_FRAME_LAYOUT_RETRIES: usize = 12;
 
 #[cfg(test)]
 #[inline]
@@ -579,16 +580,16 @@ impl LayoutEngine {
             }
         }
 
-        // --- Minibuffer auto-resize retry loop (GNU xdisp.c:13161-13301) ---
+        // --- Frame layout convergence loop (GNU xdisp.c redisplay retries) ---
         //
         // After laying out all windows we check whether the minibuffer
         // used more (or fewer) display rows than its allocated height.
         // If so we call grow_mini_window / shrink_mini_window and
-        // re-layout the entire frame.  The `mini_resize_attempted` flag
-        // limits this to a single retry to prevent infinite loops.
-        let mut mini_resize_attempted = false;
-        let mut tab_bar_resize_attempted = false;
-        let mut window_chrome_layout_retries = 0usize;
+        // A typed coordinator gives frame chrome, leaf chrome, and minibuffer
+        // allocation one bounded retry policy. Every retry discards the whole
+        // speculative output; only an iteration that requests no relayout can
+        // reach presentation sealing below.
+        let mut layout_coordinator = FrameLayoutCoordinator::new(MAX_FRAME_LAYOUT_RETRIES);
         let mut window_chrome_metrics = self.retained_window_chrome_metrics.clone();
 
         let (frame_params, curr_window_infos, retained_keys, accepted_window_chrome_metrics) = 'frame_layout: loop {
@@ -693,13 +694,24 @@ impl LayoutEngine {
                     presentation_id,
                 )
                 && (actual_tab_bar_height - tab_bar_height).abs() > 0.5
-                && !tab_bar_resize_attempted
             {
+                let request = FrameRelayoutRequest::FrameTabBar {
+                    assumed_height: tab_bar_height,
+                    measured_height: actual_tab_bar_height,
+                };
+                if let Err(error) = layout_coordinator.request_retry(request) {
+                    tracing::error!(
+                        presentation = presentation_id,
+                        ?error,
+                        "rejecting frame whose layout failed to converge"
+                    );
+                    evaluator.retire_interaction_presentation(presentation_id);
+                    return;
+                }
                 if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                     frame.tab_bar_height = actual_tab_bar_height.round().max(1.0) as u32;
                     frame.sync_window_area_bounds();
                 }
-                tab_bar_resize_attempted = true;
                 continue;
             }
 
@@ -850,18 +862,20 @@ impl LayoutEngine {
                     }
                     WindowLayoutOutcome::Skipped => layout_box,
                     WindowLayoutOutcome::NeedsRelayout { assumed, measured } => {
-                        if window_chrome_layout_retries >= MAX_WINDOW_CHROME_LAYOUT_RETRIES {
+                        let request = FrameRelayoutRequest::WindowChrome {
+                            window_id: DisplayWindowId::new(params.window_id),
+                            assumed,
+                            measured,
+                        };
+                        if let Err(error) = layout_coordinator.request_retry(request) {
                             tracing::error!(
-                                window = params.window_id,
-                                ?assumed,
-                                ?measured,
-                                attempts = window_chrome_layout_retries,
-                                "rejecting frame whose window chrome failed to converge"
+                                presentation = presentation_id,
+                                ?error,
+                                "rejecting frame whose layout failed to converge"
                             );
                             evaluator.retire_interaction_presentation(presentation_id);
                             return;
                         }
-                        window_chrome_layout_retries += 1;
                         window_chrome_metrics
                             .insert(DisplayWindowId::new(params.window_id), measured);
                         continue 'frame_layout;
@@ -907,8 +921,7 @@ impl LayoutEngine {
             // the minibuffer and re-layout the entire frame (one retry).
             // Also shrink back when the minibuffer content fits in fewer
             // rows than currently allocated.
-            if !mini_resize_attempted
-                && let Some(mini_params) = window_params_list.last()
+            if let Some(mini_params) = window_params_list.last()
                 && mini_params.is_minibuffer()
                 && let Some(mini_content_height_px) = self.output_window_content_height_px(
                     mini_params.window_id,
@@ -1012,10 +1025,23 @@ impl LayoutEngine {
                             mini_rows_used,
                             allocated_rows,
                         );
+                        let request = FrameRelayoutRequest::Minibuffer {
+                            window_id: DisplayWindowId::new(mini_params.window_id),
+                            allocated_rows,
+                            required_rows: mini_rows_used,
+                        };
+                        if let Err(error) = layout_coordinator.request_retry(request) {
+                            tracing::error!(
+                                presentation = presentation_id,
+                                ?error,
+                                "rejecting frame whose layout failed to converge"
+                            );
+                            evaluator.retire_interaction_presentation(presentation_id);
+                            return;
+                        }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                             frame.grow_mini_window_with_max_lines(delta, max_mini_lines);
                         }
-                        mini_resize_attempted = true;
                         continue; // restart the layout loop
                     }
                 } else if mini_rows_used < allocated_rows && allocated_rows > 1 {
@@ -1034,10 +1060,23 @@ impl LayoutEngine {
                             mini_rows_used,
                             allocated_rows,
                         );
+                        let request = FrameRelayoutRequest::Minibuffer {
+                            window_id: DisplayWindowId::new(mini_params.window_id),
+                            allocated_rows,
+                            required_rows: mini_rows_used,
+                        };
+                        if let Err(error) = layout_coordinator.request_retry(request) {
+                            tracing::error!(
+                                presentation = presentation_id,
+                                ?error,
+                                "rejecting frame whose layout failed to converge"
+                            );
+                            evaluator.retire_interaction_presentation(presentation_id);
+                            return;
+                        }
                         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
                             frame.shrink_mini_window();
                         }
-                        mini_resize_attempted = true;
                         continue; // restart the layout loop
                     }
                 }
