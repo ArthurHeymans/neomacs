@@ -740,7 +740,14 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
 
     builder.end_row();
     builder.end_window();
-    let snapshot = emitter.finish_snapshot(&mut eval, 0, 0, 0, 0);
+    let snapshot = emitter.finish_snapshot_with_geometry(
+        &mut eval,
+        neovm_core::window::geometry::CellOrigin::default(),
+        neovm_core::window::PresentedWindowRegions::default(),
+        0,
+        0,
+        0,
+    );
     let state = builder.finish(10, 1, 8.0, 16.0);
 
     assert!(state.cursors.is_empty());

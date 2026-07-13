@@ -1452,34 +1452,6 @@ impl WindowOutputEmitter {
         self.phys_cursor = Some(cursor);
     }
 
-    #[cfg(test)]
-    pub(crate) fn finish_snapshot(
-        self,
-        evaluator: &mut Context,
-        text_area_left_offset: i64,
-        mode_line_height: i64,
-        header_line_height: i64,
-        tab_line_height: i64,
-    ) -> WindowDisplaySnapshot {
-        self.finish_snapshot_with_geometry(
-            evaluator,
-            CellOrigin::default(),
-            PresentedWindowRegions {
-                outer: neomacs_display_protocol::types::Rect::default(),
-                text_body: neomacs_display_protocol::types::Rect::new(
-                    text_area_left_offset as f32,
-                    0.0,
-                    0.0,
-                    0.0,
-                ),
-                ..PresentedWindowRegions::default()
-            },
-            mode_line_height,
-            header_line_height,
-            tab_line_height,
-        )
-    }
-
     pub(crate) fn finish_snapshot_with_geometry(
         mut self,
         evaluator: &mut Context,
