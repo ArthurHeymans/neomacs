@@ -5340,10 +5340,20 @@ fn set_top_level_non_window_pixelwise_totals(
 ) {
     let text_width = i64::from(text_width).max(1);
     let text_height = i64::from(text_height).max(1);
-    // GNU frame.c line accounting: the 'height' parameter is FRAME_LINES (the
-    // text area including the minibuffer, excluding the menu/tab bar rows), and
-    // FRAME_TOTAL_LINES = FRAME_LINES + FRAME_MENU_BAR_LINES + FRAME_TAB_BAR_LINES.
+    // GNU frame.c line accounting: FRAME_TOTAL_LINES = FRAME_LINES +
+    // FRAME_MENU_BAR_LINES + FRAME_TAB_BAR_LINES, where FRAME_LINES is the text
+    // area including the minibuffer, excluding the menu/tab bar rows.
     // `text_height` here is the text-area line count (menu/tab already excluded).
+    //
+    // This helper only owns the NATIVE geometry parameters (total cols/lines,
+    // text lines). It must NOT write the logical `height`/`width` frame
+    // parameters: those are FRAME_LINES/FRAME_COLS and are set by the preceding
+    // `builtin_set_frame_size` call in the pixelwise builtin. Writing `height`
+    // here clobbered the logical char height for top-level TTY frames (regressed
+    // set_frame_size_and_position_pixelwise_updates_top_level_tty_native_totals:
+    // height became text_height+minibuffer instead of the logical FRAME_LINES).
+    // The terminal-resize FRAME_LINES fix lives in `Frame::resize_pixelwise`
+    // (window/mod.rs), a separate path, and is unaffected.
     let minibuffer_lines = i64::from(frame.minibuffer_leaf.is_some());
     let frame_lines = text_height.saturating_add(minibuffer_lines).min(u32::MAX as i64);
     // Only realized (displayed) chrome adds rows over FRAME_LINES; a
@@ -5360,7 +5370,6 @@ fn set_top_level_non_window_pixelwise_totals(
         Value::symbol(FRAME_TOTAL_COLS_PARAM),
         Value::fixnum(text_width),
     );
-    frame.set_parameter(Value::symbol("height"), Value::fixnum(frame_lines));
     frame.set_parameter(
         Value::symbol(FRAME_TOTAL_LINES_PARAM),
         Value::fixnum(total_lines),
