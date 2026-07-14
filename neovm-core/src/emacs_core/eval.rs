@@ -1836,6 +1836,14 @@ pub(crate) struct BcFrame {
     pub fun: Value,
 }
 
+/// A unit of work to run synchronously on the Lisp thread at a safe point.
+///
+/// Other threads (e.g. the diagnostics server) send these over a channel and
+/// wake the Lisp thread with a [`Context::wait_notifier`]; the Lisp thread
+/// drains and runs them between evaluated forms. This is the generic "run on
+/// the eval thread" seam — no diagnostics-specific type enters `neovm-core`.
+pub type EvalThreadTask = Box<dyn FnOnce(&mut Context) + Send + 'static>;
+
 pub struct Context {
     /// Tagged pointer heap — sole GC and allocator.
     pub(crate) tagged_heap: Box<crate::tagged::gc::TaggedHeap>,
@@ -2043,6 +2051,9 @@ pub struct Context {
     /// `None` in batch mode (tests, non-interactive evaluation).
     /// When `Some`, `read_char()` blocks on this channel for interactive input.
     pub input_rx: Option<crossbeam_channel::Receiver<crate::keyboard::InputEvent>>,
+    /// Tasks queued from other threads (e.g. the diagnostics server) to run on
+    /// the Lisp thread at a safe point. Drained in the `read_char` loop.
+    eval_task_rx: Option<crossbeam_channel::Receiver<EvalThreadTask>>,
     /// Wakeup file descriptor — the read end of a pipe that the render thread
     /// writes to when input is available.  Used by `wait_for_input()` with
     /// `pselect()`/`poll()` to multiplex input with process I/O and timers.
@@ -3112,6 +3123,7 @@ impl Context {
         ev.kmacro = KmacroManager::new();
         ev.command_loop = crate::keyboard::CommandLoop::default();
         ev.input_rx = None;
+        ev.eval_task_rx = None;
         ev.wakeup_fd = None;
         ev.redisplay_fn = None;
         ev.frame_snapshot_fn = None;
@@ -5503,6 +5515,7 @@ impl Context {
             kmacro: KmacroManager::new(),
             command_loop,
             input_rx: None,
+            eval_task_rx: None,
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
@@ -5691,6 +5704,7 @@ impl Context {
             kmacro,
             command_loop: crate::keyboard::CommandLoop::new(),
             input_rx: None,
+            eval_task_rx: None,
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
@@ -6187,6 +6201,28 @@ impl Context {
         self.wakeup_fd = Some(wakeup_fd);
         self.processes.register_wait_input_wakeup_fd(wakeup_fd);
         self.command_loop.running = true;
+    }
+
+    /// Install the receiver for cross-thread [`EvalThreadTask`]s (e.g. from the
+    /// diagnostics server). The sender side wakes the Lisp thread via
+    /// [`Context::wait_notifier`]; queued tasks run at the next safe point.
+    pub fn init_eval_task_system(
+        &mut self,
+        rx: crossbeam_channel::Receiver<EvalThreadTask>,
+    ) {
+        self.eval_task_rx = Some(rx);
+    }
+
+    /// Run any queued cross-thread tasks synchronously. Called at a Lisp-safe
+    /// point (the `read_char` loop); a no-op when no channel is installed.
+    pub(crate) fn drain_eval_tasks(&mut self) {
+        // Clone the Receiver handle so we don't borrow `self.eval_task_rx`
+        // across the `&mut self` task call.
+        if let Some(rx) = self.eval_task_rx.clone() {
+            while let Ok(task) = rx.try_recv() {
+                task(self);
+            }
+        }
     }
 
     /// Cross-platform handle the render/frontend thread uses to wake the wait

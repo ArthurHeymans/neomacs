@@ -4260,6 +4260,10 @@ impl crate::emacs_core::eval::Context {
 
         loop {
             self.sync_keyboard_terminal_owner();
+            // Service cross-thread tasks (e.g. diagnostics profile capture) at
+            // this Lisp-safe point — between forms, never mid-primitive. Runs on
+            // every idle wake, so a request is handled within one iteration.
+            self.drain_eval_tasks();
             match self.pop_queued_read_char_event()? {
                 QueuedReadCharEvent::Event(event) => return Ok(Some(event)),
                 QueuedReadCharEvent::HandledInternally => continue,

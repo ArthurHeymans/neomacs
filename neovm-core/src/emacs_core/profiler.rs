@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
 use super::eval::{Context, SpecBinding};
+use super::intern::resolve_sym;
 use super::value::{
     FunctionSourceIdentity, HashKey, HashTableTest, Value, build_hash_table_literal_value,
 };
@@ -33,6 +34,26 @@ struct ProfilerLog {
     entries: FxHashMap<StackKey, Sample>,
     gc_count: u64,
     discarded: u64,
+}
+
+/// Resolve one profiler frame `Value` to a folded-stack label.
+///
+/// Symbols and subrs resolve to their name; anonymous compiled closures
+/// collapse by bytecode source id; anything else falls back to its tagged bits.
+/// The folded grammar uses `;` and space as separators, so those (and newlines)
+/// are stripped from names — a single unsanitized name would corrupt the whole
+/// folded output and break inferno / the report parser.
+fn frame_label(frame: Value) -> String {
+    let raw = if let Some(name) = frame.as_symbol_name() {
+        name.to_string()
+    } else if let Some(subr_id) = frame.as_subr_id() {
+        resolve_sym(subr_id).to_string()
+    } else if let Some(FunctionSourceIdentity::ByteCode(id)) = frame.function_source_identity() {
+        format!("<bytecode:{id:#x}>")
+    } else {
+        format!("<closure:{:#x}>", frame.bits())
+    };
+    raw.replace([' ', ';', '\n'], "_")
 }
 
 impl ProfilerLog {
@@ -339,6 +360,67 @@ impl Context {
         Some(value)
     }
 
+    /// Non-destructively fold the CPU profiler log into Brendan-Gregg folded
+    /// stacks (`root;...;leaf <count>` per line), resolving function names on
+    /// the Lisp thread where the interner is live. Unlike `profiler_cpu_log`,
+    /// this does NOT take or clear the log — the caller stops the profiler
+    /// separately. Returns an empty string when nothing was sampled.
+    pub(crate) fn profiler_cpu_folded(&mut self) -> String {
+        self.profiler_poll();
+        let Some(log) = self.profiler.cpu_log.as_ref() else {
+            return String::new();
+        };
+        let mut folded: FxHashMap<String, u64> = FxHashMap::default();
+        for sample in log.entries.values() {
+            // Frames are innermost-first and NIL-padded to `depth`; drop the
+            // padding and reverse to root;...;leaf for Brendan-Gregg order.
+            let mut labels: Vec<String> = sample
+                .frames
+                .iter()
+                .copied()
+                .filter(|frame| !frame.is_nil())
+                .map(frame_label)
+                .collect();
+            labels.reverse();
+            if labels.is_empty() {
+                continue;
+            }
+            *folded.entry(labels.join(";")).or_insert(0) += sample.count;
+        }
+        if log.gc_count > 0 {
+            *folded.entry("Automatic_GC".to_string()).or_insert(0) += log.gc_count;
+        }
+        if log.discarded > 0 {
+            *folded.entry("Discarded_Samples".to_string()).or_insert(0) += log.discarded;
+        }
+        let mut lines: Vec<(String, u64)> = folded.into_iter().collect();
+        lines.sort_unstable_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        let mut out = String::new();
+        for (stack, count) in lines {
+            out.push_str(&stack);
+            out.push(' ');
+            out.push_str(&count.to_string());
+            out.push('\n');
+        }
+        out
+    }
+
+    /// Public diagnostics entry point: begin CPU sampling at `interval_ns`.
+    /// Returns false if a CPU profile is already running.
+    pub fn diagnostics_cpu_profile_start(&mut self, interval_ns: u64) -> bool {
+        self.profiler_cpu_start(interval_ns)
+    }
+
+    /// Public diagnostics entry point: fold the accrued CPU samples into
+    /// Brendan-Gregg folded stacks, then stop the profiler. Must run on the
+    /// Lisp thread (invoked from an `EvalThreadTask`) so name resolution via the
+    /// interner is valid.
+    pub fn diagnostics_cpu_profile_stop_fold(&mut self) -> String {
+        let folded = self.profiler_cpu_folded();
+        self.profiler_cpu_stop();
+        folded
+    }
+
     pub(crate) fn profiler_memory_start(&mut self) -> bool {
         if self.profiler.memory_running {
             return false;
@@ -472,6 +554,28 @@ fn monotonic_fallback_ns() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cpu_folded_renders_recorded_stacks_with_names_and_sorts_by_count() {
+        let mut ctx = Context::new();
+        // Not running, so the profiler_poll() inside profiler_cpu_folded is a
+        // no-op and the log holds exactly what we record.
+        assert!(!ctx.profiler.is_active());
+        ctx.profiler.cpu_log = Some(ProfilerLog::new(16, 100));
+        {
+            let log = ctx.profiler.cpu_log.as_mut().unwrap();
+            // Innermost-first, matching profiler_poll's rev() collection.
+            log.record(&[Value::symbol("neo-leaf"), Value::symbol("neo-root")], 7);
+            log.record(&[Value::symbol("neo-solo")], 3);
+        }
+        let folded = ctx.profiler_cpu_folded();
+        // Root-first Brendan-Gregg order after the reverse; highest count first.
+        assert!(
+            folded.starts_with("neo-root;neo-leaf 7"),
+            "folded was:\n{folded}"
+        );
+        assert!(folded.contains("neo-solo 3"), "folded was:\n{folded}");
+    }
 
     #[test]
     fn bounded_log_evicts_cold_samples_and_reports_discarded_weight() {
