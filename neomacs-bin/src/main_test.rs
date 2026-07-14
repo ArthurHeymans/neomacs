@@ -1,4 +1,4 @@
-use super::tty_frontend::TtyTerminalHost;
+use super::tty_frontend::{TtyPopupDisplayHost, TtyTerminalHost};
 use super::tty_init::{
     default_controlling_tty_name, detect_tty_background_mode, should_enable_live_tty_io,
 };
@@ -48,6 +48,7 @@ use neovm_core::window::{
     FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
 };
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -1471,6 +1472,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
             selection,
             text,
             reply,
+            ..
         }) = cmd_rx.recv().unwrap()
         else {
             panic!("expected clipboard set command");
@@ -1479,8 +1481,9 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         assert_eq!(text.as_deref(), Some("copied"));
         reply.send(Ok(())).unwrap();
 
-        let RenderCommand::Clipboard(ClipboardCommand::GetText { selection, reply }) =
-            cmd_rx.recv().unwrap()
+        let RenderCommand::Clipboard(ClipboardCommand::GetText {
+            selection, reply, ..
+        }) = cmd_rx.recv().unwrap()
         else {
             panic!("expected PRIMARY get command");
         };
@@ -1512,6 +1515,31 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         Some("selected".to_owned())
     );
     worker.join().unwrap();
+}
+
+#[test]
+fn tty_display_host_reports_clipboard_as_unsupported() {
+    let mut host = TtyPopupDisplayHost::new(Arc::new(AtomicBool::new(false)));
+
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::set_clipboard_text(&mut host, Some("copied")),
+        Err("system clipboard is unavailable in TTY mode".to_owned())
+    );
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::clipboard_text(&mut host),
+        Err("system clipboard is unavailable in TTY mode".to_owned())
+    );
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::set_primary_selection_text(
+            &mut host,
+            Some("selected")
+        ),
+        Err("PRIMARY selection is unavailable in TTY mode".to_owned())
+    );
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::primary_selection_text(&mut host),
+        Err("PRIMARY selection is unavailable in TTY mode".to_owned())
+    );
 }
 
 #[test]
@@ -2148,7 +2176,7 @@ fn neo_win_registers_neo_display_format() {
 }
 
 #[test]
-fn neo_window_system_initialization_defers_neomacs_only_setup_until_window_setup_hook() {
+fn neo_window_system_initialization_preserves_gnu_clipboard_policy_and_user_customization() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
 
@@ -2156,23 +2184,39 @@ fn neo_window_system_initialization_defers_neomacs_only_setup_until_window_setup
         .eval_str(
             r#"
         (progn
+          (require 'cl-lib)
           (load "term/neo-win" nil t)
-          (setq neomacs-initialized nil
-                command-line-args '("neomacs" "-Q" "--")
-                window-setup-hook nil
-                interprogram-cut-function nil
-                interprogram-paste-function nil)
-          (let ((window-system 'neo))
-            (window-system-initialization))
-          (and (equal command-line-args '("neomacs" "-Q" "--"))
-               (memq #'neomacs--window-setup window-setup-hook)
-               (null interprogram-cut-function)
-               (null interprogram-paste-function)
-               (progn
-                 (run-hooks 'window-setup-hook)
-                 (eq interprogram-cut-function #'neomacs--clipboard-cut)
-                 (eq interprogram-paste-function #'neomacs--clipboard-paste)
-                 (not (memq #'neomacs--window-setup window-setup-hook)))))
+          (let ((gnu-defaults
+                 (and (eq interprogram-cut-function #'gui-select-text)
+                      (eq interprogram-paste-function #'gui-selection-value))))
+            (setq neomacs-initialized nil
+                  command-line-args '("neomacs" "-Q" "--")
+                  window-setup-hook nil
+                  interprogram-cut-function #'ignore
+                  interprogram-paste-function #'identity)
+            (let ((window-system 'neo))
+              (window-system-initialization))
+            (and gnu-defaults
+                 (equal command-line-args '("neomacs" "-Q" "--"))
+                 (memq #'neomacs--window-setup window-setup-hook)
+                 (eq interprogram-cut-function #'ignore)
+                 (eq interprogram-paste-function #'identity)
+                 (progn
+                   (run-hooks 'window-setup-hook)
+                   (eq interprogram-cut-function #'ignore)
+                   (eq interprogram-paste-function #'identity)
+                   (not (memq #'neomacs--window-setup window-setup-hook)))
+                 (let ((window-system 'neo)
+                       (select-enable-clipboard t)
+                       (select-enable-primary t)
+                       calls)
+                   (cl-letf (((symbol-function 'neomacs-clipboard-set)
+                              (lambda (value) (push (list 'clipboard value) calls)))
+                             ((symbol-function 'neomacs-primary-selection-set)
+                              (lambda (value) (push (list 'primary value) calls))))
+                     (gui-select-text "copied")
+                     (equal (nreverse calls)
+                            '((primary "copied") (clipboard "copied"))))))))
         "#,
         )
         .map(|value| print_value_with_eval(&mut eval, &value))

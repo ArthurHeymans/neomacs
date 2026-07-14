@@ -36,35 +36,9 @@ impl RenderApp {
     }
 
     fn handle_clipboard(&mut self, command: ClipboardCommand) {
-        match command {
-            ClipboardCommand::SetText {
-                selection,
-                text,
-                reply,
-            } => {
-                let result = match self.clipboard.as_mut() {
-                    Ok(clipboard) => clipboard.set_text(selection, text.as_deref()),
-                    Err(err) => Err(err.clone()),
-                };
-                if let Err(err) = &result {
-                    tracing::warn!(?selection, "clipboard set failed: {err}");
-                }
-                if reply.send(result).is_err() {
-                    tracing::debug!("clipboard set reply receiver was dropped");
-                }
-            }
-            ClipboardCommand::GetText { selection, reply } => {
-                let result = match self.clipboard.as_mut() {
-                    Ok(clipboard) => clipboard.text(selection),
-                    Err(err) => Err(err.clone()),
-                };
-                if let Err(err) = &result {
-                    tracing::warn!(?selection, "clipboard read failed: {err}");
-                }
-                if reply.send(result).is_err() {
-                    tracing::debug!("clipboard get reply receiver was dropped");
-                }
-            }
+        match &self.clipboard {
+            Ok(clipboard) => clipboard.submit(command),
+            Err(err) => crate::clipboard::reject_command(command, err.clone()),
         }
     }
 }

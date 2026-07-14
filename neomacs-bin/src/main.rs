@@ -1119,6 +1119,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             ClipboardCommand::SetText {
                 selection: ClipboardSelection::Clipboard,
                 text: text.map(str::to_owned),
+                expires_at: Instant::now() + CLIPBOARD_REPLY_TIMEOUT,
                 reply: reply_tx,
             },
             reply_rx,
@@ -1131,6 +1132,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         self.await_clipboard_reply(
             ClipboardCommand::GetText {
                 selection: ClipboardSelection::Clipboard,
+                expires_at: Instant::now() + CLIPBOARD_REPLY_TIMEOUT,
                 reply: reply_tx,
             },
             reply_rx,
@@ -1144,6 +1146,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             ClipboardCommand::SetText {
                 selection: ClipboardSelection::Primary,
                 text: text.map(str::to_owned),
+                expires_at: Instant::now() + CLIPBOARD_REPLY_TIMEOUT,
                 reply: reply_tx,
             },
             reply_rx,
@@ -1156,6 +1159,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         self.await_clipboard_reply(
             ClipboardCommand::GetText {
                 selection: ClipboardSelection::Primary,
+                expires_at: Instant::now() + CLIPBOARD_REPLY_TIMEOUT,
                 reply: reply_tx,
             },
             reply_rx,

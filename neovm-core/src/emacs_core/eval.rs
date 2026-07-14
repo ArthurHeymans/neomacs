@@ -1544,16 +1544,16 @@ pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn set_clipboard_text(&mut self, _text: Option<&str>) -> Result<(), String> {
-        Ok(())
+        Err("clipboard is unsupported by this display host".to_owned())
     }
     fn clipboard_text(&mut self) -> Result<Option<String>, String> {
-        Ok(None)
+        Err("clipboard is unsupported by this display host".to_owned())
     }
     fn set_primary_selection_text(&mut self, _text: Option<&str>) -> Result<(), String> {
-        Ok(())
+        Err("PRIMARY selection is unsupported by this display host".to_owned())
     }
     fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
-        Ok(None)
+        Err("PRIMARY selection is unsupported by this display host".to_owned())
     }
     fn set_gui_frame_geometry_hints(
         &mut self,

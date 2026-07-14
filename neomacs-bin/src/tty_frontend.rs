@@ -35,6 +35,22 @@ impl DisplayHost for TtyPopupDisplayHost {
         Ok(())
     }
 
+    fn set_clipboard_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Err("system clipboard is unavailable in TTY mode".to_owned())
+    }
+
+    fn clipboard_text(&mut self) -> Result<Option<String>, String> {
+        Err("system clipboard is unavailable in TTY mode".to_owned())
+    }
+
+    fn set_primary_selection_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Err("PRIMARY selection is unavailable in TTY mode".to_owned())
+    }
+
+    fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
+        Err("PRIMARY selection is unavailable in TTY mode".to_owned())
+    }
+
     fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
         let mut stdout = io::stdout();
         let origin = menu

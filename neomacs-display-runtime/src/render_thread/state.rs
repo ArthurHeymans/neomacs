@@ -637,8 +637,7 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
 
-    /// Clipboard state is owned by the display thread and lives as long as
-    /// the native display connection.
+    /// Non-blocking handle to the clipboard worker that owns its display.
     pub(super) clipboard: Result<ClipboardService, String>,
 
     pub(super) gpu: Option<RenderGpuContext>,

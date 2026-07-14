@@ -180,6 +180,7 @@ fn clipboard_command_before_display_initialization_returns_an_explicit_error() {
         .cmd_tx
         .send(RenderCommand::Clipboard(ClipboardCommand::GetText {
             selection: ClipboardSelection::Clipboard,
+            expires_at: std::time::Instant::now() + std::time::Duration::from_secs(5),
             reply: reply_tx,
         }))
         .unwrap();

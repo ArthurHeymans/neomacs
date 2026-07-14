@@ -39,6 +39,7 @@
 (require 'frame)
 (require 'mouse)
 (require 'scroll-bar)
+(require 'select)
 (require 'faces)
 (require 'menu-bar)
 (require 'fontset)
@@ -75,11 +76,11 @@
   ;; the render thread and suppress the Emacs-side blink timer.
   (neomacs--setup-cursor-blink)
 
-  ;; Enable render-thread animations and host clipboard integration only
-  ;; after GNU startup has finished its initial frame setup.
+  ;; Enable render-thread animations only after GNU startup has finished its
+  ;; initial frame setup.  Clipboard policy remains GNU's standard
+  ;; `gui-select-text'/`gui-selection-value' pipeline; the methods below only
+  ;; implement the Neomacs display backend boundary.
   (neomacs--setup-animations)
-  (setq interprogram-cut-function #'neomacs--clipboard-cut)
-  (setq interprogram-paste-function #'neomacs--clipboard-paste)
 
   ;; Enable pixel-precise scrolling for smooth touchpad support.
   (when (fboundp 'pixel-scroll-precision-mode)
@@ -286,26 +287,6 @@ Crossfade easing (crossfade-easing parameter, symbol or integer):
   (when (fboundp 'neomacs-set-animation-config)
     (neomacs-set-animation-config t 15.0 'spring 150 t 200 t 150 'slide 'ease-out-quad 0.7 'crossfade 'ease-out-quad)))
 
-;; Clipboard integration
-(defvar neomacs--last-clipboard-text nil
-  "Last text sent to the clipboard, used to detect external changes.")
-
-(defun neomacs--clipboard-cut (text)
-  "Send TEXT to the system clipboard.
-Used as `interprogram-cut-function'."
-  (when (fboundp 'neomacs-clipboard-set)
-    (setq neomacs--last-clipboard-text text)
-    (neomacs-clipboard-set text)))
-
-(defun neomacs--clipboard-paste ()
-  "Return text from the system clipboard if it has changed.
-Used as `interprogram-paste-function'."
-  (when (fboundp 'neomacs-clipboard-get)
-    (let ((text (neomacs-clipboard-get)))
-      (when (and text (not (string= text neomacs--last-clipboard-text)))
-        (setq neomacs--last-clipboard-text text)
-        text))))
-
 (defun x-clipboard-yank ()
   "Insert the clipboard contents, or the last stretch of killed text."
   (declare (obsolete clipboard-yank "25.1"))
@@ -330,7 +311,6 @@ SELECTION is a symbol like `CLIPBOARD' or `PRIMARY'."
     (cond
      ((eq selection 'CLIPBOARD)
       (when (fboundp 'neomacs-clipboard-set)
-        (setq neomacs--last-clipboard-text text)
         (neomacs-clipboard-set text)))
      ((eq selection 'PRIMARY)
       (when (fboundp 'neomacs-primary-selection-set)

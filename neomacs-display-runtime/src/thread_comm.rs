@@ -7,6 +7,7 @@ use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawHandle, OwnedHandle, RawHandle};
+use std::time::Instant;
 
 /// Platform file descriptor type for the wakeup pipe.
 #[cfg(unix)]
@@ -596,18 +597,32 @@ pub enum ConfigCommand {
     },
 }
 
-/// Synchronous clipboard requests from the evaluator to the display owner.
+/// Clipboard requests routed through the display owner to its serialized worker.
+///
+/// The evaluator may await `reply`, but the Winit event loop only forwards the
+/// request and never performs native clipboard I/O itself.
 #[derive(Debug)]
 pub enum ClipboardCommand {
     SetText {
         selection: ClipboardSelection,
         text: Option<String>,
+        expires_at: Instant,
         reply: Sender<Result<(), String>>,
     },
     GetText {
         selection: ClipboardSelection,
+        expires_at: Instant,
         reply: Sender<Result<Option<String>, String>>,
     },
+}
+
+impl ClipboardCommand {
+    pub(crate) fn is_expired(&self) -> bool {
+        let expires_at = match self {
+            Self::SetText { expires_at, .. } | Self::GetText { expires_at, .. } => expires_at,
+        };
+        Instant::now() >= *expires_at
+    }
 }
 
 /// Command from Emacs to render thread

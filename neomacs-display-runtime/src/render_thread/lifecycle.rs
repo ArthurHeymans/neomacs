@@ -137,7 +137,9 @@ impl RenderApp {
                     NativeTextInputPolicy::for_gui_frame().apply_to_window(&window);
 
                     if self.clipboard.is_err() {
-                        self.clipboard = crate::clipboard::ClipboardService::for_window(&window);
+                        self.clipboard = crate::clipboard::ClipboardService::for_display(
+                            event_loop.owned_display_handle(),
+                        );
                         if let Err(err) = &self.clipboard {
                             tracing::error!("Failed to initialize clipboard service: {err}");
                         }

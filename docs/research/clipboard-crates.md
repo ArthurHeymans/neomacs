@@ -29,12 +29,13 @@ X11; its Wayland support is essentially a wrapper around `smithay-clipboard`.
 
 ## Neomacs behavior before this refactor
 
-The GUI initialization installs Neomacs functions as GNU Emacs's
-`interprogram-cut-function` and `interprogram-paste-function`
-([`neo-win.el`](../../lisp/term/neo-win.el#L70-L82)). The selection methods
-then map `CLIPBOARD` and Linux `PRIMARY` to text-only host calls
-([`neo-win.el`](../../lisp/term/neo-win.el#L289-L362)). Therefore, ordinary
-copy and paste are designed to work in both directions today.
+At the investigation fixed point, GUI initialization installed Neomacs
+functions as GNU Emacs's `interprogram-cut-function` and
+`interprogram-paste-function`. The selection methods then mapped `CLIPBOARD`
+and Linux `PRIMARY` to text-only host calls. That custom policy layer bypassed
+GNU's standard `gui-select-text`/`gui-selection-value` ownership and newness
+tracking, so the refactor removes it and keeps only the display-backend
+methods.
 
 At the investigation fixed point (`678bd28e`), the workspace requested
 `arboard = "3.4"` and locked 3.6.1
@@ -137,8 +138,10 @@ semantics decisions
 ([winit issue 3367](https://github.com/rust-windowing/winit/issues/3367#issue-2068493118)).
 
 Therefore Neomacs needs a separate clipboard backend. Winit's Wayland raw
-display handle is the appropriate integration point for `smithay-clipboard`;
-the clipboard service must not outlive that display.
+display handle is the appropriate integration point for `smithay-clipboard`.
+`ActiveEventLoop::owned_display_handle` lets the clipboard worker structurally
+own the lifetime on which that raw pointer depends, instead of relying on
+shutdown order comments.
 
 ## Recommended Neomacs abstraction
 
@@ -177,15 +180,27 @@ data-control feature.
 ## Implementation status
 
 This refactor implements that recommendation for text selections. The display
-runtime owns one serialized service; Winit's actual raw display handle selects
-the native Wayland backend; all other supported window backends use arboard;
-and GUI failures reach both tracing and Lisp instead of falling back to stale
-thread-local text. The thread-local clipboard remains only when no display
-host exists, which keeps batch tests deterministic.
+runtime's event loop only forwards requests to a serialized clipboard worker,
+so a slow foreign selection owner cannot block rendering or input. Its bounded
+queue discards expired requests before backend execution, preventing a timed-out
+copy from mutating the clipboard later. The worker owns Winit's display handle
+together with the native Wayland backend; all other supported window backends
+use arboard. Backend-reported GUI failures reach both tracing and Lisp instead
+of falling back to stale thread-local text. The thread-local clipboard remains
+only when no display host exists, which keeps batch tests deterministic. The
+TTY display host reports system selections as unsupported instead of silently
+discarding writes.
 
-One upstream limitation remains: smithay-clipboard 0.7.3 has no explicit
-selection-disown operation and its store calls are asynchronous. On Wayland,
-Neomacs therefore publishes an empty text selection when GNU asks it to disown
-one. This preserves the observable text/selection-exists behavior, but a future
-smithay-clipboard API should replace that approximation with protocol-level
-disowning and acknowledged writes.
+GNU Emacs continues to own selection policy through `gui-select-text` and
+`gui-selection-value`; Neomacs only supplies the `gui-backend-*` methods that
+cross the display boundary. This preserves GNU's `select-enable-clipboard`,
+`select-enable-primary`, ownership tracking, and user customization.
+
+Two upstream limitations remain: smithay-clipboard 0.7.3 has no explicit
+selection-disown operation and its store calls are asynchronous. Neomacs
+reports disowning as unsupported rather than falsely publishing an empty
+selection, while a successful store result currently means the upstream API
+accepted the request, not that the compositor confirmed ownership. A future
+smithay-clipboard API should provide protocol-level disowning and acknowledged
+writes. Until then it also cannot report a missing Wayland PRIMARY protocol or
+focus/input-serial rejection of an ownership request.
