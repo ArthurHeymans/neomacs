@@ -2740,53 +2740,6 @@ fn network_option_i32_value(keyword: ProcessKeyword, value: Value) -> Result<i32
 }
 
 #[cfg(unix)]
-fn setsockopt_raw<T>(
-    fd: RawFd,
-    level: libc::c_int,
-    optname: libc::c_int,
-    value: &T,
-) -> std::io::Result<()> {
-    let rc = unsafe {
-        libc::setsockopt(
-            fd,
-            level,
-            optname,
-            (value as *const T).cast(),
-            std::mem::size_of::<T>() as libc::socklen_t,
-        )
-    };
-    if rc == 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
-}
-
-#[cfg(unix)]
-fn set_socket_bool_option_raw(fd: RawFd, optname: libc::c_int, value: bool) -> std::io::Result<()> {
-    let raw: libc::c_int = if value { 1 } else { 0 };
-    setsockopt_raw(fd, libc::SOL_SOCKET, optname, &raw)
-}
-
-#[cfg(unix)]
-fn set_socket_linger_option_raw(fd: RawFd, value: Value) -> std::io::Result<()> {
-    let raw = libc::linger {
-        l_onoff: if value.is_nil() { 0 } else { 1 },
-        l_linger: value
-            .as_fixnum()
-            .and_then(|n| i32::try_from(n).ok())
-            .unwrap_or(0) as libc::c_int,
-    };
-    setsockopt_raw(fd, libc::SOL_SOCKET, libc::SO_LINGER, &raw)
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn set_socket_priority_option_raw(fd: RawFd, priority: i32) -> std::io::Result<()> {
-    let raw = priority as libc::c_int;
-    setsockopt_raw(fd, libc::SOL_SOCKET, libc::SO_PRIORITY, &raw)
-}
-
-#[cfg(unix)]
 fn apply_network_socket_option_to_socket(
     socket: &Socket,
     spec: NetworkSocketOptionSpec,
@@ -2805,15 +2758,22 @@ fn apply_network_socket_option_to_socket(
         }
         NetworkSocketOption::Broadcast => socket.set_broadcast(value.is_truthy()),
         NetworkSocketOption::Dontroute => {
-            set_socket_bool_option_raw(socket.as_raw_fd(), libc::SO_DONTROUTE, value.is_truthy())
+            sys::set_socket_dontroute(socket.as_raw_fd(), value.is_truthy())
         }
         NetworkSocketOption::Keepalive => socket.set_keepalive(value.is_truthy()),
-        NetworkSocketOption::Linger => set_socket_linger_option_raw(socket.as_raw_fd(), value),
+        NetworkSocketOption::Linger => {
+            let onoff = !value.is_nil();
+            let linger = value
+                .as_fixnum()
+                .and_then(|n| i32::try_from(n).ok())
+                .unwrap_or(0);
+            sys::set_socket_linger(socket.as_raw_fd(), onoff, linger)
+        }
         NetworkSocketOption::Oobinline => socket.set_out_of_band_inline(value.is_truthy()),
         #[cfg(any(target_os = "linux", target_os = "android"))]
         NetworkSocketOption::Priority => {
             let priority = network_option_i32_value(spec.keyword, value)?;
-            set_socket_priority_option_raw(socket.as_raw_fd(), priority)
+            sys::set_socket_priority(socket.as_raw_fd(), priority)
         }
         NetworkSocketOption::Reuseaddr => socket.set_reuse_address(value.is_truthy()),
         NetworkSocketOption::Nodelay => socket.set_tcp_nodelay(value.is_truthy()),

@@ -24,6 +24,13 @@ mod tty;
 #[cfg(unix)]
 pub use tty::configure_child_pty_tty;
 
+#[cfg(unix)]
+mod socket_options;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub use socket_options::set_socket_priority;
+#[cfg(unix)]
+pub use socket_options::{set_socket_dontroute, set_socket_linger};
+
 cfg_select! {
     target_os = "linux" => {
         mod linux;
