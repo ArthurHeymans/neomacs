@@ -9,6 +9,7 @@
 mod capture_store;
 pub mod flamegraph;
 pub mod metrics;
+pub mod native;
 pub mod pprof;
 pub mod report;
 pub mod server;

@@ -63,6 +63,10 @@ pub(crate) struct AppState {
     pub(crate) capture_lock: Arc<tokio::sync::Mutex<()>>,
     /// Ring of recent captures, so `/diff` can compare two.
     pub(crate) captures: Arc<std::sync::Mutex<crate::capture_store::CaptureStore>>,
+    /// Serializes native (pprof-rs) captures — only one SIGPROF profiler can be
+    /// installed at a time. Independent of `capture_lock` (the Lisp poll-sampler
+    /// and native SIGPROF sampler do not conflict).
+    pub(crate) native_capture_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 /// Build the diagnostics HTTP router.
@@ -75,6 +79,7 @@ pub fn router(
         profiler,
         capture_lock: Arc::new(tokio::sync::Mutex::new(())),
         captures: Arc::new(std::sync::Mutex::new(crate::capture_store::CaptureStore::new(16))),
+        native_capture_lock: Arc::new(tokio::sync::Mutex::new(())),
     };
     Router::new()
         .route("/", get(index))
@@ -84,6 +89,8 @@ pub fn router(
         .route("/profile/lisp.svg", get(profile_svg))
         .route("/profile/lisp.pprof", get(profile_pprof))
         .route("/profile/lisp/callers", get(callers))
+        .route("/profile/native.svg", get(profile_native_svg))
+        .route("/profile/native.pprof", get(profile_native_pprof))
         .route("/report", get(report))
         .route("/captures", get(captures_list))
         .route("/diff", get(diff))
@@ -103,6 +110,8 @@ async fn index() -> Json<serde_json::Value> {
             "/profile/lisp.svg?secs=N": "the same capture rendered as an SVG flamegraph",
             "/profile/lisp.pprof?secs=N": "the same capture as pprof protobuf (go tool pprof)",
             "/profile/lisp/callers?fn=NAME&secs=N": "callers/callees of NAME (JSON)",
+            "/profile/native.svg?secs=N": "native (Rust) CPU flamegraph — GC/layout/render/dispatch",
+            "/profile/native.pprof?secs=N": "native CPU as pprof protobuf (go tool pprof)",
             "/report?secs=N&top=K&sort=self|total": "ranked top-K CPU hotspots (JSON)",
             "/captures": "list stored captures (id, samples, age) for /diff",
             "/diff?before=A&after=B&top=K": "ranked self% change between two captures (JSON)"
@@ -299,6 +308,48 @@ async fn report(State(state): State<AppState>, Query(p): Query<CaptureParams>) -
             )
                 .into_response()
         }
+        Err((code, msg)) => (code, msg).into_response(),
+    }
+}
+
+/// Run a native (pprof-rs) capture off the runtime thread, serialized so only
+/// one SIGPROF profiler is installed at a time.
+async fn capture_native(
+    state: &AppState,
+    secs: u64,
+    svg: bool,
+) -> Result<Vec<u8>, (StatusCode, String)> {
+    let secs = secs.clamp(1, 60);
+    let _guard = state.native_capture_lock.lock().await;
+    let freq = crate::native::DEFAULT_FREQ_HZ;
+    tokio::task::spawn_blocking(move || {
+        if svg {
+            crate::native::capture_native_svg(secs, freq)
+        } else {
+            crate::native::capture_native_pprof(secs, freq)
+        }
+    })
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))
+}
+
+async fn profile_native_svg(
+    State(state): State<AppState>,
+    Query(p): Query<CaptureParams>,
+) -> Response {
+    match capture_native(&state, p.secs.unwrap_or(5), true).await {
+        Ok(svg) => ([("content-type", "image/svg+xml")], svg).into_response(),
+        Err((code, msg)) => (code, msg).into_response(),
+    }
+}
+
+async fn profile_native_pprof(
+    State(state): State<AppState>,
+    Query(p): Query<CaptureParams>,
+) -> Response {
+    match capture_native(&state, p.secs.unwrap_or(5), false).await {
+        Ok(pb) => ([("content-type", "application/octet-stream")], pb).into_response(),
         Err((code, msg)) => (code, msg).into_response(),
     }
 }
