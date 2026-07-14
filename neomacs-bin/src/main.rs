@@ -2611,6 +2611,60 @@ fn run_gui_evaluator_worker(
     EvaluatorExit::OK
 }
 
+/// Assemble a diagnostics metrics snapshot from the live producers.
+///
+/// Reads only process-global published atomics (frame scheduling + GC), so it
+/// is safe to call from the diagnostics thread with no VM access.
+fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
+    use neomacs_diagnostics::metrics::{FrameMetrics, GcMetrics};
+
+    let f = neomacs_display_runtime::frame_metrics_snapshot();
+    let g = neovm_core::emacs_core::gc_stats::snapshot();
+
+    neomacs_diagnostics::MetricsSnapshot {
+        frame: FrameMetrics {
+            presents: f.presents,
+            scene_commits: f.scene_commits,
+            wakeups: f.wakeups,
+            last_commit_to_present_us: f.last_commit_to_present_us,
+            max_commit_to_present_us: f.max_commit_to_present_us,
+            composite_only_frames: f.composite_only_frames,
+            retained_static_builds: f.retained_static_builds,
+        },
+        gc: GcMetrics {
+            collections: g.collections,
+            live_bytes: g.live_bytes,
+            bytes_since_gc: g.bytes_since_gc,
+            total_allocated_bytes: g.total_allocated_bytes,
+            cons_cells: g.cons_cells,
+            strings: g.strings,
+            vector_cells: g.vector_cells,
+            symbols: g.symbols,
+        },
+    }
+}
+
+/// Start the diagnostics HTTP server if `NEOMACS_DIAGNOSTICS_PORT` names a valid
+/// TCP port. Off by default. Best-effort: any failure is logged and ignored so
+/// diagnostics never blocks editor startup.
+fn maybe_start_diagnostics() {
+    let Ok(raw) = std::env::var("NEOMACS_DIAGNOSTICS_PORT") else {
+        return;
+    };
+    let port = match raw.trim().parse::<u16>() {
+        Ok(p) if p != 0 => p,
+        _ => {
+            tracing::error!("NEOMACS_DIAGNOSTICS_PORT={raw:?} is not a valid TCP port; ignoring");
+            return;
+        }
+    };
+    let provider = std::sync::Arc::new(|| build_metrics_snapshot());
+    match neomacs_diagnostics::spawn(neomacs_diagnostics::DiagnosticsConfig { port }, provider) {
+        Ok(_handle) => tracing::info!("neomacs diagnostics enabled on 127.0.0.1:{port}"),
+        Err(e) => tracing::error!("failed to start diagnostics server: {e}"),
+    }
+}
+
 pub fn run(mode: RuntimeMode) {
     let process_started_at = Instant::now();
     let process_args = std::env::args_os().collect::<Vec<_>>();
@@ -2736,6 +2790,11 @@ pub fn run(mode: RuntimeMode) {
     let frame_metrics = bootstrap_frame_metrics_for_display(bootstrap_display);
     let (width, height) =
         startup_dimensions(startup.frontend, frame_metrics, startup.noninteractive);
+
+    // Optional localhost performance diagnostics server (off unless
+    // NEOMACS_DIAGNOSTICS_PORT is set). Reads global atomics only, so it is
+    // safe to start here before either frontend, ahead of the GUI/TTY fork.
+    maybe_start_diagnostics();
 
     if startup.frontend == FrontendKind::Gui {
         run_gui_main_thread(mode, startup, width, height, bootstrap_display);
