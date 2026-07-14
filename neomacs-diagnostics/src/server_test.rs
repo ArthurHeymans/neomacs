@@ -250,3 +250,39 @@ async fn profile_pprof_endpoint_returns_protobuf() {
     assert!(!bytes.is_empty());
     assert!(bytes.windows(3).any(|w| w == b"foo"), "function name missing");
 }
+
+#[tokio::test(start_paused = true)]
+async fn callers_endpoint_returns_edges() {
+    let app = router(fixed_provider(), Some(stub("a;b;c 10\na;b;d 5")));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp/callers?fn=b&secs=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["function"], "b");
+    assert_eq!(v["total_samples"], 15);
+    assert_eq!(v["callers"][0]["function"], "a");
+    assert_eq!(v["callees"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn callers_endpoint_400_without_fn() {
+    let app = router(fixed_provider(), Some(stub("a;b 1")));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp/callers")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}

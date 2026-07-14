@@ -72,6 +72,7 @@ pub fn router(
         .route("/profile/lisp.folded", get(profile_folded))
         .route("/profile/lisp.svg", get(profile_svg))
         .route("/profile/lisp.pprof", get(profile_pprof))
+        .route("/profile/lisp/callers", get(callers))
         .route("/report", get(report))
         .with_state(state)
 }
@@ -88,6 +89,7 @@ async fn index() -> Json<serde_json::Value> {
             "/profile/lisp.folded?secs=N": "capture N s of Lisp CPU as folded stacks (text)",
             "/profile/lisp.svg?secs=N": "the same capture rendered as an SVG flamegraph",
             "/profile/lisp.pprof?secs=N": "the same capture as pprof protobuf (go tool pprof)",
+            "/profile/lisp/callers?fn=NAME&secs=N": "callers/callees of NAME (JSON)",
             "/report?secs=N&top=K&sort=self|total": "ranked top-K CPU hotspots (JSON)"
         }
     }))
@@ -121,6 +123,8 @@ struct CaptureParams {
     secs: Option<u64>,
     top: Option<usize>,
     sort: Option<String>,
+    #[serde(rename = "fn")]
+    function: Option<String>,
 }
 
 /// Run one serialized capture: acquire the capture lock, start sampling, wait
@@ -178,6 +182,22 @@ async fn profile_pprof(State(state): State<AppState>, Query(p): Query<CapturePar
         Ok(folded) => {
             let pb = crate::pprof::folded_to_pprof(&folded);
             ([(header::CONTENT_TYPE, "application/octet-stream")], pb).into_response()
+        }
+        Err((code, msg)) => (code, msg).into_response(),
+    }
+}
+
+async fn callers(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {
+    let Some(func) = p.function.clone() else {
+        return (
+            StatusCode::BAD_REQUEST,
+            "missing required query parameter ?fn=FUNCTION\n",
+        )
+            .into_response();
+    };
+    match do_capture(&state, p.secs.unwrap_or(5)).await {
+        Ok(folded) => {
+            Json(crate::report::callers_report_from_folded(&folded, &func)).into_response()
         }
         Err((code, msg)) => (code, msg).into_response(),
     }

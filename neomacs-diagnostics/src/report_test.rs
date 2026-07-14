@@ -52,3 +52,32 @@ fn empty_and_malformed_input() {
     assert_eq!(r2.total_samples, 4);
     assert_eq!(r2.distinct_stacks, 1);
 }
+
+#[test]
+fn callers_report_aggregates_callers_and_callees() {
+    // a;b;c 10   a;b;d 5   x;b;c 3
+    // For b: callers a=15,x=3 ; callees c=13,d=5 ; total=18
+    let folded = "a;b;c 10\na;b;d 5\nx;b;c 3";
+    let r = crate::report::callers_report_from_folded(folded, "b");
+    assert_eq!(r.total_samples, 18);
+    assert_eq!(r.callers[0].function, "a");
+    assert_eq!(r.callers[0].samples, 15);
+    assert_eq!(r.callers[1].function, "x");
+    assert_eq!(r.callees[0].function, "c");
+    assert_eq!(r.callees[0].samples, 13);
+    assert_eq!(r.callees[1].function, "d");
+}
+
+#[test]
+fn callers_report_root_leaf_and_unknown() {
+    let folded = "a;b;c 7";
+    let root = crate::report::callers_report_from_folded(folded, "a");
+    assert!(root.callers.is_empty());
+    assert_eq!(root.callees[0].function, "b");
+    let leaf = crate::report::callers_report_from_folded(folded, "c");
+    assert_eq!(leaf.callers[0].function, "b");
+    assert!(leaf.callees.is_empty());
+    let none = crate::report::callers_report_from_folded(folded, "zzz");
+    assert_eq!(none.total_samples, 0);
+    assert!(none.callers.is_empty());
+}

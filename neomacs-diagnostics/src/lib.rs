@@ -15,7 +15,10 @@ pub mod server;
 pub use flamegraph::folded_to_svg;
 pub use metrics::MetricsSnapshot;
 pub use pprof::folded_to_pprof;
-pub use report::{CpuReport, Hotspot, cpu_report_from_folded};
+pub use report::{
+    CallEdge, CallersReport, CpuReport, Hotspot, callers_report_from_folded,
+    cpu_report_from_folded,
+};
 pub use server::{
     DiagnosticsConfig, MetricsProvider, ProfileController, port_from_str, router, spawn,
 };

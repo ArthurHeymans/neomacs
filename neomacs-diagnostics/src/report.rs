@@ -122,3 +122,79 @@ fn pct(n: u64, total: u64) -> f64 {
         (n as f64 / total as f64) * 100.0
     }
 }
+
+/// One call edge (a caller of, or a callee called by, the target function).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CallEdge {
+    pub function: String,
+    pub samples: u64,
+}
+
+/// Callers and callees of a single function, for agent drill-down.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CallersReport {
+    pub function: String,
+    /// Samples in stacks where `function` appears anywhere.
+    pub total_samples: u64,
+    /// Functions that directly called `function` (the frame toward the root).
+    pub callers: Vec<CallEdge>,
+    /// Functions `function` directly called (the frame toward the leaf).
+    pub callees: Vec<CallEdge>,
+}
+
+/// Build a callers/callees drill-down for `function` from folded stacks.
+pub fn callers_report_from_folded(folded: &str, function: &str) -> CallersReport {
+    let mut callers: HashMap<&str, u64> = HashMap::new();
+    let mut callees: HashMap<&str, u64> = HashMap::new();
+    let mut total: u64 = 0;
+
+    for line in folded.lines() {
+        let line = line.trim();
+        let Some((stack, count_str)) = line.rsplit_once(' ') else {
+            continue;
+        };
+        let Ok(count) = count_str.trim().parse::<u64>() else {
+            continue;
+        };
+        let frames: Vec<&str> = stack.split(';').filter(|f| !f.is_empty()).collect();
+        let mut hit = false;
+        for (i, frame) in frames.iter().enumerate() {
+            if *frame == function {
+                hit = true;
+                if i > 0 {
+                    *callers.entry(frames[i - 1]).or_default() += count;
+                }
+                if i + 1 < frames.len() {
+                    *callees.entry(frames[i + 1]).or_default() += count;
+                }
+            }
+        }
+        // Count each stack once toward the total, even if `function` recurses.
+        if hit {
+            total += count;
+        }
+    }
+
+    CallersReport {
+        function: function.to_string(),
+        total_samples: total,
+        callers: sort_edges(callers),
+        callees: sort_edges(callees),
+    }
+}
+
+fn sort_edges(map: HashMap<&str, u64>) -> Vec<CallEdge> {
+    let mut edges: Vec<CallEdge> = map
+        .into_iter()
+        .map(|(function, samples)| CallEdge {
+            function: function.to_string(),
+            samples,
+        })
+        .collect();
+    edges.sort_by(|a, b| {
+        b.samples
+            .cmp(&a.samples)
+            .then(a.function.cmp(&b.function))
+    });
+    edges
+}
