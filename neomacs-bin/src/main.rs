@@ -2555,6 +2555,7 @@ fn run_gui_evaluator_worker(
         .expect("Failed to spawn input bridge thread");
 
     evaluator.init_input_system(input_rx, emacs_comms.wakeup_reader.read_fd());
+    install_diagnostics_eval_hooks(&mut evaluator);
 
     tty_layout::LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
@@ -2642,10 +2643,82 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
     }
 }
 
+/// Reply timeout for a diagnostics profile-capture round-trip to the Lisp
+/// thread. Bounds the wait so a stuck editor yields a 503, never a hang.
+const DIAG_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The eval-thread task Receiver, published for whichever Context path (GUI
+/// worker or TTY) boots. Taken once by that path via `init_eval_task_system`.
+static DIAG_TASK_RX: std::sync::Mutex<
+    Option<crossbeam_channel::Receiver<neovm_core::emacs_core::eval::EvalThreadTask>>,
+> = std::sync::Mutex::new(None);
+
+/// The Lisp thread's wait notifier, published once the Context exists so the
+/// diagnostics thread can wake it after queueing a task.
+static DIAG_NOTIFIER: std::sync::OnceLock<neovm_core::emacs_core::process::WaitNotifier> =
+    std::sync::OnceLock::new();
+
+/// Wake the Lisp thread if its notifier has been published.
+fn diag_wake_lisp() {
+    if let Some(notifier) = DIAG_NOTIFIER.get() {
+        notifier.notify();
+    }
+}
+
+/// Publish this Context's wait notifier and hand it the eval-thread task
+/// channel, so the diagnostics server can drive on-demand profile captures.
+/// Called from each interactive Context path right after the input system is
+/// initialized. A no-op for the channel if diagnostics is disabled (the
+/// Receiver is simply inert).
+fn install_diagnostics_eval_hooks(evaluator: &mut Context) {
+    if let Some(notifier) = evaluator.wait_notifier() {
+        let _ = DIAG_NOTIFIER.set(notifier);
+    }
+    if let Some(rx) = DIAG_TASK_RX.lock().unwrap().take() {
+        evaluator.init_eval_task_system(rx);
+    }
+}
+
+/// Bridges diagnostics profile requests onto the Lisp thread: queue an
+/// [`neovm_core::emacs_core::eval::EvalThreadTask`] and wake the Lisp thread,
+/// which services it at its next safe point.
+struct DiagProfileCtrl {
+    task_tx: crossbeam_channel::Sender<neovm_core::emacs_core::eval::EvalThreadTask>,
+}
+
+impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
+    fn start(&self, interval_ns: u64) {
+        let _ = self.task_tx.send(Box::new(move |ctx: &mut Context| {
+            let _ = ctx.diagnostics_cpu_profile_start(interval_ns);
+        }));
+        diag_wake_lisp();
+    }
+
+    fn stop_and_fold(&self) -> Result<String, String> {
+        if DIAG_NOTIFIER.get().is_none() {
+            return Err("no live Lisp thread".to_string());
+        }
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.task_tx
+            .send(Box::new(move |ctx: &mut Context| {
+                let folded = ctx.diagnostics_cpu_profile_stop_fold();
+                let _ = reply_tx.send(folded);
+            }))
+            .map_err(|_| "eval task channel closed".to_string())?;
+        diag_wake_lisp();
+        reply_rx
+            .recv_timeout(DIAG_REPLY_TIMEOUT)
+            .map_err(|_| "capture timed out".to_string())
+    }
+}
+
 /// Start the diagnostics HTTP server if `NEOMACS_DIAGNOSTICS_PORT` names a valid
 /// TCP port. Off by default. Best-effort: any failure is logged and ignored so
-/// diagnostics never blocks editor startup.
-fn maybe_start_diagnostics() {
+/// diagnostics never blocks editor startup. `task_tx` is dropped here when
+/// disabled, leaving the eval-thread channel inert.
+fn maybe_start_diagnostics(
+    task_tx: crossbeam_channel::Sender<neovm_core::emacs_core::eval::EvalThreadTask>,
+) {
     let Ok(raw) = std::env::var("NEOMACS_DIAGNOSTICS_PORT") else {
         return;
     };
@@ -2654,7 +2727,13 @@ fn maybe_start_diagnostics() {
         return;
     };
     let provider = std::sync::Arc::new(build_metrics_snapshot);
-    match neomacs_diagnostics::spawn(neomacs_diagnostics::DiagnosticsConfig { port }, provider) {
+    let controller: std::sync::Arc<dyn neomacs_diagnostics::ProfileController> =
+        std::sync::Arc::new(DiagProfileCtrl { task_tx });
+    match neomacs_diagnostics::spawn(
+        neomacs_diagnostics::DiagnosticsConfig { port },
+        provider,
+        Some(controller),
+    ) {
         Ok(_handle) => tracing::info!("neomacs diagnostics enabled on 127.0.0.1:{port}"),
         Err(e) => tracing::error!("failed to start diagnostics server: {e}"),
     }
@@ -2787,9 +2866,14 @@ pub fn run(mode: RuntimeMode) {
         startup_dimensions(startup.frontend, frame_metrics, startup.noninteractive);
 
     // Optional localhost performance diagnostics server (off unless
-    // NEOMACS_DIAGNOSTICS_PORT is set). Reads global atomics only, so it is
-    // safe to start here before either frontend, ahead of the GUI/TTY fork.
-    maybe_start_diagnostics();
+    // NEOMACS_DIAGNOSTICS_PORT is set). Started before the GUI/TTY fork; the
+    // eval-thread task channel's Receiver is published for whichever Context
+    // path boots (see install_diagnostics_eval_hooks), so on-demand profile
+    // captures can reach the Lisp thread.
+    let (diag_task_tx, diag_task_rx) =
+        crossbeam_channel::unbounded::<neovm_core::emacs_core::eval::EvalThreadTask>();
+    *DIAG_TASK_RX.lock().unwrap() = Some(diag_task_rx);
+    maybe_start_diagnostics(diag_task_tx);
 
     if startup.frontend == FrontendKind::Gui {
         run_gui_main_thread(mode, startup, width, height, bootstrap_display);
@@ -2931,6 +3015,7 @@ pub fn run(mode: RuntimeMode) {
         // 7. Connect evaluator to input system
         let wakeup_fd = emacs_comms.wakeup_reader.read_fd();
         evaluator.init_input_system(input_rx, wakeup_fd);
+        install_diagnostics_eval_hooks(&mut evaluator);
     }
 
     // 8. Set up redisplay callback (layout engine + TTY RIF render).
