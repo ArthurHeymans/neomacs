@@ -4808,16 +4808,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "invocation-directory",
-        |_ctx, args| builtin_invocation_directory(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "invocation-name",
-        |_ctx, args| builtin_invocation_name(args),
+        builtin_invocation_directory,
         0,
         Some(0),
     );
+    ctx.defsubr("invocation-name", builtin_invocation_name, 0, Some(0));
     ctx.defsubr(
         "file-name-directory",
         |ctx, args| super::fileio::builtin_file_name_directory(ctx, args),
@@ -7740,15 +7735,17 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // so they must come from the loaded Lisp source — registering Rust
     // subrs here would shadow the elisp definitions and make
     // `(subrp (symbol-function 'fixnump))` return t instead of nil.
-    defsubr_pure!(
-        ctx,
+    ctx.defsubr(
         "user-login-name",
-        super::builtins_extra::builtin_user_login_name
+        super::builtins_extra::builtin_user_login_name,
+        0,
+        Some(1),
     );
-    defsubr_pure!(
-        ctx,
+    ctx.defsubr(
         "user-real-login-name",
-        super::builtins_extra::builtin_user_real_login_name
+        super::builtins_extra::builtin_user_real_login_name,
+        0,
+        Some(0),
     );
     ctx.defsubr(
         "user-full-name",
@@ -7756,10 +7753,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    defsubr_pure!(
-        ctx,
+    ctx.defsubr(
         "system-name",
-        super::builtins_extra::builtin_system_name
+        super::builtins_extra::builtin_system_name,
+        0,
+        Some(0),
     );
     defsubr_pure!(ctx, "emacs-pid", super::builtins_extra::builtin_emacs_pid);
     defsubr_pure!(

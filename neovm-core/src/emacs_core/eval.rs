@@ -1845,6 +1845,11 @@ pub struct Context {
     /// One-shot runtime flag set by file pdump loads.  GNU keeps this as
     /// pdumper runtime state, not as a public obarray symbol.
     pub(crate) after_pdump_load_hook_pending: bool,
+    /// Runtime-owned `system-name` object used to distinguish GNU's cached
+    /// hostname from an explicit Lisp replacement.  This is transient process
+    /// state and is deliberately reconstructed rather than serialized in a
+    /// portable dump.
+    pub(crate) cached_system_name: Value,
     /// The obarray — unified symbol table with value cells, function cells, plists.
     pub(crate) obarray: Obarray,
     /// Specpdl — special binding stack that writes directly to the obarray.
@@ -3709,22 +3714,6 @@ impl Context {
             super::builtins_extra::system_configuration_features_value(),
         );
         obarray.make_special("system-configuration-features");
-        obarray.set_symbol_value("system-name", Value::string("localhost"));
-        obarray.make_special("system-name");
-        obarray.set_symbol_value(
-            "user-full-name",
-            super::builtins_extra::initial_user_full_name_value(),
-        );
-        obarray.make_special("user-full-name");
-        obarray.set_symbol_value("user-login-name", Value::string("unknown"));
-        obarray.make_special("user-login-name");
-        obarray.set_symbol_value("user-real-login-name", Value::string("unknown"));
-        obarray.make_special("user-real-login-name");
-        obarray.set_symbol_value(
-            "operating-system-release",
-            super::builtins_extra::operating_system_release_value(),
-        );
-        obarray.make_special("operating-system-release");
         // GNU `keyboard.c` defines this with DEFVAR_LISP, so lexical-binding
         // Lisp must treat it as dynamically scoped.
         obarray.set_symbol_value("delayed-warnings-list", Value::NIL);
@@ -5448,6 +5437,7 @@ impl Context {
             tagged_heap,
             pdump_image: None,
             after_pdump_load_hook_pending: false,
+            cached_system_name: Value::NIL,
             obarray,
             specpdl: Vec::new(),
             profiler: super::profiler::ProfilerState::default(),
@@ -5567,6 +5557,7 @@ impl Context {
             interpreted_closure_filter_fn: None,
             fringe_bitmaps: super::builtins::fringe_bitmap::FringeBitmapRegistry::new(),
         };
+        super::runtime_identity::install(&mut ev);
         ev.provide_value(
             Value::symbol("make-network-process"),
             Some(super::process::make_network_process_subfeatures()),
@@ -5634,6 +5625,7 @@ impl Context {
             tagged_heap,
             pdump_image: None,
             after_pdump_load_hook_pending: false,
+            cached_system_name: Value::NIL,
             obarray,
             specpdl: Vec::new(),
             profiler: super::profiler::ProfilerState::default(),
@@ -5889,6 +5881,9 @@ impl Context {
         visit(self.lexenv);
         visit(self.quit_flag);
         visit(self.inhibit_quit);
+        if self.cached_system_name.is_heap_object() {
+            visit(self.cached_system_name);
+        }
         for entry in self.runtime_macro_expansion_cache.values() {
             visit(entry.function);
             visit(entry.expanded);

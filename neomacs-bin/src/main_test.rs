@@ -1509,6 +1509,59 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
 }
 
 #[test]
+fn frame_host_title_formats_the_restored_runtime_system_name() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(843, 489),
+        image_metadata: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    }));
+    let expected_system_name: String = hostname::get()
+        .expect("OS hostname")
+        .to_string_lossy()
+        .chars()
+        .map(|character| match character {
+            ' ' | '\t' => '-',
+            other => other,
+        })
+        .collect();
+
+    adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
+    let _ = cmd_rx.try_iter().collect::<Vec<_>>();
+    eval.eval_str(r#"(setq frame-title-format '("host:" system-name))"#)
+        .expect("frame-title-format should set");
+    sync_live_gui_frame_titles(&mut eval);
+
+    let expected_title = format!("host:{expected_system_name}");
+    let commands: Vec<_> = cmd_rx.try_iter().collect();
+    assert!(
+        commands.iter().any(|command| matches!(
+            command,
+            RenderCommand::Window(WindowCommand::SetFrameWindowTitle {
+                frame: FrameRef::Primary,
+                title,
+            }) if title == &expected_title
+        )),
+        "restored runtime hostname must reach the native title command; got {commands:?}"
+    );
+}
+
+#[test]
 fn tty_terminal_host_delete_terminal_sends_shutdown() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = TtyTerminalHost { cmd_tx };

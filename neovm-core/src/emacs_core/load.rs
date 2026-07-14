@@ -2684,18 +2684,11 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
     }
     eval.set_variable("initial-environment", process_environment.clone());
     eval.set_variable("process-environment", process_environment.clone());
-    let system_name = super::builtins_extra::builtin_system_name(vec![])
-        .unwrap_or_else(|_| Value::string("localhost"));
-    let user_full_name = super::builtins_extra::initial_user_full_name_value();
-    let user_login_name = super::builtins_extra::builtin_user_login_name(vec![])
-        .unwrap_or_else(|_| Value::string("unknown"));
-    let user_real_login_name = super::builtins_extra::builtin_user_real_login_name(vec![])
-        .unwrap_or_else(|_| Value::string("unknown"));
+    super::runtime_identity::install(eval);
     let system_configuration = super::builtins_extra::system_configuration_value();
     let system_configuration_options = super::builtins_extra::system_configuration_options_value();
     let system_configuration_features =
         super::builtins_extra::system_configuration_features_value();
-    let operating_system_release = super::builtins_extra::operating_system_release_value();
     let defaults = [
         (
             "emacs-copyright",
@@ -2747,11 +2740,6 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
             "system-configuration-features",
             system_configuration_features,
         ),
-        ("system-name", system_name),
-        ("user-full-name", user_full_name),
-        ("user-login-name", user_login_name),
-        ("user-real-login-name", user_real_login_name),
-        ("operating-system-release", operating_system_release),
         ("delayed-warnings-list", Value::NIL),
         ("default-text-properties", Value::NIL),
         ("char-property-alias-alist", Value::NIL),

@@ -95,6 +95,7 @@ pub mod rect;
 pub mod regex;
 pub mod regex_emacs;
 pub mod register;
+pub(crate) mod runtime_identity;
 #[cfg(test)]
 mod runtime_string_guard_test;
 pub mod search;

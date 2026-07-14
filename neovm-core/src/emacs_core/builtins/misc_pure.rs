@@ -444,29 +444,22 @@ pub(crate) fn builtin_get_internal_run_time(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
-pub(crate) fn builtin_invocation_directory(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_invocation_directory(
+    ctx: &mut super::super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("invocation-directory", &args, 0)?;
-    let mut dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|parent| parent.to_path_buf()))
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "/".to_string());
-    if !dir.ends_with('/') {
-        dir.push('/');
-    }
-    Ok(Value::string(dir))
+    let value = ctx.eval_symbol_by_id(super::super::intern::intern("invocation-directory"))?;
+    builtin_copy_sequence(vec![value])
 }
 
-pub(crate) fn builtin_invocation_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_invocation_name(
+    ctx: &mut super::super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("invocation-name", &args, 0)?;
-    let name = std::env::current_exe()
-        .ok()
-        .and_then(|p| {
-            p.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .unwrap_or_else(|| "emacs".to_string());
-    Ok(Value::string(name))
+    let value = ctx.eval_symbol_by_id(super::super::intern::intern("invocation-name"))?;
+    builtin_copy_sequence(vec![value])
 }
 
 pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {

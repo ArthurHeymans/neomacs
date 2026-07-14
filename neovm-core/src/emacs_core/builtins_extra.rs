@@ -11,6 +11,13 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
+#[cfg(test)]
+use super::runtime_identity::{
+    PasswdEntry, canonical_full_name, effective_uid, operating_system_release_value,
+};
+use super::runtime_identity::{
+    lookup_full_name_by_login, lookup_full_name_by_uid, lookup_login_by_uid,
+};
 use crate::emacs_core::error::LispCondition;
 // storage imports removed — now using emacs_char + LispString directly
 use super::value::{Value, ValueKind};
@@ -18,7 +25,6 @@ use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::num::logic::traits::SignificantBits;
 use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
-use std::fs;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -549,87 +555,6 @@ pub(crate) fn builtin_zerop(args: Vec<Value>) -> EvalResult {
 // Misc operations
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone)]
-struct PasswdEntry {
-    login: String,
-    uid: i64,
-    gecos: String,
-}
-
-fn parse_passwd_entry(line: &str) -> Option<PasswdEntry> {
-    let trimmed = line.trim();
-    if trimmed.is_empty() || trimmed.starts_with('#') {
-        return None;
-    }
-
-    let mut fields = trimmed.split(':');
-    let login = fields.next()?.to_string();
-    let _passwd = fields.next()?;
-    let uid = fields.next()?.parse::<i64>().ok()?;
-    let _gid = fields.next()?;
-    let gecos = fields.next().unwrap_or("").to_string();
-    Some(PasswdEntry { login, uid, gecos })
-}
-
-fn load_passwd_entries() -> Vec<PasswdEntry> {
-    fs::read_to_string("/etc/passwd")
-        .ok()
-        .map(|content| content.lines().filter_map(parse_passwd_entry).collect())
-        .unwrap_or_default()
-}
-
-fn login_name_from_env() -> Option<String> {
-    std::env::var("LOGNAME")
-        .ok()
-        .or_else(|| std::env::var("USER").ok())
-        .filter(|name| !name.is_empty())
-}
-
-fn current_uid() -> i64 {
-    crate::emacs_core::callproc::new_child_command("id")
-        .arg("-u")
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|s| s.trim().parse::<i64>().ok())
-        .unwrap_or(1000)
-}
-
-fn real_uid() -> i64 {
-    crate::emacs_core::callproc::new_child_command("id")
-        .args(["-ru"])
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .and_then(|s| s.trim().parse::<i64>().ok())
-        .unwrap_or_else(current_uid)
-}
-
-fn lookup_login_by_uid(uid: i64) -> Option<String> {
-    load_passwd_entries()
-        .into_iter()
-        .find(|entry| entry.uid == uid)
-        .map(|entry| entry.login)
-}
-
-fn canonical_full_name(entry: &PasswdEntry) -> String {
-    entry.gecos.split(',').next().unwrap_or("").to_string()
-}
-
-fn lookup_full_name_by_uid(uid: i64) -> Option<String> {
-    load_passwd_entries()
-        .into_iter()
-        .find(|entry| entry.uid == uid)
-        .map(|entry| canonical_full_name(&entry))
-}
-
-fn lookup_full_name_by_login(login: &str) -> Option<String> {
-    load_passwd_entries()
-        .into_iter()
-        .find(|entry| entry.login == login)
-        .map(|entry| canonical_full_name(&entry))
-}
-
 fn expect_uid_arg(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(uid) if uid >= 0 => Ok(uid),
@@ -643,15 +568,12 @@ fn expect_uid_arg(val: &Value) -> Result<i64, Flow> {
 }
 
 /// `(user-login-name &optional UID)` -> string or nil.
-pub(crate) fn builtin_user_login_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_user_login_name(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("user-login-name", &args, 1)?;
-    if let Some(uid_arg) = args.first() {
-        if uid_arg.is_nil() {
-            let current = login_name_from_env()
-                .or_else(|| lookup_login_by_uid(current_uid()))
-                .unwrap_or_else(|| "unknown".to_string());
-            return Ok(Value::string(current));
-        }
+    if let Some(uid_arg) = args.first().filter(|uid| !uid.is_nil()) {
         let uid = expect_uid_arg(uid_arg)?;
         return Ok(match lookup_login_by_uid(uid) {
             Some(name) => Value::string(name),
@@ -659,19 +581,31 @@ pub(crate) fn builtin_user_login_name(args: Vec<Value>) -> EvalResult {
         });
     }
 
-    let current = login_name_from_env()
-        .or_else(|| lookup_login_by_uid(current_uid()))
-        .unwrap_or_else(|| "unknown".to_string());
-    Ok(Value::string(current))
+    if ctx
+        .obarray()
+        .symbol_value("user-login-name")
+        .is_none_or(|value| value.is_nil())
+    {
+        super::runtime_identity::install(ctx);
+    }
+
+    ctx.eval_symbol_by_id(super::intern::intern("user-login-name"))
 }
 
 /// `(user-real-login-name)` -> string.
-pub(crate) fn builtin_user_real_login_name(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_user_real_login_name(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("user-real-login-name", &args, 0)?;
-    let name = lookup_login_by_uid(real_uid())
-        .or_else(login_name_from_env)
-        .unwrap_or_else(|| "unknown".to_string());
-    Ok(Value::string(name))
+    if ctx
+        .obarray()
+        .symbol_value("user-login-name")
+        .is_none_or(|value| value.is_nil())
+    {
+        super::runtime_identity::install(ctx);
+    }
+    ctx.eval_symbol_by_id(super::intern::intern("user-real-login-name"))
 }
 
 /// `(user-full-name &optional UID-OR-LOGIN)` -> string or nil.
@@ -722,48 +656,17 @@ pub(crate) fn builtin_user_full_name(
     ctx.eval_symbol_by_id(super::intern::intern("user-full-name"))
 }
 
-pub(crate) fn initial_user_full_name_value() -> Value {
-    if let Ok(name) = std::env::var("NAME") {
-        return Value::string(name);
-    }
-
-    let real_login = lookup_login_by_uid(real_uid()).unwrap_or_else(|| "unknown".to_string());
-    let effective_login = login_name_from_env()
-        .or_else(|| lookup_login_by_uid(current_uid()))
-        .unwrap_or_else(|| "unknown".to_string());
-    let full_name = if effective_login == real_login {
-        lookup_full_name_by_login(&effective_login)
-    } else {
-        lookup_full_name_by_uid(current_uid())
-    }
-    .unwrap_or_else(|| "unknown".to_string());
-    Value::string(full_name)
-}
-
 /// `(system-name)` -> string.
 // `fixnump` and `bignump` are not Rust subrs: GNU defines them in
 // `lisp/subr.el` and so must we, otherwise `(subrp (symbol-function
 // 'fixnump))` returns the wrong value.
 
-/// GNU editfns.c:1283 — returns the host name via `gethostname(2)`,
-/// replacing spaces and tabs with `-`.
-pub(crate) fn builtin_system_name(args: Vec<Value>) -> EvalResult {
+/// GNU editfns.c:1283 — the zero-argument function observes the same
+/// Lisp-owned runtime identity used by `frame-title-format`.
+pub(crate) fn builtin_system_name(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("system-name", &args, 0)?;
-    let name = hostname::get()
-        .map(|os| os.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "localhost".to_string());
-    // GNU replaces spaces and tabs with dashes (sysdep.c:1646).
-    let name: String = name
-        .chars()
-        .map(|c| if c == ' ' || c == '\t' { '-' } else { c })
-        .collect();
-    Ok(Value::string(name))
-}
-
-pub(crate) fn operating_system_release_value() -> Value {
-    operating_system_release()
-        .map(Value::string)
-        .unwrap_or(Value::NIL)
+    super::runtime_identity::refresh_system_name(ctx);
+    ctx.eval_symbol_by_id(super::intern::intern("system-name"))
 }
 
 pub(crate) fn system_configuration_value() -> Value {
@@ -802,10 +705,6 @@ fn fallback_system_configuration() -> String {
         other => other,
     };
     format!("{arch}-{os}")
-}
-
-fn operating_system_release() -> Option<String> {
-    sysinfo::System::kernel_version()
 }
 
 /// `(emacs-version)` -> string.

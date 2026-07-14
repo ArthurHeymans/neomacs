@@ -8747,6 +8747,157 @@ fn ensure_startup_compat_variables_backfills_xfaces_bootstrap_state() {
     );
 }
 
+fn restored_runtime_identity_eval() -> Context {
+    let dump_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../target/test-cache/runtime-identity.pdump");
+    std::fs::create_dir_all(dump_path.parent().expect("runtime identity cache parent"))
+        .expect("create runtime identity cache parent");
+    create_runtime_startup_evaluator_at_path(&[], &dump_path)
+        .expect("create evaluator from the restored runtime image")
+}
+
+#[test]
+fn runtime_startup_rehydrates_system_name_before_lisp_observes_it() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = restored_runtime_identity_eval();
+
+    let identity = eval
+        .eval_str("(equal system-name (system-name))")
+        .expect("compare runtime system identity");
+
+    assert_eq!(
+        identity,
+        Value::T,
+        "restored runtime identity must have one system-name source of truth"
+    );
+}
+
+#[test]
+fn runtime_startup_rehydrates_user_names_before_lisp_observes_them() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = restored_runtime_identity_eval();
+
+    let identity = eval
+        .eval_str(
+            "(and (equal user-login-name (user-login-name))\
+                  (equal user-real-login-name (user-real-login-name)))",
+        )
+        .expect("compare runtime user identity");
+
+    assert_eq!(
+        identity,
+        Value::T,
+        "restored runtime identity must have one source of truth for user names"
+    );
+}
+
+#[test]
+fn runtime_identity_functions_respect_lisp_owned_invocation_values() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = restored_runtime_identity_eval();
+
+    let identity = eval
+        .eval_str(
+            r#"(progn
+                 (setq invocation-name "renamed-neomacs"
+                       invocation-directory "/runtime/bin/")
+                 (and (equal invocation-name (invocation-name))
+                      (equal invocation-directory (invocation-directory))
+                      (not (eq invocation-name (invocation-name)))
+                      (not (eq invocation-directory (invocation-directory)))))"#,
+        )
+        .expect("compare runtime invocation identity");
+
+    assert_eq!(
+        identity,
+        Value::T,
+        "runtime invocation functions must observe the Lisp-owned identity"
+    );
+}
+
+#[test]
+fn runtime_identity_functions_reinitialize_a_nil_user_login_sentinel() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = restored_runtime_identity_eval();
+
+    let identity = eval
+        .eval_str(
+            r#"(progn
+                 (setq user-login-name nil
+                       user-real-login-name "stale-real-login")
+                 (and (stringp (user-login-name))
+                      (stringp user-login-name)
+                      (stringp user-real-login-name)
+                      (equal user-real-login-name (user-real-login-name))))"#,
+        )
+        .expect("reinitialize the nil user-login-name sentinel");
+
+    assert_eq!(
+        identity,
+        Value::T,
+        "GNU identity functions must reinitialize user identity when user-login-name is nil"
+    );
+}
+
+#[test]
+fn runtime_identity_functions_respect_lisp_owned_host_and_user_values() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = restored_runtime_identity_eval();
+
+    let identity = eval
+        .eval_str(
+            r#"(progn
+                 (setq system-name "lisp-host"
+                       user-login-name "lisp-login"
+                       user-real-login-name "lisp-real-login")
+                 (and (equal system-name (system-name))
+                      (equal user-login-name (user-login-name))
+                      (equal user-login-name (user-login-name nil))
+                      (equal user-real-login-name (user-real-login-name))))"#,
+        )
+        .expect("compare Lisp-owned host and user identity");
+
+    assert_eq!(
+        identity,
+        Value::T,
+        "zero-argument identity functions must respect Lisp-owned values"
+    );
+}
+
+#[test]
+fn runtime_identity_replaces_image_owned_user_full_name() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let stale = Value::string("pdump-build-user-that-cannot-be-the-runtime-user");
+    eval.set_variable("user-full-name", stale);
+
+    super::super::runtime_identity::install(&mut eval);
+
+    assert_ne!(
+        eval.obarray().symbol_value("user-full-name").copied(),
+        Some(stale),
+        "runtime identity must replace the user full name stored in the image"
+    );
+}
+
+#[test]
+fn runtime_identity_replaces_image_owned_operating_system_release() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let stale = Value::string("pdump-build-kernel-that-cannot-be-the-runtime-kernel");
+    eval.set_variable("operating-system-release", stale);
+
+    super::super::runtime_identity::install(&mut eval);
+
+    assert_ne!(
+        eval.obarray()
+            .symbol_value("operating-system-release")
+            .copied(),
+        Some(stale),
+        "runtime identity must replace the kernel release stored in the image"
+    );
+}
+
 #[test]
 fn nested_load_restores_parent_load_file_name() {
     crate::test_utils::init_test_tracing();
