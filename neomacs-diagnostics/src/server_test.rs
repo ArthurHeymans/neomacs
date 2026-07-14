@@ -5,8 +5,33 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use tower::ServiceExt; // for `oneshot`
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::metrics::{FrameMetrics, GcMetrics, MetricsSnapshot};
-use crate::server::{MetricsProvider, port_from_str, router};
+use crate::server::{MetricsProvider, ProfileController, port_from_str, router};
+
+/// A ProfileController that returns fixed folded stacks, for exercising the
+/// capture endpoints without a real Lisp thread.
+struct StubController {
+    folded: String,
+    started: AtomicBool,
+}
+
+impl ProfileController for StubController {
+    fn start(&self, _interval_ns: u64) {
+        self.started.store(true, Ordering::Relaxed);
+    }
+    fn stop_and_fold(&self) -> Result<String, String> {
+        Ok(self.folded.clone())
+    }
+}
+
+fn stub(folded: &str) -> Arc<StubController> {
+    Arc::new(StubController {
+        folded: folded.to_string(),
+        started: AtomicBool::new(false),
+    })
+}
 
 #[test]
 fn port_from_str_accepts_valid_and_rejects_invalid() {
@@ -35,7 +60,7 @@ fn fixed_provider() -> Arc<dyn MetricsProvider> {
 
 #[tokio::test]
 async fn metrics_route_returns_snapshot_json() {
-    let app = router(fixed_provider());
+    let app = router(fixed_provider(), None);
     let resp = app
         .oneshot(
             Request::builder()
@@ -54,7 +79,7 @@ async fn metrics_route_returns_snapshot_json() {
 
 #[tokio::test]
 async fn index_route_is_self_describing() {
-    let app = router(fixed_provider());
+    let app = router(fixed_provider(), None);
     let resp = app
         .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
         .await
@@ -68,7 +93,7 @@ async fn index_route_is_self_describing() {
 
 #[tokio::test]
 async fn live_route_emits_event_stream() {
-    let app = router(fixed_provider());
+    let app = router(fixed_provider(), None);
     let resp = app
         .oneshot(Request::builder().uri("/live").body(Body::empty()).unwrap())
         .await
@@ -102,7 +127,7 @@ async fn serve_on_listener_answers_metrics_over_tcp() {
 
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = router(fixed_provider());
+    let app = router(fixed_provider(), None);
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
@@ -117,4 +142,85 @@ async fn serve_on_listener_answers_metrics_over_tcp() {
     let text = String::from_utf8_lossy(&buf);
     assert!(text.contains("200 OK"), "response was {text}");
     assert!(text.contains("\"presents\":42"), "response was {text}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn profile_folded_endpoint_captures_and_starts() {
+    let ctrl = stub("a;b;c 10\na;b 5");
+    let app = router(fixed_provider(), Some(ctrl.clone()));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp.folded?secs=2")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("a;b;c 10"), "body was {text}");
+    assert!(ctrl.started.load(Ordering::Relaxed), "start() was not called");
+}
+
+#[tokio::test(start_paused = true)]
+async fn report_endpoint_returns_ranked_json() {
+    let app = router(fixed_provider(), Some(stub("a;b;c 10\na;b 5\na;d 3")));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/report?secs=1&top=2&sort=total")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["sort"], "total");
+    assert_eq!(v["report"]["total_samples"], 18);
+    assert_eq!(v["report"]["top"][0]["function"], "a");
+    assert_eq!(v["report"]["top"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test(start_paused = true)]
+async fn profile_svg_endpoint_renders_flamegraph() {
+    let app = router(fixed_provider(), Some(stub("a;b;c 10\na;b 5")));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp.svg?secs=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ct = resp
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(ct, "image/svg+xml");
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&bytes).contains("<svg"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn capture_endpoints_503_without_controller() {
+    let app = router(fixed_provider(), None);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp.folded")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
