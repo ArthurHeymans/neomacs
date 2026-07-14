@@ -7805,14 +7805,7 @@ fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
 #[cfg(not(unix))]
 fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
     let _ = signal_num;
-    if pid_exists(pid) { 0 } else { -1 }
-}
-
-fn pid_exists(pid: i64) -> bool {
-    if pid < 0 {
-        return false;
-    }
-    std::fs::metadata(format!("/proc/{pid}")).is_ok()
+    if sys::process_is_alive(pid) { 0 } else { -1 }
 }
 
 #[derive(Clone, Debug)]
@@ -9061,7 +9054,11 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
             Ok(Value::fixnum(-1))
         }
         SignalProcessTarget::MissingNamedProcess => Ok(Value::NIL),
-        SignalProcessTarget::Pid(pid) => Ok(Value::fixnum(if pid_exists(pid) { 0 } else { -1 })),
+        SignalProcessTarget::Pid(pid) => Ok(Value::fixnum(if sys::process_is_alive(pid) {
+            0
+        } else {
+            -1
+        })),
     }
 }
 
@@ -12931,7 +12928,11 @@ pub(crate) fn builtin_signal_process_impl(
             }
             #[cfg(not(unix))]
             {
-                Ok(Value::fixnum(if pid_exists(pid) { 0 } else { -1 }))
+                Ok(Value::fixnum(if sys::process_is_alive(pid) {
+                    0
+                } else {
+                    -1
+                }))
             }
         }
     }
@@ -13033,7 +13034,7 @@ pub(crate) fn builtin_process_attributes(
 pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     expect_args("process-attributes", &args, 1)?;
     let pid = process_attributes_pid_arg(args[0])?;
-    if !pid_exists(pid) {
+    if !sys::process_is_alive(pid) {
         return Ok(Value::NIL);
     }
 
