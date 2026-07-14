@@ -13,6 +13,9 @@
 
 use crate::emacs_core::process::{HostInterfaceEntry, ProcessId};
 
+mod signals;
+pub use signals::signal_name_number;
+
 cfg_select! {
     target_os = "linux" => {
         mod linux;

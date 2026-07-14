@@ -7718,7 +7718,7 @@ fn parse_signal_number(value: &Value) -> Result<i32, Flow> {
             // Borrow the symbol name before consuming it
             let sym_name = value.as_symbol_name().map(|s| s.to_owned());
             if let Some(name) = sym_name {
-                signal_name_number(&name).ok_or_else(|| signal_undefined_signal_name(&name))
+                sys::signal_name_number(&name).ok_or_else(|| signal_undefined_signal_name(&name))
             } else {
                 Err(signal_wrong_type_integerp(*value))
             }
@@ -7806,95 +7806,6 @@ fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
 fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
     let _ = signal_num;
     if pid_exists(pid) { 0 } else { -1 }
-}
-
-#[cfg(unix)]
-fn signal_name_number(name: &str) -> Option<i32> {
-    let name = name
-        .strip_prefix("SIG")
-        .or_else(|| name.strip_prefix("sig"))
-        .unwrap_or(name);
-    let name = name.to_ascii_uppercase();
-    match name.as_str() {
-        "EXIT" => Some(0),
-        "HUP" => Some(libc::SIGHUP),
-        "INT" => Some(libc::SIGINT),
-        "QUIT" => Some(libc::SIGQUIT),
-        "ILL" => Some(libc::SIGILL),
-        "TRAP" => Some(libc::SIGTRAP),
-        "ABRT" | "IOT" => Some(libc::SIGABRT),
-        "BUS" => Some(libc::SIGBUS),
-        "FPE" => Some(libc::SIGFPE),
-        "KILL" => Some(libc::SIGKILL),
-        "USR1" => Some(libc::SIGUSR1),
-        "SEGV" => Some(libc::SIGSEGV),
-        "USR2" => Some(libc::SIGUSR2),
-        "PIPE" => Some(libc::SIGPIPE),
-        "ALRM" => Some(libc::SIGALRM),
-        "TERM" => Some(libc::SIGTERM),
-        "CHLD" | "CLD" => Some(libc::SIGCHLD),
-        "CONT" => Some(libc::SIGCONT),
-        "STOP" => Some(libc::SIGSTOP),
-        "TSTP" => Some(libc::SIGTSTP),
-        "TTIN" => Some(libc::SIGTTIN),
-        "TTOU" => Some(libc::SIGTTOU),
-        "URG" => Some(libc::SIGURG),
-        "XCPU" => Some(libc::SIGXCPU),
-        "XFSZ" => Some(libc::SIGXFSZ),
-        "VTALRM" => Some(libc::SIGVTALRM),
-        "PROF" => Some(libc::SIGPROF),
-        "WINCH" => Some(libc::SIGWINCH),
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        "POLL" | "IO" => Some(libc::SIGPOLL),
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        "PWR" => Some(libc::SIGPWR),
-        "SYS" => Some(libc::SIGSYS),
-        _ => realtime_signal_name_number(&name),
-    }
-}
-
-#[cfg(unix)]
-fn realtime_signal_name_number(name: &str) -> Option<i32> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let min = libc::SIGRTMIN();
-        let max = libc::SIGRTMAX();
-        if name == "RTMIN" {
-            return Some(min);
-        }
-        if name == "RTMAX" {
-            return Some(max);
-        }
-        if let Some(offset) = name
-            .strip_prefix("RTMIN+")
-            .and_then(|value| value.parse::<i32>().ok())
-        {
-            let signal = min + offset;
-            return (signal <= max).then_some(signal);
-        }
-        if let Some(offset) = name
-            .strip_prefix("RTMAX-")
-            .and_then(|value| value.parse::<i32>().ok())
-        {
-            let signal = max - offset;
-            return (signal >= min).then_some(signal);
-        }
-    }
-    None
-}
-
-#[cfg(not(unix))]
-fn signal_name_number(name: &str) -> Option<i32> {
-    match name
-        .strip_prefix("SIG")
-        .or_else(|| name.strip_prefix("sig"))
-        .unwrap_or(name)
-        .to_ascii_uppercase()
-        .as_str()
-    {
-        "EXIT" => Some(0),
-        _ => None,
-    }
 }
 
 fn pid_exists(pid: i64) -> bool {
