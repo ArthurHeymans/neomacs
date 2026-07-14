@@ -19,6 +19,12 @@ pub use signals::signal_name_number;
 mod process_status;
 pub use process_status::process_is_alive;
 
+mod process_attributes;
+pub use process_attributes::{
+    ProcStatSnapshot, boot_time_secs, clock_ticks_per_second, group_name, list_process_ids,
+    process_cmdline, process_effective_ids, process_stat, total_memory_kb, user_name,
+};
+
 #[cfg(unix)]
 mod tty;
 #[cfg(unix)]
