@@ -183,6 +183,100 @@ pub fn callers_report_from_folded(folded: &str, function: &str) -> CallersReport
     }
 }
 
+/// Per-function self and total sample counts, plus the grand total, from folded
+/// stacks. (Owned keys so callers can compare two independent captures.)
+fn self_total_maps(folded: &str) -> (HashMap<String, u64>, HashMap<String, u64>, u64) {
+    let mut self_c: HashMap<String, u64> = HashMap::new();
+    let mut total_c: HashMap<String, u64> = HashMap::new();
+    let mut grand: u64 = 0;
+    for line in folded.lines() {
+        let Some((stack, count_str)) = line.trim().rsplit_once(' ') else {
+            continue;
+        };
+        let Ok(count) = count_str.trim().parse::<u64>() else {
+            continue;
+        };
+        let frames: Vec<&str> = stack.split(';').filter(|f| !f.is_empty()).collect();
+        if frames.is_empty() {
+            continue;
+        }
+        grand += count;
+        let mut seen: HashSet<&str> = HashSet::new();
+        for frame in &frames {
+            if seen.insert(frame) {
+                *total_c.entry((*frame).to_string()).or_default() += count;
+            }
+        }
+        *self_c
+            .entry(frames[frames.len() - 1].to_string())
+            .or_default() += count;
+    }
+    (self_c, total_c, grand)
+}
+
+/// One function's change between two captures, in percentage points of self
+/// time (normalized so captures of different sizes compare fairly).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FnDelta {
+    pub function: String,
+    pub self_pct_before: f64,
+    pub self_pct_after: f64,
+    /// after - before, in percentage points; positive = got hotter.
+    pub self_pct_delta: f64,
+}
+
+/// A ranked before/after comparison of two captures ("did my change help?").
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct DiffReport {
+    pub before_total_samples: u64,
+    pub after_total_samples: u64,
+    /// Functions ranked by absolute self% change, most-changed first.
+    pub top: Vec<FnDelta>,
+}
+
+/// Diff two folded captures, ranking functions by absolute self% change.
+pub fn diff_from_folded(before: &str, after: &str, top_n: usize) -> DiffReport {
+    let (self_b, total_b, grand_b) = self_total_maps(before);
+    let (self_a, total_a, grand_a) = self_total_maps(after);
+
+    let mut names: HashSet<&str> = HashSet::new();
+    for k in total_b.keys() {
+        names.insert(k.as_str());
+    }
+    for k in total_a.keys() {
+        names.insert(k.as_str());
+    }
+
+    let mut deltas: Vec<FnDelta> = names
+        .into_iter()
+        .map(|name| {
+            let pct_b = pct(self_b.get(name).copied().unwrap_or(0), grand_b);
+            let pct_a = pct(self_a.get(name).copied().unwrap_or(0), grand_a);
+            FnDelta {
+                function: name.to_string(),
+                self_pct_before: pct_b,
+                self_pct_after: pct_a,
+                self_pct_delta: pct_a - pct_b,
+            }
+        })
+        .collect();
+
+    deltas.sort_by(|a, b| {
+        b.self_pct_delta
+            .abs()
+            .partial_cmp(&a.self_pct_delta.abs())
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.function.cmp(&b.function))
+    });
+    deltas.truncate(top_n);
+
+    DiffReport {
+        before_total_samples: grand_b,
+        after_total_samples: grand_a,
+        top: deltas,
+    }
+}
+
 fn sort_edges(map: HashMap<&str, u64>) -> Vec<CallEdge> {
     let mut edges: Vec<CallEdge> = map
         .into_iter()

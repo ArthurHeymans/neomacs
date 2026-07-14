@@ -81,3 +81,24 @@ fn callers_report_root_leaf_and_unknown() {
     assert_eq!(none.total_samples, 0);
     assert!(none.callers.is_empty());
 }
+
+#[test]
+fn diff_ranks_by_self_pct_change() {
+    // before: a is 100% self; after: a drops to 20%, b appears at 80%.
+    let before = "main;a 10";
+    let after = "main;a 2\nmain;b 8";
+    let d = crate::report::diff_from_folded(before, after, 10);
+    assert_eq!(d.before_total_samples, 10);
+    assert_eq!(d.after_total_samples, 10);
+
+    let b = d.top.iter().find(|f| f.function == "b").unwrap();
+    assert!((b.self_pct_before - 0.0).abs() < 1e-9);
+    assert!((b.self_pct_after - 80.0).abs() < 1e-9);
+    assert!((b.self_pct_delta - 80.0).abs() < 1e-9);
+
+    let a = d.top.iter().find(|f| f.function == "a").unwrap();
+    assert!((a.self_pct_delta + 80.0).abs() < 1e-9);
+
+    // main appears in both stacks (self 0 in each) -> zero delta, ranked last.
+    assert_eq!(d.top.last().unwrap().function, "main");
+}

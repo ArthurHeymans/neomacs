@@ -341,3 +341,61 @@ async fn capture_503_when_not_live() {
     // A not-live controller must be rejected before start() is ever called.
     assert!(!ctrl.started.load(Ordering::Relaxed));
 }
+
+fn get_req(uri: &str) -> Request<Body> {
+    Request::builder().uri(uri).body(Body::empty()).unwrap()
+}
+
+async fn json_of(resp: axum::response::Response) -> serde_json::Value {
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn captures_list_and_diff_flow() {
+    let app = router(fixed_provider(), Some(stub("main;a 10")));
+
+    let cap1 = app
+        .clone()
+        .oneshot(get_req("/profile/lisp.folded?secs=1"))
+        .await
+        .unwrap();
+    assert_eq!(
+        cap1.headers().get("x-capture-id").unwrap().to_str().unwrap(),
+        "1"
+    );
+    let cap2 = app
+        .clone()
+        .oneshot(get_req("/report?secs=1"))
+        .await
+        .unwrap();
+    assert_eq!(
+        cap2.headers().get("x-capture-id").unwrap().to_str().unwrap(),
+        "2"
+    );
+
+    let cl = app.clone().oneshot(get_req("/captures")).await.unwrap();
+    let v = json_of(cl).await;
+    assert_eq!(v["captures"].as_array().unwrap().len(), 2);
+
+    let df = app
+        .clone()
+        .oneshot(get_req("/diff?before=1&after=2"))
+        .await
+        .unwrap();
+    assert_eq!(df.status(), StatusCode::OK);
+    let dv = json_of(df).await;
+    assert_eq!(dv["before"], 1);
+    assert_eq!(dv["after"], 2);
+    assert!(dv["diff"]["top"].is_array());
+
+    let bad = app.clone().oneshot(get_req("/diff")).await.unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+
+    let nf = app
+        .clone()
+        .oneshot(get_req("/diff?before=1&after=999"))
+        .await
+        .unwrap();
+    assert_eq!(nf.status(), StatusCode::NOT_FOUND);
+}

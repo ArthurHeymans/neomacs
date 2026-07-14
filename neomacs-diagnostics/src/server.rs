@@ -61,6 +61,8 @@ pub(crate) struct AppState {
     /// Serializes captures so two concurrent `/profile` requests can't race the
     /// single shared profiler (double-start / stop-after-stop).
     pub(crate) capture_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Ring of recent captures, so `/diff` can compare two.
+    pub(crate) captures: Arc<std::sync::Mutex<crate::capture_store::CaptureStore>>,
 }
 
 /// Build the diagnostics HTTP router.
@@ -72,6 +74,7 @@ pub fn router(
         provider,
         profiler,
         capture_lock: Arc::new(tokio::sync::Mutex::new(())),
+        captures: Arc::new(std::sync::Mutex::new(crate::capture_store::CaptureStore::new(16))),
     };
     Router::new()
         .route("/", get(index))
@@ -82,6 +85,8 @@ pub fn router(
         .route("/profile/lisp.pprof", get(profile_pprof))
         .route("/profile/lisp/callers", get(callers))
         .route("/report", get(report))
+        .route("/captures", get(captures_list))
+        .route("/diff", get(diff))
         .with_state(state)
 }
 
@@ -98,7 +103,9 @@ async fn index() -> Json<serde_json::Value> {
             "/profile/lisp.svg?secs=N": "the same capture rendered as an SVG flamegraph",
             "/profile/lisp.pprof?secs=N": "the same capture as pprof protobuf (go tool pprof)",
             "/profile/lisp/callers?fn=NAME&secs=N": "callers/callees of NAME (JSON)",
-            "/report?secs=N&top=K&sort=self|total": "ranked top-K CPU hotspots (JSON)"
+            "/report?secs=N&top=K&sort=self|total": "ranked top-K CPU hotspots (JSON)",
+            "/captures": "list stored captures (id, samples, age) for /diff",
+            "/diff?before=A&after=B&top=K": "ranked self% change between two captures (JSON)"
         }
     }))
 }
@@ -133,6 +140,19 @@ struct CaptureParams {
     sort: Option<String>,
     #[serde(rename = "fn")]
     function: Option<String>,
+    before: Option<u64>,
+    after: Option<u64>,
+}
+
+/// Capture folded stacks and store them in the ring, returning the assigned id
+/// (so a client can `/diff` against it later) alongside the folded text.
+async fn capture_and_store(
+    state: &AppState,
+    secs: u64,
+) -> Result<(u64, String), (StatusCode, String)> {
+    let folded = do_capture(state, secs).await?;
+    let id = state.captures.lock().unwrap().store(folded.clone());
+    Ok((id, folded))
 }
 
 /// Ensures a started capture is stopped even if the request future is dropped
@@ -212,9 +232,12 @@ async fn do_capture(state: &AppState, secs: u64) -> Result<String, (StatusCode, 
 }
 
 async fn profile_folded(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {
-    match do_capture(&state, p.secs.unwrap_or(5)).await {
-        Ok(folded) => (
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+    match capture_and_store(&state, p.secs.unwrap_or(5)).await {
+        Ok((id, folded)) => (
+            [
+                ("content-type", "text/plain; charset=utf-8".to_string()),
+                ("x-capture-id", id.to_string()),
+            ],
             folded,
         )
             .into_response(),
@@ -260,20 +283,63 @@ async fn callers(State(state): State<AppState>, Query(p): Query<CaptureParams>) 
 
 async fn report(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {
     let secs = p.secs.unwrap_or(5);
-    match do_capture(&state, secs).await {
-        Ok(folded) => {
+    match capture_and_store(&state, secs).await {
+        Ok((id, folded)) => {
             let top = p.top.unwrap_or(20).clamp(1, 1000);
             let sort_by_self = p.sort.as_deref() != Some("total");
             let rep = crate::report::cpu_report_from_folded(&folded, top, sort_by_self);
-            Json(serde_json::json!({
-                "window_secs": secs.clamp(1, 60),
-                "sort": if sort_by_self { "self" } else { "total" },
-                "report": rep,
-            }))
-            .into_response()
+            (
+                [("x-capture-id", id.to_string())],
+                Json(serde_json::json!({
+                    "capture_id": id,
+                    "window_secs": secs.clamp(1, 60),
+                    "sort": if sort_by_self { "self" } else { "total" },
+                    "report": rep,
+                })),
+            )
+                .into_response()
         }
         Err((code, msg)) => (code, msg).into_response(),
     }
+}
+
+/// List the stored captures available for `/diff`.
+async fn captures_list(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let list = state.captures.lock().unwrap().list();
+    let items: Vec<serde_json::Value> = list
+        .into_iter()
+        .map(|(id, total, secs_ago)| {
+            serde_json::json!({ "id": id, "total_samples": total, "captured_secs_ago": secs_ago })
+        })
+        .collect();
+    Json(serde_json::json!({ "captures": items }))
+}
+
+/// Compare two stored captures: `/diff?before=A&after=B&top=K`.
+async fn diff(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {
+    let (Some(before_id), Some(after_id)) = (p.before, p.after) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            "diff requires ?before=ID&after=ID (see /captures)\n",
+        )
+            .into_response();
+    };
+    let store = state.captures.lock().unwrap();
+    let (Some(before), Some(after)) = (store.folded(before_id), store.folded(after_id)) else {
+        return (
+            StatusCode::NOT_FOUND,
+            "unknown capture id (it may have been evicted; see /captures)\n",
+        )
+            .into_response();
+    };
+    let top = p.top.unwrap_or(20).clamp(1, 1000);
+    let report = crate::report::diff_from_folded(before, after, top);
+    Json(serde_json::json!({
+        "before": before_id,
+        "after": after_id,
+        "diff": report,
+    }))
+    .into_response()
 }
 
 /// Configuration for the diagnostics server.
