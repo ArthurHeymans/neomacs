@@ -25,8 +25,6 @@ use crate::emacs_core::error::LispCondition;
 use num_enum::IntoPrimitive;
 use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
 use std::collections::HashMap;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{Read as IoRead, Write as IoWrite};
 use std::net::{
@@ -2836,26 +2834,6 @@ fn connect_tcp_stream_socket(
     Ok(socket.into())
 }
 
-fn nonblocking_connect_is_pending(err: &std::io::Error) -> bool {
-    if err.kind() == std::io::ErrorKind::WouldBlock {
-        return true;
-    }
-    #[cfg(unix)]
-    {
-        matches!(
-            err.raw_os_error(),
-            Some(code)
-                if code == libc::EINPROGRESS
-                    || code == libc::EWOULDBLOCK
-                    || code == libc::EALREADY
-        )
-    }
-    #[cfg(not(unix))]
-    {
-        false
-    }
-}
-
 fn io_error_status_code(err: &std::io::Error) -> i32 {
     err.raw_os_error().unwrap_or(1)
 }
@@ -2873,7 +2851,7 @@ fn start_nonblocking_tcp_stream_socket(
     let sock_addr = SockAddr::from(addr);
     match socket.connect(&sock_addr) {
         Ok(()) => Ok(Ok(socket.into())),
-        Err(err) if nonblocking_connect_is_pending(&err) => Ok(Ok(socket.into())),
+        Err(err) if sys::net::connect_is_pending(&err) => Ok(Ok(socket.into())),
         Err(err) => Ok(Err(err)),
     }
 }
@@ -2929,34 +2907,15 @@ fn udp_unspecified_addr_for(remote: SocketAddr) -> SocketAddr {
 
 fn datagram_zero_address_for(addr: SocketAddr) -> Value {
     let raw_len = match addr {
-        SocketAddr::V4(_) => socket_addr_payload_len_v4(),
-        SocketAddr::V6(_) => socket_addr_payload_len_v6(),
+        SocketAddr::V4(_) => sys::net::sockaddr_in_payload_len(),
+        SocketAddr::V6(_) => sys::net::sockaddr_in6_payload_len(),
     };
     Value::cons(Value::fixnum(0), int_vector(&vec![0_i64; raw_len]))
 }
 
-fn socket_addr_payload_len_v4() -> usize {
-    cfg_select! {
-        unix => {
-            std::mem::size_of::<libc::sockaddr_in>() - std::mem::size_of::<libc::sa_family_t>()
-        }
-        _ => { 14 }
-    }
-}
-
-fn socket_addr_payload_len_v6() -> usize {
-    cfg_select! {
-        unix => {
-            std::mem::size_of::<libc::sockaddr_in6>() - std::mem::size_of::<libc::sa_family_t>()
-        }
-        _ => { 26 }
-    }
-}
-
 #[cfg(unix)]
 fn datagram_zero_unix_address() -> Value {
-    let raw_len =
-        std::mem::size_of::<libc::sockaddr_un>() - std::mem::size_of::<libc::sa_family_t>();
+    let raw_len = sys::net::sockaddr_un_payload_len();
     Value::cons(Value::fixnum(0), int_vector(&vec![0_i64; raw_len]))
 }
 
@@ -2974,7 +2933,7 @@ fn network_socket_type_addrinfo_socktype(socket_type: NetworkSocketType) -> i32 
         NetworkSocketType::Stream => SockType::Stream.into(),
         NetworkSocketType::Datagram => SockType::DGram.into(),
         #[cfg(unix)]
-        NetworkSocketType::Seqpacket => libc::SOCK_SEQPACKET,
+        NetworkSocketType::Seqpacket => sys::net::sock_seqpacket(),
     }
 }
 
@@ -3260,7 +3219,7 @@ fn start_nonblocking_unix_stream_socket(
         .map_err(|err| network_socket_io_error("make client process failed", err))?;
     match socket.connect(&sock_addr) {
         Ok(()) => Ok(Ok(socket.into())),
-        Err(err) if nonblocking_connect_is_pending(&err) => Ok(Ok(socket.into())),
+        Err(err) if sys::net::connect_is_pending(&err) => Ok(Ok(socket.into())),
         Err(err) => Ok(Err(err)),
     }
 }
@@ -7716,52 +7675,12 @@ impl NetworkProcessFamily {
     fn addrinfo_family(self) -> i32 {
         match self {
             Self::Unspecified => 0,
-            Self::Local => network_process_local_family_raw(),
-            Self::Ipv4 => network_process_ipv4_family_raw(),
-            Self::Ipv6 => network_process_ipv6_family_raw(),
+            Self::Local => sys::net::af_local(),
+            Self::Ipv4 => sys::net::af_inet(),
+            Self::Ipv6 => sys::net::af_inet6(),
             Self::Raw(raw) => raw,
         }
     }
-}
-
-#[cfg(unix)]
-fn network_process_local_family_raw() -> i32 {
-    libc::AF_UNIX
-}
-
-#[cfg(not(unix))]
-fn network_process_local_family_raw() -> i32 {
-    0
-}
-
-#[cfg(unix)]
-fn network_process_ipv4_family_raw() -> i32 {
-    libc::AF_INET
-}
-
-#[cfg(windows)]
-fn network_process_ipv4_family_raw() -> i32 {
-    windows_sys::Win32::Networking::WinSock::AF_INET as i32
-}
-
-#[cfg(all(not(unix), not(windows)))]
-fn network_process_ipv4_family_raw() -> i32 {
-    0
-}
-
-#[cfg(unix)]
-fn network_process_ipv6_family_raw() -> i32 {
-    libc::AF_INET6
-}
-
-#[cfg(windows)]
-fn network_process_ipv6_family_raw() -> i32 {
-    windows_sys::Win32::Networking::WinSock::AF_INET6 as i32
-}
-
-#[cfg(all(not(unix), not(windows)))]
-fn network_process_ipv6_family_raw() -> i32 {
-    0
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -7803,23 +7722,6 @@ fn network_service_protocol(socket_type: NetworkSocketType) -> &'static str {
     }
 }
 
-#[cfg(unix)]
-fn lookup_network_service_port(service: &str, protocol: &str) -> Option<u16> {
-    let service = CString::new(service).ok()?;
-    let protocol = CString::new(protocol).ok()?;
-    let entry = unsafe { libc::getservbyname(service.as_ptr(), protocol.as_ptr()) };
-    if entry.is_null() {
-        None
-    } else {
-        Some(u16::from_be(unsafe { (*entry).s_port as u16 }))
-    }
-}
-
-#[cfg(not(unix))]
-fn lookup_network_service_port(_service: &str, _protocol: &str) -> Option<u16> {
-    None
-}
-
 fn parse_network_numeric_service_port(service: &str) -> Option<u16> {
     let service = service.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
     let service = service.strip_prefix('+').unwrap_or(service);
@@ -7848,7 +7750,7 @@ fn parse_network_service_port(
             if let Some(port) = parse_network_numeric_service_port(&service) {
                 return Ok(port);
             }
-            lookup_network_service_port(&service, network_service_protocol(socket_type)).ok_or_else(
+            sys::net::service_port(&service, network_service_protocol(socket_type)).ok_or_else(
                 || {
                     signal(
                         "error",
@@ -8002,35 +7904,15 @@ fn parse_network_process_family(value: &Value) -> Result<NetworkProcessFamily, F
     ))
 }
 
-#[cfg(unix)]
 fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
     let raw = i32::try_from(raw).ok()?;
-    match raw {
-        raw if raw == libc::AF_UNSPEC => Some(NetworkProcessFamily::Unspecified),
-        raw if raw == libc::AF_INET => Some(NetworkProcessFamily::Ipv4),
-        raw if raw == libc::AF_INET6 => Some(NetworkProcessFamily::Ipv6),
-        raw if raw == libc::AF_UNIX => Some(NetworkProcessFamily::Local),
-        raw => Some(NetworkProcessFamily::Raw(raw)),
-    }
-}
-
-#[cfg(windows)]
-fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
-    use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6, AF_UNSPEC};
-
-    let raw = i32::try_from(raw).ok()?;
-    match raw {
-        raw if raw == AF_UNSPEC as i32 => Some(NetworkProcessFamily::Unspecified),
-        raw if raw == AF_INET as i32 => Some(NetworkProcessFamily::Ipv4),
-        raw if raw == AF_INET6 as i32 => Some(NetworkProcessFamily::Ipv6),
-        raw => Some(NetworkProcessFamily::Raw(raw)),
-    }
-}
-
-#[cfg(all(not(unix), not(windows)))]
-fn network_process_family_from_raw(raw: i64) -> Option<NetworkProcessFamily> {
-    let raw = i32::try_from(raw).ok()?;
-    Some(NetworkProcessFamily::Raw(raw))
+    Some(match sys::net::classify_family(raw) {
+        sys::net::NetFamily::Unspecified => NetworkProcessFamily::Unspecified,
+        sys::net::NetFamily::Ipv4 => NetworkProcessFamily::Ipv4,
+        sys::net::NetFamily::Ipv6 => NetworkProcessFamily::Ipv6,
+        sys::net::NetFamily::Local => NetworkProcessFamily::Local,
+        sys::net::NetFamily::Other(r) => NetworkProcessFamily::Raw(r),
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -8046,7 +7928,7 @@ impl NetworkLookupHint {
 
     fn addrinfo_flags(self) -> i32 {
         match self {
-            Self::Numeric => ai_numerichost_flag(),
+            Self::Numeric => sys::net::ai_numerichost(),
         }
     }
 
@@ -8054,16 +7936,6 @@ impl NetworkLookupHint {
     fn name(self) -> &'static str {
         self.into()
     }
-}
-
-#[cfg(unix)]
-fn ai_numerichost_flag() -> i32 {
-    libc::AI_NUMERICHOST
-}
-
-#[cfg(windows)]
-fn ai_numerichost_flag() -> i32 {
-    windows_sys::Win32::Networking::WinSock::AI_NUMERICHOST as i32
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]

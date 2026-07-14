@@ -43,6 +43,8 @@ pub use fd::{dup_fd, set_fd_nonblocking};
 mod fs;
 pub use fs::path_is_executable;
 
+pub mod net;
+
 #[cfg(unix)]
 mod child_wait;
 #[cfg(unix)]
