@@ -1300,18 +1300,7 @@ fn lisp_string_to_os_string(string: &LispString) -> OsString {
 }
 
 fn executable_path_exists(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-            return false;
-        };
-        unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
-    }
-
-    #[cfg(not(unix))]
-    {
-        path.exists()
-    }
+    sys::path_is_executable(path)
 }
 
 #[derive(Clone, Copy)]
@@ -4778,13 +4767,12 @@ impl ProcessManager {
                     vec![Value::string("Pipe process has no stdout file descriptor")],
                 )
             })?;
-            let fd = unsafe { libc::dup(stdout.as_raw_fd()) };
-            if fd == -1 {
-                return Err(signal(
+            let fd = sys::dup_fd(stdout.as_raw_fd()).ok_or_else(|| {
+                signal(
                     LispCondition::FileError,
                     vec![Value::string("Cannot duplicate file descriptor")],
-                ));
-            }
+                )
+            })?;
             Ok(fd)
         }
         #[cfg(not(unix))]

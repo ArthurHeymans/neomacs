@@ -38,7 +38,10 @@ pub use tty::{
 #[cfg(unix)]
 mod fd;
 #[cfg(unix)]
-pub use fd::set_fd_nonblocking;
+pub use fd::{dup_fd, set_fd_nonblocking};
+
+mod fs;
+pub use fs::path_is_executable;
 
 #[cfg(unix)]
 mod child_wait;
