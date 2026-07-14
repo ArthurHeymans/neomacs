@@ -163,9 +163,9 @@ fn strong_navigate_and_read() {
 fn strong_clock_in_out_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (closed \"0:00\" \"* Task\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  0:00\n:END:\nBody\")""#
+        r#""OK (closed \"0:00\" \"* Task\n:LOGBOOK:\nCLOCK: [2026-06-06 Sat 18:50]--[2026-06-06 Sat 18:50] =>  0:00\n:END:\nBody\")""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org)
   (require 'org-clock)

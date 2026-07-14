@@ -602,9 +602,9 @@ fn strong_babel_named_block_reference() {
 fn strong_dynamic_block_clocktable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\"""##
+        r##""OK \"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\"""##
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+BEGIN: clocktable :maxlevel 2\n#+END:")

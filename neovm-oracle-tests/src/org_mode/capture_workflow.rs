@@ -794,9 +794,9 @@ fn org_capture_template_expand_body_placeholders_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [FIXED-ORG-TIME]\n:END:\nFirst task\n* Notes\n** Quick\n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [FIXED-ORG-TIME]\n:END:\nFirst task\n* Notes\n** Quick\n- [FIXED-ORG-TIME] \n  \n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: [src]\n:Created: [stamp]\n:END:\nFirst task\n* Notes\n** Quick\n- [FIXED-ORG-TIME] \n  \n\" ((headline 1 \"Inbox\" nil nil) (headline 2 \"\" nil nil) (property-drawer nil nil nil nil) (headline 1 \"Notes\" nil nil) (headline 2 \"Quick\" nil nil) (item nil nil nil nil)))""##
+        r##""OK (\"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-15 Mon 12:00]\n:END:\nFirst task\n* Notes\n** Quick\n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-15 Mon 12:00]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-15 Mon 12:00] \n  \n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: [src]\n:Created: [stamp]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-15 Mon 12:00] \n  \n\" ((headline 1 \"Inbox\" nil nil) (headline 2 \"\" nil nil) (property-drawer nil nil nil nil) (headline 1 \"Notes\" nil nil) (headline 2 \"Quick\" nil nil) (item nil nil nil nil)))""##
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
@@ -927,9 +927,9 @@ fn org_capture_datetree_insert_edit_clock_refile_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** [FIXED-TODAY-DAY]\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-07 July\n*** [FIXED-TODAY-DAY]\n**** Journal entry alpha\n[FIXED-ORG-TIME]\n**** Journal entry beta\n[FIXED-ORG-TIME]\n\")""##
+        r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-15 Monday\n**** Journal entry alpha\n[2026-06-15 Mon 12:00]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-15 Monday\n**** Journal entry alpha\n[2026-06-15 Mon 12:00]\n**** Journal entry beta\n[2026-06-15 Mon 12:00]\n\")""##
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)

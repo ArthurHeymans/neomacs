@@ -28,9 +28,9 @@ fn combo98_org_block_property_drawer_position() {
 fn combo98_org_todo_state_with_logging() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:todo #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:buffer #(\"* DONE Task\nCLOSED: [FIXED-ORG-TIME]\n\" 0 11 (org-todo-head \"TODO\"))))""#
+        r#""OK ((:todo #(\"DONE\" 0 4 (org-todo-head \"TODO\"))) (:buffer #(\"* DONE Task\nCLOSED: [2026-06-15 Mon 12:00]\n\" 0 11 (org-todo-head \"TODO\"))))""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer (org-mode)
  (let ((org-log-done 'time)) (insert "* TODO Task\n") (goto-char (point-min))
   (let ((r '())) (org-todo "DONE")

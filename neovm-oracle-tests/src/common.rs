@@ -308,24 +308,6 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                     (cons (neovm--oracle-normalize-1 env seen)
                           (cons (neovm--oracle-normalize-1 args seen)
                                 (neovm--oracle-normalize-1 body seen)))))))
-         ;; org-element parses a timestamp into a plist whose sub-day fields
-         ;; (:hour-start/:minute-start/:second-start and the -end variants) are
-         ;; integers.  When the timestamp came from `current-time' (a live
-         ;; `org-clock-in'/`org-insert-time-stamp'), those integers are the run
-         ;; wall-clock and differ between record and replay.  Squash the sub-day
-         ;; fields to 0 while leaving :year/:month/:day intact (dates are test
-         ;; data or, at worst, only roll at midnight).
-         ((and (consp v)
-               (memq (car v) '(:hour-start :minute-start :second-start
-                               :hour-end :minute-end :second-end))
-               (integerp (car (cdr v))))
-          (cons (car v) (cons 0 (neovm--oracle-normalize-1 (cdr (cdr v)) seen))))
-         ;; `org-agenda' tags the line for the current day with an `org-today'
-         ;; text property.  Which line carries it depends on the run date, so
-         ;; across a midnight boundary between record and replay the property
-         ;; moves.  Drop the `org-today PROP' pair from any plist.
-         ((and (consp v) (eq (car v) 'org-today) (consp (cdr v)))
-          (neovm--oracle-normalize-1 (cdr (cdr v)) seen))
          ((consp v)
           (or (gethash v seen)
               (let ((out (cons nil nil)))
@@ -346,101 +328,34 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; mapconcat, while GNU reuses uninitialised stack memory.  Both are
          ;; non-deterministic across builds, so squash them to 0 for parity.
          ((fixnump v) (if (> (abs v) 1000000000000) 0 v))
-         ;; Org clock, archive, and export output embed the wall-clock time of the run.
-         ;; The Neomacs and GNU oracle processes start seconds apart, so
-         ;; timestamps can differ even when the resulting structure matches.
-         ;; Replace wall-clock timestamps with canonical placeholders while
-         ;; preserving clock durations.
-         ;; Use make-string to build the leading '#' without writing
-         ;; the quote-hash sequence inside the Rust raw-string literal.
+         ;; Frame/icon title product branding is a DELIBERATE Neomacs divergence:
+         ;; GNU titles read "%b - GNU Emacs at HOST" while Neomacs -- which must
+         ;; never advertise "GNU Emacs" -- reads "%b - NEO Emacs at HOST" (see
+         ;; frame_vars.rs).  Canonicalize the product name on BOTH engines so the
+         ;; frame-title-format STRUCTURE stays a real parity lock while this one
+         ;; intentional brand difference is ignored.  The per-run tempdir
+         ;; (`temporary-file-directory' / a `neovm-oracle-case-XXX' path under the
+         ;; nix-shell sandbox) is shared within a run but differs across
+         ;; record/replay, so it is squashed to a stable token.
+         ;;
+         ;; Wall-clock date/time is NOT scrubbed here.  Date-sensitive tests run
+         ;; under a frozen clock via `assert_oracle_parity_frozen_time_*', so both
+         ;; engines emit the identical instant and their raw output already agrees
+         ;; -- the non-determinism is fixed at the source instead of matching every
+         ;; timestamp format with a regex.
          ((stringp v)
-          (let* ((hash (make-string 1 35))
-                 ;; Today's date, computed live: the normalizer runs in both the
-                 ;; recording and the replay process, so "today" is whatever day
-                 ;; each runs on.  Agenda/capture/feed output embeds the run date
-                 ;; (`%t' timestamps, datetree headings, feed dates, the current
-                 ;; agenda day), which changes across a midnight boundary between
-                 ;; record and replay.  Collapse today's date -- in the org
-                 ;; timestamp, datetree, and bare ISO forms -- to fixed tokens.
-                 ;; Fixed test dates (never equal to today on both days) are left
-                 ;; intact.
-                 (today (regexp-quote (format-time-string "%Y-%m-%d")))
-                 ;; Frame/icon title product branding is a DELIBERATE Neomacs
-                 ;; divergence: GNU titles read "%b - GNU Emacs at HOST" while
-                 ;; Neomacs -- which must never advertise "GNU Emacs" -- reads
-                 ;; "%b - NEO Emacs at HOST" (see frame_vars.rs). Canonicalize the
-                 ;; product name on BOTH engines so the frame-title-format
-                 ;; STRUCTURE stays a real parity lock while this one intentional
-                 ;; brand difference is ignored.
-                 (brand-normalized
-                  (replace-regexp-in-string
-                   "%b - \\(?:GNU\\|NEO\\) Emacs at "
-                   "%b - [EMACS-PRODUCT] at "
-                   v))
-                 ;; `temporary-file-directory' / a bare $TMPDIR is the
-                 ;; per-session nix-shell sandbox dir (/tmp/nix-shell.XXXXX): it
-                 ;; differs between the recording and replay runs but is shared
-                 ;; within a run, so it is not a real divergence. Squash the
-                 ;; per-CASE `.../neovm-oracle-case-...' path FIRST (it starts
-                 ;; with this same nix-shell prefix; the outer chain also squashes
-                 ;; it, harmlessly, later), then squash any remaining bare session
-                 ;; root -- so a case path becomes a single [ORACLE-TMPDIR] token
-                 ;; rather than [SESSION-TMPDIR][ORACLE-TMPDIR].
-                 (tmpdir-normalized
-                  (replace-regexp-in-string
-                   "/tmp/nix-shell\\.[A-Za-z0-9]+"
-                   "[SESSION-TMPDIR]"
-                   (replace-regexp-in-string
-                    "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
-                    "[ORACLE-TMPDIR]"
-                    brand-normalized)))
-                 (caption-normalized
-                  (replace-regexp-in-string
-                   (concat hash "\\+CAPTION: Clock summary at \\[[^]]+\\]")
-                   (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
-                   tmpdir-normalized)))
-            (replace-regexp-in-string
-             ;; Bare today ISO date (e.g. an Org feed's pubdate).
-             today "[FIXED-TODAY-DATE]"
-             (replace-regexp-in-string
-              ;; Datetree heading / long form: today's ISO date + weekday name.
-              (concat today " [A-Z][a-z]+day") "[FIXED-TODAY-DAY]"
-              (replace-regexp-in-string
-               ;; Org timestamp for today with a 3-letter weekday, no time
-               ;; (e.g. a `%t' capture insert): [2026-07-12 Sun] / <...>.
-               (concat "\\([][<>]\\)" today " [A-Z][a-z][a-z]\\([][<>]\\)")
-               "\\1FIXED-TODAY\\2"
-               (replace-regexp-in-string
-                ;; Per-run tempdir is a random path (tempfile prefix
-                ;; "neovm-oracle-case-" under $TMPDIR); GNU and Neomacs share it
-                ;; within a run but it differs across recording/replay runs, so
-                ;; it is not a real divergence.  Squash the whole absolute path.
-                "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
-                "[ORACLE-TMPDIR]"
-             (replace-regexp-in-string
-              ;; Bare Org timestamps carrying a wall-clock HH:MM (e.g. from a
-              ;; `%U'/`%T' capture template or `org-insert-time-stamp') are
-              ;; recorded seconds apart from replay; the date+time is the run
-              ;; time, not test data.  Timestamps WITHOUT a time (SCHEDULED/
-              ;; DEADLINE dates like <2026-05-27 Wed>) are left intact.
-              "\\([][<>]\\)[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}\\([][<>]\\)"
-              "\\1FIXED-ORG-TIME\\2"
-              (replace-regexp-in-string
-               ":ARCHIVE_TIME: [^\n]+"
-               ":ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]"
-               (replace-regexp-in-string
-                "CLOCK: \\[[^]]+\\]--\\[[^]]+\\] => \\( *[0-9]+:[0-9][0-9]\\)"
-                "CLOCK: [FIXED-CLOCK] => \\1"
-                (replace-regexp-in-string
-                 "Created: [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
-                 "Created: [FIXED-EXPORT-TIME]"
+          (let ((brand-normalized
                  (replace-regexp-in-string
-                  "<!-- [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\} -->"
-                  "<!-- [FIXED-EXPORT-TIME] -->"
-                  (replace-regexp-in-string
-                   "% Created [0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\} [A-Z][a-z][a-z] [0-9]\\{2\\}:[0-9]\\{2\\}"
-                   "% Created [FIXED-EXPORT-TIME]"
-                   caption-normalized))))))))))))
+                  "%b - \\(?:GNU\\|NEO\\) Emacs at "
+                  "%b - [EMACS-PRODUCT] at "
+                  v)))
+            (replace-regexp-in-string
+             "/tmp/nix-shell\\.[A-Za-z0-9]+"
+             "[SESSION-TMPDIR]"
+             (replace-regexp-in-string
+              "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
+              "[ORACLE-TMPDIR]"
+              brand-normalized))))
          (t v)))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
@@ -1016,6 +931,17 @@ pub(crate) fn assert_oracle_parity_with_env_expect(
 /// normalization is needed. A shared per-case tempdir is provided so file paths
 /// stay normalizable alongside the frozen clock.
 pub(crate) fn assert_oracle_parity_frozen_time_expect(form: &str, expected: expect_test::Expect) {
+    assert_oracle_parity_frozen_time_with_load_expect(form, &[], expected);
+}
+
+/// [`assert_oracle_parity_frozen_time_expect`] with extra `load_files` loaded
+/// into both engines first -- the frozen-clock counterpart of
+/// [`assert_oracle_parity_with_load_expect`].
+pub(crate) fn assert_oracle_parity_frozen_time_with_load_expect(
+    form: &str,
+    load_files: &[&str],
+    expected: expect_test::Expect,
+) {
     let env_owned = frozen_time_env();
     let extra_env: Vec<(&str, &str)> = env_owned
         .iter()
@@ -1031,7 +957,7 @@ pub(crate) fn assert_oracle_parity_frozen_time_expect(form: &str, expected: expe
         || {
             run_neomacs_binary_eval_inner_with_tmpdir(
                 form,
-                &[],
+                load_files,
                 Some(tmpdir.path()),
                 &extra_env,
                 &project_lisp_dir(),
@@ -1040,7 +966,7 @@ pub(crate) fn assert_oracle_parity_frozen_time_expect(form: &str, expected: expe
         || {
             run_oracle_eval_inner_with_tmpdir(
                 form,
-                &[],
+                load_files,
                 Some(tmpdir.path()),
                 &extra_env,
                 &project_lisp_dir(),

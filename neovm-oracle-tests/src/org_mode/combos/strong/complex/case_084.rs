@@ -18,9 +18,9 @@ fn combo84_ob_css_makefile_latex() {
 fn combo84_org_element_clock_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:type clock :status closed :duration \"1:00\" :value \"[FIXED-ORG-TIME]--[FIXED-ORG-TIME]\")""#
+        r#""OK (:type clock :status closed :duration \"1:00\" :value \"[2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00]\")""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn (require 'org-element)
  (let ((clock (org-element-create 'clock '(:status closed
    :value "[2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00]" :duration "1:00"))))

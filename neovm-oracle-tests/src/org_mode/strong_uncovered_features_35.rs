@@ -214,9 +214,9 @@ fn uf35_archive() {
 fn uf35_archive_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: [FIXED-ARCHIVE-TIME]\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
+        r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: 2026-06-15 Mon 12:00\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* H1\n** TODO T1\n* Archive :archive:\n* H2\n** TODO T2")

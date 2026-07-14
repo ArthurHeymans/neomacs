@@ -220,9 +220,9 @@ fn org_cycle_hide_drawers_show_all_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((2 nil nil nil) (nil nil nil nil) \"* A\n:PROPERTIES:\n:X: y\n:END:\nbody\n** B\n:LOGBOOK:\nCLOCK: [FIXED-CLOCK] =>  1:00\n:END:\nbody B\n\")""#
+        r#""OK ((2 nil nil nil) (nil nil nil nil) \"* A\n:PROPERTIES:\n:X: y\n:END:\nbody\n** B\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:00] =>  1:00\n:END:\nbody B\n\")""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r#"(progn
   (require 'org)
   (require 'org-cycle)

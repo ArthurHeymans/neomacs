@@ -101,9 +101,9 @@ fn combo74_export_insert_image_links() {
 fn combo74_clock_timestamps_adjust() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:ts-up-fbound t) (:ts-down-fbound t) (:after-up \"CLOCK: [FIXED-CLOCK] =>  1:00\n\"))""#
+        r#""OK ((:ts-up-fbound t) (:ts-down-fbound t) (:after-up \"CLOCK: [2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00] =>  1:00\n\"))""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-clock)
   (insert "CLOCK: [2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00] =>  1:00\n")
   (let ((r '()))

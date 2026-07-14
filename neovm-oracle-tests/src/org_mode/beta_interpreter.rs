@@ -189,8 +189,10 @@ fn beta_interpret_babel_call() {
 #[test]
 fn beta_interpret_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"CLOCK: [FIXED-CLOCK] =>  1:00\n\"""#]];
-    crate::common::assert_oracle_parity_expect(
+    let expect = expect_test::expect![[
+        r#""OK \"CLOCK: [2024-01-15 Mon 10:00]--[2024-01-15 Mon 11:00] =>  1:00\n\"""#
+    ]];
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -1160,8 +1162,8 @@ fn beta_interpret_verbatim() {
 #[test]
 fn beta_interpret_timestamp_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"<FIXED-ORG-TIME>\n\"""#]];
-    crate::common::assert_oracle_parity_expect(
+    let expect = expect_test::expect![[r#""OK \"<2012-03-29 Thu 16:40>\n\"""#]];
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -1176,8 +1178,8 @@ fn beta_interpret_timestamp_active() {
 #[test]
 fn beta_interpret_timestamp_inactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"[FIXED-ORG-TIME]\n\"""#]];
-    crate::common::assert_oracle_parity_expect(
+    let expect = expect_test::expect![[r#""OK \"[2012-03-29 Thu 16:40]\n\"""#]];
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
@@ -1192,8 +1194,9 @@ fn beta_interpret_timestamp_inactive() {
 #[test]
 fn beta_interpret_timestamp_active_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"<FIXED-ORG-TIME>--<FIXED-ORG-TIME>\n\"""#]];
-    crate::common::assert_oracle_parity_expect(
+    let expect =
+        expect_test::expect![[r#""OK \"<2012-03-29 Thu 16:40>--<2012-03-29 Thu 16:41>\n\"""#]];
+    crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
   (require 'org-element)
   (require 'org)
