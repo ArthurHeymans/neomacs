@@ -71,6 +71,7 @@ pub fn router(
         .route("/live", get(live))
         .route("/profile/lisp.folded", get(profile_folded))
         .route("/profile/lisp.svg", get(profile_svg))
+        .route("/profile/lisp.pprof", get(profile_pprof))
         .route("/report", get(report))
         .with_state(state)
 }
@@ -86,6 +87,7 @@ async fn index() -> Json<serde_json::Value> {
             "/live": "server-sent events stream of metrics (~1 Hz)",
             "/profile/lisp.folded?secs=N": "capture N s of Lisp CPU as folded stacks (text)",
             "/profile/lisp.svg?secs=N": "the same capture rendered as an SVG flamegraph",
+            "/profile/lisp.pprof?secs=N": "the same capture as pprof protobuf (go tool pprof)",
             "/report?secs=N&top=K&sort=self|total": "ranked top-K CPU hotspots (JSON)"
         }
     }))
@@ -167,6 +169,16 @@ async fn profile_svg(State(state): State<AppState>, Query(p): Query<CaptureParam
             Ok(svg) => ([(header::CONTENT_TYPE, "image/svg+xml")], svg).into_response(),
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
         },
+        Err((code, msg)) => (code, msg).into_response(),
+    }
+}
+
+async fn profile_pprof(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {
+    match do_capture(&state, p.secs.unwrap_or(5)).await {
+        Ok(folded) => {
+            let pb = crate::pprof::folded_to_pprof(&folded);
+            ([(header::CONTENT_TYPE, "application/octet-stream")], pb).into_response()
+        }
         Err((code, msg)) => (code, msg).into_response(),
     }
 }

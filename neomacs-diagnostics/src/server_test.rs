@@ -224,3 +224,29 @@ async fn capture_endpoints_503_without_controller() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
+
+#[tokio::test(start_paused = true)]
+async fn profile_pprof_endpoint_returns_protobuf() {
+    let app = router(fixed_provider(), Some(stub("main;foo 10")));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp.pprof?secs=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ct = resp
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(ct, "application/octet-stream");
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    assert!(!bytes.is_empty());
+    assert!(bytes.windows(3).any(|w| w == b"foo"), "function name missing");
+}
