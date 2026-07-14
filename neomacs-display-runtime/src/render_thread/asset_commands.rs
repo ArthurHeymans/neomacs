@@ -430,7 +430,7 @@ impl RenderApp {
 #[cfg(test)]
 mod image_terminal_tests {
     use super::*;
-    use neovm_core::emacs_core::eval::ResolvedImageMetadata;
+    use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
     use std::collections::HashMap;
     use std::sync::{Arc, Condvar, Mutex};
 

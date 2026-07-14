@@ -22,6 +22,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod args;
+mod image_catalog;
 mod input_bridge;
 mod termcap_input;
 pub(crate) mod tty_frontend;
@@ -38,8 +39,8 @@ use std::time::{Duration, Instant};
 
 use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
-    ImageDecodeTerminal, RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata,
-    SharedMonitorInfo, build_render_event_loop, run_render_loop_current_thread,
+    RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
+    build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
@@ -57,11 +58,11 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
-    FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ImageResolveRequest,
-    ImageResolveSource, ResolvedFontMatch, ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedImage,
-    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
-    WebKitResolveSource,
+    FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
+    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
+    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
+use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
     LoadupDumpMode, LoadupStartupSurface, RuntimeImageRole, find_file_in_load_path, get_load_path,
     load_file,
@@ -78,6 +79,8 @@ use neovm_core::emacs_core::{
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
 use neovm_core::window::{FrameFullscreen, FrameId, FrameParam, Window};
+
+use image_catalog::AsyncImageCatalog;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 // Variants share a `Print*` prefix by design (all are print-and-exit CLI
@@ -834,8 +837,7 @@ struct PrimaryWindowDisplayHost {
     last_window_titles: Mutex<HashMap<neovm_core::window::FrameId, LispString>>,
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
-    image_metadata: SharedImageMetadata,
-    resolved_images: Mutex<HashMap<ImageResolveRequest, ResolvedImage>>,
+    image_catalog: AsyncImageCatalog,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
 }
@@ -848,16 +850,10 @@ struct PrimaryWindowSize {
 
 type SharedPrimaryWindowSize = Arc<Mutex<PrimaryWindowSize>>;
 
-const HOST_IMAGE_ID_START: u32 = 0x4000_0000;
-static HOST_IMAGE_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_IMAGE_ID_START);
 const HOST_VIDEO_ID_START: u32 = 0x5000_0000;
 static HOST_VIDEO_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_VIDEO_ID_START);
 const HOST_WEBKIT_ID_START: u32 = 0x6000_0000;
 static HOST_WEBKIT_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_WEBKIT_ID_START);
-
-fn next_host_image_id() -> u32 {
-    HOST_IMAGE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
-}
 
 fn next_host_video_id() -> u32 {
     HOST_VIDEO_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
@@ -865,37 +861,6 @@ fn next_host_video_id() -> u32 {
 
 fn next_host_webkit_id() -> u32 {
     HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
-}
-
-fn wait_for_image_metadata(
-    shared: &SharedImageMetadata,
-    id: u32,
-    timeout: Duration,
-) -> Option<ImageDecodeTerminal> {
-    let (lock, cvar) = &**shared;
-    let deadline = Instant::now() + timeout;
-    let mut images = match lock.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    loop {
-        if let Some(terminal) = images.get(&id).cloned() {
-            return Some(terminal);
-        }
-        let remaining = deadline.checked_duration_since(Instant::now())?;
-        match cvar.wait_timeout(images, remaining) {
-            Ok((guard, result)) => {
-                images = guard;
-                if result.timed_out() {
-                    return images.get(&id).cloned();
-                }
-            }
-            Err(poisoned) => {
-                let (guard, _) = poisoned.into_inner();
-                images = guard;
-            }
-        }
-    }
 }
 
 fn read_primary_window_size(shared: &SharedPrimaryWindowSize) -> PrimaryWindowSize {
@@ -1023,18 +988,6 @@ fn cursor_effect_u32(args: &[CursorEffectArg], index: usize, default: u32) -> u3
         Some(CursorEffectArg::Number(value)) => value.round().max(0.0) as u32,
         _ => default,
     }
-}
-
-fn normalize_image_file_request(mut request: ImageResolveRequest) -> ImageResolveRequest {
-    let ImageResolveSource::File(path) = &request.source else {
-        return request;
-    };
-    let Some(path) = path.as_utf8_str().filter(|path| path.starts_with('~')) else {
-        return request;
-    };
-    let expanded = neovm_core::emacs_core::fileio::expand_file_name(path, None);
-    request.source = ImageResolveSource::File(LispString::from_utf8(&expanded));
-    request
 }
 
 impl DisplayHost for PrimaryWindowDisplayHost {
@@ -1572,125 +1525,15 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
-    fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
-        let request = normalize_image_file_request(request);
-        let image = match self.request_image(request.clone())? {
-            Some(image) if image.metadata.is_some() => return Ok(Some(image)),
-            Some(image) => image,
-            None => return Ok(None),
-        };
-
-        let Some(terminal) =
-            wait_for_image_metadata(&self.image_metadata, image.image_id, Duration::from_secs(1))
-        else {
-            return Ok(None);
-        };
-        let metadata = match terminal {
-            ImageDecodeTerminal::Ready(metadata) => metadata,
-            ImageDecodeTerminal::Failed(error) => return Err(error),
-        };
-
-        let resolved = ResolvedImage {
-            image_id: image.image_id,
-            width: metadata.width,
-            height: metadata.height,
-            metadata: Some(metadata),
-        };
-        match self.resolved_images.lock() {
-            Ok(mut cache) => {
-                cache.insert(request, resolved.clone());
-            }
-            Err(poisoned) => {
-                let mut cache = poisoned.into_inner();
-                cache.insert(request, resolved.clone());
-            }
-        }
-        Ok(Some(resolved))
+    fn resolve_image_sync(
+        &self,
+        request: ImageResolveRequest,
+    ) -> Result<Option<ReadyImage>, String> {
+        self.image_catalog.resolve_sync(request)
     }
 
-    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
-        let request = normalize_image_file_request(request);
-        {
-            let mut cache = match self.resolved_images.lock() {
-                Ok(cache) => cache,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            if let Some(image) = cache.get(&request).cloned() {
-                if image.metadata.is_some() {
-                    return Ok(Some(image));
-                }
-                let (lock, _) = &*self.image_metadata;
-                let terminal = match lock.lock() {
-                    Ok(images) => images.get(&image.image_id).cloned(),
-                    Err(poisoned) => poisoned.into_inner().get(&image.image_id).cloned(),
-                };
-                if let Some(terminal) = terminal {
-                    match terminal {
-                        ImageDecodeTerminal::Ready(metadata) => {
-                            let updated = ResolvedImage {
-                                image_id: image.image_id,
-                                width: metadata.width,
-                                height: metadata.height,
-                                metadata: Some(metadata),
-                            };
-                            cache.insert(request, updated.clone());
-                            return Ok(Some(updated));
-                        }
-                        ImageDecodeTerminal::Failed(error) => return Err(error),
-                    }
-                }
-                return Ok(Some(image));
-            }
-        }
-
-        let image_id = next_host_image_id();
-        match &request.source {
-            ImageResolveSource::File(path) => {
-                self.send_render_command(
-                    RenderCommand::Asset(AssetCommand::ImageLoadFile {
-                        id: image_id,
-                        path: path.as_utf8_str().unwrap_or_default().to_owned(),
-                        max_width: request.max_width,
-                        max_height: request.max_height,
-                        fg_color: request.fg_color,
-                        bg_color: request.bg_color,
-                    }),
-                    "failed to queue image load",
-                )?;
-            }
-            ImageResolveSource::Data(data) => {
-                self.send_render_command(
-                    RenderCommand::Asset(AssetCommand::ImageLoadData {
-                        id: image_id,
-                        data: data.clone(),
-                        max_width: request.max_width,
-                        max_height: request.max_height,
-                        fg_color: request.fg_color,
-                        bg_color: request.bg_color,
-                    }),
-                    "failed to queue image data load",
-                )?;
-            }
-        }
-
-        let (width, height) = placeholder_image_dimensions(&request);
-
-        let resolved = ResolvedImage {
-            image_id,
-            width,
-            height,
-            metadata: None,
-        };
-        match self.resolved_images.lock() {
-            Ok(mut cache) => {
-                cache.insert(request, resolved.clone());
-            }
-            Err(poisoned) => {
-                let mut cache = poisoned.into_inner();
-                cache.insert(request, resolved.clone());
-            }
-        }
-        Ok(Some(resolved))
+    fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
+        Some(&self.image_catalog)
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
@@ -1824,15 +1667,6 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
             "failed to queue WebKit xwidget destroy",
         )
-    }
-}
-
-fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
-    match (request.max_width.max(1), request.max_height.max(1)) {
-        (width, height) if request.max_width > 0 && request.max_height > 0 => (width, height),
-        (width, _) if request.max_width > 0 => (width, width),
-        (_, height) if request.max_height > 0 => (height, height),
-        _ => (1, 1),
     }
 }
 
@@ -2503,8 +2337,11 @@ fn run_gui_evaluator_worker(
         last_window_titles: Mutex::new(HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&primary_window_size),
-        image_metadata: Arc::clone(&gui_image_metadata),
-        resolved_images: Mutex::new(HashMap::new()),
+        image_catalog: AsyncImageCatalog::new(
+            emacs_comms.cmd_tx.clone(),
+            Some(render_waker.clone()),
+            Arc::clone(&gui_image_metadata),
+        ),
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
     }));

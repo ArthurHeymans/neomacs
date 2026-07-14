@@ -1,3 +1,4 @@
+use super::image_catalog::{AsyncImageCatalog, wait_for_image_metadata};
 use super::tty_frontend::{TtyPopupDisplayHost, TtyTerminalHost};
 use super::tty_init::{
     default_controlling_tty_name, detect_tty_background_mode, should_enable_live_tty_io,
@@ -16,7 +17,7 @@ use super::{
     parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
-    sync_live_gui_frame_titles, sync_selected_gui_chrome_state, wait_for_image_metadata,
+    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
 };
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
@@ -30,9 +31,11 @@ use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
-    ImageResolveRequest, ImageResolveSource, PopupMenuEntry, PopupMenuRequest,
-    ResolvedImageMetadata, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
-    WebKitResolveSource,
+    PopupMenuEntry, PopupMenuRequest, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
+};
+use neovm_core::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -58,6 +61,13 @@ fn gui_display() -> BootstrapDisplayConfig {
 
 fn shared_primary_window_size(width: u32, height: u32) -> Arc<Mutex<PrimaryWindowSize>> {
     Arc::new(Mutex::new(PrimaryWindowSize { width, height }))
+}
+
+fn test_image_catalog(
+    cmd_tx: &crossbeam_channel::Sender<RenderCommand>,
+    image_metadata: SharedImageMetadata,
+) -> AsyncImageCatalog {
+    AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata)
 }
 
 #[test]
@@ -638,7 +648,7 @@ fn assert_selected_frame_matches_materialized_default_metrics(eval: &Context) {
 fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -646,11 +656,13 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -711,7 +723,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
 fn opening_gui_frame_adoption_applies_fullscreen_mode() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -719,11 +731,13 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -762,7 +776,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
 fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
@@ -773,11 +787,13 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         ])),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -810,7 +826,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
 fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
@@ -818,11 +834,13 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -870,14 +888,14 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
 }
 
 #[test]
-fn primary_display_host_request_image_queues_without_waiting_for_render_thread() {
+fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_thread() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let image_metadata = Arc::new((
         Mutex::new(std::collections::HashMap::new()),
         std::sync::Condvar::new(),
     ));
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -885,8 +903,7 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::clone(&image_metadata),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -905,17 +922,17 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     };
 
     let started = Instant::now();
-    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request.clone())
-        .expect("request image")
-        .expect("image handle");
+    let lookup = ImageCatalog::lookup(&host.image_catalog, request.clone());
 
     assert!(
         started.elapsed() < Duration::from_millis(100),
-        "request_image should not wait for render-thread dimensions"
+        "image lookup should not wait for render-thread dimensions"
     );
-    assert_eq!(image.width, 50);
-    assert_eq!(image.height, 50);
-    assert!(image.metadata.is_none());
+    let ImageLookup::Pending(image) = lookup else {
+        panic!("new image lookup should be pending");
+    };
+    assert_eq!(image.placement().width(), 50);
+    assert_eq!(image.placement().height(), 50);
     assert!(matches!(
         cmd_rx.try_recv().expect("queued image load"),
         RenderCommand::Asset(AssetCommand::ImageLoadFile {
@@ -924,10 +941,19 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
             ..
         })
     ));
+    assert_eq!(
+        ImageCatalog::lookup(&host.image_catalog, request.clone()),
+        ImageLookup::Pending(image.clone()),
+        "duplicate lookup should reuse the same pending image"
+    );
+    assert!(
+        cmd_rx.try_recv().is_err(),
+        "duplicate lookup must not enqueue a second decode"
+    );
 
     let (lock, cvar) = &*image_metadata;
     lock.lock().expect("image dimensions lock").insert(
-        image.image_id,
+        image.placement().image_id(),
         ImageDecodeTerminal::Ready(ResolvedImageMetadata {
             width: 25,
             height: 50,
@@ -937,27 +963,30 @@ fn primary_display_host_request_image_queues_without_waiting_for_render_thread()
     );
     cvar.notify_all();
 
-    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request)
-        .expect("request cached image")
-        .expect("image handle");
-    assert_eq!(image.width, 25);
-    assert_eq!(image.height, 50);
+    let ImageLookup::Ready(image) = ImageCatalog::lookup(&host.image_catalog, request) else {
+        panic!("decoded image lookup should be ready");
+    };
+    assert_eq!(image.metadata.width, 25);
+    assert_eq!(image.metadata.height, 50);
     assert_eq!(
         image.metadata,
-        Some(ResolvedImageMetadata {
+        ResolvedImageMetadata {
             width: 25,
             height: 50,
             background: 0x12_34_56,
             background_transparent: false,
-        })
+        }
     );
 }
 
 #[test]
-fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
-    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::bounded(1);
+    cmd_tx
+        .send(RenderCommand::Asset(AssetCommand::ImageFree { id: 1 }))
+        .expect("fill command queue");
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -965,11 +994,144 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = ImageResolveRequest {
+        source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
+        max_width: 24,
+        max_height: 24,
+        fg_color: 0,
+        bg_color: 0,
+    };
+    let (done_tx, done_rx) = crossbeam_channel::bounded(1);
+    let worker = std::thread::spawn(move || {
+        let lookup = ImageCatalog::lookup(&host.image_catalog, request);
+        done_tx.send((host, lookup)).expect("publish lookup result");
+    });
+
+    let first_result = done_rx.recv_timeout(Duration::from_millis(100));
+    cmd_rx.try_recv().expect("drain backpressuring command");
+    let (host, lookup) = match first_result {
+        Ok(result) => result,
+        Err(error) => {
+            let _result = done_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("blocked lookup should finish after draining queue");
+            worker.join().expect("lookup worker");
+            panic!("image catalog blocked on render command backpressure: {error}");
+        }
+    };
+    worker.join().expect("lookup worker");
+
+    let ImageLookup::Pending(image) = lookup else {
+        panic!("backpressured lookup should remain pending");
+    };
+    assert!(matches!(
+        cmd_rx.recv_timeout(Duration::from_secs(1)),
+        Ok(RenderCommand::Asset(AssetCommand::ImageLoadData { id, .. }))
+            if id == image.placement().image_id()
+    ));
+    assert_eq!(
+        ImageCatalog::lookup(
+            &host.image_catalog,
+            ImageResolveRequest {
+                source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
+                max_width: 24,
+                max_height: 24,
+                fg_color: 0,
+                bg_color: 0,
+            }
+        ),
+        ImageLookup::Pending(image.clone())
+    );
+    assert!(cmd_rx.try_recv().is_err(), "retry must not enqueue twice");
+}
+
+#[test]
+fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let image_metadata = Arc::new((
+        Mutex::new(std::collections::HashMap::new()),
+        std::sync::Condvar::new(),
+    ));
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx: cmd_tx.clone(),
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+    let request = ImageResolveRequest {
+        source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
+        max_width: 18,
+        max_height: 18,
+        fg_color: 0,
+        bg_color: 0,
+    };
+    let ImageLookup::Pending(expected) = ImageCatalog::lookup(&host.image_catalog, request.clone())
+    else {
+        panic!("new image should be pending");
+    };
+    cmd_rx.try_recv().expect("queued image command");
+
+    let locked_metadata = Arc::clone(&image_metadata);
+    let (locked_tx, locked_rx) = crossbeam_channel::bounded(1);
+    let (release_tx, release_rx) = crossbeam_channel::bounded::<()>(1);
+    let locker = std::thread::spawn(move || {
+        let _guard = locked_metadata
+            .0
+            .lock()
+            .expect("hold renderer metadata lock");
+        locked_tx.send(()).expect("publish locked state");
+        let _ = release_rx.recv_timeout(Duration::from_millis(250));
+    });
+    locked_rx.recv().expect("renderer metadata lock acquired");
+
+    let started = Instant::now();
+    let lookup = ImageCatalog::lookup(&host.image_catalog, request);
+    let elapsed = started.elapsed();
+    drop(release_tx);
+    locker.join().expect("metadata locker");
+    assert!(
+        elapsed < Duration::from_millis(100),
+        "image catalog waited {elapsed:?} for renderer metadata lock"
+    );
+    assert_eq!(lookup, ImageLookup::Pending(expected));
+}
+
+#[test]
+fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let host = PrimaryWindowDisplayHost {
+        cmd_tx: cmd_tx.clone(),
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: false,
+        primary_frame_id: None,
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(1600, 1800),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -981,9 +1143,10 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         bg_color: 0,
     };
 
-    neovm_core::emacs_core::DisplayHost::request_image(&host, request)
-        .expect("request image")
-        .expect("image handle");
+    assert!(matches!(
+        ImageCatalog::lookup(&host.image_catalog, request),
+        ImageLookup::Pending(_)
+    ));
 
     let home = std::env::var("HOME").expect("HOME for GNU tilde expansion");
     let expected = Path::new(&home)
@@ -1036,14 +1199,14 @@ fn failed_image_decode_wakes_waiter_and_is_negative_cached() {
 }
 
 #[test]
-fn primary_display_host_resolve_image_returns_cached_decode_failure_promptly() {
+fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptly() {
     let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
     let image_metadata: SharedImageMetadata = Arc::new((
         Mutex::new(std::collections::HashMap::new()),
         std::sync::Condvar::new(),
     ));
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1051,8 +1214,7 @@ fn primary_display_host_resolve_image_returns_cached_decode_failure_promptly() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::clone(&image_metadata),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1063,20 +1225,36 @@ fn primary_display_host_resolve_image_returns_cached_decode_failure_promptly() {
         fg_color: 0,
         bg_color: 0,
     };
-    let image = neovm_core::emacs_core::DisplayHost::request_image(&host, request.clone())
-        .unwrap()
-        .unwrap();
+    let ImageLookup::Pending(image) = ImageCatalog::lookup(&host.image_catalog, request.clone())
+    else {
+        panic!("new image should be pending");
+    };
     let (lock, cvar) = &*image_metadata;
     lock.lock().unwrap().insert(
-        image.image_id,
+        image.placement().image_id(),
         ImageDecodeTerminal::Failed("image decode failed".to_owned()),
     );
     cvar.notify_all();
 
     for _ in 0..2 {
         let started = Instant::now();
+        let ImageLookup::Failed(failed) =
+            ImageCatalog::lookup(&host.image_catalog, request.clone())
+        else {
+            panic!("failed decode should be negative-cached");
+        };
+        assert_eq!(failed.placement(), image.placement());
+        assert_eq!(failed.error, "image decode failed");
+        assert!(
+            started.elapsed() < Duration::from_millis(100),
+            "failed catalog lookup should return from the negative cache"
+        );
+    }
+
+    for _ in 0..2 {
+        let started = Instant::now();
         assert_eq!(
-            neovm_core::emacs_core::DisplayHost::resolve_image(&host, request.clone()),
+            neovm_core::emacs_core::DisplayHost::resolve_image_sync(&host, request.clone()),
             Err("image decode failed".to_owned())
         );
         assert!(
@@ -1090,7 +1268,7 @@ fn primary_display_host_resolve_image_returns_cached_decode_failure_promptly() {
 fn primary_display_host_request_video_queues_create_once_with_stable_id() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1098,11 +1276,13 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1140,7 +1320,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
 fn primary_display_host_request_video_preserves_uri_source() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1148,11 +1328,13 @@ fn primary_display_host_request_video_preserves_uri_source() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1186,7 +1368,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
 fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_id() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1194,11 +1376,13 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1239,7 +1423,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
 fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1247,11 +1431,13 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(1600, 1800),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1308,7 +1494,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
     eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1316,11 +1502,13 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     }));
@@ -1371,7 +1559,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let shared = shared_primary_window_size(843, 489);
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
@@ -1379,11 +1567,13 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&shared),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1433,7 +1623,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
 fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
@@ -1441,11 +1631,13 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1491,7 +1683,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         reply.send(Ok(Some("selected".to_owned()))).unwrap();
     });
     let mut host = PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: true,
@@ -1499,11 +1691,13 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     };
@@ -1550,7 +1744,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
 
     eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1558,11 +1752,13 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     }));
@@ -1594,7 +1790,7 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
     let _bootstrap = bootstrap_buffers(&mut eval, 843, 489, gui_display());
     let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
     eval.set_display_host(Box::new(PrimaryWindowDisplayHost {
-        cmd_tx,
+        cmd_tx: cmd_tx.clone(),
         render_waker: None,
         font_sizing: FontSizing::xft(),
         primary_window_adopted: false,
@@ -1602,11 +1798,13 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         last_window_titles: Mutex::new(std::collections::HashMap::new()),
         font_metrics: None,
         primary_window_size: shared_primary_window_size(843, 489),
-        image_metadata: Arc::new((
-            Mutex::new(std::collections::HashMap::new()),
-            std::sync::Condvar::new(),
-        )),
-        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        image_catalog: test_image_catalog(
+            &cmd_tx,
+            Arc::new((
+                Mutex::new(std::collections::HashMap::new()),
+                std::sync::Condvar::new(),
+            )),
+        ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
     }));

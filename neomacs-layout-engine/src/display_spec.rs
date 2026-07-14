@@ -7,10 +7,10 @@
 
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{
-    ImageResolveRequest, ImageResolveSource, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    VideoResolveRequest, VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
+use neovm_core::emacs_core::image_catalog::{ImageResolveRequest, ImageResolveSource};
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
 use strum::{EnumString, IntoStaticStr};

@@ -15,7 +15,8 @@
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
-use crate::emacs_core::eval::{Context, ImageResolveRequest, ImageResolveSource};
+use crate::emacs_core::eval::Context;
+use crate::emacs_core::image_catalog::{ImageResolveRequest, ImageResolveSource};
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
 
@@ -623,7 +624,7 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
     };
 
     let resolved = display_host
-        .resolve_image(request)
+        .resolve_image_sync(request)
         .map_err(|message| signal("error", vec![Value::string(message)]))?;
     let Some(image) = resolved else {
         return Err(signal(
@@ -633,8 +634,8 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
     };
 
     Ok(Value::cons(
-        Value::fixnum(image.width as i64),
-        Value::fixnum(image.height as i64),
+        Value::fixnum(image.metadata.width as i64),
+        Value::fixnum(image.metadata.height as i64),
     ))
 }
 
@@ -732,9 +733,11 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
         ));
     };
 
-    let _resolved = display_host
-        .request_image(request)
-        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    if let Some(catalog) = display_host.image_catalog()
+        && let super::image_catalog::ImageLookup::Failed(failed) = catalog.lookup(request)
+    {
+        return Err(signal("error", vec![Value::string(failed.error)]));
+    }
 
     Ok(Value::NIL)
 }

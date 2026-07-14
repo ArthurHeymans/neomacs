@@ -648,17 +648,11 @@ fn input_event_window_focus_construction() {
 }
 
 #[test]
-fn input_event_image_dimensions_ready_construction() {
-    let event = InputEvent::ImageDimensionsReady {
-        id: 7,
-        width: 640,
-        height: 480,
-    };
+fn input_event_image_terminal_state_changed_construction() {
+    let event = InputEvent::ImageStateChanged { id: 7 };
     match event {
-        InputEvent::ImageDimensionsReady { id, width, height } => {
+        InputEvent::ImageStateChanged { id } => {
             assert_eq!(id, 7);
-            assert_eq!(width, 640);
-            assert_eq!(height, 480);
         }
         _ => panic!("Wrong variant"),
     }

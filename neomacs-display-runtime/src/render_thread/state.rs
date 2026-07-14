@@ -14,7 +14,7 @@ use neomacs_display_protocol::{
     PointerAppearanceSelection, PresentationId, ToolBarImageSource, TransitionPolicy,
 };
 use neomacs_renderer_wgpu::WgpuRenderer;
-use neovm_core::emacs_core::eval::ResolvedImageMetadata;
+use neovm_core::emacs_core::image_catalog::ResolvedImageMetadata;
 
 use super::cursor::CursorState;
 use super::frame_windows::{

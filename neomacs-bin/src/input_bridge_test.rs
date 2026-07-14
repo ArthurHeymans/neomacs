@@ -23,12 +23,8 @@ fn non_mouse_move_is_included_in_input_bridge_info_logging() {
 }
 
 #[test]
-fn image_dimension_completion_becomes_layout_invalidation_instead_of_being_dropped() {
-    let event = convert_display_event(&DisplayEvent::ImageDimensionsReady {
-        id: 17,
-        width: 16,
-        height: 16,
-    });
+fn image_terminal_state_change_becomes_layout_invalidation_instead_of_being_dropped() {
+    let event = convert_display_event(&DisplayEvent::ImageStateChanged { id: 17 });
 
     assert!(matches!(event, Some(KbInputEvent::LayoutInvalidated)));
 }

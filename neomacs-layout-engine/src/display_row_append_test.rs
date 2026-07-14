@@ -111,8 +111,9 @@ use neomacs_display_protocol::types::DisplayWindowId;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
-use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
+use neovm_core::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
+use neovm_core::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
@@ -419,24 +420,25 @@ impl DisplayHost for RecordingAppendImageHost {
         Ok(())
     }
 
-    fn resolve_image(
+    fn resolve_image_sync(
         &self,
         _request: ImageResolveRequest,
-    ) -> Result<Option<ResolvedImage>, String> {
-        panic!("append display source rendering must use nonblocking request_image");
+    ) -> Result<Option<ReadyImage>, String> {
+        panic!("append display source rendering must not use synchronous image resolution");
     }
 
-    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+    fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
+        Some(self)
+    }
+}
+
+impl ImageCatalog for RecordingAppendImageHost {
+    fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
         self.requests
             .lock()
             .expect("image requests lock")
             .push(request);
-        Ok(Some(ResolvedImage {
-            image_id: 42,
-            width: 64,
-            height: 32,
-            metadata: None,
-        }))
+        ImageLookup::Pending(PendingImage::new(42, 64, 32))
     }
 }
 

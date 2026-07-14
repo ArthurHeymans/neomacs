@@ -376,21 +376,18 @@ impl RenderApp {
             for outcome in renderer.process_pending_images() {
                 let (id, terminal) = match outcome {
                     neomacs_renderer_wgpu::ImageDecodeOutcome::Ready { id, metadata } => {
-                        let metadata = neovm_core::emacs_core::eval::ResolvedImageMetadata {
-                            width: metadata.width,
-                            height: metadata.height,
-                            background: metadata.background,
-                            background_transparent: metadata.background_transparent,
-                        };
+                        let metadata =
+                            neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
+                                width: metadata.width,
+                                height: metadata.height,
+                                background: metadata.background,
+                                background_transparent: metadata.background_transparent,
+                            };
                         (id, super::ImageDecodeTerminal::Ready(metadata))
                     }
                     neomacs_renderer_wgpu::ImageDecodeOutcome::Failed { id, error } => {
                         (id, super::ImageDecodeTerminal::Failed(error))
                     }
-                };
-                let ready = match &terminal {
-                    super::ImageDecodeTerminal::Ready(metadata) => Some(metadata.clone()),
-                    super::ImageDecodeTerminal::Failed(_) => None,
                 };
                 let (lock, cvar) = &*self.image_metadata;
                 match lock.lock() {
@@ -402,14 +399,8 @@ impl RenderApp {
                     }
                 }
                 cvar.notify_all();
-                if let Some(metadata) = ready {
-                    self.comms
-                        .send_input(crate::thread_comm::InputEvent::ImageDimensionsReady {
-                            id,
-                            width: metadata.width,
-                            height: metadata.height,
-                        });
-                }
+                self.comms
+                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { id });
             }
         }
     }

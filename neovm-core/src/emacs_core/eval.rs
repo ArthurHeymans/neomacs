@@ -1463,40 +1463,6 @@ pub struct FontOtfCapability {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ImageResolveSource {
-    File(crate::heap_types::LispString),
-    Data(Vec<u8>),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ImageResolveRequest {
-    pub source: ImageResolveSource,
-    pub max_width: u32,
-    pub max_height: u32,
-    pub fg_color: u32,
-    pub bg_color: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedImageMetadata {
-    pub width: u32,
-    pub height: u32,
-    /// GNU's decoded four-corner background guess (0x00RRGGBB).
-    pub background: u32,
-    /// GNU's decoded four-corner mask classification.
-    pub background_transparent: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedImage {
-    pub image_id: u32,
-    pub width: u32,
-    pub height: u32,
-    /// Present only after the render thread has decoded the final pixels.
-    pub metadata: Option<ResolvedImageMetadata>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VideoResolveSource {
     File(crate::heap_types::LispString),
     Uri(crate::heap_types::LispString),
@@ -1635,17 +1601,19 @@ pub trait DisplayHost {
     ) -> Result<Option<FontOtfCapability>, String> {
         Ok(None)
     }
-    fn resolve_image(
+    /// GNU-compatible synchronous image query used by explicit Lisp
+    /// primitives such as `image-size`. This may wait for metadata and must
+    /// never be called from redisplay.
+    fn resolve_image_sync(
         &self,
-        _request: ImageResolveRequest,
-    ) -> Result<Option<ResolvedImage>, String> {
+        _request: super::image_catalog::ImageResolveRequest,
+    ) -> Result<Option<super::image_catalog::ReadyImage>, String> {
         Ok(None)
     }
-    fn request_image(
-        &self,
-        _request: ImageResolveRequest,
-    ) -> Result<Option<ResolvedImage>, String> {
-        Ok(None)
+    /// Nonblocking image catalog used by redisplay. Synchronous Lisp image
+    /// queries use `resolve_image_sync`; redisplay must use this catalog instead.
+    fn image_catalog(&self) -> Option<&dyn super::image_catalog::ImageCatalog> {
+        None
     }
     fn request_video(
         &self,

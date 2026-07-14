@@ -19,8 +19,11 @@ use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedImageMetadata,
-    ResolvedVideo, ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
+    DisplayHost, GuiFrameHostRequest, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
+    WebKitResolveRequest,
+};
+use neovm_core::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
@@ -152,24 +155,15 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
         Ok(())
     }
 
-    fn resolve_image(
+    fn resolve_image_sync(
         &self,
         _request: ImageResolveRequest,
-    ) -> Result<Option<ResolvedImage>, String> {
-        panic!("display row rendering must use nonblocking request_image");
+    ) -> Result<Option<ReadyImage>, String> {
+        panic!("display row rendering must not use synchronous image resolution");
     }
 
-    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
-        self.image_requests
-            .lock()
-            .expect("image requests lock")
-            .push(request);
-        Ok(Some(ResolvedImage {
-            image_id: 42,
-            width: self.image_width,
-            height: self.image_height,
-            metadata: self.image_metadata.clone(),
-        }))
+    fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
+        Some(self)
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
@@ -189,6 +183,24 @@ impl DisplayHost for RecordingDisplayRowMediaHost {
             .expect("webkit requests lock")
             .push(request);
         Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+    }
+}
+
+impl ImageCatalog for RecordingDisplayRowMediaHost {
+    fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
+        self.image_requests
+            .lock()
+            .expect("image requests lock")
+            .push(request);
+        match &self.image_metadata {
+            Some(metadata) => ImageLookup::Ready(ReadyImage {
+                image_id: 42,
+                metadata: metadata.clone(),
+            }),
+            None => {
+                ImageLookup::Pending(PendingImage::new(42, self.image_width, self.image_height))
+            }
+        }
     }
 }
 

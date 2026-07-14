@@ -1,6 +1,7 @@
 use super::*;
-use crate::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage,
+use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
+use crate::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage, ResolvedImageMetadata,
 };
 use std::sync::{Arc, Mutex};
 
@@ -18,30 +19,37 @@ impl DisplayHost for RecordingImageDisplayHost {
         Ok(())
     }
 
-    fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+    fn resolve_image_sync(
+        &self,
+        request: ImageResolveRequest,
+    ) -> Result<Option<ReadyImage>, String> {
         self.requests
             .lock()
             .expect("image requests lock")
             .push(request);
-        Ok(Some(ResolvedImage {
+        Ok(Some(ReadyImage {
             image_id: 9,
-            width: 40,
-            height: 30,
-            metadata: None,
+            metadata: ResolvedImageMetadata {
+                width: 40,
+                height: 30,
+                background: 0,
+                background_transparent: true,
+            },
         }))
     }
 
-    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
+    fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
+        Some(self)
+    }
+}
+
+impl ImageCatalog for RecordingImageDisplayHost {
+    fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
         self.requests
             .lock()
             .expect("image requests lock")
             .push(request);
-        Ok(Some(ResolvedImage {
-            image_id: 9,
-            width: 0,
-            height: 0,
-            metadata: None,
-        }))
+        ImageLookup::Pending(PendingImage::new(9, 0, 0))
     }
 }
 

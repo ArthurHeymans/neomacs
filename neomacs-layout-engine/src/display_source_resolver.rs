@@ -737,24 +737,19 @@ fn resolve_image_display_property(
 ) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_image_layout(display_prop, params.default_fg, params.default_bg)?;
     let scale = spec.scale;
-    let resolved = params
-        .display_host
-        .request_image(spec.request)
-        .ok()
-        .flatten()?;
-    let opaque_background = resolved
-        .metadata
-        .as_ref()
-        .filter(|metadata| !metadata.background_transparent)
-        .map(|metadata| metadata.background);
-    let mut width = resolved.width.max(1) as f32;
-    let mut height = resolved.height.max(1) as f32;
+    let lookup = params.display_host.image_catalog()?.lookup(spec.request);
+    let placement = lookup.placement();
+    let opaque_background = lookup
+        .ready_metadata()
+        .and_then(|metadata| (!metadata.background_transparent).then_some(metadata.background));
+    let mut width = placement.width().max(1) as f32;
+    let mut height = placement.height().max(1) as f32;
     if (scale - 1.0).abs() > f32::EPSILON && scale.is_finite() && scale > 0.0 {
         width = (width * scale).round().max(1.0);
         height = (height * scale).round().max(1.0);
     }
     Some(DisplayMediaReplacement::image(DisplayImageItem {
-        image_id: display_media_id(resolved.image_id),
+        image_id: display_media_id(placement.image_id()),
         width,
         height,
         ascent: spec.ascent.resolve(

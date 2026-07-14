@@ -126,8 +126,8 @@ pub enum InputEvent {
     /// WebKit view finished loading
     #[cfg(feature = "wpe-webkit")]
     WebKitLoadFinished { id: u32 },
-    /// Image dimensions ready (sent after async image load)
-    ImageDimensionsReady { id: u32, width: u32, height: u32 },
+    /// Image decoding reached a terminal state (ready or failed).
+    ImageStateChanged { id: u32 },
     /// Terminal child process exited
     #[cfg(feature = "neo-term")]
     TerminalExited { id: u32 },
@@ -908,7 +908,7 @@ impl RenderComms {
             InputEvent::WebKitProgressChanged { .. } => "webkit-progress-changed",
             #[cfg(feature = "wpe-webkit")]
             InputEvent::WebKitLoadFinished { .. } => "webkit-load-finished",
-            InputEvent::ImageDimensionsReady { .. } => "image-dimensions-ready",
+            InputEvent::ImageStateChanged { .. } => "image-state-changed",
             InputEvent::MenuSelection { .. } => "menu-selection",
             InputEvent::FileDrop { .. } => "file-drop",
             InputEvent::ToolBarClick { .. } => "toolbar-click",

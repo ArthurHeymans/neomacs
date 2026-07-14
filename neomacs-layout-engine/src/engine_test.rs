@@ -40,8 +40,11 @@ use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
 use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
-    ResolvedWebKit, VideoResolveRequest, WebKitResolveRequest,
+    DisplayHost, GuiFrameHostRequest, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
+    WebKitResolveRequest,
+};
+use neovm_core::emacs_core::image_catalog::{
+    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::load::{
     apply_runtime_startup_state, create_bootstrap_evaluator_cached_with_features,
@@ -1474,24 +1477,15 @@ impl DisplayHost for RecordingImageDisplayHost {
         Ok(())
     }
 
-    fn resolve_image(
+    fn resolve_image_sync(
         &self,
         _request: ImageResolveRequest,
-    ) -> Result<Option<ResolvedImage>, String> {
-        panic!("layout must use nonblocking request_image");
+    ) -> Result<Option<ReadyImage>, String> {
+        panic!("layout must not use synchronous image resolution");
     }
 
-    fn request_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
-        self.requests
-            .lock()
-            .expect("requests lock")
-            .push(request.clone());
-        Ok(Some(ResolvedImage {
-            image_id: 77,
-            width: 32,
-            height: 24,
-            metadata: None,
-        }))
+    fn image_catalog(&self) -> Option<&dyn ImageCatalog> {
+        Some(self)
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
@@ -1511,6 +1505,16 @@ impl DisplayHost for RecordingImageDisplayHost {
             .expect("webkit requests lock")
             .push(request);
         Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+    }
+}
+
+impl ImageCatalog for RecordingImageDisplayHost {
+    fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
+        self.requests
+            .lock()
+            .expect("requests lock")
+            .push(request.clone());
+        ImageLookup::Pending(PendingImage::new(77, 32, 24))
     }
 }
 
