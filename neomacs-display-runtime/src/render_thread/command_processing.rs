@@ -1,5 +1,5 @@
 use super::RenderApp;
-use crate::thread_comm::{LifecycleCommand, RenderCommand, WindowCommand};
+use crate::thread_comm::{ClipboardCommand, LifecycleCommand, RenderCommand, WindowCommand};
 
 impl RenderApp {
     /// Process pending commands from Emacs.
@@ -28,9 +28,43 @@ impl RenderApp {
                 RenderCommand::Terminal(c) => self.handle_terminal(c),
                 RenderCommand::Ui(c) => self.handle_ui(c),
                 RenderCommand::Config(c) => self.handle_config(c),
+                RenderCommand::Clipboard(c) => self.handle_clipboard(c),
             }
         }
 
         should_exit
+    }
+
+    fn handle_clipboard(&mut self, command: ClipboardCommand) {
+        match command {
+            ClipboardCommand::SetText {
+                selection,
+                text,
+                reply,
+            } => {
+                let result = match self.clipboard.as_mut() {
+                    Ok(clipboard) => clipboard.set_text(selection, text.as_deref()),
+                    Err(err) => Err(err.clone()),
+                };
+                if let Err(err) = &result {
+                    tracing::warn!(?selection, "clipboard set failed: {err}");
+                }
+                if reply.send(result).is_err() {
+                    tracing::debug!("clipboard set reply receiver was dropped");
+                }
+            }
+            ClipboardCommand::GetText { selection, reply } => {
+                let result = match self.clipboard.as_mut() {
+                    Ok(clipboard) => clipboard.text(selection),
+                    Err(err) => Err(err.clone()),
+                };
+                if let Err(err) = &result {
+                    tracing::warn!(?selection, "clipboard read failed: {err}");
+                }
+                if reply.send(result).is_err() {
+                    tracing::debug!("clipboard get reply receiver was dropped");
+                }
+            }
+        }
     }
 }

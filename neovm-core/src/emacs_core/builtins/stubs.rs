@@ -606,9 +606,11 @@ pub(crate) fn builtin_neomacs_clipboard_set(
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => Some(format!("{}", args[0])),
     };
-    set_cached_clipboard_text(text.clone());
     if let Some(host) = ctx.display_host.as_mut() {
-        let _ = host.set_clipboard_text(text.as_deref());
+        host.set_clipboard_text(text.as_deref())
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    } else {
+        set_cached_clipboard_text(text);
     }
     Ok(Value::NIL)
 }
@@ -618,17 +620,13 @@ pub(crate) fn builtin_neomacs_clipboard_get(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("neomacs-clipboard-get", &args, 0)?;
-    let host_text = ctx
-        .display_host
-        .as_mut()
-        .and_then(|host| host.clipboard_text().ok().flatten());
-    if let Some(text) = host_text.as_ref() {
-        set_cached_clipboard_text(Some(text.clone()));
-    }
-    Ok(host_text
-        .or_else(cached_clipboard_text)
-        .map(Value::string)
-        .unwrap_or(Value::NIL))
+    let text = if let Some(host) = ctx.display_host.as_mut() {
+        host.clipboard_text()
+            .map_err(|err| signal("error", vec![Value::string(err)]))?
+    } else {
+        cached_clipboard_text()
+    };
+    Ok(text.map(Value::string).unwrap_or(Value::NIL))
 }
 
 pub(crate) fn builtin_neomacs_primary_selection_set(
@@ -643,9 +641,11 @@ pub(crate) fn builtin_neomacs_primary_selection_set(
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes())),
         _ => Some(format!("{}", args[0])),
     };
-    set_cached_primary_selection_text(text.clone());
     if let Some(host) = ctx.display_host.as_mut() {
-        let _ = host.set_primary_selection_text(text.as_deref());
+        host.set_primary_selection_text(text.as_deref())
+            .map_err(|err| signal("error", vec![Value::string(err)]))?;
+    } else {
+        set_cached_primary_selection_text(text);
     }
     Ok(Value::NIL)
 }
@@ -655,17 +655,13 @@ pub(crate) fn builtin_neomacs_primary_selection_get(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("neomacs-primary-selection-get", &args, 0)?;
-    let host_text = ctx
-        .display_host
-        .as_mut()
-        .and_then(|host| host.primary_selection_text().ok().flatten());
-    if let Some(text) = host_text.as_ref() {
-        set_cached_primary_selection_text(Some(text.clone()));
-    }
-    Ok(host_text
-        .or_else(cached_primary_selection_text)
-        .map(Value::string)
-        .unwrap_or(Value::NIL))
+    let text = if let Some(host) = ctx.display_host.as_mut() {
+        host.primary_selection_text()
+            .map_err(|err| signal("error", vec![Value::string(err)]))?
+    } else {
+        cached_primary_selection_text()
+    };
+    Ok(text.map(Value::string).unwrap_or(Value::NIL))
 }
 
 pub(crate) fn builtin_neomacs_core_backend(args: Vec<Value>) -> EvalResult {

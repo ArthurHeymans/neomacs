@@ -21,6 +21,13 @@ pub use neomacs_display_protocol::{
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
+/// Native selection owned by the display server.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ClipboardSelection {
+    Clipboard,
+    Primary,
+}
+
 /// Monitor information transported from the frontend to the evaluator.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MonitorInfo {
@@ -589,6 +596,20 @@ pub enum ConfigCommand {
     },
 }
 
+/// Synchronous clipboard requests from the evaluator to the display owner.
+#[derive(Debug)]
+pub enum ClipboardCommand {
+    SetText {
+        selection: ClipboardSelection,
+        text: Option<String>,
+        reply: Sender<Result<(), String>>,
+    },
+    GetText {
+        selection: ClipboardSelection,
+        reply: Sender<Result<Option<String>, String>>,
+    },
+}
+
 /// Command from Emacs to render thread
 #[derive(Debug)]
 pub enum RenderCommand {
@@ -599,6 +620,7 @@ pub enum RenderCommand {
     Terminal(TerminalCommand),
     Ui(UiCommand),
     Config(ConfigCommand),
+    Clipboard(ClipboardCommand),
 }
 
 #[cfg(unix)]

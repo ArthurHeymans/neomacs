@@ -324,17 +324,17 @@ Used as `interprogram-paste-function'."
                                          &context (window-system neo))
   "Set SELECTION to VALUE on the Neomacs display.
 SELECTION is a symbol like `CLIPBOARD' or `PRIMARY'."
-  (when value
-    (let ((text (if (stringp value) value
-                  (substring-no-properties (symbol-name value)))))
-      (cond
-       ((eq selection 'CLIPBOARD)
-        (when (fboundp 'neomacs-clipboard-set)
-          (setq neomacs--last-clipboard-text text)
-          (neomacs-clipboard-set text)))
-       ((eq selection 'PRIMARY)
-        (when (fboundp 'neomacs-primary-selection-set)
-          (neomacs-primary-selection-set text)))))))
+  (let ((text (and value
+                   (if (stringp value) value
+                     (substring-no-properties (symbol-name value))))))
+    (cond
+     ((eq selection 'CLIPBOARD)
+      (when (fboundp 'neomacs-clipboard-set)
+        (setq neomacs--last-clipboard-text text)
+        (neomacs-clipboard-set text)))
+     ((eq selection 'PRIMARY)
+      (when (fboundp 'neomacs-primary-selection-set)
+        (neomacs-primary-selection-set text))))))
 
 (cl-defmethod gui-backend-get-selection (selection-symbol _target-type
                                           &context (window-system neo)

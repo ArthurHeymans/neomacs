@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use winit::dpi::{LogicalSize, PhysicalSize, Size};
 
+use crate::clipboard::ClipboardService;
 use crate::core::face::Face;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
@@ -636,6 +637,10 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
 
+    /// Clipboard state is owned by the display thread and lives as long as
+    /// the native display connection.
+    pub(super) clipboard: Result<ClipboardService, String>,
+
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
 
@@ -745,6 +750,7 @@ impl RenderApp {
 
         Self {
             comms,
+            clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
             faces: HashMap::new(),

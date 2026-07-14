@@ -3,7 +3,9 @@ use super::state::GuiChromeInteractionState;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::types::DisplayWindowId;
 use crate::thread_comm::FrameRef;
-use crate::thread_comm::{ThreadComms, UiCommand, WindowCommand};
+use crate::thread_comm::{
+    ClipboardCommand, ClipboardSelection, RenderCommand, ThreadComms, UiCommand, WindowCommand,
+};
 use neomacs_display_protocol::PopupMenuItem;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neovm_core::window::GuiFrameGeometryHints;
@@ -156,6 +158,37 @@ fn test_render_thread_creation() {
 
     assert!(emacs.input_rx.is_empty());
     assert!(render.cmd_rx.is_empty());
+}
+
+#[test]
+fn clipboard_command_before_display_initialization_returns_an_explicit_error() {
+    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let (emacs, render) = comms.split();
+    let mut app = RenderApp::new(
+        render,
+        800,
+        600,
+        "test".to_string(),
+        Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new())),
+        Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
+        true,
+        #[cfg(feature = "neo-term")]
+        Arc::new(Mutex::new(HashMap::new())),
+    );
+    let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+    emacs
+        .cmd_tx
+        .send(RenderCommand::Clipboard(ClipboardCommand::GetText {
+            selection: ClipboardSelection::Clipboard,
+            reply: reply_tx,
+        }))
+        .unwrap();
+
+    assert!(!app.process_commands());
+    assert_eq!(
+        reply_rx.recv().unwrap(),
+        Err("clipboard is unavailable before display initialization".to_owned())
+    );
 }
 
 #[test]

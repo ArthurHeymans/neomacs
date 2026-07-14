@@ -36,19 +36,15 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-#[cfg(not(target_os = "linux"))]
-use arboard::Clipboard;
-#[cfg(target_os = "linux")]
-use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
 use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
 use neomacs_display_runtime::render_thread::{
     ImageDecodeTerminal, RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata,
     SharedMonitorInfo, build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::thread_comm::{
-    AssetCommand, ConfigCommand, EmacsComms, FrameRef, InputEvent as DisplayInputEvent,
-    LifecycleCommand, MediaSource, RenderCommand, ThreadComms, UiCommand, WindowCommand,
-    WindowFullscreenMode,
+    AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
+    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, ThreadComms,
+    UiCommand, WindowCommand, WindowFullscreenMode,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::FontSizing;
@@ -827,6 +823,7 @@ impl EvaluatorExit {
 }
 
 const GUI_EVALUATOR_THREAD_STACK_SIZE: usize = 64 * 1024 * 1024;
+const CLIPBOARD_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
 struct PrimaryWindowDisplayHost {
     cmd_tx: crossbeam_channel::Sender<RenderCommand>,
@@ -981,6 +978,18 @@ impl PrimaryWindowDisplayHost {
         }
         Ok(())
     }
+
+    fn await_clipboard_reply<T>(
+        &self,
+        command: ClipboardCommand,
+        reply: crossbeam_channel::Receiver<Result<T, String>>,
+        operation: &str,
+    ) -> Result<T, String> {
+        self.send_render_command(RenderCommand::Clipboard(command), operation)?;
+        reply
+            .recv_timeout(CLIPBOARD_REPLY_TIMEOUT)
+            .map_err(|err| format!("{operation}: {err}"))?
+    }
 }
 
 fn render_fullscreen_mode(fullscreen: FrameFullscreen) -> WindowFullscreenMode {
@@ -991,60 +1000,6 @@ fn render_fullscreen_mode(fullscreen: FrameFullscreen) -> WindowFullscreenMode {
         FrameFullscreen::Fullheight => WindowFullscreenMode::Fullheight,
         FrameFullscreen::Maximized => WindowFullscreenMode::Maximized,
     }
-}
-
-fn set_system_clipboard_text(text: Option<&str>) -> Result<(), String> {
-    let Some(text) = text else {
-        return Ok(());
-    };
-    Clipboard::new()
-        .and_then(|mut clipboard| clipboard.set_text(text.to_owned()))
-        .map_err(|err| err.to_string())
-}
-
-fn get_system_clipboard_text() -> Result<Option<String>, String> {
-    Clipboard::new()
-        .and_then(|mut clipboard| clipboard.get_text())
-        .map(Some)
-        .map_err(|err| err.to_string())
-}
-
-#[cfg(target_os = "linux")]
-fn set_system_primary_selection_text(text: Option<&str>) -> Result<(), String> {
-    let Some(text) = text else {
-        return Ok(());
-    };
-    Clipboard::new()
-        .and_then(|mut clipboard| {
-            clipboard
-                .set()
-                .clipboard(LinuxClipboardKind::Primary)
-                .text(text.to_owned())
-        })
-        .map_err(|err| err.to_string())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn set_system_primary_selection_text(_text: Option<&str>) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-fn get_system_primary_selection_text() -> Result<Option<String>, String> {
-    Clipboard::new()
-        .and_then(|mut clipboard| {
-            clipboard
-                .get()
-                .clipboard(LinuxClipboardKind::Primary)
-                .text()
-        })
-        .map(Some)
-        .map_err(|err| err.to_string())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn get_system_primary_selection_text() -> Result<Option<String>, String> {
-    Ok(None)
 }
 
 fn render_cursor_effect_arg(arg: CursorEffectArg) -> RenderCursorEffectArg {
@@ -1159,19 +1114,53 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     fn set_clipboard_text(&mut self, text: Option<&str>) -> Result<(), String> {
-        set_system_clipboard_text(text)
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.await_clipboard_reply(
+            ClipboardCommand::SetText {
+                selection: ClipboardSelection::Clipboard,
+                text: text.map(str::to_owned),
+                reply: reply_tx,
+            },
+            reply_rx,
+            "failed to set system clipboard",
+        )
     }
 
     fn clipboard_text(&mut self) -> Result<Option<String>, String> {
-        get_system_clipboard_text()
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.await_clipboard_reply(
+            ClipboardCommand::GetText {
+                selection: ClipboardSelection::Clipboard,
+                reply: reply_tx,
+            },
+            reply_rx,
+            "failed to read system clipboard",
+        )
     }
 
     fn set_primary_selection_text(&mut self, text: Option<&str>) -> Result<(), String> {
-        set_system_primary_selection_text(text)
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.await_clipboard_reply(
+            ClipboardCommand::SetText {
+                selection: ClipboardSelection::Primary,
+                text: text.map(str::to_owned),
+                reply: reply_tx,
+            },
+            reply_rx,
+            "failed to set PRIMARY selection",
+        )
     }
 
     fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
-        get_system_primary_selection_text()
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.await_clipboard_reply(
+            ClipboardCommand::GetText {
+                selection: ClipboardSelection::Primary,
+                reply: reply_tx,
+            },
+            reply_rx,
+            "failed to read PRIMARY selection",
+        )
     }
 
     fn opening_gui_frame_pending(&self) -> bool {

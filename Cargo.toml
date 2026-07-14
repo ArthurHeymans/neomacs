@@ -147,6 +147,7 @@ swash = "0.2.6"
 fontdb = "0.23"
 ttf-parser = "0.25"
 arboard = "3.4"
+smithay-clipboard = "0.7.3"
 
 # GStreamer (video)
 gstreamer = "0.25"

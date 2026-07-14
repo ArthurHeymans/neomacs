@@ -136,6 +136,13 @@ impl RenderApp {
                     let window = Arc::new(window);
                     NativeTextInputPolicy::for_gui_frame().apply_to_window(&window);
 
+                    if self.clipboard.is_err() {
+                        self.clipboard = crate::clipboard::ClipboardService::for_window(&window);
+                        if let Err(err) = &self.clipboard {
+                            tracing::error!("Failed to initialize clipboard service: {err}");
+                        }
+                    }
+
                     let raw_scale_factor = window.scale_factor();
                     let effective_scale = effective_window_scale_factor(raw_scale_factor);
                     {
@@ -556,6 +563,13 @@ impl RenderApp {
         // Solution: leak the adapter to prevent eglTerminate from ever running.
         // The OS reclaims all GPU resources on process exit anyway.
         tracing::info!("Event loop exiting, cleaning up GPU resources");
+
+        // The Wayland clipboard borrows Winit's wl_display. Stop its worker
+        // before dropping any native windows or the event-loop connection.
+        drop(std::mem::replace(
+            &mut self.clipboard,
+            Err("display is shutting down".to_owned()),
+        ));
 
         // Drop WebKit views and WPE backend (hold EGL contexts)
         #[cfg(feature = "wpe-webkit")]

@@ -14,6 +14,7 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod backend;
+pub(crate) mod clipboard;
 pub mod core;
 pub mod thread_comm;
 pub mod tty_input;

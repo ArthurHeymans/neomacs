@@ -105,6 +105,7 @@ neo-term = [
 windows-sys.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
+smithay-clipboard.workspace = true
 x11-dl.workspace = true
 
 [lints]

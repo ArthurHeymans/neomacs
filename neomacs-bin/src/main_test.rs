@@ -20,8 +20,8 @@ use super::{
 };
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
-    AssetCommand, ConfigCommand, FrameRef, LifecycleCommand, MediaSource, RenderCommand, UiCommand,
-    WindowCommand, WindowFullscreenMode,
+    AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef, LifecycleCommand,
+    MediaSource, RenderCommand, UiCommand, WindowCommand, WindowFullscreenMode,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::face_height_to_pixels;
@@ -1464,6 +1464,57 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
 }
 
 #[test]
+fn primary_window_display_host_round_trips_clipboard_requests_through_renderer() {
+    let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+    let worker = std::thread::spawn(move || {
+        let RenderCommand::Clipboard(ClipboardCommand::SetText {
+            selection,
+            text,
+            reply,
+        }) = cmd_rx.recv().unwrap()
+        else {
+            panic!("expected clipboard set command");
+        };
+        assert_eq!(selection, ClipboardSelection::Clipboard);
+        assert_eq!(text.as_deref(), Some("copied"));
+        reply.send(Ok(())).unwrap();
+
+        let RenderCommand::Clipboard(ClipboardCommand::GetText { selection, reply }) =
+            cmd_rx.recv().unwrap()
+        else {
+            panic!("expected PRIMARY get command");
+        };
+        assert_eq!(selection, ClipboardSelection::Primary);
+        reply.send(Ok(Some("selected".to_owned()))).unwrap();
+    });
+    let mut host = PrimaryWindowDisplayHost {
+        cmd_tx,
+        render_waker: None,
+        font_sizing: FontSizing::xft(),
+        primary_window_adopted: true,
+        primary_frame_id: Some(FrameId(0x100000001)),
+        last_window_titles: Mutex::new(std::collections::HashMap::new()),
+        font_metrics: None,
+        primary_window_size: shared_primary_window_size(843, 489),
+        image_metadata: Arc::new((
+            Mutex::new(std::collections::HashMap::new()),
+            std::sync::Condvar::new(),
+        )),
+        resolved_images: Mutex::new(std::collections::HashMap::new()),
+        resolved_videos: Mutex::new(std::collections::HashMap::new()),
+        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+    };
+
+    neovm_core::emacs_core::DisplayHost::set_clipboard_text(&mut host, Some("copied"))
+        .expect("clipboard set should round-trip through renderer");
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::primary_selection_text(&mut host).unwrap(),
+        Some("selected".to_owned())
+    );
+    worker.join().unwrap();
+}
+
+#[test]
 fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
         .expect("cached bootstrap evaluator");
@@ -2128,6 +2179,34 @@ fn neo_window_system_initialization_defers_neomacs_only_setup_until_window_setup
         .unwrap_or_else(|err| format!("{err:?}"));
 
     assert_eq!(rendered, "t");
+}
+
+#[test]
+fn neo_selection_backend_forwards_nil_to_disown_clipboard_and_primary() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+
+    let rendered = eval
+        .eval_str(
+            r#"
+        (progn
+          (require 'cl-lib)
+          (load "term/neo-win.el" nil t)
+          (let ((window-system 'neo)
+                (calls nil))
+            (cl-letf (((symbol-function 'neomacs-clipboard-set)
+                       (lambda (value) (push (list 'clipboard value) calls)))
+                      ((symbol-function 'neomacs-primary-selection-set)
+                       (lambda (value) (push (list 'primary value) calls))))
+              (gui-backend-set-selection 'CLIPBOARD nil)
+              (gui-backend-set-selection 'PRIMARY nil))
+            (nreverse calls)))
+        "#,
+        )
+        .map(|value| print_value_with_eval(&mut eval, &value))
+        .unwrap_or_else(|err| format!("{err:?}"));
+
+    assert_eq!(rendered, "((clipboard nil) (primary nil))");
 }
 
 #[test]

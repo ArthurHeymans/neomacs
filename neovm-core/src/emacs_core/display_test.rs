@@ -1,9 +1,11 @@
 use super::*;
+use crate::EvalError;
 use crate::emacs_core::dispnew::pure::{
     builtin_internal_show_cursor, builtin_internal_show_cursor_p, builtin_open_termscript,
     builtin_redraw_frame, builtin_send_string_to_terminal, reset_dispnew_thread_locals,
 };
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
+use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::terminal::pure::{
     builtin_controlling_tty_p, builtin_frame_terminal, builtin_resume_tty,
     builtin_selected_terminal, builtin_set_terminal_parameter, builtin_suspend_tty,
@@ -28,6 +30,34 @@ impl DisplayHost for ImageCapableDisplayHost {
 
     fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
         Ok(())
+    }
+}
+
+struct FailingClipboardDisplayHost;
+
+impl DisplayHost for FailingClipboardDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn set_clipboard_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Err("system clipboard unavailable".to_owned())
+    }
+
+    fn clipboard_text(&mut self) -> Result<Option<String>, String> {
+        Err("system clipboard unavailable".to_owned())
+    }
+
+    fn set_primary_selection_text(&mut self, _text: Option<&str>) -> Result<(), String> {
+        Err("system clipboard unavailable".to_owned())
+    }
+
+    fn primary_selection_text(&mut self) -> Result<Option<String>, String> {
+        Err("system clipboard unavailable".to_owned())
     }
 }
 
@@ -76,6 +106,31 @@ fn raw_context_does_not_prebind_x_selection_aliases() {
             eval.obarray.symbol_function(name).is_none(),
             "{name} should come from GNU select.el, not Context::new",
         );
+    }
+}
+
+#[test]
+fn gui_clipboard_errors_are_visible_instead_of_returning_cached_text() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    eval.eval_str(r#"(neomacs-clipboard-set "stale")"#)
+        .expect("headless clipboard cache should remain available");
+    eval.set_display_host(Box::new(FailingClipboardDisplayHost));
+
+    for form in [
+        r#"(neomacs-clipboard-set "new")"#,
+        "(neomacs-clipboard-get)",
+        r#"(neomacs-primary-selection-set "new")"#,
+        "(neomacs-primary-selection-get)",
+    ] {
+        let err = eval
+            .eval_str(form)
+            .expect_err("GUI clipboard backend failures must reach Lisp");
+        let EvalError::Signal { symbol, data, .. } = err else {
+            panic!("clipboard backend failure should signal an error");
+        };
+        assert_eq!(resolve_sym(symbol), "error");
+        assert_eq!(data, vec![Value::string("system clipboard unavailable")]);
     }
 }
 
