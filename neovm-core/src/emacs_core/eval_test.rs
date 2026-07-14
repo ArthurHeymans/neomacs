@@ -20961,3 +20961,31 @@ fn unwind_cleanup_depth_rebalances_when_guard_scope_panics() {
         "a panicking cleanup scope must not leave throw-on-input suppressed"
     );
 }
+
+#[test]
+fn eval_task_drain_runs_queued_closures_in_order() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut ctx = Context::new();
+    let (tx, rx) =
+        crossbeam_channel::unbounded::<crate::emacs_core::eval::EvalThreadTask>();
+    ctx.init_eval_task_system(rx);
+
+    let counter = Arc::new(AtomicUsize::new(0));
+    for _ in 0..3 {
+        let c = counter.clone();
+        tx.send(Box::new(move |_ctx: &mut Context| {
+            // Runs synchronously on the Lisp thread when drained.
+            c.fetch_add(1, Ordering::Relaxed);
+        }))
+        .unwrap();
+    }
+    // Nothing runs until the safe-point drain.
+    assert_eq!(counter.load(Ordering::Relaxed), 0);
+    ctx.drain_eval_tasks();
+    assert_eq!(counter.load(Ordering::Relaxed), 3);
+    // Draining again with no queued tasks is a harmless no-op.
+    ctx.drain_eval_tasks();
+    assert_eq!(counter.load(Ordering::Relaxed), 3);
+}
