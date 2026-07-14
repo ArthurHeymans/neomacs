@@ -235,6 +235,10 @@
 
               # For bindgen (generates Rust bindings from C headers)
               pkgs.llvmPackages.clang
+
+              # Frozen wall clock for date/time-sensitive oracle tests
+              # (puts `faketime` on PATH; the .so path is exported below).
+              pkgs.libfaketime
             ];
 
             buildInputs = commonBuildInputsFor pkgs
@@ -282,6 +286,11 @@
 
             shellHook = ''
               export RUST_BACKTRACE=1
+
+              # libfaketime shared object for frozen-clock oracle tests. Pinned
+              # here so the resolver never has to guess the path from PATH.
+              export NEOVM_LIBFAKETIME_SO="${pkgs.libfaketime}/lib/libfaketime.so.1"
+
               echo "=== Neomacs Development Environment ==="
               echo ""
               echo "Rust: $(rustc --version)"

@@ -171,6 +171,89 @@ fn apply_extra_env(cmd: &mut Command, extra_env: &[(&str, &str)]) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Frozen wall clock (libfaketime) for date/time-sensitive oracle tests
+// ---------------------------------------------------------------------------
+//
+// A handful of oracle forms embed the *run-time* wall clock in their output:
+// org-agenda's "today" line and week header, `%t`/`%U` capture timestamps,
+// clock/export/archive stamps, and so on. The GNU recording process and the
+// Neomacs replay process sample the clock seconds apart -- and, across a
+// midnight boundary, on different days -- so that output is non-deterministic.
+//
+// Rather than scrub every timestamp format out of the serialized result with
+// bespoke regexes (an open-ended, error-prone game of whack-a-mole -- a greedy
+// pattern can silently mask a *real* divergence), the tests that need it opt
+// into a frozen clock: both subprocesses run under libfaketime pinned to one
+// fixed instant, so their raw output already agrees with no normalization.
+// libfaketime interposes glibc's `clock_gettime`/`gettimeofday`, which is the
+// one layer both engines share (GNU's C `current_timespec` and Neomacs's Rust
+// `std::time` both bottom out there), so it catches even `format-time-string`,
+// which reads the C clock directly and would slip past a Lisp-level redefinition
+// of `current-time`.
+
+/// A fixed wall-clock instant shared by every frozen-clock oracle test: Monday
+/// 2026-06-15 12:00:00. Deliberately an unremarkable weekday far from any real
+/// suite run date, so a checked-in expectation never depends on when the suite
+/// runs. The leading `@` pins the clock (it does not advance from this instant).
+const ORACLE_FROZEN_TIME: &str = "@2026-06-15 12:00:00";
+
+/// Resolve `libfaketime.so.1`. Prefer the explicit `NEOVM_LIBFAKETIME_SO`
+/// override (set by the flake devShell for reproducibility); otherwise locate
+/// it relative to the `faketime` binary on `PATH`. Frozen-clock tests cannot be
+/// deterministic without it, so a missing library is a hard, clearly-explained
+/// error rather than a silently flaky pass.
+fn libfaketime_so_path() -> String {
+    if let Ok(explicit) = std::env::var("NEOVM_LIBFAKETIME_SO") {
+        if !explicit.is_empty() {
+            return explicit;
+        }
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let bin = dir.join("faketime");
+            if !bin.is_file() {
+                continue;
+            }
+            // Canonicalize resolves the nix-profile symlink to the real
+            // <prefix>/bin/faketime, whose sibling <prefix>/lib holds the .so.
+            let Ok(real) = std::fs::canonicalize(&bin) else {
+                continue;
+            };
+            let Some(prefix) = real.parent().and_then(|p| p.parent()) else {
+                continue;
+            };
+            for rel in [
+                "lib/libfaketime.so.1",
+                "lib/faketime/libfaketime.so.1",
+                "lib64/libfaketime.so.1",
+                "lib64/faketime/libfaketime.so.1",
+            ] {
+                let so = prefix.join(rel);
+                if so.is_file() {
+                    return so.to_string_lossy().into_owned();
+                }
+            }
+        }
+    }
+    panic!(
+        "frozen-time oracle tests require libfaketime, but libfaketime.so.1 could not be located. \
+         Set NEOVM_LIBFAKETIME_SO to its path, or run inside `nix develop` (the devShell provides it)."
+    );
+}
+
+/// The env vars that pin a spawned engine's wall clock to [`ORACLE_FROZEN_TIME`].
+/// `FAKETIME_DONT_FAKE_MONOTONIC=1` freezes only `CLOCK_REALTIME` (the wall
+/// clock that leaks into timestamps) and leaves `CLOCK_MONOTONIC` real, so the
+/// subprocess's own `select`/timeout logic is unaffected.
+fn frozen_time_env() -> Vec<(String, String)> {
+    vec![
+        ("LD_PRELOAD".to_string(), libfaketime_so_path()),
+        ("FAKETIME".to_string(), ORACLE_FROZEN_TIME.to_string()),
+        ("FAKETIME_DONT_FAKE_MONOTONIC".to_string(), "1".to_string()),
+    ]
+}
+
 fn project_lisp_dir() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest.parent().expect("project root").join("lisp")
@@ -921,6 +1004,48 @@ pub(crate) fn assert_oracle_parity_with_env_expect(
             )
         },
         || run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env, &project_lisp_dir()),
+    );
+}
+
+/// Like [`assert_oracle_parity_expect`], but runs both engines under a frozen
+/// wall clock ([`ORACLE_FROZEN_TIME`]) via libfaketime. Use this for forms
+/// whose output embeds the run-time date/time (org-agenda "today", `%t`/`%U`
+/// captures, clock/export/archive stamps) so the checked-in expectation is
+/// stable regardless of when -- or across what midnight boundary -- the suite
+/// runs. Because both processes see the identical instant, no date/time output
+/// normalization is needed. A shared per-case tempdir is provided so file paths
+/// stay normalizable alongside the frozen clock.
+pub(crate) fn assert_oracle_parity_frozen_time_expect(form: &str, expected: expect_test::Expect) {
+    let env_owned = frozen_time_env();
+    let extra_env: Vec<(&str, &str)> = env_owned
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    let tmpdir = tempfile::Builder::new()
+        .prefix("neovm-oracle-case-")
+        .tempdir()
+        .expect("shared oracle tempdir should be created");
+    assert_oracle_parity_expect_with_runners(
+        form,
+        expected,
+        || {
+            run_neomacs_binary_eval_inner_with_tmpdir(
+                form,
+                &[],
+                Some(tmpdir.path()),
+                &extra_env,
+                &project_lisp_dir(),
+            )
+        },
+        || {
+            run_oracle_eval_inner_with_tmpdir(
+                form,
+                &[],
+                Some(tmpdir.path()),
+                &extra_env,
+                &project_lisp_dir(),
+            )
+        },
     );
 }
 
