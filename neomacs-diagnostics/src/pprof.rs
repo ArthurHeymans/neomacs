@@ -171,11 +171,11 @@ pub fn folded_to_pprof(folded: &str) -> Vec<u8> {
     }
 
     // 5: functions
-    for i in 0..order.len() {
+    for (i, &name_idx) in name_str_idx.iter().enumerate() {
         let id = i as u64 + 1;
         let mut function = ProtoBuf::new();
         function.field_varint(1, id);
-        function.field_varint(2, name_str_idx[i] as u64);
+        function.field_varint(2, name_idx as u64);
         profile.field_message(5, &function);
     }
 
