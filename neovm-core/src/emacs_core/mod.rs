@@ -86,6 +86,7 @@ pub mod plist;
 pub(crate) mod position;
 pub(crate) mod prefix;
 pub mod print;
+pub mod gc_stats;
 pub mod process;
 pub(crate) mod profiler;
 #[cfg(test)]
