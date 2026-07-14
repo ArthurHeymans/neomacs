@@ -65,8 +65,10 @@ pub(crate) struct AppState {
     pub(crate) captures: Arc<std::sync::Mutex<crate::capture_store::CaptureStore>>,
     /// Serializes native (pprof-rs) captures — only one SIGPROF profiler can be
     /// installed at a time. Independent of `capture_lock` (the Lisp poll-sampler
-    /// and native SIGPROF sampler do not conflict).
-    pub(crate) native_capture_lock: Arc<tokio::sync::Mutex<()>>,
+    /// and native SIGPROF sampler do not conflict). A `std` mutex (not tokio) so
+    /// it can be held *inside* the blocking capture task, tracking the profiler
+    /// guard's true lifetime even if the request future is cancelled.
+    pub(crate) native_capture_lock: Arc<std::sync::Mutex<()>>,
 }
 
 /// Build the diagnostics HTTP router.
@@ -79,7 +81,7 @@ pub fn router(
         profiler,
         capture_lock: Arc::new(tokio::sync::Mutex::new(())),
         captures: Arc::new(std::sync::Mutex::new(crate::capture_store::CaptureStore::new(16))),
-        native_capture_lock: Arc::new(tokio::sync::Mutex::new(())),
+        native_capture_lock: Arc::new(std::sync::Mutex::new(())),
     };
     Router::new()
         .route("/", get(index))
@@ -320,9 +322,16 @@ async fn capture_native(
     svg: bool,
 ) -> Result<Vec<u8>, (StatusCode, String)> {
     let secs = secs.clamp(1, 60);
-    let _guard = state.native_capture_lock.lock().await;
     let freq = crate::native::DEFAULT_FREQ_HZ;
+    let lock = state.native_capture_lock.clone();
     tokio::task::spawn_blocking(move || {
+        // Hold the serialization lock for the profiler's TRUE lifetime. Taking
+        // it inside the blocking task (not around the await) makes it immune to
+        // request cancellation — a dropped future can't cancel spawn_blocking,
+        // so a concurrent capture correctly queues here instead of racing
+        // pprof-rs's internal guard into a spurious error. Poison is recoverable
+        // (the guarded unit has no invariant).
+        let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
         if svg {
             crate::native::capture_native_svg(secs, freq)
         } else {
@@ -375,8 +384,16 @@ async fn diff(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> 
         )
             .into_response();
     };
-    let store = state.captures.lock().unwrap();
-    let (Some(before), Some(after)) = (store.folded(before_id), store.folded(after_id)) else {
+    // Clone the two captures out, then release the store lock before the
+    // CPU-bound diff so it never blocks /metrics or /live on the runtime thread.
+    let folded = {
+        let store = state.captures.lock().unwrap_or_else(|e| e.into_inner());
+        match (store.folded(before_id), store.folded(after_id)) {
+            (Some(b), Some(a)) => Some((b.to_string(), a.to_string())),
+            _ => None,
+        }
+    };
+    let Some((before, after)) = folded else {
         return (
             StatusCode::NOT_FOUND,
             "unknown capture id (it may have been evicted; see /captures)\n",
@@ -384,7 +401,7 @@ async fn diff(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> 
             .into_response();
     };
     let top = p.top.unwrap_or(20).clamp(1, 1000);
-    let report = crate::report::diff_from_folded(before, after, top);
+    let report = crate::report::diff_from_folded(&before, &after, top);
     Json(serde_json::json!({
         "before": before_id,
         "after": after_id,
