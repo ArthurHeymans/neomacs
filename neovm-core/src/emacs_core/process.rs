@@ -36,12 +36,6 @@ use std::net::{
 };
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, RawFd};
-cfg_select! {
-    target_os = "linux" => {
-        use std::os::fd::{FromRawFd, OwnedFd};
-    }
-    _ => {}
-}
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
@@ -81,75 +75,10 @@ pub enum NetworkSocket {
     UnixDatagram(UnixDatagram),
 }
 
-cfg_select! {
-    target_os = "linux" => {
-        /// Platform child-status wait source.
-        ///
-        /// GNU Emacs waits for subprocess I/O and child status in one primitive:
-        /// Unix uses its SIGCHLD self-pipe in `wait_reading_process_output`,
-        /// while w32 waits on subprocess handles alongside pipe-reader events.
-        /// Linux pidfds provide the same pollable status edge per subprocess.
-        pub struct ChildStatusSource {
-            pidfd: OwnedFd,
-        }
-    }
-    _ => {
-        /// Platform child-status wait source.
-        ///
-        /// GNU Emacs waits for subprocess I/O and child status in one primitive:
-        /// Unix uses its SIGCHLD self-pipe in `wait_reading_process_output`,
-        /// while w32 waits on subprocess handles alongside pipe-reader events.
-        /// Non-Linux backends keep using the existing explicit status poll until
-        /// their GNU-style wake source is wired here.
-        pub struct ChildStatusSource;
-    }
-}
-
-impl ChildStatusSource {
-    fn open(pid: u32) -> Option<Self> {
-        cfg_select! {
-            target_os = "linux" => {
-                let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) };
-                if fd < 0 {
-                    return None;
-                }
-                // SAFETY: `pidfd_open` returned a new owned descriptor.
-                Some(Self {
-                    pidfd: unsafe { OwnedFd::from_raw_fd(fd as RawFd) },
-                })
-            }
-            _ => {
-                let _ = pid;
-                None
-            }
-        }
-    }
-
-    fn register_with_poller(&self, poller: Option<&polling::Poller>, id: ProcessId) {
-        let Some(poller) = poller else {
-            return;
-        };
-        cfg_select! {
-            target_os = "linux" => {
-                let _ = ProcessManager::register_readable_source(poller, &self.pidfd, id);
-            }
-            _ => {
-                let _ = (poller, id);
-            }
-        }
-    }
-
-    fn unregister_from_poller(&self, poller: &polling::Poller) {
-        cfg_select! {
-            target_os = "linux" => {
-                let _ = poller.delete(&self.pidfd);
-            }
-            _ => {
-                let _ = poller;
-            }
-        }
-    }
-}
+/// Platform abstraction layer for OS-specific subprocess facilities (currently
+/// the child-status wait source). See `process/sys/mod.rs`.
+mod sys;
+use sys::ChildStatusSource;
 
 /// GNU-compatible GnuTLS process initialization stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
