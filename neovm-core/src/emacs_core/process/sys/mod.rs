@@ -31,6 +31,11 @@ mod tty;
 pub use tty::configure_child_pty_tty;
 
 #[cfg(unix)]
+mod fd;
+#[cfg(unix)]
+pub use fd::set_fd_nonblocking;
+
+#[cfg(unix)]
 mod socket_options;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use socket_options::set_socket_priority;

@@ -3501,10 +3501,7 @@ impl ProcessManager {
         use std::os::unix::io::AsRawFd;
         let fd = stdout.as_raw_fd();
         // Set non-blocking before registering.
-        unsafe {
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        }
+        let _ = sys::set_fd_nonblocking(fd);
         // Use process id as the event key so we know which process is ready.
         let _ = Self::register_readable_raw_fd(poller, fd, id);
     }
@@ -3548,10 +3545,7 @@ impl ProcessManager {
     ) {
         use std::os::unix::io::AsRawFd;
         let fd = stderr.as_raw_fd();
-        unsafe {
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        }
+        let _ = sys::set_fd_nonblocking(fd);
         let _ = Self::register_readable_raw_fd(poller, fd, id);
     }
 
@@ -3591,10 +3585,7 @@ impl ProcessManager {
     ) {
         use std::os::unix::io::AsRawFd;
         let fd = stdin.as_raw_fd();
-        unsafe {
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        }
+        let _ = sys::set_fd_nonblocking(fd);
         let _ = Self::register_writable_raw_fd(poller, fd, id);
     }
 
@@ -4333,10 +4324,7 @@ impl ProcessManager {
         // Register the PTY master fd with the poller for non-blocking I/O.
         if let Some(master_fd) = pty_pair.master.as_raw_fd() {
             // Set non-blocking on the master fd.
-            unsafe {
-                let flags = libc::fcntl(master_fd, libc::F_GETFL);
-                libc::fcntl(master_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
+            let _ = sys::set_fd_nonblocking(master_fd);
             if let Some(poller) = self.wait_backend.poller() {
                 let _ = Self::register_readable_raw_fd(poller, master_fd, id);
             }
@@ -4486,10 +4474,7 @@ impl ProcessManager {
             use std::os::unix::io::AsRawFd;
             let fd = stdout.as_raw_fd();
             // Set non-blocking
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
+            let _ = sys::set_fd_nonblocking(fd);
         }
 
         let mut buf = vec![0u8; read_len];
@@ -4520,10 +4505,7 @@ impl ProcessManager {
         {
             use std::os::unix::io::AsRawFd;
             let fd = stderr.as_raw_fd();
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            }
+            let _ = sys::set_fd_nonblocking(fd);
         }
 
         let mut buf = vec![0u8; read_len];
@@ -5090,10 +5072,7 @@ impl ProcessManager {
             {
                 use std::os::unix::io::AsRawFd;
                 let fd = stdin.as_raw_fd();
-                unsafe {
-                    let flags = libc::fcntl(fd, libc::F_GETFL);
-                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                }
+                let _ = sys::set_fd_nonblocking(fd);
             }
             stdin.write(bytes)
         } else if let Some(ref mut tls) = proc.tls_stream {
