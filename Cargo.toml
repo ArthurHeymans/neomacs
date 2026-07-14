@@ -5,6 +5,7 @@ members = [
     "neomacs-display-protocol",
     "neomacs-layout-engine",
     "neomacs-renderer-wgpu",
+    "neomacs-diagnostics",
     "neovm-core",
     "neovm-host-abi",
     "neovm-oracle-tests",
@@ -51,6 +52,7 @@ neomacs-display-runtime = { path = "neomacs-display-runtime", version = "0.0.12"
 neomacs-display-protocol = { path = "neomacs-display-protocol", version = "0.0.12", default-features = false }
 neomacs-layout-engine = { path = "neomacs-layout-engine", version = "0.0.12", default-features = false }
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", version = "0.0.12", default-features = false }
+neomacs-diagnostics = { path = "neomacs-diagnostics", version = "0.0.12", default-features = false }
 
 # Logging / tracing
 tracing = { version = "0.1", features = ["attributes"] }
