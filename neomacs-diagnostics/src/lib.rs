@@ -6,12 +6,16 @@
 //! the provider closure. This keeps the Lisp VM synchronous and confines tokio
 //! to this crate (the "IO-reactor edge").
 
+pub mod flamegraph;
 pub mod metrics;
 pub mod server;
 
+pub use flamegraph::folded_to_svg;
 pub use metrics::MetricsSnapshot;
 pub use server::{DiagnosticsConfig, MetricsProvider, port_from_str, router, spawn};
 
+#[cfg(test)]
+mod flamegraph_test;
 #[cfg(test)]
 mod metrics_test;
 #[cfg(test)]
