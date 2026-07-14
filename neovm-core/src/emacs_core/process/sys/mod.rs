@@ -11,7 +11,7 @@
 //! the `cfg_select!` below, exactly as GNU adds an `#elif`/`w32proc.c` path.
 //! The `fallback` backend is the portable poll-only path used until then.
 
-use crate::emacs_core::process::ProcessId;
+use crate::emacs_core::process::{HostInterfaceEntry, ProcessId};
 
 cfg_select! {
     target_os = "linux" => {
@@ -54,4 +54,11 @@ impl ChildStatusSource {
     pub fn unregister_from_poller(&self, poller: &polling::Poller) {
         self.0.unregister(poller);
     }
+}
+
+/// Snapshot of the host's network interfaces for `network-interface-list` /
+/// `network-interface-info`. Linux uses native `getifaddrs`+ioctls; other
+/// platforms use the portable `network_interface` crate (see the backends).
+pub fn interface_snapshot() -> Option<Vec<HostInterfaceEntry>> {
+    backend::interface_snapshot()
 }
