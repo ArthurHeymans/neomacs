@@ -15,7 +15,6 @@ fn snapshot_serializes_stable_json_shape() {
         gc: GcMetrics {
             collections: 7,
             live_bytes: 4096,
-            bytes_since_gc: 512,
             total_allocated_bytes: 1_000_000,
             cons_cells: 200,
             strings: 40,

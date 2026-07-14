@@ -32,7 +32,6 @@ pub struct FrameMetrics {
 pub struct GcMetrics {
     pub collections: u64,
     pub live_bytes: u64,
-    pub bytes_since_gc: u64,
     pub total_allocated_bytes: u64,
     pub cons_cells: u64,
     pub strings: u64,

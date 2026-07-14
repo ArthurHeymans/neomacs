@@ -6067,7 +6067,6 @@ impl Context {
         crate::emacs_core::gc_stats::publish(crate::emacs_core::gc_stats::GcStatsSnapshot {
             collections: self.gc_count,
             live_bytes: self.tagged_heap.live_bytes() as u64,
-            bytes_since_gc: self.tagged_heap.bytes_since_gc() as u64,
             total_allocated_bytes: self.tagged_heap.total_allocated_bytes(),
             cons_cells: counts[0],
             vector_cells: counts[2],

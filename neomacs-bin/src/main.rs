@@ -2634,7 +2634,6 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
         gc: GcMetrics {
             collections: g.collections,
             live_bytes: g.live_bytes,
-            bytes_since_gc: g.bytes_since_gc,
             total_allocated_bytes: g.total_allocated_bytes,
             cons_cells: g.cons_cells,
             strings: g.strings,
