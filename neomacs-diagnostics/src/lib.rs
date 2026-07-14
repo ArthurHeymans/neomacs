@@ -8,15 +8,19 @@
 
 pub mod flamegraph;
 pub mod metrics;
+pub mod report;
 pub mod server;
 
 pub use flamegraph::folded_to_svg;
 pub use metrics::MetricsSnapshot;
+pub use report::{CpuReport, Hotspot, cpu_report_from_folded};
 pub use server::{DiagnosticsConfig, MetricsProvider, port_from_str, router, spawn};
 
 #[cfg(test)]
 mod flamegraph_test;
 #[cfg(test)]
 mod metrics_test;
+#[cfg(test)]
+mod report_test;
 #[cfg(test)]
 mod server_test;
