@@ -19,6 +19,11 @@ pub use signals::signal_name_number;
 mod process_status;
 pub use process_status::process_is_alive;
 
+#[cfg(unix)]
+mod tty;
+#[cfg(unix)]
+pub use tty::configure_child_pty_tty;
+
 cfg_select! {
     target_os = "linux" => {
         mod linux;

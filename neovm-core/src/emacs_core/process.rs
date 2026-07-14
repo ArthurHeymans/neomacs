@@ -1638,71 +1638,6 @@ fn process_output_read_from_io_result(
     }
 }
 
-#[cfg(unix)]
-fn configure_child_pty_tty(tty_name: &OsStr) -> Result<(), String> {
-    use std::os::unix::io::RawFd;
-
-    #[cfg(unix)]
-    fn close_fd(fd: RawFd) {
-        unsafe {
-            libc::close(fd);
-        }
-    }
-
-    #[cfg(unix)]
-    fn set_cc(settings: &mut libc::termios, index: usize, value: u8) {
-        if index < settings.c_cc.len() {
-            settings.c_cc[index] = value;
-        }
-    }
-
-    let path = std::ffi::CString::new(tty_name.as_bytes())
-        .map_err(|_| "PTY tty name contains an interior NUL".to_string())?;
-    let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR | libc::O_NOCTTY) };
-    if fd < 0 {
-        return Err(std::io::Error::last_os_error().to_string());
-    }
-
-    let mut settings = unsafe {
-        let mut settings = std::mem::MaybeUninit::<libc::termios>::uninit();
-        if libc::tcgetattr(fd, settings.as_mut_ptr()) != 0 {
-            let err = std::io::Error::last_os_error().to_string();
-            close_fd(fd);
-            return Err(err);
-        }
-        settings.assume_init()
-    };
-
-    settings.c_oflag |= libc::OPOST;
-    settings.c_oflag &= !libc::ONLCR;
-    settings.c_lflag &= !libc::ECHO;
-    settings.c_lflag |= libc::ISIG;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        settings.c_iflag &= !libc::IUCLC;
-        settings.c_oflag &= !libc::OLCUC;
-    }
-    settings.c_iflag &= !libc::ISTRIP;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        settings.c_oflag &= !libc::TAB3;
-    }
-    settings.c_cflag = (settings.c_cflag & !libc::CSIZE) | libc::CS8;
-    set_cc(&mut settings, libc::VERASE, 0);
-    set_cc(&mut settings, libc::VKILL, 0);
-    settings.c_lflag |= libc::ICANON;
-    set_cc(&mut settings, libc::VEOF, 4);
-
-    let result = unsafe { libc::tcsetattr(fd, libc::TCSANOW, &settings) };
-    let err = if result != 0 {
-        Some(std::io::Error::last_os_error().to_string())
-    } else {
-        None
-    };
-    close_fd(fd);
-    err.map_or(Ok(()), Err)
-}
-
 fn env_var_name_bytes_eq(left: &[u8], right: &[u8]) -> bool {
     #[cfg(windows)]
     {
@@ -4278,7 +4213,7 @@ impl ProcessManager {
             .map(|p| Value::heap_string(os_str_to_lisp_string(p.as_os_str())))
             .unwrap_or(Value::NIL);
         if let Some(tty_path) = tty_name_path.as_ref() {
-            configure_child_pty_tty(tty_path.as_os_str())
+            sys::configure_child_pty_tty(tty_path.as_os_str())
                 .map_err(|e| format!("Failed to configure PTY child tty: {e}"))?;
         }
 
