@@ -2639,7 +2639,6 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
             cons_cells: g.cons_cells,
             strings: g.strings,
             vector_cells: g.vector_cells,
-            symbols: g.symbols,
         },
     }
 }
@@ -2655,7 +2654,7 @@ fn maybe_start_diagnostics() {
         tracing::error!("NEOMACS_DIAGNOSTICS_PORT={raw:?} is not a valid TCP port; ignoring");
         return;
     };
-    let provider = std::sync::Arc::new(|| build_metrics_snapshot());
+    let provider = std::sync::Arc::new(build_metrics_snapshot);
     match neomacs_diagnostics::spawn(neomacs_diagnostics::DiagnosticsConfig { port }, provider) {
         Ok(_handle) => tracing::info!("neomacs diagnostics enabled on 127.0.0.1:{port}"),
         Err(e) => tracing::error!("failed to start diagnostics server: {e}"),

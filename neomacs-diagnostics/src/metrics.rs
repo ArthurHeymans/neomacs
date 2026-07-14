@@ -37,5 +37,4 @@ pub struct GcMetrics {
     pub cons_cells: u64,
     pub strings: u64,
     pub vector_cells: u64,
-    pub symbols: u64,
 }

@@ -20,7 +20,6 @@ fn snapshot_serializes_stable_json_shape() {
             cons_cells: 200,
             strings: 40,
             vector_cells: 60,
-            symbols: 80,
         },
     };
     let v: serde_json::Value = serde_json::to_value(&snap).unwrap();
@@ -37,5 +36,5 @@ fn default_snapshot_is_all_zero() {
     assert_eq!(snap.gc.collections, 0);
     let v = serde_json::to_value(&snap).unwrap();
     assert_eq!(v["frame"]["max_commit_to_present_us"], 0);
-    assert_eq!(v["gc"]["symbols"], 0);
+    assert_eq!(v["gc"]["vector_cells"], 0);
 }

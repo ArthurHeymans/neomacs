@@ -6071,7 +6071,6 @@ impl Context {
             total_allocated_bytes: self.tagged_heap.total_allocated_bytes(),
             cons_cells: counts[0],
             vector_cells: counts[2],
-            symbols: counts[3],
             strings: counts[6],
         });
     }

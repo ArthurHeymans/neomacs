@@ -15,9 +15,13 @@ static TOTAL_ALLOCATED_BYTES: AtomicU64 = AtomicU64::new(0);
 static CONS_CELLS: AtomicU64 = AtomicU64::new(0);
 static STRINGS: AtomicU64 = AtomicU64::new(0);
 static VECTOR_CELLS: AtomicU64 = AtomicU64::new(0);
-static SYMBOLS: AtomicU64 = AtomicU64::new(0);
 
 /// A snapshot of published GC/heap counters.
+///
+/// The object counts (`cons_cells`, `strings`, `vector_cells`) come from the
+/// `TaggedHeap` memory-use-count array. Symbols are interned rather than heap
+/// allocated in this array, so a symbol count is intentionally not exposed
+/// here (it would be structurally zero through this accessor).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GcStatsSnapshot {
     pub collections: u64,
@@ -27,7 +31,6 @@ pub struct GcStatsSnapshot {
     pub cons_cells: u64,
     pub strings: u64,
     pub vector_cells: u64,
-    pub symbols: u64,
 }
 
 /// Publish the latest counters. Called on the Lisp thread after a GC cycle.
@@ -39,7 +42,6 @@ pub fn publish(snap: GcStatsSnapshot) {
     CONS_CELLS.store(snap.cons_cells, Ordering::Relaxed);
     STRINGS.store(snap.strings, Ordering::Relaxed);
     VECTOR_CELLS.store(snap.vector_cells, Ordering::Relaxed);
-    SYMBOLS.store(snap.symbols, Ordering::Relaxed);
 }
 
 /// Read the most recently published counters. Safe from any thread.
@@ -52,7 +54,6 @@ pub fn snapshot() -> GcStatsSnapshot {
         cons_cells: CONS_CELLS.load(Ordering::Relaxed),
         strings: STRINGS.load(Ordering::Relaxed),
         vector_cells: VECTOR_CELLS.load(Ordering::Relaxed),
-        symbols: SYMBOLS.load(Ordering::Relaxed),
     }
 }
 
@@ -70,7 +71,6 @@ mod tests {
             cons_cells: 5,
             strings: 6,
             vector_cells: 7,
-            symbols: 8,
         });
         let got = snapshot();
         assert_eq!(got.collections, 11);
@@ -80,12 +80,11 @@ mod tests {
         assert_eq!(got.cons_cells, 5);
         assert_eq!(got.strings, 6);
         assert_eq!(got.vector_cells, 7);
-        assert_eq!(got.symbols, 8);
     }
 
     /// Integration: a real GC cycle publishes live heap stats. Verifies the
     /// wiring in `update_gc_runtime_stats` fires and that the counts-slot
-    /// mapping (cons=0, vector=2, symbols=3, strings=6) is plausible.
+    /// mapping (cons=0, vector=2, strings=6) is plausible.
     #[test]
     fn gc_collect_publishes_live_stats() {
         use crate::emacs_core::eval::Context;
@@ -106,6 +105,10 @@ mod tests {
         assert!(
             snap.cons_cells > 0,
             "cons_cells (counts[0]) should be > 0 after bootstrap"
+        );
+        assert!(
+            snap.vector_cells > 0,
+            "vector_cells (counts[2]) should be > 0 after bootstrap"
         );
     }
 }
