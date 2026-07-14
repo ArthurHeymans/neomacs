@@ -1886,39 +1886,13 @@ fn process_status_signal_value_with_core(signal_num: i32, core_dumped: bool) -> 
     ])
 }
 
-/// Map a `strsignal`-style description (as produced by `portable_pty::ExitStatus`)
-/// back to a signal number by scanning the platform's signal table. Both the
-/// PTY layer and this lookup call `strsignal`, so the descriptions match exactly.
-#[cfg(unix)]
-fn signal_number_from_description(name: &str) -> Option<i32> {
-    // portable_pty falls back to "Signal N" when strsignal yields NULL.
-    if let Some(rest) = name.strip_prefix("Signal ") {
-        if let Ok(n) = rest.trim().parse::<i32>() {
-            return Some(n);
-        }
-    }
-    for signum in 1..=64i32 {
-        let desc = unsafe {
-            let p = libc::strsignal(signum);
-            if p.is_null() {
-                continue;
-            }
-            std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned()
-        };
-        if desc == name {
-            return Some(signum);
-        }
-    }
-    None
-}
-
 /// Convert a finished `portable_pty::ExitStatus` (PTY child) to an Emacs process
 /// status. GNU distinguishes signal death from a normal exit via
 /// `WIFSIGNALED`/`WTERMSIG`; portable_pty preserves this as `signal()`/`exit_code()`.
 #[cfg(unix)]
 fn process_status_from_pty_exit(status: &portable_pty::ExitStatus) -> Value {
     if let Some(sig_name) = status.signal() {
-        let signum = signal_number_from_description(sig_name).unwrap_or(0);
+        let signum = sys::signal_number_from_description(sig_name).unwrap_or(0);
         return process_status_signal_value(signum);
     }
     process_status_exit_value(status.exit_code() as i32)
@@ -1956,7 +1930,7 @@ fn gnu_process_status_message(status: Value) -> String {
         }
         Some(ProcessStatusSymbol::Signal) | Some(ProcessStatusSymbol::Stop) => {
             let code = process_status_code_value(status);
-            let desc = signal_description(code as i32);
+            let desc = sys::signal_description(code as i32);
             let suffix = if process_status_core_dumped_value(status) {
                 " (core dumped)\n"
             } else {
@@ -1994,34 +1968,6 @@ fn process_status_core_dumped_value(status: Value) -> bool {
     list_to_vec(&status)
         .and_then(|items| items.get(2).copied())
         .is_some_and(|value| value.is_truthy())
-}
-
-/// strsignal description with the first character down-cased, matching GNU's
-/// `status_message`. Falls back to "unknown" when strsignal yields NULL.
-fn signal_description(signum: i32) -> String {
-    #[cfg(unix)]
-    {
-        let raw = unsafe {
-            let p = libc::strsignal(signum);
-            if p.is_null() {
-                None
-            } else {
-                Some(std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned())
-            }
-        };
-        if let Some(s) = raw {
-            let mut chars = s.chars();
-            return match chars.next() {
-                Some(first) => {
-                    let lowered: String = first.to_lowercase().collect();
-                    format!("{lowered}{}", chars.as_str())
-                }
-                None => s,
-            };
-        }
-    }
-    let _ = signum;
-    "unknown".to_string()
 }
 
 fn process_status_symbol_value(status: Value) -> Value {
@@ -7576,7 +7522,7 @@ fn parse_signal_number(value: &Value) -> Result<i32, Flow> {
 
 fn send_signal_to_process(proc: &Process, signal_num: i32) -> i32 {
     proc.os_pid
-        .map(|pid| send_signal_to_process_group(pid as i64, signal_num))
+        .map(|pid| sys::send_signal_to_group(pid as i64, signal_num))
         .unwrap_or(-1)
 }
 
@@ -7632,28 +7578,6 @@ fn signal_kill_number() -> i32 {
         unix => { libc::SIGKILL }
         _ => { 9 }
     }
-}
-
-#[cfg(unix)]
-fn send_signal_to_process_group(pid: i64, signal_num: i32) -> i32 {
-    unsafe { libc::kill(-(pid as libc::pid_t), signal_num) }
-}
-
-#[cfg(not(unix))]
-fn send_signal_to_process_group(pid: i64, signal_num: i32) -> i32 {
-    send_signal_to_pid(pid, signal_num)
-}
-
-#[cfg(unix)]
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
-    unsafe { libc::kill(pid as libc::pid_t, signal_num) }
-}
-
-#[cfg(not(unix))]
-fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
-    let _ = signal_num;
-    if sys::process_is_alive(pid) { 0 } else { -1 }
 }
 
 fn ticks_to_secs_usecs(ticks: i64, hz: i64) -> (i64, i64) {
@@ -12445,19 +12369,7 @@ pub(crate) fn builtin_signal_process_impl(
         }
         SignalProcessTarget::MissingNamedProcess => Ok(Value::NIL),
         SignalProcessTarget::Pid(pid) => {
-            #[cfg(unix)]
-            {
-                let result = unsafe { libc::kill(pid as i32, signal_num) };
-                Ok(Value::fixnum(result as i64))
-            }
-            #[cfg(not(unix))]
-            {
-                Ok(Value::fixnum(if sys::process_is_alive(pid) {
-                    0
-                } else {
-                    -1
-                }))
-            }
+            Ok(Value::fixnum(sys::send_signal(pid, signal_num) as i64))
         }
     }
 }
