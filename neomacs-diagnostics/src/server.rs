@@ -36,14 +36,22 @@ where
 /// Drives an on-demand Lisp CPU profile capture on the Lisp thread.
 ///
 /// The host binary implements this by sending tasks over the eval-thread
-/// channel and waking the Lisp thread. Both methods are synchronous (they block
+/// channel and waking the Lisp thread. The methods are synchronous (they block
 /// on cross-thread channels), so handlers call them via `spawn_blocking`.
 pub trait ProfileController: Send + Sync + 'static {
-    /// Begin CPU sampling at `interval_ns` (fire-and-forget).
-    fn start(&self, interval_ns: u64);
-    /// Stop sampling and return Brendan-Gregg folded stacks, or an error string
-    /// (e.g. no live Lisp thread, or a timeout).
+    /// Whether a capture can actually run: true only when there is a live Lisp
+    /// thread. Batch/headless returns false.
+    fn is_live(&self) -> bool;
+    /// Begin a CPU capture. `Ok(true)` = started a fresh session; `Ok(false)` =
+    /// a CPU profiler session is already running (must not be hijacked, so do
+    /// not proceed); `Err` = failure (dead thread / timeout).
+    fn start(&self, interval_ns: u64) -> Result<bool, String>;
+    /// Stop the capture and return folded stacks, clearing the log so the next
+    /// capture starts clean.
     fn stop_and_fold(&self) -> Result<String, String>;
+    /// Fire-and-forget stop + discard, to clean up a capture whose request was
+    /// cancelled before its clean stop ran.
+    fn abort(&self);
 }
 
 #[derive(Clone)]
@@ -127,33 +135,80 @@ struct CaptureParams {
     function: Option<String>,
 }
 
-/// Run one serialized capture: acquire the capture lock, start sampling, wait
-/// `secs`, then stop and return folded stacks. `503` when no Lisp thread.
+/// Ensures a started capture is stopped even if the request future is dropped
+/// (client disconnect) or an error unwinds before the clean stop runs. Without
+/// this, the profiler would run orphaned and contaminate the next capture.
+struct CaptureCleanup {
+    ctrl: Option<Arc<dyn ProfileController>>,
+}
+
+impl CaptureCleanup {
+    fn disarm(&mut self) {
+        self.ctrl = None;
+    }
+}
+
+impl Drop for CaptureCleanup {
+    fn drop(&mut self) {
+        if let Some(ctrl) = self.ctrl.take() {
+            ctrl.abort();
+        }
+    }
+}
+
+/// Run one serialized capture: gate on liveness, acquire the capture lock, start
+/// sampling (without hijacking a running session), wait `secs`, then stop and
+/// return folded stacks. `503` when no Lisp thread, `409` when a session is
+/// already running.
 async fn do_capture(state: &AppState, secs: u64) -> Result<String, (StatusCode, String)> {
     let Some(ctrl) = state.profiler.clone() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            "no live Lisp thread (batch mode or diagnostics disabled)".to_string(),
+            "diagnostics profiling is not available".to_string(),
         ));
     };
+    // Real liveness gate: batch/headless has a controller but no Lisp thread, so
+    // reject before enqueuing a start task into a never-drained channel.
+    if !ctrl.is_live() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "no live Lisp thread (batch mode or editor not started)".to_string(),
+        ));
+    }
     let secs = secs.clamp(1, 60);
     let interval_ns = 1_000_000; // 1 ms sampling
 
     let _guard = state.capture_lock.lock().await;
 
-    // start / stop_and_fold block on crossbeam channels; keep them off the
-    // async runtime thread so /metrics and /live stay responsive.
+    // start / stop block on crossbeam channels; keep them off the async runtime
+    // thread so /metrics and /live stay responsive.
     let c = ctrl.clone();
-    let _ = tokio::task::spawn_blocking(move || c.start(interval_ns)).await;
+    let started = tokio::task::spawn_blocking(move || c.start(interval_ns))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    if !started {
+        return Err((
+            StatusCode::CONFLICT,
+            "a CPU profiler session is already running (interactive profiler-start?)".to_string(),
+        ));
+    }
+
+    // We own the session now — guarantee it is stopped even if this request is
+    // cancelled or an error unwinds below.
+    let mut cleanup = CaptureCleanup {
+        ctrl: Some(ctrl.clone()),
+    };
 
     tokio::time::sleep(Duration::from_secs(secs)).await;
 
     let c = ctrl.clone();
-    match tokio::task::spawn_blocking(move || c.stop_and_fold()).await {
-        Ok(Ok(folded)) => Ok(folded),
-        Ok(Err(e)) => Err((StatusCode::SERVICE_UNAVAILABLE, e)),
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-    }
+    let folded = tokio::task::spawn_blocking(move || c.stop_and_fold())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    cleanup.disarm();
+    Ok(folded)
 }
 
 async fn profile_folded(State(state): State<AppState>, Query(p): Query<CaptureParams>) -> Response {

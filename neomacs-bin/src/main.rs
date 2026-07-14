@@ -2687,11 +2687,25 @@ struct DiagProfileCtrl {
 }
 
 impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
-    fn start(&self, interval_ns: u64) {
-        let _ = self.task_tx.send(Box::new(move |ctx: &mut Context| {
-            let _ = ctx.diagnostics_cpu_profile_start(interval_ns);
-        }));
+    fn is_live(&self) -> bool {
+        DIAG_NOTIFIER.get().is_some()
+    }
+
+    fn start(&self, interval_ns: u64) -> Result<bool, String> {
+        if DIAG_NOTIFIER.get().is_none() {
+            return Err("no live Lisp thread".to_string());
+        }
+        let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
+        self.task_tx
+            .send(Box::new(move |ctx: &mut Context| {
+                let started = ctx.diagnostics_cpu_profile_start(interval_ns);
+                let _ = reply_tx.send(started);
+            }))
+            .map_err(|_| "eval task channel closed".to_string())?;
         diag_wake_lisp();
+        reply_rx
+            .recv_timeout(DIAG_REPLY_TIMEOUT)
+            .map_err(|_| "start timed out".to_string())
     }
 
     fn stop_and_fold(&self) -> Result<String, String> {
@@ -2709,6 +2723,13 @@ impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
         reply_rx
             .recv_timeout(DIAG_REPLY_TIMEOUT)
             .map_err(|_| "capture timed out".to_string())
+    }
+
+    fn abort(&self) {
+        let _ = self.task_tx.send(Box::new(|ctx: &mut Context| {
+            ctx.diagnostics_cpu_profile_abort();
+        }));
+        diag_wake_lisp();
     }
 }
 

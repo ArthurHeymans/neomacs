@@ -15,21 +15,31 @@ use crate::server::{MetricsProvider, ProfileController, port_from_str, router};
 struct StubController {
     folded: String,
     started: AtomicBool,
+    live: bool,
+    /// What `start` reports: true = started fresh, false = already running.
+    started_fresh: bool,
 }
 
 impl ProfileController for StubController {
-    fn start(&self, _interval_ns: u64) {
+    fn is_live(&self) -> bool {
+        self.live
+    }
+    fn start(&self, _interval_ns: u64) -> Result<bool, String> {
         self.started.store(true, Ordering::Relaxed);
+        Ok(self.started_fresh)
     }
     fn stop_and_fold(&self) -> Result<String, String> {
         Ok(self.folded.clone())
     }
+    fn abort(&self) {}
 }
 
 fn stub(folded: &str) -> Arc<StubController> {
     Arc::new(StubController {
         folded: folded.to_string(),
         started: AtomicBool::new(false),
+        live: true,
+        started_fresh: true,
     })
 }
 
@@ -285,4 +295,49 @@ async fn callers_endpoint_400_without_fn() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test(start_paused = true)]
+async fn capture_409_when_a_session_is_already_running() {
+    // started_fresh=false => a CPU session is already running; must not hijack.
+    let ctrl = Arc::new(StubController {
+        folded: String::new(),
+        started: AtomicBool::new(false),
+        live: true,
+        started_fresh: false,
+    });
+    let app = router(fixed_provider(), Some(ctrl));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/profile/lisp.folded?secs=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test(start_paused = true)]
+async fn capture_503_when_not_live() {
+    let ctrl = Arc::new(StubController {
+        folded: String::new(),
+        started: AtomicBool::new(false),
+        live: false,
+        started_fresh: true,
+    });
+    let app = router(fixed_provider(), Some(ctrl.clone()));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/report?secs=1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    // A not-live controller must be rejected before start() is ever called.
+    assert!(!ctrl.started.load(Ordering::Relaxed));
 }

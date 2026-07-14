@@ -53,7 +53,7 @@ fn frame_label(frame: Value) -> String {
     } else {
         format!("<closure:{:#x}>", frame.bits())
     };
-    raw.replace([' ', ';', '\n'], "_")
+    raw.replace([' ', ';', '\n', '\r', '\t'], "_")
 }
 
 impl ProfilerLog {
@@ -405,20 +405,37 @@ impl Context {
         out
     }
 
-    /// Public diagnostics entry point: begin CPU sampling at `interval_ns`.
-    /// Returns false if a CPU profile is already running.
+    /// Public diagnostics entry point: begin a CPU capture at `interval_ns`.
+    ///
+    /// Returns false WITHOUT touching the profiler when a CPU session is already
+    /// running (e.g. an interactive `M-x profiler-start`), so a diagnostics
+    /// probe never hijacks or steals a user's session. When it does start, it
+    /// resets the log first so the capture reflects only this window.
     pub fn diagnostics_cpu_profile_start(&mut self, interval_ns: u64) -> bool {
+        if self.profiler_cpu_running() {
+            return false;
+        }
+        self.profiler.cpu_log = None;
         self.profiler_cpu_start(interval_ns)
     }
 
     /// Public diagnostics entry point: fold the accrued CPU samples into
-    /// Brendan-Gregg folded stacks, then stop the profiler. Must run on the
-    /// Lisp thread (invoked from an `EvalThreadTask`) so name resolution via the
-    /// interner is valid.
+    /// Brendan-Gregg folded stacks, then stop the profiler and clear the log so
+    /// the next capture starts clean. Must run on the Lisp thread (invoked from
+    /// an `EvalThreadTask`) so name resolution via the interner is valid.
     pub fn diagnostics_cpu_profile_stop_fold(&mut self) -> String {
         let folded = self.profiler_cpu_folded();
         self.profiler_cpu_stop();
+        self.profiler.cpu_log = None;
         folded
+    }
+
+    /// Public diagnostics entry point: stop the profiler and discard the log
+    /// without folding. Cleans up a capture whose HTTP request was cancelled,
+    /// so an orphaned session can't contaminate the next capture.
+    pub fn diagnostics_cpu_profile_abort(&mut self) {
+        self.profiler_cpu_stop();
+        self.profiler.cpu_log = None;
     }
 
     pub(crate) fn profiler_memory_start(&mut self) -> bool {
@@ -575,6 +592,34 @@ mod tests {
             "folded was:\n{folded}"
         );
         assert!(folded.contains("neo-solo 3"), "folded was:\n{folded}");
+    }
+
+    #[test]
+    fn diagnostics_capture_resets_stale_log_and_does_not_hijack() {
+        let mut ctx = Context::new();
+        assert!(!ctx.profiler.is_active());
+
+        // Stale samples from a hypothetical prior capture.
+        ctx.profiler.cpu_log = Some(ProfilerLog::new(16, 100));
+        ctx.profiler
+            .cpu_log
+            .as_mut()
+            .unwrap()
+            .record(&[Value::symbol("stale-sym")], 99);
+
+        // A fresh capture resets the log, so the stale sample cannot survive.
+        assert!(ctx.diagnostics_cpu_profile_start(1_000_000));
+        assert!(ctx.profiler_cpu_running());
+        let folded = ctx.diagnostics_cpu_profile_stop_fold();
+        assert!(!folded.contains("stale-sym"), "stale sample leaked: {folded}");
+        // Stopping clears the log so the next capture starts clean.
+        assert!(!ctx.profiler_cpu_running());
+
+        // A capture must not hijack an already-running session.
+        assert!(ctx.diagnostics_cpu_profile_start(1_000_000));
+        assert!(!ctx.diagnostics_cpu_profile_start(1_000_000));
+        ctx.diagnostics_cpu_profile_abort();
+        assert!(!ctx.profiler_cpu_running());
     }
 
     #[test]
