@@ -33,7 +33,7 @@ use std::net::{
     IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket,
 };
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::AsRawFd;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
@@ -4154,34 +4154,12 @@ impl ProcessManager {
             // forkerr=stderr-pipe arrangement.
             let tty_cstr = std::ffi::CString::new(tty_path.as_os_str().as_bytes())
                 .map_err(|_| "PTY tty name contains an interior NUL".to_string())?;
+            // SAFETY: `pre_exec` runs in the forked child before exec; the closure
+            // calls only `sys::establish_pty_controlling_terminal`, which is itself
+            // restricted to async-signal-safe syscalls for exactly this context.
             unsafe {
                 use std::os::unix::process::CommandExt;
-                cmd.pre_exec(move || {
-                    let slave = libc::open(tty_cstr.as_ptr(), libc::O_RDWR | libc::O_NOCTTY);
-                    if slave < 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    // Make the pty our controlling terminal (setsid already ran
-                    // in the first pre_exec, so we are a session leader with no
-                    // controlling tty).
-                    #[allow(clippy::cast_lossless)]
-                    if libc::ioctl(slave, libc::TIOCSCTTY as _, 0) == -1 {
-                        let err = std::io::Error::last_os_error();
-                        libc::close(slave);
-                        return Err(err);
-                    }
-                    if libc::dup2(slave, libc::STDIN_FILENO) == -1
-                        || libc::dup2(slave, libc::STDOUT_FILENO) == -1
-                    {
-                        let err = std::io::Error::last_os_error();
-                        libc::close(slave);
-                        return Err(err);
-                    }
-                    if slave > libc::STDERR_FILENO {
-                        libc::close(slave);
-                    }
-                    Ok(())
-                });
+                cmd.pre_exec(move || sys::establish_pty_controlling_terminal(&tty_cstr));
             }
 
             let mut child = cmd
@@ -13941,18 +13919,12 @@ pub(crate) fn builtin_process_running_child_p(
 }
 
 #[cfg(unix)]
-fn process_tty_foreground_group(proc: &Process) -> Option<libc::pid_t> {
-    fn ioctl_tiocgpgrp(fd: RawFd) -> Option<libc::pid_t> {
-        let mut gid: libc::pid_t = -1;
-        let ok = unsafe { libc::ioctl(fd, libc::TIOCGPGRP, &mut gid) } != -1;
-        (ok && gid != -1).then_some(gid)
-    }
-
+fn process_tty_foreground_group(proc: &Process) -> Option<i32> {
     if let Some(gid) = proc
         .pty_master
         .as_ref()
         .and_then(|master| master.as_raw_fd())
-        .and_then(ioctl_tiocgpgrp)
+        .and_then(sys::fd_foreground_pgrp)
     {
         return Some(gid);
     }
@@ -13962,16 +13934,7 @@ fn process_tty_foreground_group(proc: &Process) -> Option<libc::pid_t> {
         return None;
     }
     let tty_path = lisp_string_to_os_string(tty_name);
-    let c_tty_path = CString::new(tty_path.as_os_str().as_bytes()).ok()?;
-    let fd = unsafe { libc::open(c_tty_path.as_ptr(), libc::O_RDONLY, 0) };
-    if fd == -1 {
-        return None;
-    }
-    let gid = ioctl_tiocgpgrp(fd);
-    unsafe {
-        libc::close(fd);
-    }
-    gid
+    sys::tty_path_foreground_pgrp(tty_path.as_os_str())
 }
 
 #[cfg(not(unix))]

@@ -30,7 +30,10 @@ pub use process_attributes::{
 #[cfg(unix)]
 mod tty;
 #[cfg(unix)]
-pub use tty::configure_child_pty_tty;
+pub use tty::{
+    configure_child_pty_tty, establish_pty_controlling_terminal, fd_foreground_pgrp,
+    tty_path_foreground_pgrp,
+};
 
 #[cfg(unix)]
 mod fd;
