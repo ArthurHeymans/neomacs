@@ -41,6 +41,33 @@ pub(super) static LAST_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 /// Worst observed commit-to-present latency in microseconds.
 pub(super) static MAX_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 
+/// Commit-to-present latency histogram: sample counts per log-scale microsecond
+/// bucket (upper bounds in [`FRAME_TIME_BUCKET_UPPER_US`]). Lets a reader derive
+/// frame-time percentiles (p50/p95/p99) rather than only last/max.
+static FRAME_TIME_BUCKETS: [AtomicU64; 8] = [
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+    AtomicU64::new(0),
+];
+
+/// Inclusive upper bound (microseconds) of each `FRAME_TIME_BUCKETS` slot; the
+/// last is unbounded (`u64::MAX`), i.e. frames slower than 66 ms.
+pub const FRAME_TIME_BUCKET_UPPER_US: [u64; 8] =
+    [1_000, 2_000, 4_000, 8_000, 16_000, 33_000, 66_000, u64::MAX];
+
+fn record_frame_time(latency_us: u64) {
+    let idx = FRAME_TIME_BUCKET_UPPER_US
+        .iter()
+        .position(|&upper| latency_us <= upper)
+        .unwrap_or(FRAME_TIME_BUCKET_UPPER_US.len() - 1);
+    FRAME_TIME_BUCKETS[idx].fetch_add(1, Ordering::Relaxed);
+}
+
 /// Monotonic anchor for converting `Instant`s to storable microsecond ticks.
 static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 /// Microsecond tick (vs EPOCH) of the oldest scene commit not yet presented;
@@ -92,6 +119,7 @@ pub(super) fn note_present(now: Instant) {
         let latency_us = tick_us(now).saturating_sub(pending);
         LAST_COMMIT_TO_PRESENT_US.store(latency_us, Ordering::Relaxed);
         MAX_COMMIT_TO_PRESENT_US.fetch_max(latency_us, Ordering::Relaxed);
+        record_frame_time(latency_us);
     }
 }
 
@@ -112,6 +140,9 @@ pub struct FrameSchedSnapshot {
     pub composite_only_frames: u64,
     pub last_commit_to_present_us: u64,
     pub max_commit_to_present_us: u64,
+    /// Commit-to-present latency histogram (counts per bucket; bounds in
+    /// [`FRAME_TIME_BUCKET_UPPER_US`]).
+    pub frame_time_buckets: [u64; 8],
 }
 
 pub fn snapshot() -> FrameSchedSnapshot {
@@ -130,6 +161,7 @@ pub fn snapshot() -> FrameSchedSnapshot {
         composite_only_frames: COMPOSITE_ONLY_FRAMES.load(Ordering::Relaxed),
         last_commit_to_present_us: LAST_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         max_commit_to_present_us: MAX_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
+        frame_time_buckets: std::array::from_fn(|i| FRAME_TIME_BUCKETS[i].load(Ordering::Relaxed)),
     }
 }
 

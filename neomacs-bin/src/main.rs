@@ -2629,6 +2629,21 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
             wakeups: f.wakeups,
             last_commit_to_present_us: f.last_commit_to_present_us,
             max_commit_to_present_us: f.max_commit_to_present_us,
+            frame_p50_us: neomacs_diagnostics::metrics::percentile_from_buckets(
+                &f.frame_time_buckets,
+                &neomacs_display_runtime::FRAME_TIME_BUCKET_UPPER_US,
+                0.50,
+            ),
+            frame_p95_us: neomacs_diagnostics::metrics::percentile_from_buckets(
+                &f.frame_time_buckets,
+                &neomacs_display_runtime::FRAME_TIME_BUCKET_UPPER_US,
+                0.95,
+            ),
+            frame_p99_us: neomacs_diagnostics::metrics::percentile_from_buckets(
+                &f.frame_time_buckets,
+                &neomacs_display_runtime::FRAME_TIME_BUCKET_UPPER_US,
+                0.99,
+            ),
             composite_only_frames: f.composite_only_frames,
             retained_static_builds: f.retained_static_builds,
         },
