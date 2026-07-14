@@ -191,7 +191,8 @@ fn process_finite_domains_match_gnu_symbols() {
 #[test]
 fn waitpid_signal_status_preserves_core_dump_flag_for_sentinel_messages() {
     let raw_status = libc::SIGQUIT | 0x80;
-    let status = process_status_from_waitpid_status(raw_status).expect("signal status");
+    let status =
+        process_status_from_child_wait(sys::decode_wait_status(raw_status)).expect("signal status");
 
     assert_eq!(
         status,

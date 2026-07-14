@@ -36,6 +36,15 @@ mod fd;
 pub use fd::set_fd_nonblocking;
 
 #[cfg(unix)]
+mod child_wait;
+#[cfg(unix)]
+pub use child_wait::{ChildWait, poll_child_status};
+// The raw-status decode entry point is currently only exercised by status-decode
+// tests; production reaps through `poll_child_status`.
+#[cfg(all(unix, test))]
+pub use child_wait::decode_wait_status;
+
+#[cfg(unix)]
 mod socket_options;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use socket_options::set_socket_priority;

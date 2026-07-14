@@ -1857,27 +1857,21 @@ fn process_status_from_exit(status: &std::process::ExitStatus) -> Value {
     process_status_exit_value(1)
 }
 
+/// Map a `sys::ChildWait` (the outcome of a non-blocking child-status probe, or
+/// a decoded `waitpid` status) to an Emacs process-status value, or `None` when
+/// there is no state change to report.
 #[cfg(unix)]
-fn process_status_from_waitpid_status(status: libc::c_int) -> Option<Value> {
-    if libc::WIFEXITED(status) {
-        return Some(process_status_exit_value(libc::WEXITSTATUS(status)));
+fn process_status_from_child_wait(wait: sys::ChildWait) -> Option<Value> {
+    match wait {
+        sys::ChildWait::Running | sys::ChildWait::NoChild | sys::ChildWait::Undecoded => None,
+        sys::ChildWait::Exited(code) => Some(process_status_exit_value(code)),
+        sys::ChildWait::Signaled { sig, core } => {
+            Some(process_status_signal_value_with_core(sig, core))
+        }
+        sys::ChildWait::Stopped(sig) => Some(process_status_stop_value(sig as i64)),
+        sys::ChildWait::Continued => Some(process_status_run_value()),
+        sys::ChildWait::Error => Some(process_status_exit_value(1)),
     }
-    if libc::WIFSIGNALED(status) {
-        use std::os::unix::process::ExitStatusExt;
-
-        let core_dumped = std::process::ExitStatus::from_raw(status).core_dumped();
-        return Some(process_status_signal_value_with_core(
-            libc::WTERMSIG(status),
-            core_dumped,
-        ));
-    }
-    if libc::WIFSTOPPED(status) {
-        return Some(process_status_stop_value(libc::WSTOPSIG(status) as i64));
-    }
-    if libc::WIFCONTINUED(status) {
-        return Some(process_status_run_value());
-    }
-    None
 }
 
 fn process_status_signal_value(signal_num: i32) -> Value {
@@ -4404,25 +4398,7 @@ impl ProcessManager {
 
         #[cfg(unix)]
         if let Some(pid) = proc.os_pid {
-            let mut raw_status: libc::c_int = 0;
-            let result = unsafe {
-                libc::waitpid(
-                    pid as libc::pid_t,
-                    &mut raw_status,
-                    libc::WNOHANG | libc::WUNTRACED | libc::WCONTINUED,
-                )
-            };
-            if result == pid as libc::pid_t {
-                return process_status_from_waitpid_status(raw_status);
-            }
-            if result == 0 {
-                return None;
-            }
-            let err = std::io::Error::last_os_error();
-            if err.raw_os_error() == Some(libc::ECHILD) {
-                return None;
-            }
-            return Some(process_status_exit_value(1));
+            return process_status_from_child_wait(sys::poll_child_status(pid));
         }
 
         // Pipe child path.
