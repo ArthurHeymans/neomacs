@@ -294,11 +294,28 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                    "%b - \\(?:GNU\\|NEO\\) Emacs at "
                    "%b - [EMACS-PRODUCT] at "
                    v))
+                 ;; `temporary-file-directory' / a bare $TMPDIR is the
+                 ;; per-session nix-shell sandbox dir (/tmp/nix-shell.XXXXX): it
+                 ;; differs between the recording and replay runs but is shared
+                 ;; within a run, so it is not a real divergence. Squash the
+                 ;; per-CASE `.../neovm-oracle-case-...' path FIRST (it starts
+                 ;; with this same nix-shell prefix; the outer chain also squashes
+                 ;; it, harmlessly, later), then squash any remaining bare session
+                 ;; root -- so a case path becomes a single [ORACLE-TMPDIR] token
+                 ;; rather than [SESSION-TMPDIR][ORACLE-TMPDIR].
+                 (tmpdir-normalized
+                  (replace-regexp-in-string
+                   "/tmp/nix-shell\\.[A-Za-z0-9]+"
+                   "[SESSION-TMPDIR]"
+                   (replace-regexp-in-string
+                    "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
+                    "[ORACLE-TMPDIR]"
+                    brand-normalized)))
                  (caption-normalized
                   (replace-regexp-in-string
                    (concat hash "\\+CAPTION: Clock summary at \\[[^]]+\\]")
                    (concat hash "+CAPTION: Clock summary at [FIXED-TIME]")
-                   brand-normalized)))
+                   tmpdir-normalized)))
             (replace-regexp-in-string
              ;; Bare today ISO date (e.g. an Org feed's pubdate).
              today "[FIXED-TODAY-DATE]"

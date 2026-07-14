@@ -50,7 +50,6 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
    (shell-command-to-string "pwd")))
 "#;
 
-    let expect =
-        expect_test::expect![[r#""OK (\"/tmp/nix-shell.ZUFluE/\" \"/tmp/nix-shell.ZUFluE\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"[SESSION-TMPDIR]/\" \"[SESSION-TMPDIR]\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
