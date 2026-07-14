@@ -1752,7 +1752,11 @@ fn internal_get_lisp_face_attribute_mode_line_returns_unspecified() {
         vec![Value::symbol("mode-line"), Value::keyword(":foreground")],
     )
     .unwrap();
-    assert_eq!(result.as_utf8_str(), Some("black"));
+    // GNU `internal-get-lisp-face-attribute` returns the LISP face's slot (never
+    // the realized face), so mode-line's unset `:foreground` reports as
+    // `unspecified` here rather than the color it happens to realize to on a
+    // color-capable display (fixed in a604c3a19; matches this test's own name).
+    assert_eq!(result.as_symbol_name(), Some("unspecified"));
 }
 
 #[test]
@@ -2960,18 +2964,26 @@ fn face_font_rejects_invalid_face() {
 fn internal_get_lisp_face_attribute_eval_reads_live_face_table() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
-    eval.set_face_attribute(
-        "mode-line",
-        crate::face::LFaceAttr::Background,
-        FaceAttrValue::Color(Color::rgb(191, 191, 191)),
-    );
+    // internal-get-lisp-face-attribute reads the live LISP face table (not the
+    // realized runtime face, dropped in a604c3a19), so a background written
+    // through the Lisp face path must be reflected immediately on read-back.
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("mode-line"),
+            Value::keyword(":background"),
+            Value::string("grey75"),
+            Value::T,
+        ],
+    )
+    .expect("set live mode-line background");
 
     let value = builtin_internal_get_lisp_face_attribute(
         &mut eval,
         vec![
             Value::symbol("mode-line"),
             Value::keyword(":background"),
-            Value::NIL,
+            Value::T,
         ],
     )
     .expect("live face attribute");
