@@ -82,4 +82,30 @@ mod tests {
         assert_eq!(got.vector_cells, 7);
         assert_eq!(got.symbols, 8);
     }
+
+    /// Integration: a real GC cycle publishes live heap stats. Verifies the
+    /// wiring in `update_gc_runtime_stats` fires and that the counts-slot
+    /// mapping (cons=0, vector=2, symbols=3, strings=6) is plausible.
+    #[test]
+    fn gc_collect_publishes_live_stats() {
+        use crate::emacs_core::eval::Context;
+
+        let mut eval = Context::new();
+        eval.gc_collect();
+
+        let snap = snapshot();
+        assert!(
+            snap.collections >= 1,
+            "collections should be >= 1 after gc_collect, got {}",
+            snap.collections
+        );
+        assert!(
+            snap.total_allocated_bytes > 0,
+            "total_allocated_bytes should be > 0 after bootstrap"
+        );
+        assert!(
+            snap.cons_cells > 0,
+            "cons_cells (counts[0]) should be > 0 after bootstrap"
+        );
+    }
 }

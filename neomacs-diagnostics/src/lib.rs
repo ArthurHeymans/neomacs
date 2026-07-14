@@ -10,7 +10,7 @@ pub mod metrics;
 pub mod server;
 
 pub use metrics::MetricsSnapshot;
-pub use server::{DiagnosticsConfig, MetricsProvider, router, spawn};
+pub use server::{DiagnosticsConfig, MetricsProvider, port_from_str, router, spawn};
 
 #[cfg(test)]
 mod metrics_test;

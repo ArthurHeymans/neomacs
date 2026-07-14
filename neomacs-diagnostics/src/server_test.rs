@@ -6,7 +6,19 @@ use http_body_util::BodyExt;
 use tower::ServiceExt; // for `oneshot`
 
 use crate::metrics::{FrameMetrics, GcMetrics, MetricsSnapshot};
-use crate::server::{MetricsProvider, router};
+use crate::server::{MetricsProvider, port_from_str, router};
+
+#[test]
+fn port_from_str_accepts_valid_and_rejects_invalid() {
+    assert_eq!(port_from_str("9099"), Some(9099));
+    assert_eq!(port_from_str("  8080 "), Some(8080));
+    assert_eq!(port_from_str("65535"), Some(65535));
+    assert_eq!(port_from_str("0"), None); // zero is not a usable bind port
+    assert_eq!(port_from_str(""), None);
+    assert_eq!(port_from_str("nope"), None);
+    assert_eq!(port_from_str("70000"), None); // out of u16 range
+    assert_eq!(port_from_str("-1"), None);
+}
 
 fn fixed_provider() -> Arc<dyn MetricsProvider> {
     Arc::new(|| MetricsSnapshot {

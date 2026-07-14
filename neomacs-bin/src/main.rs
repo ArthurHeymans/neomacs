@@ -2651,12 +2651,9 @@ fn maybe_start_diagnostics() {
     let Ok(raw) = std::env::var("NEOMACS_DIAGNOSTICS_PORT") else {
         return;
     };
-    let port = match raw.trim().parse::<u16>() {
-        Ok(p) if p != 0 => p,
-        _ => {
-            tracing::error!("NEOMACS_DIAGNOSTICS_PORT={raw:?} is not a valid TCP port; ignoring");
-            return;
-        }
+    let Some(port) = neomacs_diagnostics::port_from_str(&raw) else {
+        tracing::error!("NEOMACS_DIAGNOSTICS_PORT={raw:?} is not a valid TCP port; ignoring");
+        return;
     };
     let provider = std::sync::Arc::new(|| build_metrics_snapshot());
     match neomacs_diagnostics::spawn(neomacs_diagnostics::DiagnosticsConfig { port }, provider) {

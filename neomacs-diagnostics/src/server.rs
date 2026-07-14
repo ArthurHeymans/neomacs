@@ -88,6 +88,15 @@ pub struct DiagnosticsConfig {
     pub port: u16,
 }
 
+/// Parse a TCP port from a string, rejecting empty, zero, and out-of-range
+/// values. Used to interpret the `NEOMACS_DIAGNOSTICS_PORT` env var.
+pub fn port_from_str(raw: &str) -> Option<u16> {
+    match raw.trim().parse::<u16>() {
+        Ok(port) if port != 0 => Some(port),
+        _ => None,
+    }
+}
+
 /// Spawn the diagnostics server on a dedicated OS thread running a
 /// current-thread tokio runtime. Binds `127.0.0.1:<port>` only.
 ///
