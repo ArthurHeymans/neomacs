@@ -7,8 +7,6 @@
 
 use super::eval::Context;
 use super::value::{Value, eq_value};
-#[cfg(unix)]
-use std::ffi::{CStr, CString};
 
 #[derive(Clone, Debug)]
 pub(crate) struct PasswdEntry {
@@ -16,215 +14,256 @@ pub(crate) struct PasswdEntry {
     pub(crate) gecos: String,
 }
 
-#[cfg(unix)]
-fn passwd_entry_from_raw(passwd: &libc::passwd) -> Option<PasswdEntry> {
-    if passwd.pw_name.is_null() {
-        return None;
-    }
-    let login = unsafe { CStr::from_ptr(passwd.pw_name) }
-        .to_string_lossy()
-        .into_owned();
-    let gecos = if passwd.pw_gecos.is_null() {
-        String::new()
-    } else {
-        unsafe { CStr::from_ptr(passwd.pw_gecos) }
-            .to_string_lossy()
-            .into_owned()
-    };
-    Some(PasswdEntry { login, gecos })
-}
+std::cfg_select! {
+    unix => {
+        use std::ffi::{CStr, CString};
 
-#[cfg(unix)]
-fn lookup_passwd_by_uid(uid: i64) -> Option<PasswdEntry> {
-    let uid = libc::uid_t::try_from(uid).ok()?;
-    let mut buffer_len = 1024usize;
-    loop {
-        let mut buffer = vec![0u8; buffer_len];
-        let mut passwd = unsafe { std::mem::zeroed::<libc::passwd>() };
-        let mut result = std::ptr::null_mut();
-        let status = unsafe {
-            libc::getpwuid_r(
-                uid,
-                &mut passwd,
-                buffer.as_mut_ptr().cast(),
-                buffer.len(),
-                &mut result,
-            )
-        };
-        if status == 0 {
-            return (!result.is_null())
-                .then(|| passwd_entry_from_raw(&passwd))
-                .flatten();
+        const SECONDARY_LOGIN_ENV: &str = "USER";
+
+        fn passwd_entry_from_raw(passwd: &libc::passwd) -> Option<PasswdEntry> {
+            if passwd.pw_name.is_null() {
+                return None;
+            }
+            let login = unsafe { CStr::from_ptr(passwd.pw_name) }
+                .to_string_lossy()
+                .into_owned();
+            let gecos = if passwd.pw_gecos.is_null() {
+                String::new()
+            } else {
+                unsafe { CStr::from_ptr(passwd.pw_gecos) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            Some(PasswdEntry { login, gecos })
         }
-        if status != libc::ERANGE || buffer_len >= 1 << 20 {
-            return None;
+
+        fn lookup_passwd_by_uid(uid: i64) -> Option<PasswdEntry> {
+            let uid = libc::uid_t::try_from(uid).ok()?;
+            let mut buffer_len = 1024usize;
+            loop {
+                let mut buffer = vec![0u8; buffer_len];
+                let mut passwd = unsafe { std::mem::zeroed::<libc::passwd>() };
+                let mut result = std::ptr::null_mut();
+                let status = unsafe {
+                    libc::getpwuid_r(
+                        uid,
+                        &mut passwd,
+                        buffer.as_mut_ptr().cast(),
+                        buffer.len(),
+                        &mut result,
+                    )
+                };
+                if status == 0 {
+                    return (!result.is_null())
+                        .then(|| passwd_entry_from_raw(&passwd))
+                        .flatten();
+                }
+                if status != libc::ERANGE || buffer_len >= 1 << 20 {
+                    return None;
+                }
+                buffer_len *= 2;
+            }
         }
-        buffer_len *= 2;
-    }
-}
 
-#[cfg(windows)]
-fn windows_passwd_entry() -> Option<PasswdEntry> {
-    let login = whoami::fallible::username().ok()?;
-    // GNU w32.c leaves its synthetic passwd `pw_gecos` empty.
-    Some(PasswdEntry {
-        login,
-        gecos: String::new(),
-    })
-}
-
-#[cfg(windows)]
-fn lookup_passwd_by_uid(uid: i64) -> Option<PasswdEntry> {
-    (uid == effective_uid())
-        .then(windows_passwd_entry)
-        .flatten()
-}
-
-#[cfg(all(not(unix), not(windows)))]
-fn lookup_passwd_by_uid(_uid: i64) -> Option<PasswdEntry> {
-    None
-}
-
-#[cfg(unix)]
-fn lookup_passwd_by_login(login: &str) -> Option<PasswdEntry> {
-    let login = CString::new(login).ok()?;
-    let mut buffer_len = 1024usize;
-    loop {
-        let mut buffer = vec![0u8; buffer_len];
-        let mut passwd = unsafe { std::mem::zeroed::<libc::passwd>() };
-        let mut result = std::ptr::null_mut();
-        let status = unsafe {
-            libc::getpwnam_r(
-                login.as_ptr(),
-                &mut passwd,
-                buffer.as_mut_ptr().cast(),
-                buffer.len(),
-                &mut result,
-            )
-        };
-        if status == 0 {
-            return (!result.is_null())
-                .then(|| passwd_entry_from_raw(&passwd))
-                .flatten();
+        fn lookup_passwd_by_login(login: &str) -> Option<PasswdEntry> {
+            let login = CString::new(login).ok()?;
+            let mut buffer_len = 1024usize;
+            loop {
+                let mut buffer = vec![0u8; buffer_len];
+                let mut passwd = unsafe { std::mem::zeroed::<libc::passwd>() };
+                let mut result = std::ptr::null_mut();
+                let status = unsafe {
+                    libc::getpwnam_r(
+                        login.as_ptr(),
+                        &mut passwd,
+                        buffer.as_mut_ptr().cast(),
+                        buffer.len(),
+                        &mut result,
+                    )
+                };
+                if status == 0 {
+                    return (!result.is_null())
+                        .then(|| passwd_entry_from_raw(&passwd))
+                        .flatten();
+                }
+                if status != libc::ERANGE || buffer_len >= 1 << 20 {
+                    return None;
+                }
+                buffer_len *= 2;
+            }
         }
-        if status != libc::ERANGE || buffer_len >= 1 << 20 {
-            return None;
+
+        pub(crate) fn effective_uid() -> i64 {
+            unsafe { libc::geteuid() as i64 }
         }
-        buffer_len *= 2;
-    }
-}
 
-#[cfg(windows)]
-fn lookup_passwd_by_login(login: &str) -> Option<PasswdEntry> {
-    let mut entry = windows_passwd_entry()?;
-    let environment_alias = login_name_from_env();
-    if !entry.login.eq_ignore_ascii_case(login)
-        && environment_alias
-            .as_deref()
-            .is_none_or(|alias| !alias.eq_ignore_ascii_case(login))
-    {
-        return None;
-    }
-    entry.login = login.to_string();
-    Some(entry)
-}
+        fn real_uid() -> i64 {
+            unsafe { libc::getuid() as i64 }
+        }
 
-#[cfg(all(not(unix), not(windows)))]
-fn lookup_passwd_by_login(_login: &str) -> Option<PasswdEntry> {
-    None
+        fn capture_platform_identity() -> PlatformIdentity {
+            let environment_login = login_name_from_env();
+            PlatformIdentity {
+                effective_passwd: lookup_passwd_by_uid(effective_uid()),
+                environment_passwd: environment_login
+                    .as_deref()
+                    .and_then(lookup_passwd_by_login),
+                environment_login,
+                real_passwd: lookup_passwd_by_uid(real_uid()),
+            }
+        }
+    }
+    windows => {
+        const SECONDARY_LOGIN_ENV: &str = "USERNAME";
+
+        fn windows_passwd_entry() -> Option<PasswdEntry> {
+            let login = whoami::fallible::username().ok()?;
+            // GNU w32.c leaves its synthetic passwd `pw_gecos` empty.
+            Some(PasswdEntry {
+                login,
+                gecos: String::new(),
+            })
+        }
+
+        fn lookup_passwd_by_uid(uid: i64) -> Option<PasswdEntry> {
+            (uid == effective_uid())
+                .then(windows_passwd_entry)
+                .flatten()
+        }
+
+        fn lookup_passwd_by_login(login: &str) -> Option<PasswdEntry> {
+            let mut entry = windows_passwd_entry()?;
+            let environment_alias = login_name_from_env();
+            if !entry.login.eq_ignore_ascii_case(login)
+                && environment_alias
+                    .as_deref()
+                    .is_none_or(|alias| !alias.eq_ignore_ascii_case(login))
+            {
+                return None;
+            }
+            entry.login = login.to_string();
+            Some(entry)
+        }
+
+        pub(crate) fn effective_uid() -> i64 {
+            windows_effective_uid().unwrap_or(123)
+        }
+
+        fn windows_effective_uid() -> Option<i64> {
+            use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+            use windows_sys::Win32::Security::{
+                GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TOKEN_QUERY,
+                TOKEN_USER, TokenUser,
+            };
+            use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+            if whoami::fallible::username()
+                .ok()
+                .is_some_and(|name| name.eq_ignore_ascii_case("administrator"))
+            {
+                return Some(500);
+            }
+
+            let mut token: HANDLE = std::ptr::null_mut();
+            if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+                return None;
+            }
+
+            let result = (|| {
+                let mut required = 0u32;
+                unsafe {
+                    GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut required);
+                }
+                if required < std::mem::size_of::<TOKEN_USER>() as u32 {
+                    return None;
+                }
+                let mut buffer = vec![0u8; required as usize];
+                if unsafe {
+                    GetTokenInformation(
+                        token,
+                        TokenUser,
+                        buffer.as_mut_ptr().cast(),
+                        required,
+                        &mut required,
+                    )
+                } == 0
+                {
+                    return None;
+                }
+
+                let token_user = unsafe { &*(buffer.as_ptr().cast::<TOKEN_USER>()) };
+                let sid = token_user.User.Sid;
+                let count = unsafe { GetSidSubAuthorityCount(sid).as_ref().copied() }?;
+                if count == 0 {
+                    return None;
+                }
+                unsafe { GetSidSubAuthority(sid, u32::from(count - 1)).as_ref() }
+                    .copied()
+                    .map(i64::from)
+            })();
+
+            unsafe {
+                CloseHandle(token);
+            }
+            result
+        }
+
+        fn capture_platform_identity() -> PlatformIdentity {
+            // GNU w32.c synthesizes its passwd entry from the process token.
+            // `whoami` uses the corresponding native Windows account APIs.
+            let environment_login = login_name_from_env();
+            let native_passwd = windows_passwd_entry();
+            let environment_passwd = environment_login.as_ref().and_then(|login| {
+                native_passwd.clone().map(|mut entry| {
+                    entry.login = login.clone();
+                    entry
+                })
+            });
+            PlatformIdentity {
+                effective_passwd: native_passwd.clone(),
+                environment_login,
+                environment_passwd,
+                real_passwd: native_passwd,
+            }
+        }
+    }
+    _ => {
+        const SECONDARY_LOGIN_ENV: &str = "USER";
+
+        fn lookup_passwd_by_uid(_uid: i64) -> Option<PasswdEntry> {
+            None
+        }
+
+        fn lookup_passwd_by_login(_login: &str) -> Option<PasswdEntry> {
+            None
+        }
+
+        pub(crate) fn effective_uid() -> i64 {
+            0
+        }
+
+        fn real_uid() -> i64 {
+            effective_uid()
+        }
+
+        fn capture_platform_identity() -> PlatformIdentity {
+            let environment_login = login_name_from_env();
+            PlatformIdentity {
+                effective_passwd: lookup_passwd_by_uid(effective_uid()),
+                environment_passwd: environment_login
+                    .as_deref()
+                    .and_then(lookup_passwd_by_login),
+                environment_login,
+                real_passwd: lookup_passwd_by_uid(real_uid()),
+            }
+        }
+    }
 }
 
 fn login_name_from_env() -> Option<String> {
-    let secondary = if cfg!(windows) { "USERNAME" } else { "USER" };
     std::env::var_os("LOGNAME")
-        .or_else(|| std::env::var_os(secondary))
+        .or_else(|| std::env::var_os(SECONDARY_LOGIN_ENV))
         .map(|name| name.to_string_lossy().into_owned())
-}
-
-pub(crate) fn effective_uid() -> i64 {
-    #[cfg(unix)]
-    {
-        unsafe { libc::geteuid() as i64 }
-    }
-    #[cfg(windows)]
-    {
-        windows_effective_uid().unwrap_or(123)
-    }
-    #[cfg(all(not(unix), not(windows)))]
-    {
-        0
-    }
-}
-
-#[cfg(windows)]
-fn windows_effective_uid() -> Option<i64> {
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows_sys::Win32::Security::{
-        GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TOKEN_QUERY, TOKEN_USER,
-        TokenUser,
-    };
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-
-    if whoami::fallible::username()
-        .ok()
-        .is_some_and(|name| name.eq_ignore_ascii_case("administrator"))
-    {
-        return Some(500);
-    }
-
-    let mut token: HANDLE = std::ptr::null_mut();
-    if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
-        return None;
-    }
-
-    let result = (|| {
-        let mut required = 0u32;
-        unsafe {
-            GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut required);
-        }
-        if required < std::mem::size_of::<TOKEN_USER>() as u32 {
-            return None;
-        }
-        let mut buffer = vec![0u8; required as usize];
-        if unsafe {
-            GetTokenInformation(
-                token,
-                TokenUser,
-                buffer.as_mut_ptr().cast(),
-                required,
-                &mut required,
-            )
-        } == 0
-        {
-            return None;
-        }
-
-        let token_user = unsafe { &*(buffer.as_ptr().cast::<TOKEN_USER>()) };
-        let sid = token_user.User.Sid;
-        let count = unsafe { GetSidSubAuthorityCount(sid).as_ref().copied() }?;
-        if count == 0 {
-            return None;
-        }
-        unsafe { GetSidSubAuthority(sid, u32::from(count - 1)).as_ref() }
-            .copied()
-            .map(i64::from)
-    })();
-
-    unsafe {
-        CloseHandle(token);
-    }
-    result
-}
-
-fn real_uid() -> i64 {
-    #[cfg(unix)]
-    {
-        unsafe { libc::getuid() as i64 }
-    }
-    #[cfg(not(unix))]
-    {
-        effective_uid()
-    }
 }
 
 pub(crate) fn lookup_login_by_uid(uid: i64) -> Option<String> {
@@ -270,39 +309,7 @@ struct PlatformIdentity {
 
 impl PlatformIdentity {
     fn capture() -> Self {
-        #[cfg(windows)]
-        {
-            // GNU w32.c synthesizes its passwd entry from the process token.
-            // `whoami` uses the corresponding native Windows account APIs.
-            let environment_login = login_name_from_env();
-            let native_passwd = windows_passwd_entry();
-            let environment_passwd = environment_login.as_ref().and_then(|login| {
-                native_passwd.clone().map(|mut entry| {
-                    entry.login = login.clone();
-                    entry
-                })
-            });
-            return Self {
-                effective_passwd: native_passwd.clone(),
-                environment_login,
-                environment_passwd,
-                real_passwd: native_passwd,
-            };
-        }
-
-        #[cfg(not(windows))]
-        let environment_login = login_name_from_env();
-        #[cfg(not(windows))]
-        {
-            Self {
-                effective_passwd: lookup_passwd_by_uid(effective_uid()),
-                environment_passwd: environment_login
-                    .as_deref()
-                    .and_then(lookup_passwd_by_login),
-                environment_login,
-                real_passwd: lookup_passwd_by_uid(real_uid()),
-            }
-        }
+        capture_platform_identity()
     }
 
     fn login_name(&self) -> String {
@@ -447,9 +454,13 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn effective_uid_comes_from_the_os_without_a_child_process() {
-        assert_eq!(effective_uid(), unsafe { libc::geteuid() as i64 });
+    std::cfg_select! {
+        unix => {
+            #[test]
+            fn effective_uid_comes_from_the_os_without_a_child_process() {
+                assert_eq!(effective_uid(), unsafe { libc::geteuid() as i64 });
+            }
+        }
+        _ => {}
     }
 }
