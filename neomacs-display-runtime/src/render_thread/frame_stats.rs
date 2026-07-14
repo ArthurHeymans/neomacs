@@ -97,7 +97,7 @@ pub(super) fn note_present(now: Instant) {
 
 /// Point-in-time copy of every counter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct FrameSchedSnapshot {
+pub struct FrameSchedSnapshot {
     pub wakeups: u64,
     pub redraw_requests: u64,
     pub redraw_events: u64,
@@ -114,7 +114,7 @@ pub(crate) struct FrameSchedSnapshot {
     pub max_commit_to_present_us: u64,
 }
 
-pub(crate) fn snapshot() -> FrameSchedSnapshot {
+pub fn snapshot() -> FrameSchedSnapshot {
     FrameSchedSnapshot {
         wakeups: EVENT_LOOP_WAKEUPS.load(Ordering::Relaxed),
         redraw_requests: REDRAW_REQUESTS.load(Ordering::Relaxed),

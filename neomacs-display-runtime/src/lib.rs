@@ -44,6 +44,20 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// NeoVM core backend selected at compile time.
 pub const CORE_BACKEND: &str = "rust";
 
+pub use render_thread::frame_stats::FrameSchedSnapshot;
+
+#[cfg(test)]
+mod frame_metrics_pub_test;
+
+/// Read the current process-global frame-scheduling counters.
+///
+/// Safe to call from any thread — the counters are relaxed atomics — so the
+/// diagnostics server can sample frame timing without touching the render
+/// thread's state.
+pub fn frame_metrics_snapshot() -> FrameSchedSnapshot {
+    render_thread::frame_stats::snapshot()
+}
+
 /// Read GPU power preference from `NEOMACS_GPU` environment variable.
 ///
 /// - `"low"` or `"integrated"` → `LowPower` (prefer integrated GPU, e.g. Intel)
