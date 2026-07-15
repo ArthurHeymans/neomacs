@@ -68,3 +68,44 @@ fn child_stretch_decorations_follow_the_effective_face() {
     );
     assert!(rects.iter().all(|rect| rect.color == Color::RED));
 }
+
+/// Regression guard for the glyph-rasterization hotspot fix.
+///
+/// The atlas cache key embeds subpixel bins. Deriving them from the fractional
+/// glyph origin (the old `SubpixelBin::new`) made the key position-dependent, so
+/// every column and every fractional scroll offset re-rasterized glyphs (~173
+/// misses + GPU uploads per frame during scrolling, ~25% of total CPU).
+/// `snap_glyph_origin` must place glyphs on whole pixels with `Zero` bins so the
+/// key is position-invariant and each glyph rasterizes once.
+#[test]
+fn snap_glyph_origin_is_position_invariant_and_pixel_snapped() {
+    use super::snap_glyph_origin;
+    use cosmic_text::SubpixelBin;
+
+    // Bins are always Zero, for any fractional offset within and across pixels.
+    for &f in &[
+        0.0_f32, 0.1, 0.25, 0.4, 0.5, 0.6, 0.75, 0.9, 12.3, 12.8, -3.2,
+    ] {
+        let (_, _, x_bin, y_bin) = snap_glyph_origin(f, f);
+        assert_eq!(x_bin, SubpixelBin::Zero, "x_bin must be Zero for {f}");
+        assert_eq!(y_bin, SubpixelBin::Zero, "y_bin must be Zero for {f}");
+    }
+
+    // Integer parts snap to the nearest whole pixel.
+    assert_eq!(snap_glyph_origin(10.4, 20.6).0, 10);
+    assert_eq!(snap_glyph_origin(10.4, 20.6).1, 21);
+    assert_eq!(snap_glyph_origin(10.6, 20.4).0, 11);
+
+    // Position-invariance: two origins in the same pixel produce identical
+    // (int, bin) tuples, so the derived atlas key is identical -> one raster.
+    assert_eq!(
+        snap_glyph_origin(30.05, 40.05),
+        snap_glyph_origin(30.45, 40.45)
+    );
+    // ...and a fractional scroll drift that stays within a pixel does not change
+    // the key (this is precisely what used to thrash the atlas while scrolling).
+    assert_eq!(
+        snap_glyph_origin(100.0, 200.1),
+        snap_glyph_origin(100.0, 200.3)
+    );
+}

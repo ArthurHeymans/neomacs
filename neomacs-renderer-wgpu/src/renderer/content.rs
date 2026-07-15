@@ -26,6 +26,28 @@ use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::HashSet;
 
+/// Snap a glyph origin's physical-pixel position to the nearest whole pixel with
+/// no subpixel bin, matching GNU Emacs's whole-pixel glyph placement.
+///
+/// The atlas cache key includes the subpixel bins (`GlyphKey::x_bin`/`y_bin`).
+/// Deriving them from the fractional origin (via `SubpixelBin::new`) made the key
+/// depend on subpixel position: a monospace grid has fractional advances, so the
+/// bin varied per column, and every fractional scroll offset produced a fresh
+/// vertical bin -- turning each glyph into up to 16 position variants and
+/// re-rasterizing ~173 glyphs (with as many GPU texture uploads) *per frame*
+/// during scrolling, at ~25% of total CPU. Forcing the bins to `Zero` collapses
+/// the key to `(char, face, size, font)` so each glyph rasterizes once and later
+/// frames are pure cache hits. The vertex is placed at the returned integer
+/// origin, so bitmap and placement stay consistent.
+fn snap_glyph_origin(phys_x: f32, phys_y: f32) -> (i32, i32, SubpixelBin, SubpixelBin) {
+    (
+        phys_x.round() as i32,
+        phys_y.round() as i32,
+        SubpixelBin::Zero,
+        SubpixelBin::Zero,
+    )
+}
+
 fn clipped_media_rect(
     x: f32,
     y: f32,
@@ -612,15 +634,15 @@ impl WgpuRenderer {
 
                     let face = faces.get(&face_id);
 
-                    // Decompose physical-pixel positions into integer + subpixel bin.
-                    // The bin is baked into the rasterized bitmap by swash for subpixel
-                    // accuracy; vertex positions stay on integer pixels (no Linear blur).
+                    // Snap glyph origins to integer physical pixels (see
+                    // `snap_glyph_origin`): the atlas cache key must be independent
+                    // of subpixel position or each glyph re-rasterizes per column and
+                    // per fractional scroll offset.
                     let sf = self.scale_factor;
                     let phys_x = (*x + offset_x) * sf;
                     let baseline_y = *baseline + offset_y;
                     let phys_y = baseline_y * sf;
-                    let (x_int, x_bin) = SubpixelBin::new(phys_x);
-                    let (y_int, y_bin) = SubpixelBin::new(phys_y);
+                    let (x_int, y_int, x_bin, y_bin) = snap_glyph_origin(phys_x, phys_y);
                     let font_identity = glyph_font_identity(face);
 
                     let subpixel_request = if enable_subpixel {
