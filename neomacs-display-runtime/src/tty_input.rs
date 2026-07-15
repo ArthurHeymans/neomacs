@@ -13,6 +13,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
+#[cfg(not(unix))]
+use crossterm::event::Event;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 #[cfg(unix)]
