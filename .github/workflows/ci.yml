@@ -10,8 +10,8 @@ concurrency:
 
 jobs:
   fmt-check:
-    name: fmt and check (linux x86_64)
-    runs-on: ubuntu-latest
+    name: fmt and check (linux aarch64)
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     env: &linux_env
       CARGO_TERM_COLOR: always
@@ -67,7 +67,7 @@ jobs:
         name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: ci-linux-x86_64
+          prefix-key: ci-linux-aarch64
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
@@ -79,8 +79,8 @@ jobs:
         run: cargo check --workspace
 
   neovm-core-test-archive:
-    name: neovm-core test archive (linux x86_64)
-    runs-on: ubuntu-latest
+    name: neovm-core test archive (linux aarch64)
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     env: *linux_env
     steps:
@@ -101,21 +101,21 @@ jobs:
       - name: Upload neovm-core test archive
         uses: actions/upload-artifact@v4
         with:
-          name: neovm-core-nextest-archive-linux-x86_64
+          name: neovm-core-nextest-archive-linux-aarch64
           path: neovm-core-nextest.tar.zst
           if-no-files-found: error
           retention-days: 1
 
   neovm-core-tests:
-    name: neovm-core tests shard ${{ matrix.partition }}/4 (linux x86_64)
+    name: neovm-core tests shard ${{ matrix.partition }}/10 (linux aarch64)
     needs: neovm-core-test-archive
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     env: *linux_env
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3, 4]
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - *checkout
       - *install_linux_deps
@@ -125,7 +125,7 @@ jobs:
       - name: Download neovm-core test archive
         uses: actions/download-artifact@v5
         with:
-          name: neovm-core-nextest-archive-linux-x86_64
+          name: neovm-core-nextest-archive-linux-aarch64
           path: .
 
       - name: Run neovm-core test shard
@@ -133,12 +133,12 @@ jobs:
           cargo nextest run \
             --archive-file neovm-core-nextest.tar.zst \
             --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition slice:${{ matrix.partition }}/4 \
+            --partition slice:${{ matrix.partition }}/10 \
             --no-fail-fast
 
   fresh-release-build:
-    name: fresh release build (linux x86_64)
-    runs-on: ubuntu-latest
+    name: fresh release build (linux aarch64)
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
     env: *linux_env
     steps:
@@ -155,7 +155,7 @@ jobs:
 
       - name: Package release runtime for oracle tests
         run: |
-          tar czf neomacs-release-runtime-linux-x86_64.tar.gz \
+          tar czf neomacs-release-runtime-linux-aarch64.tar.gz \
             target/release/neomacs \
             target/release/neomacs.pdump \
             lisp \
@@ -164,15 +164,15 @@ jobs:
       - name: Upload release runtime for oracle tests
         uses: actions/upload-artifact@v4
         with:
-          name: neomacs-release-runtime-linux-x86_64
-          path: neomacs-release-runtime-linux-x86_64.tar.gz
+          name: neomacs-release-runtime-linux-aarch64
+          path: neomacs-release-runtime-linux-aarch64.tar.gz
           if-no-files-found: error
           retention-days: 1
 
   neovm-oracle-tests:
-    name: neovm-oracle-tests (linux x86_64)
+    name: neovm-oracle-tests (linux aarch64)
     needs: fresh-release-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     env: *linux_env
     steps:
@@ -185,12 +185,12 @@ jobs:
       - name: Download release runtime
         uses: actions/download-artifact@v5
         with:
-          name: neomacs-release-runtime-linux-x86_64
+          name: neomacs-release-runtime-linux-aarch64
           path: .
 
       - name: Unpack release runtime
         run: |
-          tar xzf neomacs-release-runtime-linux-x86_64.tar.gz
+          tar xzf neomacs-release-runtime-linux-aarch64.tar.gz
           chmod +x target/release/neomacs
 
       - name: neovm-oracle-tests
