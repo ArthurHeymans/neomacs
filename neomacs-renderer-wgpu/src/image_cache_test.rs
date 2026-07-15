@@ -129,6 +129,24 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
 }
 
 #[test]
+fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <rect width="80" height="40" fill="#000000"/>
+        <rect y="36" width="80" height="4" fill="#ff0000"/>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 20, (0, 0)).unwrap();
+
+    assert_eq!((decoded.width, decoded.height), (40, 20));
+    let bottom_left = ((decoded.height - 1) * decoded.width * 4) as usize;
+    assert_eq!(
+        &decoded.data[bottom_left..bottom_left + 4],
+        &[0xff, 0x00, 0x00, 0xff],
+        "the natural-coordinate bottom band must be scaled into the constrained output"
+    );
+}
+
+#[test]
 fn decoded_xpm_distinguishes_transparent_and_opaque_corner_backgrounds() {
     let transparent = br#"/* XPM */
 static char *icon[] = {

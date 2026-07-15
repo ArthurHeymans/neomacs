@@ -37,7 +37,17 @@ pub(crate) fn decode(data: &[u8], max_width: u32, max_height: u32) -> Option<Dec
 
     let mut surface = ImageSurface::create(Format::ARgb32, width as i32, height as i32).ok()?;
     let context = cairo::Context::new(&surface).ok()?;
-    let viewport = cairo::Rectangle::new(0.0, 0.0, f64::from(width), f64::from(height));
+    // Render in the document's measured coordinate space, then scale that
+    // complete space into the constrained output.  A dimensionless SVG has
+    // no intrinsic viewport for librsvg to resize, so passing the smaller
+    // output rectangle directly would clip absolute coordinates (including
+    // CSS-pixel font sizes) instead of scaling them.  This is equivalent to
+    // GNU Emacs's generated outer SVG with a natural-size viewBox.
+    context.scale(
+        f64::from(width) / natural_width,
+        f64::from(height) / natural_height,
+    );
+    let viewport = cairo::Rectangle::new(0.0, 0.0, natural_width, natural_height);
     renderer.render_document(&context, &viewport).ok()?;
     drop(context);
 
