@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn mouse_move_is_excluded_from_input_bridge_info_logging() {
+fn mouse_move_is_excluded_from_input_bridge_debug_logging() {
     let event = DisplayEvent::MouseMove {
         x: 1.0,
         y: 2.0,
@@ -13,7 +13,7 @@ fn mouse_move_is_excluded_from_input_bridge_info_logging() {
 }
 
 #[test]
-fn non_mouse_move_is_included_in_input_bridge_info_logging() {
+fn non_mouse_move_is_included_in_input_bridge_debug_logging() {
     let event = DisplayEvent::WindowFocus {
         focused: true,
         emacs_frame_id: 7,

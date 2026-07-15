@@ -2366,12 +2366,12 @@ fn run_gui_evaluator_worker(
             while let Ok(event) = display_input_rx.recv() {
                 let should_log = input_bridge::should_log_display_event(&event);
                 if should_log {
-                    tracing::info!("input-bridge: received display event {:?}", event);
+                    tracing::debug!("input-bridge: received display event {:?}", event);
                 }
                 record_primary_window_resize(&primary_window_size_for_input, &event);
                 if let Some(kb_event) = input_bridge::convert_display_event(&event) {
                     if should_log {
-                        tracing::info!(
+                        tracing::debug!(
                             "input-bridge: converted display event {:?} to keyboard event {:?}",
                             event,
                             kb_event
@@ -2879,12 +2879,12 @@ pub fn run(mode: RuntimeMode) {
                 while let Ok(event) = display_input_rx.recv() {
                     let should_log = input_bridge::should_log_display_event(&event);
                     if should_log {
-                        tracing::info!("input-bridge: received display event {:?}", event);
+                        tracing::debug!("input-bridge: received display event {:?}", event);
                     }
                     record_primary_window_resize(&primary_window_size_for_input, &event);
                     if let Some(kb_event) = input_bridge::convert_display_event(&event) {
                         if should_log {
-                            tracing::info!(
+                            tracing::debug!(
                                 "input-bridge: converted display event {:?} to keyboard event {:?}",
                                 event,
                                 kb_event
