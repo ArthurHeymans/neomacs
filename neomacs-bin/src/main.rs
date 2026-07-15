@@ -2668,23 +2668,44 @@ static DIAG_TASK_RX: std::sync::Mutex<
     Option<crossbeam_channel::Receiver<neovm_core::emacs_core::eval::EvalThreadTask>>,
 > = std::sync::Mutex::new(None);
 
-/// The Lisp thread's wait notifier, published once the Context exists so the
-/// diagnostics thread can wake it after queueing a task.
+/// The Lisp thread's wait notifier, so the diagnostics thread can wake it after
+/// queueing a task. In TTY mode the poller's notify handle is created lazily
+/// (only once `recursive_edit` blocks), so it may be absent at install time —
+/// [`ensure_diag_notifier`] therefore also publishes it from the first task
+/// that runs on the Lisp thread.
 static DIAG_NOTIFIER: std::sync::OnceLock<neovm_core::emacs_core::process::WaitNotifier> =
     std::sync::OnceLock::new();
 
-/// Wake the Lisp thread if its notifier has been published.
+/// Set once an interactive Context has installed the eval-task channel, so the
+/// diagnostics server knows a capture can be serviced. Decoupled from
+/// `DIAG_NOTIFIER` because the notifier may not exist yet (see above); a queued
+/// task is still drained at the next `read_char` iteration (timer/input),
+/// so an active editor is profilable even before the notifier is published.
+static DIAG_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Wake the Lisp thread if its notifier has been published (best-effort — an
+/// active editor also drains queued tasks on its next loop iteration).
 fn diag_wake_lisp() {
     if let Some(notifier) = DIAG_NOTIFIER.get() {
         notifier.notify();
     }
 }
 
-/// Publish this Context's wait notifier and hand it the eval-thread task
-/// channel, so the diagnostics server can drive on-demand profile captures.
-/// Called from each interactive Context path right after the input system is
-/// initialized. A no-op for the channel if diagnostics is disabled (the
-/// Receiver is simply inert).
+/// Publish the Context's wait notifier if available and not yet set. Called from
+/// task closures, which run on the Lisp thread during `recursive_edit` — by
+/// which point the (lazily-created) poller notify handle exists.
+fn ensure_diag_notifier(ctx: &Context) {
+    if DIAG_NOTIFIER.get().is_none()
+        && let Some(notifier) = ctx.wait_notifier()
+    {
+        let _ = DIAG_NOTIFIER.set(notifier);
+    }
+}
+
+/// Hand this Context the eval-thread task channel and (best-effort) publish its
+/// wait notifier, so the diagnostics server can drive on-demand profile
+/// captures. Called from each interactive Context path right after the input
+/// system is initialized. The channel Receiver is inert if diagnostics is off.
 fn install_diagnostics_eval_hooks(evaluator: &mut Context) {
     if let Some(notifier) = evaluator.wait_notifier() {
         let _ = DIAG_NOTIFIER.set(notifier);
@@ -2692,6 +2713,7 @@ fn install_diagnostics_eval_hooks(evaluator: &mut Context) {
     if let Some(rx) = DIAG_TASK_RX.lock().unwrap().take() {
         evaluator.init_eval_task_system(rx);
     }
+    DIAG_INSTALLED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// Bridges diagnostics profile requests onto the Lisp thread: queue an
@@ -2703,16 +2725,14 @@ struct DiagProfileCtrl {
 
 impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
     fn is_live(&self) -> bool {
-        DIAG_NOTIFIER.get().is_some()
+        DIAG_INSTALLED.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn start(&self, interval_ns: u64) -> Result<bool, String> {
-        if DIAG_NOTIFIER.get().is_none() {
-            return Err("no live Lisp thread".to_string());
-        }
         let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
         self.task_tx
             .send(Box::new(move |ctx: &mut Context| {
+                ensure_diag_notifier(ctx);
                 let started = ctx.diagnostics_cpu_profile_start(interval_ns);
                 let _ = reply_tx.send(started);
             }))
@@ -2724,12 +2744,10 @@ impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
     }
 
     fn stop_and_fold(&self) -> Result<String, String> {
-        if DIAG_NOTIFIER.get().is_none() {
-            return Err("no live Lisp thread".to_string());
-        }
         let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
         self.task_tx
             .send(Box::new(move |ctx: &mut Context| {
+                ensure_diag_notifier(ctx);
                 let folded = ctx.diagnostics_cpu_profile_stop_fold();
                 let _ = reply_tx.send(folded);
             }))
@@ -2742,6 +2760,7 @@ impl neomacs_diagnostics::ProfileController for DiagProfileCtrl {
 
     fn abort(&self) {
         let _ = self.task_tx.send(Box::new(|ctx: &mut Context| {
+            ensure_diag_notifier(ctx);
             ctx.diagnostics_cpu_profile_abort();
         }));
         diag_wake_lisp();
