@@ -188,7 +188,7 @@ jobs:
           tool: cargo-nextest
 
       - name: Build and archive neovm-core tests
-        run: cargo nextest archive -p neovm-core --archive-file neovm-core-nextest.tar.zst
+        run: cargo nextest archive --release -p neovm-core --archive-file neovm-core-nextest.tar.zst
 
       - name: Upload neovm-core test archive
         uses: actions/upload-artifact@v4
@@ -246,6 +246,7 @@ jobs:
       - name: Build and archive neovm-oracle-tests
         run: |
           cargo nextest archive \
+            --release \
             -p neovm-oracle-tests \
             --archive-file neovm-oracle-tests-nextest.tar.zst
 
