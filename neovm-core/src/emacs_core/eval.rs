@@ -1386,6 +1386,7 @@ pub struct FontSpecResolveRequest {
     pub lang: Option<crate::heap_types::LispString>,
     pub weight: Option<FontWeight>,
     pub slant: Option<FontSlant>,
+    pub width: Option<FontWidth>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

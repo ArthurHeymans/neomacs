@@ -2001,6 +2001,10 @@ fn font_spec_resolve_request(
         .and_then(|value| font_value_text_lisp_string(&value));
     let weight = font_vector_get_flexible(&elems, "weight").and_then(font_weight_from_value);
     let slant = font_vector_get_flexible(&elems, "slant").and_then(font_slant_from_value);
+    let width = font_vector_get_flexible(&elems, "width").and_then(|value| match value.kind() {
+        ValueKind::Symbol(id) => FontWidth::from_symbol(resolve_sym(id)),
+        _ => None,
+    });
 
     Ok(super::eval::FontSpecResolveRequest {
         frame_id: find_font_frame_id(eval, frame)?,
@@ -2009,6 +2013,7 @@ fn font_spec_resolve_request(
         lang,
         weight,
         slant,
+        width,
     })
 }
 

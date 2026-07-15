@@ -141,6 +141,7 @@ impl FontBackend for FontconfigBackend {
             None,
             Some(FontWeight::from_css_weight(weight)),
             Some(slant),
+            Some(neovm_core::face::FontWidth::Normal),
         )
         .and_then(|matched| {
             PlatformFontMatch::from_fontconfig(crate::fontconfig::FontMatch {

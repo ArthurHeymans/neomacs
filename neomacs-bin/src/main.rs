@@ -1461,6 +1461,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             request.lang.as_ref().and_then(|ls| ls.as_utf8_str()),
             request.weight,
             request.slant,
+            request.width,
         );
         Ok(matched.map(|font| ResolvedFontSpecMatch {
             family: LispString::from_utf8(&font.family),

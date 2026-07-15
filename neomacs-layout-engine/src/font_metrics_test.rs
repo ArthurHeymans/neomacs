@@ -610,6 +610,7 @@ fn installed_symbols_only_primary_font_uses_fontconfig_metrics_without_ascii_fal
         None,
         Some(FontWeight::Normal),
         Some(FontSlant::Normal),
+        None,
     ) else {
         return;
     };
@@ -644,6 +645,33 @@ fn char_width_bold_vs_normal() {
     // Both should be positive — bold may or may not be wider depending on font
     assert!(w_normal > 0.0, "normal width should be positive");
     assert!(w_bold > 0.0, "bold width should be positive");
+}
+
+#[cfg(unix)]
+#[test]
+fn installed_iosevka_digit_advance_is_fixed_across_weights() {
+    use crate::font_backend::FontBackend;
+
+    let backend = crate::font_backend::FontconfigBackend;
+    let Some(normal) = backend.match_primary_font("Iosevka", 400, false) else {
+        return;
+    };
+    let Some(bold) = backend.match_primary_font("Iosevka", 700, false) else {
+        return;
+    };
+    assert_eq!(normal.family, "Iosevka");
+    assert_eq!(bold.family, "Iosevka");
+
+    let mut svc = make_svc();
+    let normal_width = svc.char_width('2', "Iosevka", 400, false, 10.0);
+    let bold_width = svc.char_width('2', "Iosevka", 700, false, 10.0);
+    let normal_realized = realized_face_info(&mut svc, '2', "Iosevka", 400, false, 10.0);
+    let bold_realized = realized_face_info(&mut svc, '2', "Iosevka", 700, false, 10.0);
+
+    assert_eq!(
+        normal_width, bold_width,
+        "Iosevka is fixed-pitch across weights: platform regular={normal:?}, platform bold={bold:?}, shaped regular={normal_width} {normal_realized:?}, shaped bold={bold_width} {bold_realized:?}"
+    );
 }
 
 #[test]
@@ -1696,6 +1724,7 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
         None,
         Some(FontWeight::Bold),
         Some(FontSlant::Normal),
+        None,
     ) else {
         tracing::info!("skipping: Noto Sans is not installed");
         return;
@@ -1874,6 +1903,7 @@ fn realize_frame_fonts_resolves_an_installed_symbols_only_primary_face() {
         None,
         Some(FontWeight::Normal),
         Some(FontSlant::Normal),
+        None,
     ) else {
         return;
     };

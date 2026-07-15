@@ -366,6 +366,8 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
         Value::string("gb2312.1980-0"),
         Value::keyword("weight"),
         Value::symbol("normal"),
+        Value::keyword("width"),
+        Value::symbol("expanded"),
     ])
     .unwrap();
     let font = builtin_find_font(&mut eval, vec![spec]).unwrap();
@@ -410,6 +412,7 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
     );
     assert_eq!(request.family, None);
     assert_eq!(request.weight, Some(FontWeight::NORMAL));
+    assert_eq!(request.width, Some(crate::face::FontWidth::Expanded));
 }
 
 #[test]

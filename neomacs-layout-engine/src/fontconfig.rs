@@ -422,6 +422,7 @@ pub fn find_font_for_spec(
     lang: Option<&str>,
     weight: Option<FontWeight>,
     slant: Option<FontSlant>,
+    width: Option<FontWidth>,
 ) -> Option<SpecFontMatch> {
     let resolved_family = family
         .map(str::trim)
@@ -434,7 +435,7 @@ pub fn find_font_for_spec(
         lang: lang.map(|lang| intern(&lang.to_ascii_lowercase())),
         weight,
         slant,
-        width: None,
+        width,
         repertory: None,
     };
     let representative = representative_char_for_spec(&spec);
@@ -481,10 +482,20 @@ fn select_find_font_candidate(
         .min_by_key(|(ordinal, candidate)| {
             (
                 family_affinity_score(requested_family, &candidate.matched.family),
+                requested_width_distance(spec.width, candidate.width),
                 *ordinal,
             )
         })
         .map(|(_, candidate)| candidate)
+}
+
+fn requested_width_distance(requested: Option<FontWidth>, candidate: Option<FontWidth>) -> u16 {
+    requested.map_or(0, |requested| {
+        candidate
+            .unwrap_or(FontWidth::Normal)
+            .gnu_numeric()
+            .abs_diff(requested.gnu_numeric())
+    })
 }
 
 pub fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {

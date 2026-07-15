@@ -480,6 +480,46 @@ fn find_font_candidate_prefers_the_requested_family_over_an_earlier_fallback() {
 }
 
 #[test]
+fn find_font_candidate_prefers_requested_width_over_candidate_order() {
+    let candidate = |file: &str, width: FontWidth| ListedFont {
+        foundry: None,
+        matched: super::FontMatch {
+            family: "Iosevka".to_string(),
+            file: Some(file.to_string()),
+            face_index: 0,
+            variation_coords: Vec::new(),
+            postscript_name: None,
+            weight: Some(700),
+            slant: FontSlant::Normal,
+        },
+        style: "Bold".to_string(),
+        weight_css: Some(700),
+        width: Some(width),
+        spacing: None,
+    };
+    let spec = StoredFontSpec {
+        family: Some(font_sym("Iosevka")),
+        registry: None,
+        lang: None,
+        weight: Some(FontWeight::Bold),
+        slant: Some(FontSlant::Normal),
+        width: Some(FontWidth::Normal),
+        repertory: None,
+    };
+
+    let selected = select_find_font_candidate(
+        vec![
+            candidate("Iosevka-ExtendedBold.ttf", FontWidth::Expanded),
+            candidate("Iosevka-Bold.ttf", FontWidth::Normal),
+        ],
+        &spec,
+    )
+    .expect("matching candidate");
+
+    assert_eq!(selected.matched.file.as_deref(), Some("Iosevka-Bold.ttf"));
+}
+
+#[test]
 fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_up() {
     let candidates = vec![
         ListedFont {
