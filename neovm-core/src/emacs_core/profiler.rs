@@ -187,6 +187,11 @@ fn fixnum_count(count: u64) -> i64 {
 pub(crate) struct ProfilerState {
     cpu_log: Option<ProfilerLog>,
     cpu_running: bool,
+    /// True while the running CPU session was started by the diagnostics server
+    /// (not an interactive `profiler-start`). Lets a later diagnostics start
+    /// reclaim an orphaned diagnostics session while still never hijacking a
+    /// user session.
+    cpu_diagnostics_owned: bool,
     cpu_interval_ns: u64,
     cpu_last_ns: u64,
     cpu_remainder_ns: u64,
@@ -200,6 +205,7 @@ impl Default for ProfilerState {
         Self {
             cpu_log: None,
             cpu_running: false,
+            cpu_diagnostics_owned: false,
             cpu_interval_ns: 0,
             cpu_last_ns: 0,
             cpu_remainder_ns: 0,
@@ -407,16 +413,25 @@ impl Context {
 
     /// Public diagnostics entry point: begin a CPU capture at `interval_ns`.
     ///
-    /// Returns false WITHOUT touching the profiler when a CPU session is already
-    /// running (e.g. an interactive `M-x profiler-start`), so a diagnostics
-    /// probe never hijacks or steals a user's session. When it does start, it
-    /// resets the log first so the capture reflects only this window.
+    /// Returns false WITHOUT touching the profiler only when an INTERACTIVE CPU
+    /// session (`M-x profiler-start`) is already running, so a diagnostics probe
+    /// never hijacks a user's session. If a previous *diagnostics* session is
+    /// still running (e.g. an orphan whose stop task never drained), it is
+    /// reclaimed — stopped and restarted — so captures can't get wedged. On a
+    /// fresh start it resets the log so the capture reflects only this window.
     pub fn diagnostics_cpu_profile_start(&mut self, interval_ns: u64) -> bool {
         if self.profiler_cpu_running() {
-            return false;
+            if self.profiler.cpu_diagnostics_owned {
+                // Reclaim an orphaned diagnostics session.
+                self.profiler_cpu_stop();
+            } else {
+                return false;
+            }
         }
         self.profiler.cpu_log = None;
-        self.profiler_cpu_start(interval_ns)
+        let started = self.profiler_cpu_start(interval_ns);
+        self.profiler.cpu_diagnostics_owned = started;
+        started
     }
 
     /// Public diagnostics entry point: fold the accrued CPU samples into
@@ -427,6 +442,7 @@ impl Context {
         let folded = self.profiler_cpu_folded();
         self.profiler_cpu_stop();
         self.profiler.cpu_log = None;
+        self.profiler.cpu_diagnostics_owned = false;
         folded
     }
 
@@ -436,6 +452,7 @@ impl Context {
     pub fn diagnostics_cpu_profile_abort(&mut self) {
         self.profiler_cpu_stop();
         self.profiler.cpu_log = None;
+        self.profiler.cpu_diagnostics_owned = false;
     }
 
     pub(crate) fn profiler_memory_start(&mut self) -> bool {
@@ -615,11 +632,24 @@ mod tests {
         // Stopping clears the log so the next capture starts clean.
         assert!(!ctx.profiler_cpu_running());
 
-        // A capture must not hijack an already-running session.
+        // A diagnostics capture reclaims its OWN orphaned session (a prior
+        // diagnostics start whose stop never ran) instead of wedging.
         assert!(ctx.diagnostics_cpu_profile_start(1_000_000));
-        assert!(!ctx.diagnostics_cpu_profile_start(1_000_000));
+        assert!(
+            ctx.diagnostics_cpu_profile_start(1_000_000),
+            "should reclaim an orphaned diagnostics session"
+        );
         ctx.diagnostics_cpu_profile_abort();
         assert!(!ctx.profiler_cpu_running());
+
+        // But it must NOT hijack an interactive (non-diagnostics) session.
+        assert!(ctx.profiler_cpu_start(1_000_000));
+        assert!(
+            !ctx.diagnostics_cpu_profile_start(1_000_000),
+            "must not hijack an interactive profiler-start session"
+        );
+        assert!(ctx.profiler_cpu_running());
+        ctx.profiler_cpu_stop();
     }
 
     #[test]
