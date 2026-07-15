@@ -1854,7 +1854,7 @@ fn materialize_stretch_glyph() {
 }
 
 #[test]
-fn materialize_uses_explicit_stretch_geometry() {
+fn materialize_stretch_paint_uses_row_geometry_after_explicit_layout_metrics() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state
         .faces
@@ -1882,11 +1882,60 @@ fn materialize_uses_explicit_stretch_geometry() {
         FrameGlyph::Stretch {
             y, width, height, ..
         } => {
-            assert_eq!(*y, 25.0);
+            assert_eq!(*y, 10.0);
             assert_eq!(*width, 24.0);
-            assert_eq!(*height, 12.0);
+            assert_eq!(*height, 30.0);
         }
         other => panic!("expected Stretch, got {:?}", other),
+    }
+}
+
+#[test]
+fn materialize_stretch_face_paints_the_full_mixed_height_row() {
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state
+        .faces
+        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
+
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].pixel_y = 4.0;
+    matrix.rows[0].height_px = 20.0;
+    matrix.rows[0].ascent_px = 15.0;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].extend([
+        Glyph::char('\u{f401}', FaceId::new(0), 0).with_pixel_geometry(7.0, 16.0, 12.0),
+        Glyph::stretch(2, FaceId::new(0)).with_pixel_geometry(10.0, 13.0, 10.0),
+        Glyph::char('n', FaceId::new(0), 2).with_pixel_geometry(9.0, 20.0, 15.0),
+    ]);
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: Rect::new(0.0, 20.0, 80.0, 40.0),
+        text_pixel_bounds: Rect::new(0.0, 20.0, 80.0, 40.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    match &buf.glyphs[1] {
+        FrameGlyph::Stretch {
+            x,
+            y,
+            width,
+            height,
+            ..
+        } => {
+            assert_eq!(*x, 7.0);
+            assert_eq!(*width, 10.0);
+            assert_eq!(*y, 24.0, "GNU stretch backgrounds start at row->y");
+            assert_eq!(
+                *height, 20.0,
+                "GNU stretch backgrounds use row->height, not glyph height"
+            );
+        }
+        other => panic!("expected Stretch, got {other:?}"),
     }
 }
 

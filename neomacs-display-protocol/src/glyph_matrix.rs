@@ -126,15 +126,18 @@ pub struct Glyph {
     /// `0.0` means "not explicitly measured"; materialization falls back to
     /// character-grid width.  TTY backends ignore this field.
     pub pixel_width: f32,
-    /// Stretch-glyph height in pixels.
+    /// Stretch-glyph layout height in pixels.
     ///
     /// GNU's `struct glyph` stores stretch height/ascent in
-    /// `glyph->u.stretch`.  `0.0` means "use the containing row height".
+    /// `glyph->u.stretch`.  These metrics contribute to the containing row's
+    /// ascent and height; they are not the stretch face's paint rectangle.
+    /// GNU paints every glyph string background with `row->y` and
+    /// `row->height`. `0.0` means "use the containing row metrics".
     pub pixel_height: f32,
-    /// Stretch-glyph ascent in pixels.
+    /// Stretch-glyph layout ascent in pixels.
     ///
-    /// Used with `pixel_height`; materialization positions the stretch
-    /// relative to the row baseline.  `0.0` falls back to row ascent.
+    /// Used with `pixel_height` while constructing the containing row.
+    /// `0.0` falls back to row ascent.
     pub pixel_ascent: f32,
     /// Glyph vertical offset in pixels.
     ///
@@ -957,6 +960,39 @@ pub fn reset_materialize_call_count_for_current_thread() {
 #[cfg(debug_assertions)]
 pub fn materialize_call_count_for_current_thread() -> u32 {
     MATERIALIZE_CALL_COUNT.with(std::cell::Cell::get)
+}
+
+/// Authoritative paint cell shared by every glyph materialized from one row.
+///
+/// This mirrors GNU `struct glyph_string`: glyph strings keep their own
+/// horizontal advance and font/ink metrics, but their `y` and `height` always
+/// come from the containing `glyph_row`. Keeping that invariant in one value
+/// prevents glyph-specific layout metrics from leaking into face background,
+/// pointer, and decoration geometry.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct MaterializedRowCell {
+    y: f32,
+    height: f32,
+}
+
+impl MaterializedRowCell {
+    fn new(win_y: f32, row_index: u32, row: &GlyphRow, fallback_height: f32) -> Self {
+        let y = if row.height_px > 0.0 {
+            win_y + row.pixel_y
+        } else {
+            win_y + row_index as f32 * fallback_height
+        };
+        let height = if row.height_px > 0.0 {
+            row.height_px
+        } else {
+            fallback_height
+        };
+        Self { y, height }
+    }
+
+    fn rect(self, x: f32, width: f32) -> Rect {
+        Rect::new(x, self.y, width, self.height)
+    }
 }
 
 impl FrameDisplayState {
@@ -1990,22 +2026,10 @@ impl FrameDisplayState {
         let win_x = pixel_bounds.x;
         let win_y = pixel_bounds.y;
         let win_w = pixel_bounds.width;
-        let y = if glyph_row.height_px > 0.0 {
-            win_y + glyph_row.pixel_y
-        } else {
-            win_y + row_index as f32 * char_h
-        };
-        let row_height = if glyph_row.height_px > 0.0 {
-            glyph_row.height_px
-        } else {
-            char_h
-        };
+        let row_cell = MaterializedRowCell::new(win_y, row_index, glyph_row, char_h);
+        let y = row_cell.y;
+        let row_height = row_cell.height;
         let row_role = glyph_row.role;
-        let row_ascent = if glyph_row.ascent_px > 0.0 {
-            glyph_row.ascent_px.min(row_height)
-        } else {
-            row_height
-        };
         // For `Text` rows this is the text-area band (narrower than the window
         // when a vscroll shifts content past the header/mode-line); for chrome
         // rows the caller passes the window bounds, matching the historical
@@ -2085,7 +2109,8 @@ impl FrameDisplayState {
                         } else {
                             row_height
                         };
-                        let baseline = y + row_ascent + glyph.vertical_offset_px;
+                        let cell = row_cell.rect(x, materialized_width);
+                        let baseline = cell.y + row_ascent + glyph.vertical_offset_px;
                         push(FrameGlyph::Char {
                             window_id,
                             row_role,
@@ -2094,11 +2119,11 @@ impl FrameDisplayState {
                             bidi_level: glyph.bidi_level,
                             char: *ch,
                             composed: None,
-                            x,
-                            y,
+                            x: cell.x,
+                            y: cell.y,
                             baseline,
-                            width: materialized_width,
-                            height: row_height,
+                            width: cell.width,
+                            height: cell.height,
                             ascent: if font_ascent > 0.0 {
                                 font_ascent.min(row_height)
                             } else {
@@ -2117,7 +2142,8 @@ impl FrameDisplayState {
                         } else {
                             row_height
                         };
-                        let baseline = y + row_ascent + glyph.vertical_offset_px;
+                        let cell = row_cell.rect(x, materialized_width);
+                        let baseline = cell.y + row_ascent + glyph.vertical_offset_px;
                         push(FrameGlyph::Char {
                             window_id,
                             row_role,
@@ -2126,11 +2152,11 @@ impl FrameDisplayState {
                             bidi_level: glyph.bidi_level,
                             char: text.chars().next().unwrap_or(' '),
                             composed: Some(text.clone()),
-                            x,
-                            y,
+                            x: cell.x,
+                            y: cell.y,
                             baseline,
-                            width: materialized_width,
-                            height: row_height,
+                            width: cell.width,
+                            height: cell.height,
                             ascent: if font_ascent > 0.0 {
                                 font_ascent.min(row_height)
                             } else {
@@ -2141,31 +2167,17 @@ impl FrameDisplayState {
                     }
                     GlyphType::Stretch { .. } => {
                         let face_data = self.resolve_face_for_materialize(glyph.face_id);
-                        let stretch_height = if glyph.pixel_height > 0.0 {
-                            glyph.pixel_height
-                        } else {
-                            row_height
-                        };
-                        let stretch_ascent = if glyph.pixel_height > 0.0 {
-                            glyph.pixel_ascent.min(stretch_height)
-                        } else {
-                            row_ascent.min(stretch_height)
-                        };
-                        let stretch_y = if glyph.pixel_height > 0.0 {
-                            y + row_ascent - stretch_ascent
-                        } else {
-                            y
-                        } + glyph.vertical_offset_px;
+                        let cell = row_cell.rect(x, materialized_width);
                         push(FrameGlyph::Stretch {
                             window_id,
                             row_role,
                             clip_rect,
                             slot_id,
                             bidi_level: glyph.bidi_level,
-                            x,
-                            y: stretch_y,
-                            width: materialized_width,
-                            height: stretch_height,
+                            x: cell.x,
+                            y: cell.y,
+                            width: cell.width,
+                            height: cell.height,
                             bg: face_data.bg,
                             face_id: glyph.face_id,
                             stipple_id: 0,
