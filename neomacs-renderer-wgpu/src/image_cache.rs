@@ -1,15 +1,10 @@
 //! Async image loading and caching for wgpu renderer
 //!
 //! Provides non-blocking image loading:
-//! - Fast dimension query (header only)
+//! - Dimension queries for pending-image placeholders
 //! - Background decoding in thread pool
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
-
-// `resvg::usvg::Options` is a large external config type; setting fields after
-// `default()` reads clearly and sidesteps functional-record-update constraints
-// on an external type, so the field-reassign lint is allowed module-wide.
-#![allow(clippy::field_reassign_with_default)]
 
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -17,40 +12,14 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, mpsc};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-
-use resvg::usvg::fontdb;
 
 #[cfg(target_os = "linux")]
 use crate::external_buffer::DmaBufBuffer;
 
 /// Maximum texture dimension (width or height)
 const MAX_TEXTURE_SIZE: u32 = 4096;
-
-/// Global font database for SVG text rendering (loaded once, shared across threads)
-static SVG_FONTDB: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
-
-/// Get or initialize the global font database for SVG rendering.
-/// Loads system fonts on first call. Thread-safe via OnceLock.
-fn svg_fontdb() -> Arc<fontdb::Database> {
-    SVG_FONTDB
-        .get_or_init(|| {
-            let mut db = fontdb::Database::new();
-            db.load_system_fonts();
-            let count = db.len();
-            if count > 0 {
-                tracing::info!("SVG fontdb: loaded {} system font faces", count);
-            } else {
-                tracing::warn!(
-                    "SVG fontdb: no system fonts found! SVG text elements will not render. \
-                     Ensure fonts are installed (e.g. noto-fonts, dejavu-fonts)."
-                );
-            }
-            Arc::new(db)
-        })
-        .clone()
-}
 
 /// Maximum total cache memory in bytes (64MB)
 const MAX_CACHE_MEMORY: usize = 64 * 1024 * 1024;
@@ -546,65 +515,14 @@ impl ImageCache {
         }
     }
 
-    /// Decode SVG data via resvg, returning RGBA pixels
+    /// Decode SVG data through the platform SVG backend, returning RGBA pixels.
     fn decode_svg_data(
         data: &[u8],
         max_width: u32,
         max_height: u32,
     ) -> Option<(u32, u32, Vec<u8>)> {
-        let fontdb = svg_fontdb();
-        let mut opts = resvg::usvg::Options::default();
-        opts.fontdb = fontdb;
-        let tree = resvg::usvg::Tree::from_data(data, &opts).ok()?;
-        let svg_size = tree.size();
-        let svg_w = svg_size.width();
-        let svg_h = svg_size.height();
-        if svg_w <= 0.0 || svg_h <= 0.0 {
-            return None;
-        }
-
-        // Determine render size respecting max constraints
-        let mut w = svg_w.ceil() as u32;
-        let mut h = svg_h.ceil() as u32;
-        let mw = if max_width > 0 {
-            max_width
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-        let mh = if max_height > 0 {
-            max_height
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-        if w > mw {
-            h = (h as f64 * mw as f64 / w as f64) as u32;
-            w = mw;
-        }
-        if h > mh {
-            w = (w as f64 * mh as f64 / h as f64) as u32;
-            h = mh;
-        }
-        w = w.max(1);
-        h = h.max(1);
-
-        let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
-        let scale_x = w as f32 / svg_w;
-        let scale_y = h as f32 / svg_h;
-        let transform = resvg::tiny_skia::Transform::from_scale(scale_x, scale_y);
-        resvg::render(&tree, transform, &mut pixmap.as_mut());
-
-        // tiny_skia produces premultiplied RGBA; convert to straight alpha for wgpu
-        let mut rgba = pixmap.take();
-        for pixel in rgba.chunks_exact_mut(4) {
-            let a = pixel[3] as f32 / 255.0;
-            if a > 0.0 && a < 1.0 {
-                pixel[0] = (pixel[0] as f32 / a).min(255.0) as u8;
-                pixel[1] = (pixel[1] as f32 / a).min(255.0) as u8;
-                pixel[2] = (pixel[2] as f32 / a).min(255.0) as u8;
-            }
-        }
-
-        Some((w, h, rgba))
+        let decoded = crate::svg::decode(data, max_width, max_height, MAX_TEXTURE_SIZE)?;
+        Some((decoded.width, decoded.height, decoded.rgba))
     }
 
     /// Process decoded image: resize if needed, convert to RGBA
@@ -773,7 +691,9 @@ impl ImageCache {
         &self.sampler
     }
 
-    /// Query image file dimensions (fast - reads header only)
+    /// Query image file dimensions.
+    ///
+    /// Raster formats read only their header; SVG requires document parsing.
     pub fn query_file_dimensions(path: &str) -> Option<ImageDimensions> {
         let file = File::open(path).ok()?;
         let reader = BufReader::new(file);
@@ -790,12 +710,14 @@ impl ImageCache {
             });
         }
 
-        // Fallback: try SVG via resvg
+        // Fallback: try SVG.
         let data = std::fs::read(path).ok()?;
         Self::query_svg_dimensions(&data)
     }
 
-    /// Query image data dimensions (fast - reads header only)
+    /// Query image data dimensions.
+    ///
+    /// Raster formats read only their header; SVG requires document parsing.
     pub fn query_data_dimensions(data: &[u8]) -> Option<ImageDimensions> {
         let cursor = std::io::Cursor::new(data);
         if let Ok(dims) = image::ImageReader::new(BufReader::new(cursor))
@@ -825,27 +747,14 @@ impl ImageCache {
             });
         }
 
-        // Fallback: try SVG via resvg
+        // Fallback: try SVG.
         Self::query_svg_dimensions(data)
     }
 
     /// Query SVG dimensions without full rendering
     fn query_svg_dimensions(data: &[u8]) -> Option<ImageDimensions> {
-        let fontdb = svg_fontdb();
-        let mut opts = resvg::usvg::Options::default();
-        opts.fontdb = fontdb;
-        let tree = resvg::usvg::Tree::from_data(data, &opts).ok()?;
-        let size = tree.size();
-        let w = size.width().ceil() as u32;
-        let h = size.height().ceil() as u32;
-        if w > 0 && h > 0 {
-            Some(ImageDimensions {
-                width: w,
-                height: h,
-            })
-        } else {
-            None
-        }
+        let (width, height) = crate::svg::query_dimensions(data)?;
+        Some(ImageDimensions { width, height })
     }
 
     /// Load image from file (async)
@@ -874,7 +783,7 @@ impl ImageCache {
         bg_color: u32,
     ) {
         let load = self.begin_load(id);
-        // Query dimensions first (fast)
+        // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
             let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
             self.pending_dimensions.insert(
@@ -910,7 +819,7 @@ impl ImageCache {
         bg_color: u32,
     ) {
         let load = self.begin_load(id);
-        // Query dimensions first (fast)
+        // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_file_dimensions(path) {
             // Apply max constraints to dimensions
             let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
@@ -953,7 +862,7 @@ impl ImageCache {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
 
-        // Query dimensions first (fast)
+        // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
             let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
             self.pending_dimensions.insert(

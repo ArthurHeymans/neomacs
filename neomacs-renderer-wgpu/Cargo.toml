@@ -33,5 +33,9 @@ gstreamer-allocators = { workspace = true, optional = true }
 neomacs-display-protocol.workspace = true
 neomacs-layout-engine.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+librsvg-rebind.workspace = true
+cairo-rs.workspace = true
+
 [lints]
 workspace = true

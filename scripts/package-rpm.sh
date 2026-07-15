@@ -149,6 +149,8 @@ URL:            https://github.com/eval-exec/neomacs
 
 Requires:       fontconfig
 Requires:       glib2
+Requires:       cairo
+Requires:       librsvg2
 
 %description
 NEO Emacs is an extensible, programmable text editor based on

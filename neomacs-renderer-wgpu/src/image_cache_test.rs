@@ -114,6 +114,21 @@ fn decoded_transparent_svg_stays_transparent_with_explicit_lisp_background() {
 }
 
 #[test]
+fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#000000"/>
+        <rect width="80" height="40" fill="#ff0000"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 24, (0, 0)).unwrap();
+
+    assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
+}
+
+#[test]
 fn decoded_xpm_distinguishes_transparent_and_opaque_corner_backgrounds() {
     let transparent = br#"/* XPM */
 static char *icon[] = {

@@ -10,6 +10,7 @@ pub mod glyph_atlas;
 pub mod image_cache;
 pub mod overlay_state;
 pub mod renderer;
+mod svg;
 pub mod vertex;
 pub mod xbm;
 pub mod xpm;

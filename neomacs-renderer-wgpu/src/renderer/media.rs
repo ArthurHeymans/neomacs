@@ -107,12 +107,12 @@ impl WgpuRenderer {
             .load_raw_rgb24_with_id(id, data, width, height, stride)
     }
 
-    /// Query image file dimensions (fast - reads header only, does not block)
+    /// Query image file dimensions for a pending-image placeholder.
     pub fn query_image_file_size(path: &str) -> Option<(u32, u32)> {
         ImageCache::query_file_dimensions(path).map(|d| (d.width, d.height))
     }
 
-    /// Query image data dimensions (fast - reads header only)
+    /// Query image data dimensions for a pending-image placeholder.
     pub fn query_image_data_size(data: &[u8]) -> Option<(u32, u32)> {
         ImageCache::query_data_dimensions(data).map(|d| (d.width, d.height))
     }

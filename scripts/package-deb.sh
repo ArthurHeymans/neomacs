@@ -142,7 +142,7 @@ Homepage: https://github.com/eval-exec/neomacs
 Description: NEO Emacs
  Extensible, programmable text editor based on Emacs Lisp
  and the Neovim virtual machine, built with Rust.
-Depends: libfontconfig1, libglib2.0-0
+Depends: libcairo2, libfontconfig1, libglib2.0-0, librsvg2-2
 CONTROL
 
 cat >"$pkg_dir/DEBIAN/postinst" <<'POSTINST'
