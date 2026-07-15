@@ -2223,9 +2223,18 @@ impl FrameDisplayState {
             }
         }
 
+        // Window-owned chrome still relies on the legacy row-completion
+        // fallback introduced before typed frame chrome.  A frame tab bar is
+        // already a complete `FrameChromeContent::DisplayRow` scene: adding a
+        // second, inferred primitive here loses GNU's iterator-selected tail
+        // face and can smear the last item's background across the band.
         let final_x = x_cursor.min(win_x + win_w);
         let right_edge = win_x + win_w;
-        if final_x < right_edge && col > 0 && row_role.is_chrome() {
+        if final_x < right_edge
+            && col > 0
+            && row_role.is_chrome()
+            && row_role != GlyphRowRole::TabBar
+        {
             let last_face_id = glyph_row
                 .glyphs
                 .iter()

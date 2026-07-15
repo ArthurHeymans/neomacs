@@ -2023,6 +2023,53 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
 }
 
 #[test]
+fn frame_tab_bar_materialization_does_not_invent_a_trailing_face() {
+    use crate::frame_chrome::{
+        ChromeBandRequest, ChromeDisplayRow, FrameChrome, FrameChromeContent, FrameChromeKind,
+        FrameSize,
+    };
+
+    let mut state = FrameDisplayState::new(10, 2, 8.0, 16.0);
+    state.frame_pixel_width = 80.0;
+    state.frame_pixel_height = 32.0;
+
+    let blue_face_id = FaceId::new(20);
+    let mut blue_face = Face::new(blue_face_id);
+    blue_face.background = Color::from_pixel(0x000000ff);
+    state.faces.insert(blue_face_id, blue_face);
+
+    let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    row.enabled = true;
+    row.height_px = 16.0;
+    row.ascent_px = 12.0;
+    row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::char('x', blue_face_id, 0).with_pixel_width(8.0));
+    state.frame_chrome = FrameChrome::layout(
+        FrameSize::new(80.0, 32.0).expect("valid frame"),
+        vec![ChromeBandRequest::new(
+            FrameChromeKind::TabBar,
+            16.0,
+            FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row, Vec::new())),
+        )],
+    )
+    .expect("valid chrome");
+
+    let materialized = state.materialize();
+    let tab_bar_glyphs: Vec<_> = materialized
+        .glyphs
+        .iter()
+        .filter(|glyph| glyph.row_role() == Some(GlyphRowRole::TabBar))
+        .collect();
+
+    assert_eq!(
+        tab_bar_glyphs.len(),
+        1,
+        "materialization must preserve the complete frame-tab-bar scene instead of guessing a tail fill"
+    );
+    assert!(matches!(tab_bar_glyphs[0], FrameGlyph::Char { .. }));
+}
+
+#[test]
 fn materialize_mixed_grid_and_nongrid_items() {
     let mut state = state_with_text("Hi");
 
