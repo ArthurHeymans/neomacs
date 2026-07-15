@@ -59,8 +59,8 @@ use crate::emacs_core::value::{
     get_string_text_properties_for_value, set_string_text_properties_for_value,
 };
 use crate::face::{
-    BoxBorder, BoxStyle, Color, Face, FaceHeight, FaceTable, FontSlant, FontWeight, FontWidth,
-    Underline, UnderlineStyle,
+    BoxBorder, BoxStyle, Color, Face, FaceDecoration, FaceHeight, FaceTable, FontSlant, FontWeight,
+    FontWidth, Underline, UnderlineStyle,
 };
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
@@ -3456,7 +3456,8 @@ fn dump_face(encoder: &mut DumpEncoder, f: &Face) -> DumpFace {
         height: f.height.as_ref().map(dump_face_height),
         weight: f.weight.map(FontWeight::dump_code),
         slant: f.slant.as_ref().map(dump_font_slant),
-        underline: f.underline.as_ref().map(|u| DumpUnderline {
+        underline_disabled: matches!(&f.underline, FaceDecoration::Disabled),
+        underline: f.underline.enabled().map(|u| DumpUnderline {
             style: dump_underline_style(&u.style),
             color: u.color.map(|c| dump_color(&c)),
             position: u.position,
@@ -5558,17 +5559,23 @@ fn load_face(decoder: &mut LoadDecoder, df: &DumpFace) -> Face {
         }),
         weight: df.weight.map(FontWeight::from_dump_code),
         slant: df.slant.as_ref().map(load_font_slant),
-        underline: df.underline.as_ref().map(|u| Underline {
-            style: match u.style {
-                DumpUnderlineStyle::Line => UnderlineStyle::Line,
-                DumpUnderlineStyle::Wave => UnderlineStyle::Wave,
-                DumpUnderlineStyle::Dot => UnderlineStyle::Dots,
-                DumpUnderlineStyle::Dash => UnderlineStyle::Dashes,
-                DumpUnderlineStyle::DoubleLine => UnderlineStyle::DoubleLine,
-            },
-            color: u.color.map(|c| load_color(&c)),
-            position: u.position,
-        }),
+        underline: if df.underline_disabled {
+            FaceDecoration::Disabled
+        } else if let Some(u) = &df.underline {
+            FaceDecoration::Enabled(Underline {
+                style: match u.style {
+                    DumpUnderlineStyle::Line => UnderlineStyle::Line,
+                    DumpUnderlineStyle::Wave => UnderlineStyle::Wave,
+                    DumpUnderlineStyle::Dot => UnderlineStyle::Dots,
+                    DumpUnderlineStyle::Dash => UnderlineStyle::Dashes,
+                    DumpUnderlineStyle::DoubleLine => UnderlineStyle::DoubleLine,
+                },
+                color: u.color.map(|c| load_color(&c)),
+                position: u.position,
+            })
+        } else {
+            FaceDecoration::Unspecified
+        },
         overline: df.overline,
         strike_through: df.strike_through,
         box_border: df.box_border.as_ref().map(|b| BoxBorder {

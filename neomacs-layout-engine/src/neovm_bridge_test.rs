@@ -2034,7 +2034,7 @@ fn face_resolver_underline_styles_use_gnu_codes() {
 
     for (name, style, _) in styles {
         let mut face = NeoFace::new(name);
-        face.underline = Some(neovm_core::face::Underline {
+        face.underline = neovm_core::face::FaceDecoration::Enabled(neovm_core::face::Underline {
             style,
             color: None,
             position: None,

@@ -14092,6 +14092,72 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
 }
 
 #[test]
+fn layout_frame_rust_overlay_face_nil_cancels_text_underline() {
+    use neomacs_display_protocol::face::UnderlineStyle;
+
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-face-cancels-underline",
+        640,
+        180,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+
+    let results = eval.eval_str_each(
+        "(internal-set-lisp-face-attribute '__underlined_text :underline t (selected-frame))\
+         (internal-set-lisp-face-attribute '__highlight_without_underline :underline nil (selected-frame))\
+         (internal-set-lisp-face-attribute '__highlight_without_underline :background \"#4d4d4d\" (selected-frame))\
+         (erase-buffer)\
+         (insert \"neomacs\")\
+         (put-text-property 1 8 'face '__underlined_text)\
+         (overlay-put (make-overlay 1 8) 'face '__highlight_without_underline)",
+    );
+    assert!(
+        results.iter().all(Result::is_ok),
+        "face and overlay setup must succeed, got {results:?}"
+    );
+
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let glyph = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'n' }))
+        .expect("rendered n glyph");
+    let face = state.faces.get(&glyph.face_id).expect("merged glyph face");
+
+    assert_eq!(
+        face.underline_style,
+        UnderlineStyle::None,
+        "GNU overlay precedence: explicit :underline nil must cancel the text property's underline"
+    );
+}
+
+#[test]
 fn layout_frame_rust_applies_face_only_overlay_starting_mid_run() {
     // Regression (isearch current-match highlight): a face-only overlay (no
     // display string) that begins/ends INSIDE a text-property run must bound the

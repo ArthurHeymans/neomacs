@@ -350,12 +350,12 @@ fn face_from_plist_accepts_source_style_keywords() {
     assert_eq!(face.foreground, Some(Color::rgb(255, 215, 0)));
     assert_eq!(face.width, Some(FontWidth::Expanded));
     assert_eq!(
-        face.underline.as_ref().map(|underline| &underline.style),
+        face.underline.enabled().map(|underline| &underline.style),
         Some(&UnderlineStyle::Wave)
     );
     assert_eq!(
         face.underline
-            .as_ref()
+            .enabled()
             .and_then(|underline| underline.color),
         Some(Color::rgb(0, 255, 255))
     );
@@ -599,7 +599,7 @@ fn face_to_plist_contains_set_attrs() {
 fn face_merge_underline_and_box() {
     crate::test_utils::init_test_tracing();
     let base = Face {
-        underline: Some(Underline {
+        underline: FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
             position: None,
@@ -618,7 +618,7 @@ fn face_merge_underline_and_box() {
     };
     let merged = base.merge(&overlay);
     // base's underline preserved
-    assert!(merged.underline.is_some());
+    assert!(merged.underline.enabled().is_some());
     // overlay's box, overline, strike-through applied
     assert_eq!(merged.box_border.as_ref().unwrap().width, 2);
     assert_eq!(merged.overline, Some(true));
@@ -706,8 +706,11 @@ fn face_from_plist_underline_and_flags() {
         Value::symbol("bold"),
     ];
     let face = Face::from_plist("test", &plist);
-    assert!(face.underline.is_some());
-    assert_eq!(face.underline.as_ref().unwrap().style, UnderlineStyle::Line);
+    assert!(face.underline.enabled().is_some());
+    assert_eq!(
+        face.underline.enabled().unwrap().style,
+        UnderlineStyle::Line
+    );
     assert_eq!(face.overline, Some(true));
     assert_eq!(face.strike_through, Some(true));
     assert_eq!(face.inverse_video, Some(true));
@@ -721,9 +724,12 @@ fn face_from_plist_accepts_raw_unibyte_underline_and_box_strings() {
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     let plist = vec![Value::keyword("underline"), raw, Value::keyword("box"), raw];
     let face = Face::from_plist("test", &plist);
-    assert!(face.underline.is_some());
-    assert_eq!(face.underline.as_ref().unwrap().style, UnderlineStyle::Line);
-    assert_eq!(face.underline.as_ref().unwrap().color, None);
+    assert!(face.underline.enabled().is_some());
+    assert_eq!(
+        face.underline.enabled().unwrap().style,
+        UnderlineStyle::Line
+    );
+    assert_eq!(face.underline.enabled().unwrap().color, None);
     assert!(face.box_border.is_some());
     assert_eq!(face.box_border.as_ref().unwrap().width, 1);
     assert_eq!(face.box_border.as_ref().unwrap().color, None);

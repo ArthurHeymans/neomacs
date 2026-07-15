@@ -5547,7 +5547,7 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
         }
         LFaceAttr::Underline => {
             if value.is_nil() {
-                return Some(FaceAttrValue::Unspecified);
+                return Some(FaceAttrValue::Bool(false));
             }
             if value.is_t() {
                 return Some(FaceAttrValue::Bool(true));

@@ -14,7 +14,7 @@ use super::types::{
 };
 
 const FACE_MAGIC: [u8; 16] = *b"NEOFACE\0\0\0\0\0\0\0\0\0";
-const FACE_FORMAT_VERSION: u32 = 1;
+const FACE_FORMAT_VERSION: u32 = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -129,6 +129,7 @@ fn write_face(out: &mut Vec<u8>, face: &DumpFace) -> Result<(), DumpError> {
     write_opt_face_height(out, face.height.as_ref());
     write_opt_u16(out, face.weight);
     write_opt_font_slant(out, face.slant.as_ref());
+    write_bool(out, face.underline_disabled);
     write_opt_underline(out, face.underline.as_ref())?;
     write_opt_bool(out, face.overline);
     write_opt_bool(out, face.strike_through);
@@ -156,6 +157,7 @@ fn read_face(cursor: &mut Cursor<'_>) -> Result<DumpFace, DumpError> {
         height: read_opt_face_height(cursor)?,
         weight: read_opt_u16(cursor, "face weight")?,
         slant: read_opt_font_slant(cursor)?,
+        underline_disabled: cursor.read_bool("face underline disabled")?,
         underline: read_opt_underline(cursor)?,
         overline: read_opt_bool(cursor)?,
         strike_through: read_opt_bool(cursor)?,
@@ -629,6 +631,7 @@ mod tests {
                     height: Some(DumpFaceHeight::Relative(1.25)),
                     weight: Some(700),
                     slant: Some(DumpFontSlant::Italic),
+                    underline_disabled: false,
                     underline: Some(DumpUnderline {
                         style: DumpUnderlineStyle::Wave,
                         color: Some(DumpColor {
@@ -674,6 +677,7 @@ mod tests {
                     height: Some(DumpFaceHeight::Absolute(120)),
                     weight: None,
                     slant: Some(DumpFontSlant::ReverseOblique),
+                    underline_disabled: true,
                     underline: None,
                     overline: None,
                     strike_through: None,

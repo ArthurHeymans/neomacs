@@ -1257,6 +1257,8 @@ pub struct DumpFace {
     pub height: Option<DumpFaceHeight>,
     pub weight: Option<u16>,
     pub slant: Option<DumpFontSlant>,
+    #[serde(default)]
+    pub underline_disabled: bool,
     pub underline: Option<DumpUnderline>,
     pub overline: Option<bool>,
     pub strike_through: Option<bool>,

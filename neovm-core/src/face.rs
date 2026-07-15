@@ -215,6 +215,40 @@ pub struct Underline {
     pub position: Option<i32>,
 }
 
+/// A decoration attribute in a partial Lisp face specification.
+///
+/// GNU face vectors distinguish `unspecified` (inherit the lower-priority
+/// value) from nil (explicitly disable the decoration).  `Option<T>` cannot
+/// represent both states, so decoration composition must retain this tri-state
+/// until the face is fully realized.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum FaceDecoration<T> {
+    #[default]
+    Unspecified,
+    Disabled,
+    Enabled(T),
+}
+
+impl<T> FaceDecoration<T> {
+    pub fn enabled(&self) -> Option<&T> {
+        match self {
+            Self::Enabled(value) => Some(value),
+            Self::Unspecified | Self::Disabled => None,
+        }
+    }
+
+    fn merge_over(&self, base: &Self) -> Self
+    where
+        T: Clone,
+    {
+        match self {
+            Self::Unspecified => base.clone(),
+            Self::Disabled => Self::Disabled,
+            Self::Enabled(value) => Self::Enabled(value.clone()),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Box border
 // ---------------------------------------------------------------------------
@@ -673,8 +707,9 @@ pub struct Face {
     pub weight: Option<FontWeight>,
     /// Font slant.
     pub slant: Option<FontSlant>,
-    /// Underline.
-    pub underline: Option<Underline>,
+    /// Underline specification, preserving explicit nil separately from
+    /// `unspecified` until face composition is complete.
+    pub underline: FaceDecoration<Underline>,
     /// Overline (true = draw overline).
     pub overline: Option<bool>,
     /// Overline color (None = use foreground).
@@ -815,18 +850,17 @@ impl Face {
                 _ => return false,
             },
             LFaceAttr::Underline => match value {
-                FaceAttrValue::Underline(u) => self.underline = Some(u),
+                FaceAttrValue::Underline(u) => self.underline = FaceDecoration::Enabled(u),
                 FaceAttrValue::Bool(true) => {
-                    self.underline = Some(Underline {
+                    self.underline = FaceDecoration::Enabled(Underline {
                         style: UnderlineStyle::Line,
                         color: None,
                         position: None,
                     });
                 }
-                FaceAttrValue::Bool(false) | FaceAttrValue::Unspecified => {
-                    self.underline = None;
-                }
-                _ => self.underline = None,
+                FaceAttrValue::Bool(false) => self.underline = FaceDecoration::Disabled,
+                FaceAttrValue::Unspecified => self.underline = FaceDecoration::Unspecified,
+                _ => return false,
             },
             LFaceAttr::Overline => match value {
                 FaceAttrValue::Bool(b) => self.overline = Some(b),
@@ -875,7 +909,7 @@ impl Face {
             height: merge_face_height(overlay.height.as_ref(), self.height.as_ref()),
             weight: overlay.weight.or(self.weight),
             slant: overlay.slant.or(self.slant),
-            underline: overlay.underline.clone().or_else(|| self.underline.clone()),
+            underline: overlay.underline.merge_over(&self.underline),
             overline: overlay.overline.or(self.overline),
             strike_through: overlay.strike_through.or(self.strike_through),
             box_border: overlay
@@ -1054,24 +1088,28 @@ impl Face {
     }
 }
 
-fn parse_underline_value(value: &Value) -> Option<Underline> {
+fn parse_underline_value(value: &Value) -> FaceDecoration<Underline> {
     match value.kind() {
-        ValueKind::T => Some(Underline {
+        ValueKind::T => FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
             position: None,
         }),
-        ValueKind::Nil => None,
+        ValueKind::Nil => FaceDecoration::Disabled,
         _ if value.is_string() => {
-            let text = face_runtime_string(value)?;
-            Some(Underline {
+            let Some(text) = face_runtime_string(value) else {
+                return FaceDecoration::Unspecified;
+            };
+            FaceDecoration::Enabled(Underline {
                 style: UnderlineStyle::Line,
                 color: Color::parse(&text),
                 position: None,
             })
         }
         ValueKind::Cons => {
-            let items = crate::emacs_core::value::list_to_vec(value)?;
+            let Some(items) = crate::emacs_core::value::list_to_vec(value) else {
+                return FaceDecoration::Unspecified;
+            };
             let mut style = UnderlineStyle::Line;
             let mut color = None;
             let mut position = None;
@@ -1101,18 +1139,18 @@ fn parse_underline_value(value: &Value) -> Option<Underline> {
                 }
                 i += 2;
             }
-            Some(Underline {
+            FaceDecoration::Enabled(Underline {
                 style,
                 color,
                 position,
             })
         }
-        _ if value.is_truthy() => Some(Underline {
+        _ if value.is_truthy() => FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
             position: None,
         }),
-        _ => None,
+        _ => FaceDecoration::Unspecified,
     }
 }
 
@@ -1393,7 +1431,7 @@ impl FaceTable {
 
         // underline
         let mut underline = Face::new("underline");
-        underline.underline = Some(Underline {
+        underline.underline = FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
             position: None,
@@ -1657,7 +1695,7 @@ impl FaceTable {
         // link
         let mut link = Face::new("link");
         link.foreground = Some(Color::rgb(0, 0, 238));
-        link.underline = Some(Underline {
+        link.underline = FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
             color: None,
             position: None,

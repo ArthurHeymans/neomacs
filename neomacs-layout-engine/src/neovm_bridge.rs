@@ -15,8 +15,8 @@ use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::{
-    BoxStyle as NeoBoxStyle, Color as NeoColor, Face as NeoFace, FaceHeight, FaceTable, FontWeight,
-    UnderlineStyle as NeoUnderlineStyle,
+    BoxStyle as NeoBoxStyle, Color as NeoColor, Face as NeoFace, FaceDecoration, FaceHeight,
+    FaceTable, FontWeight, UnderlineStyle as NeoUnderlineStyle,
 };
 use neovm_core::window::{
     CursorTypeSymbol, Frame, FrameId, VerticalScrollBarType, Window,
@@ -2606,7 +2606,7 @@ impl FaceResolver {
         df.overstrike = neo_default.overstrike;
 
         // Underline
-        if let Some(ul) = &neo_default.underline {
+        if let Some(ul) = neo_default.underline.enabled() {
             df.underline_style = underline_style_to_u8(&ul.style);
             df.underline_color = ul.color.as_ref().map(color_to_pixel).unwrap_or(0);
         }
@@ -2730,9 +2730,16 @@ impl FaceResolver {
             }
         }
 
-        if let Some(underline) = &face.underline {
-            rf.underline_style = underline_style_to_u8(&underline.style);
-            rf.underline_color = underline.color.as_ref().map(color_to_pixel).unwrap_or(0);
+        match &face.underline {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                rf.underline_style = 0;
+                rf.underline_color = 0;
+            }
+            FaceDecoration::Enabled(underline) => {
+                rf.underline_style = underline_style_to_u8(&underline.style);
+                rf.underline_color = underline.color.as_ref().map(color_to_pixel).unwrap_or(0);
+            }
         }
         if let Some(overline) = face.overline {
             rf.overline = overline;
@@ -3398,9 +3405,16 @@ impl FaceResolver {
         }
 
         // Underline
-        if let Some(ul) = &face.underline {
-            rf.underline_style = underline_style_to_u8(&ul.style);
-            rf.underline_color = ul.color.as_ref().map(color_to_pixel).unwrap_or(0);
+        match &face.underline {
+            FaceDecoration::Unspecified => {}
+            FaceDecoration::Disabled => {
+                rf.underline_style = 0;
+                rf.underline_color = 0;
+            }
+            FaceDecoration::Enabled(underline) => {
+                rf.underline_style = underline_style_to_u8(&underline.style);
+                rf.underline_color = underline.color.as_ref().map(color_to_pixel).unwrap_or(0);
+            }
         }
         // Overline
         if let Some(over) = face.overline {
