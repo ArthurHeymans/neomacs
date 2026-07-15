@@ -121,6 +121,42 @@ impl ImageCatalog for AsyncImageCatalog {
         *state = image_lookup_from_terminal(pending.clone(), terminal);
         state.clone()
     }
+
+    fn invalidate(&self, source: &ImageResolveSource) {
+        let normalized_source = normalize_image_file_request_with_home(
+            ImageResolveRequest {
+                source: source.clone(),
+                max_width: 0,
+                max_height: 0,
+                fg_color: 0,
+                bg_color: 0,
+            },
+            self.home_directory.as_deref(),
+        )
+        .source;
+        let removed = {
+            let mut entries = self.entries.borrow_mut();
+            let requests = entries
+                .keys()
+                .filter(|request| request.source == normalized_source)
+                .cloned()
+                .collect::<Vec<_>>();
+            requests
+                .into_iter()
+                .filter_map(|request| entries.remove(&request))
+                .map(|state| state.placement().image_id())
+                .collect::<Vec<_>>()
+        };
+
+        for id in removed {
+            let command = RenderCommand::Asset(AssetCommand::ImageFree { id });
+            if let Err(error) =
+                schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command)
+            {
+                tracing::warn!(id, %error, "failed to schedule invalidated image release");
+            }
+        }
+    }
 }
 
 fn image_lookup_from_terminal(pending: PendingImage, terminal: ImageDecodeTerminal) -> ImageLookup {
@@ -325,6 +361,7 @@ fn normalize_image_file_request_with_home(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Condvar, Mutex};
 
     fn file_request(path: &str) -> ImageResolveRequest {
         ImageResolveRequest {
@@ -364,5 +401,32 @@ mod tests {
                 if path.as_utf8_str() == Some("~some-user/Pictures/icon.png")
         ));
         assert!(requires_deferred_path_expansion(&command));
+    }
+
+    #[test]
+    fn invalidating_file_source_frees_old_identity_and_next_lookup_reloads() {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+        let request = file_request("/tmp/watched.svg");
+
+        let first = catalog.lookup(request.clone()).placement().image_id();
+        assert!(matches!(
+            cmd_rx.try_recv().expect("initial image load"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == first
+        ));
+
+        catalog.invalidate(&request.source);
+        assert!(matches!(
+            cmd_rx.try_recv().expect("old image identity freed"),
+            RenderCommand::Asset(AssetCommand::ImageFree { id }) if id == first
+        ));
+
+        let second = catalog.lookup(request).placement().image_id();
+        assert_ne!(first, second);
+        assert!(matches!(
+            cmd_rx.try_recv().expect("replacement image load"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == second
+        ));
     }
 }

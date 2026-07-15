@@ -1,13 +1,15 @@
 use super::*;
 use crate::emacs_core::eval::{DisplayHost, GuiFrameHostRequest};
 use crate::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage, ResolvedImageMetadata,
+    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
+    ResolvedImageMetadata,
 };
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
+    invalidations: Arc<Mutex<Vec<ImageResolveSource>>>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -50,6 +52,13 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .expect("image requests lock")
             .push(request);
         ImageLookup::Pending(PendingImage::new(9, 0, 0))
+    }
+
+    fn invalidate(&self, source: &ImageResolveSource) {
+        self.invalidations
+            .lock()
+            .expect("image invalidations lock")
+            .push(source.clone());
     }
 }
 
@@ -488,6 +497,7 @@ fn image_mask_p_resolves_image_and_returns_nil_on_gui_frame() {
         .set_window_system(Some(Value::symbol("neo")));
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::clone(&requests),
+        ..Default::default()
     }));
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
 
@@ -753,6 +763,39 @@ fn image_flush_lisp_call_accepts_selected_neo_window_system_frame() {
         .expect("Lisp image-flush should accept GUI frame");
 
     assert!(result.is_nil());
+}
+
+#[test]
+fn image_flush_invalidates_every_cached_variant_of_its_source() {
+    crate::test_utils::init_test_tracing();
+    let invalidations = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = Context::new();
+    let buffer = eval.buffers.create_buffer("*scratch*");
+    let frame = eval.frames.create_frame("F1", 960, 640, buffer);
+    eval.frames
+        .get_mut(frame)
+        .expect("test frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        invalidations: Arc::clone(&invalidations),
+        ..Default::default()
+    }));
+
+    let spec = builtin_create_image(vec![
+        Value::string("/tmp/watched.svg"),
+        Value::symbol("svg"),
+    ])
+    .unwrap();
+    builtin_image_flush_in_context(&mut eval, vec![spec]).unwrap();
+
+    assert!(matches!(
+        invalidations
+            .lock()
+            .expect("image invalidations lock")
+            .as_slice(),
+        [ImageResolveSource::File(path)]
+            if path.as_utf8_str() == Some("/tmp/watched.svg")
+    ));
 }
 
 #[test]
@@ -1260,6 +1303,7 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
         .set_window_system(Some(Value::symbol("neo")));
     eval.set_display_host(Box::new(RecordingImageDisplayHost {
         requests: Arc::clone(&requests),
+        ..Default::default()
     }));
     let spec = Value::list(vec![
         Value::symbol("image"),

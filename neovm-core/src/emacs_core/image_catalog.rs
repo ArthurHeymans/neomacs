@@ -155,4 +155,10 @@ pub trait ImageCatalog {
     /// and returns [`ImageLookup::Pending`]. Implementations must not wait for
     /// renderer queue capacity, metadata locks, file I/O, decode, or upload.
     fn lookup(&self, request: ImageResolveRequest) -> ImageLookup;
+
+    /// Forget every cached rendering derived from `source`.
+    ///
+    /// The next lookup must allocate a fresh renderer identity and decode the
+    /// source again.  Hosts without an image cache may keep the default no-op.
+    fn invalidate(&self, _source: &ImageResolveSource) {}
 }

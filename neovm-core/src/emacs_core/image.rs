@@ -885,6 +885,20 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         ));
     }
 
+    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid image specification")],
+        ));
+    };
+    if let Some(catalog) = eval
+        .display_host
+        .as_ref()
+        .and_then(|host| host.image_catalog())
+    {
+        catalog.invalidate(&request.source);
+    }
+
     Ok(Value::NIL)
 }
 
