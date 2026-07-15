@@ -270,11 +270,91 @@ fn raw_unibyte_display_width(byte: u8) -> usize {
     if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
 }
 
+/// Upper bound (in chars) on how far ahead a single stop computation looks for
+/// the next display-relevant property change. Mirrors GNU's
+/// `TEXT_PROP_DISTANCE_LIMIT` (src/xdisp.c): it caps the interval walk so the
+/// cost of recomputing a stop stays bounded even in a buffer with no display
+/// properties at all, at the price of an occasional redundant recompute.
+const DISPLAY_STOP_CHAR_CAP: usize = 100;
+
+/// Per-scan cache of the next byte position at which a display-relevant property
+/// (`invisible`, `display`, `composition`, or any overlay) could change, so the
+/// per-char display scanner runs the three expensive property probes only at a
+/// stop and skips them in between. This mirrors GNU's `it->stop_charpos` /
+/// `compute_stop_pos` (src/xdisp.c) and reuses the same discipline as
+/// `SyntaxPropRange` in syntax.rs: construct one fresh per forward scan so it
+/// never observes a mid-scan edit (screen-line motion is read-only; font-lock
+/// and syntax-propertize ran earlier).
+pub(crate) struct DisplayStopCache {
+    recompute_at: std::cell::Cell<usize>,
+}
+
+impl DisplayStopCache {
+    pub(crate) fn new() -> Self {
+        // recompute_at = 0 forces the first call (at any byte >= 0) to probe.
+        Self {
+            recompute_at: std::cell::Cell::new(0),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Counts how many times `display_advance_at` recomputes a stop (i.e. runs
+    /// the three property probes). For plain text this must be O(scan / cap),
+    /// not O(scan); a test asserts the ratio to guard against regressing to
+    /// per-char probing.
+    static DISPLAY_STOP_RECOMPUTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_display_stop_recomputes_for_test() {
+    DISPLAY_STOP_RECOMPUTES.with(|n| n.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn display_stop_recomputes_for_test() -> usize {
+    DISPLAY_STOP_RECOMPUTES.with(std::cell::Cell::get)
+}
+
+/// Byte position of the next stop after `byte`: the earliest place at which
+/// `invisible`, `display`, or `composition` could change value, folding in the
+/// coarse next-overlay-boundary (GNU `next_overlay_change`) and bounded by
+/// `DISPLAY_STOP_CHAR_CAP` and the accessible end. The result is strictly
+/// greater than `byte`, so the scan always makes progress before re-probing.
+fn next_display_stop(
+    ctx: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte: usize,
+    end: usize,
+) -> usize {
+    let Some(buf) = ctx.buffers.get(buffer_id) else {
+        return end;
+    };
+    let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte));
+    let cap_char = CharPos0::new(char_pos.get().saturating_add(DISPLAY_STOP_CHAR_CAP));
+    let watched = [
+        Value::symbol("invisible"),
+        Value::symbol("display"),
+        Value::symbol("composition"),
+    ];
+    let change_char = buf.next_watched_property_change_at_char_pos(char_pos, cap_char, &watched);
+    let mut stop = buf.char_pos_to_emacs_byte_pos_clamped(change_char).get();
+    if let Some(overlay_boundary) = buf
+        .overlays
+        .next_boundary_after_emacs_byte_pos(EmacsBytePos::new(byte))
+    {
+        stop = stop.min(overlay_boundary.get());
+    }
+    stop.min(end).max(byte.saturating_add(1))
+}
+
 pub(crate) fn display_advance_at(
     ctx: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     byte: usize,
     column: usize,
+    stop: &DisplayStopCache,
 ) -> Result<Option<DisplayAdvance>, Flow> {
     let (end, tab_width, display_table) = {
         let buf = match ctx.buffers.get(buffer_id) {
@@ -300,38 +380,82 @@ pub(crate) fn display_advance_at(
         return Ok(None);
     }
 
-    if let Some(next_visible) =
-        super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
-    {
-        if next_visible > byte {
-            return Ok(Some(DisplayAdvance {
-                next_byte: next_visible.min(end),
-                width: 0,
-                hard_newline: false,
-                unbreakable_wide: false,
-            }));
+    if byte >= stop.recompute_at.get() {
+        #[cfg(test)]
+        DISPLAY_STOP_RECOMPUTES.with(|n| n.set(n.get().saturating_add(1)));
+        // STOP: probe the three display-relevant properties. On a hit, return the
+        // coalesced run and arm the cache to re-probe at its end (GNU sets
+        // it->stop_charpos to the run end so handle_stop refires there).
+        if let Some(next_visible) =
+            super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
+        {
+            if next_visible > byte {
+                stop.recompute_at.set(next_visible.min(end));
+                return Ok(Some(DisplayAdvance {
+                    next_byte: next_visible.min(end),
+                    width: 0,
+                    hard_newline: false,
+                    unbreakable_wide: false,
+                }));
+            }
         }
-    }
 
-    if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
-        if run_end_byte > byte {
-            return Ok(Some(DisplayAdvance {
-                next_byte: run_end_byte.min(end),
-                width: disp_width,
-                hard_newline: false,
-                unbreakable_wide: false,
-            }));
+        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
+            if run_end_byte > byte {
+                stop.recompute_at.set(run_end_byte.min(end));
+                return Ok(Some(DisplayAdvance {
+                    next_byte: run_end_byte.min(end),
+                    width: disp_width,
+                    hard_newline: false,
+                    unbreakable_wide: false,
+                }));
+            }
         }
-    }
 
-    if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
-        if comp_end > byte {
-            return Ok(Some(DisplayAdvance {
-                next_byte: comp_end.min(end),
-                width: comp_width,
-                hard_newline: false,
-                unbreakable_wide: false,
-            }));
+        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
+            if comp_end > byte {
+                stop.recompute_at.set(comp_end.min(end));
+                return Ok(Some(DisplayAdvance {
+                    next_byte: comp_end.min(end),
+                    width: comp_width,
+                    hard_newline: false,
+                    unbreakable_wide: false,
+                }));
+            }
+        }
+
+        // No display-relevant property present here: cache the span over which
+        // none can appear so the following chars skip these probes entirely,
+        // then fall through to the ordinary per-char width branch.
+        stop.recompute_at
+            .set(next_display_stop(ctx, buffer_id, byte, end));
+    } else {
+        // FAST PATH: below the cached stop, no watched property can be present,
+        // so skip the three probes. In debug builds re-run them and assert they
+        // agree -- the same stale-cache safety net SyntaxPropRange uses.
+        #[cfg(debug_assertions)]
+        {
+            let recompute_at = stop.recompute_at.get();
+            if let Some(next_visible) =
+                super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
+            {
+                debug_assert!(
+                    next_visible <= byte,
+                    "DisplayStopCache skipped an invisible run at byte {byte} < stop {recompute_at}"
+                );
+            }
+            if let Some((_, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
+                debug_assert!(
+                    run_end_byte <= byte,
+                    "DisplayStopCache skipped a display run at byte {byte} < stop {recompute_at}"
+                );
+            }
+            if let Some((_, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
+                debug_assert!(
+                    comp_end <= byte,
+                    "DisplayStopCache skipped a composition run at byte {byte} < stop {recompute_at}"
+                );
+            }
         }
     }
 

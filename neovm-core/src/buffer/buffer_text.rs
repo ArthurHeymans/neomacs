@@ -1107,6 +1107,20 @@ impl BufferText {
             .get_property_run_at_char_pos(pos, name, total)
     }
 
+    /// Next char position in `(pos, cap)` where any of `keys` changes value.
+    /// See [`text_props::TextPropertyTable::next_watched_property_change`].
+    pub fn next_watched_property_change_at_char_pos(
+        &self,
+        pos: CharPos0,
+        cap: CharPos0,
+        keys: &[Value],
+    ) -> CharPos0 {
+        self.storage
+            .borrow()
+            .text_props
+            .next_watched_property_change(pos, cap, keys)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

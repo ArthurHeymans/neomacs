@@ -2162,11 +2162,17 @@ fn next_screen_line_start_from(
     };
     let mut scan = start;
     let mut column = 0usize;
+    // One stop cache for this forward screen-line scan: display/invisible/
+    // composition/overlay probes run only at a stop, not per char (GNU
+    // it->stop_charpos). Fresh per call, so it never observes a mid-scan edit.
+    let stop_cache = indent::DisplayStopCache::new();
 
     while scan < point_max {
         #[cfg(test)]
         SCREEN_LINE_SCAN_STEPS.with(|steps| steps.set(steps.get().saturating_add(1)));
-        let Some(advance) = indent::display_advance_at(eval, buffer_id, scan.get(), column)? else {
+        let Some(advance) =
+            indent::display_advance_at(eval, buffer_id, scan.get(), column, &stop_cache)?
+        else {
             return Ok(None);
         };
         if advance.next_byte <= scan.get() {

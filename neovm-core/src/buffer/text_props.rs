@@ -1439,6 +1439,32 @@ impl IntervalTree {
 // Plist helpers
 // ---------------------------------------------------------------------------
 
+/// Value of `key` in a materialized `[(key, value)]` plist run, or None.
+fn plist_pairs_get(pairs: &[(Value, Value)], key: Value) -> Option<Value> {
+    pairs
+        .iter()
+        .find(|(k, _)| eq_value(k, &key))
+        .map(|(_, v)| *v)
+}
+
+/// True when `left` and `right` agree (by `eq`) on every property in `keys`,
+/// treating an absent key as nil-equal-to-absent. Ignores all other properties,
+/// so two plists differing only in e.g. `face` compare equal for the watched
+/// display keys.
+fn watched_keys_equal_eq(
+    left: &[(Value, Value)],
+    right: &[(Value, Value)],
+    keys: &[Value],
+) -> bool {
+    keys.iter().all(
+        |k| match (plist_pairs_get(left, *k), plist_pairs_get(right, *k)) {
+            (Some(a), Some(b)) => eq_value(&a, &b),
+            (None, None) => true,
+            _ => false,
+        },
+    )
+}
+
 fn plists_equal_eq(left: &[(Value, Value)], right: &[(Value, Value)]) -> bool {
     if left.len() != right.len() {
         return false;
@@ -1742,6 +1768,44 @@ impl TextPropertyTable {
                 (None, pos, end)
             }
         }
+    }
+
+    /// The next char position in `(pos, cap)` where any property in `keys`
+    /// changes VALUE from its value at `pos`, or `cap` if none change first.
+    ///
+    /// Mirrors GNU `compute_stop_pos` (src/xdisp.c): record the watched keys'
+    /// values at `pos`, then step interval boundaries comparing ONLY those keys,
+    /// so a run that is constant in `keys` but split by other properties (e.g.
+    /// dense `face` intervals from font-lock) is coalesced in one walk instead of
+    /// stopping at every boundary. Gaps (no interval) read as all-nil, matching
+    /// `next_property_change_raw`. This lets a per-char display scanner learn the
+    /// span over which invisible/display/composition cannot change and skip the
+    /// expensive per-char property probes across it.
+    pub fn next_watched_property_change(
+        &self,
+        pos: CharPos0,
+        cap: CharPos0,
+        keys: &[Value],
+    ) -> CharPos0 {
+        if cap <= pos {
+            return cap;
+        }
+        let current = self.plist_at(pos).unwrap_or_default();
+        let mut cursor = pos;
+        while let Some(next) = self.next_interval_boundary_raw(cursor) {
+            if next >= cap {
+                return cap;
+            }
+            if next.get() <= cursor.get() {
+                return cap;
+            }
+            let next_plist = self.plist_at(next).unwrap_or_default();
+            if !watched_keys_equal_eq(&current, &next_plist, keys) {
+                return next;
+            }
+            cursor = next;
+        }
+        cap
     }
 
     pub fn get_properties_at_char_pos(&self, pos: CharPos0) -> HashMap<Value, Value> {

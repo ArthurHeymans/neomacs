@@ -7543,6 +7543,7 @@ fn scroll_down_page_scans_buffer_once_not_once_per_screen_row() {
     crate::window::window_markers::set_window_start_with_marker(&mut ev.buffers, window, end);
 
     crate::emacs_core::builtins::reset_screen_line_scan_steps_for_test();
+    crate::emacs_core::indent::reset_display_stop_recomputes_for_test();
     super::builtin_scroll_down(&mut ev, vec![Value::NIL]).expect("page up from end");
     let after_start = super::builtin_window_start(&mut ev, vec![Value::make_window(window_id.0)])
         .expect("window-start after page up")
@@ -7567,6 +7568,16 @@ fn scroll_down_page_scans_buffer_once_not_once_per_screen_row() {
         scan_steps < buffer_bytes.saturating_mul(2),
         "page-up rescanned the buffer per screen row: {scan_steps} display steps for \
          {buffer_bytes} buffer bytes"
+    );
+    // The DisplayStopCache must coalesce the invisible/display/composition
+    // probes: over plain text they run once per stop (~one per screen line here,
+    // since each line is far shorter than DISPLAY_STOP_CHAR_CAP), not once per
+    // scanned character. Guard against regressing to per-char probing.
+    let recomputes = crate::emacs_core::indent::display_stop_recomputes_for_test();
+    assert!(
+        recomputes.saturating_mul(4) < scan_steps,
+        "display-stop cache did not coalesce property probes: {recomputes} stop recomputes \
+         for {scan_steps} per-char scan steps (expected far fewer recomputes)"
     );
 }
 
