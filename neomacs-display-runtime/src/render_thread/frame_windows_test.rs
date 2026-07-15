@@ -651,15 +651,37 @@ fn frame_render_state_remove_child_cursor_clears_preedit() {
         style: CursorStyle::Bar(1.0),
         frame_id: 0x99,
     });
-    render.overlays.ime_preedit_active = true;
-    render.overlays.ime_preedit_text = "preedit".to_string();
+    render.set_ime_preedit("preedit".to_string(), Some((7, 7)));
 
     assert!(render.remove_child_frame(0x99));
 
     assert!(render.cursor.target_cloned().is_none());
-    assert!(!render.overlays.ime_preedit_active);
-    assert!(render.overlays.ime_preedit_text.is_empty());
+    assert!(render.input_method.preedit().is_none());
     assert!(render.compositor.dirty);
+}
+
+#[test]
+fn frame_render_state_preedit_update_replaces_composition_and_preserves_cursor() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+
+    render.set_ime_preedit("ni".to_string(), Some((2, 2)));
+    render.set_ime_preedit("你".to_string(), Some((3, 3)));
+
+    let preedit = render
+        .input_method
+        .preedit()
+        .expect("a non-empty preedit update must be active");
+    assert_eq!(preedit.text, "你");
+    assert_eq!(preedit.cursor_range, Some((3, 3)));
+
+    render.set_ime_preedit(String::new(), None);
+    assert!(
+        render.input_method.preedit().is_none(),
+        "winit defines an empty preedit update as clearing the composition"
+    );
 }
 
 // =======================================================================

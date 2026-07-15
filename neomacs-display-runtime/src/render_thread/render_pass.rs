@@ -186,15 +186,12 @@ impl RenderApp {
     }
 
     fn frame_ime_preedit_overlay<'a>(
-        active: bool,
-        text: &'a str,
+        preedit: Option<&'a super::frame_windows::ImePreedit>,
         target: Option<CursorTarget>,
         root_frame_id: u64,
         child_frames: &ChildFrameManager,
     ) -> Option<GuiFrameImeOverlay<'a>> {
-        if !active || text.is_empty() {
-            return None;
-        }
+        let preedit = preedit?;
 
         let target = target?;
         let (offset_x, offset_y) = if target.frame_id != root_frame_id {
@@ -208,7 +205,7 @@ impl RenderApp {
         };
 
         Some(GuiFrameImeOverlay {
-            text,
+            text: &preedit.text,
             x: target.x + offset_x,
             y: target.y + offset_y,
             height: target.height,
@@ -854,8 +851,7 @@ impl RenderApp {
                 popup_menu: render.overlays.popup_menu.as_ref(),
                 tooltip: render.overlays.tooltip.as_ref(),
                 ime_preedit: Self::frame_ime_preedit_overlay(
-                    render.overlays.ime_preedit_active,
-                    &render.overlays.ime_preedit_text,
+                    render.input_method.preedit(),
                     render.cursor.target_cloned(),
                     render.emacs_frame_id,
                     &render.compositor.child_frames,
@@ -1194,7 +1190,7 @@ impl RenderApp {
         render.overlays.popup_menu.is_some()
             || render.overlays.tooltip.is_some()
             || render.overlays.visual_bell_start.is_some()
-            || render.overlays.ime_preedit_active
+            || render.has_ime_preedit()
             || render.overlays.idle_dim.active
             // The FPS counter is redrawn from a live timer every frame; the
             // retained scene would freeze it, so a full render is required

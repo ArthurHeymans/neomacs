@@ -259,7 +259,7 @@ impl RenderApp {
                         self.modifiers,
                         self.frame_windows
                             .primary_window()
-                            .is_some_and(|ws| ws.render.overlays.ime_preedit_active)
+                            .is_some_and(|ws| ws.render.has_ime_preedit())
                     );
                 }
                 let is_primary = self.frame_windows.is_primary_winit(window_id);
@@ -269,9 +269,9 @@ impl RenderApp {
                             && self
                                 .frame_windows
                                 .primary_window()
-                                .is_some_and(|ws| ws.render.overlays.ime_preedit_active)
+                                .is_some_and(|ws| ws.render.has_ime_preedit())
                     },
-                    |ws| ws.render.overlays.ime_preedit_active,
+                    |ws| ws.render.has_ime_preedit(),
                 );
                 let handled_managed_popup = state == ElementState::Pressed
                     && self
@@ -592,7 +592,9 @@ impl RenderApp {
                 winit::event::Ime::Preedit(text, cursor_range) => {
                     tracing::debug!("IME Preedit: '{}' cursor: {:?}", text, cursor_range);
                     if let Some(window_state) = self.frame_windows.get_by_winit_mut(window_id) {
-                        window_state.render.set_ime_preedit(text.clone());
+                        window_state
+                            .render
+                            .set_ime_preedit(text.clone(), cursor_range);
                         if let Some(target) = window_state.render.cursor.target_cloned() {
                             Self::update_frame_window_ime_cursor_area_if_needed(
                                 window_state,
@@ -601,7 +603,7 @@ impl RenderApp {
                         }
                     } else if self.frame_windows.is_primary_winit(window_id) {
                         if let Some(ws) = self.frame_windows.primary_window_mut() {
-                            ws.render.set_ime_preedit(text.clone())
+                            ws.render.set_ime_preedit(text.clone(), cursor_range)
                         };
                         if let Some(target) = self
                             .frame_windows

@@ -69,7 +69,7 @@ impl RenderApp {
             && !self
                 .frame_windows
                 .primary_window()
-                .is_some_and(|ws| ws.render.overlays.ime_preedit_active)
+                .is_some_and(|ws| ws.render.has_ime_preedit())
         {
             return;
         }
@@ -85,7 +85,7 @@ impl RenderApp {
         window_state: &mut GuiFrameWindowState,
         target: &CursorTarget,
     ) {
-        if !window_state.ime_enabled() && !window_state.render.overlays.ime_preedit_active {
+        if !window_state.ime_enabled() && !window_state.render.has_ime_preedit() {
             return;
         }
 

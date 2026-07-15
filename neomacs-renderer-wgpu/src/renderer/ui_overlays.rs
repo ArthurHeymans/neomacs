@@ -1300,10 +1300,26 @@ impl WgpuRenderer {
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
-        let char_width = glyph_atlas.default_char_width();
         let font_size_bits = 0.0_f32.to_bits();
-        let text_len = preedit_text.chars().count();
-        let preedit_width = text_len as f32 * char_width;
+        // A preedit update is one replaceable Unicode text run.  Shape it as
+        // a whole, just like ordinary frame text: advancing once per Rust
+        // `char` is incorrect for fallback CJK fonts, combining marks,
+        // ligatures, emoji sequences, and bidirectional scripts.
+        let shaped_preedit = glyph_atlas.get_or_create_composed_atlas(
+            &self.device,
+            &self.queue,
+            preedit_text,
+            FaceId::new(0),
+            font_size_bits,
+            None,
+            SubpixelBin::Zero,
+            SubpixelBin::Zero,
+            SubpixelRequest::Disabled,
+        );
+        let preedit_width = shaped_preedit.as_ref().map_or_else(
+            || preedit_text.chars().count() as f32 * glyph_atlas.default_char_width(),
+            |handle| handle.advance_width / self.scale_factor,
+        );
 
         // Background and underline rects
         let bg_color = Color::new(0.15, 0.15, 0.2, 0.95).srgb_to_linear();
@@ -1367,26 +1383,9 @@ impl WgpuRenderer {
             let c = Color::new(1.0, 1.0, 1.0, 1.0).srgb_to_linear();
             [c.r, c.g, c.b, c.a]
         };
-        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = Vec::new();
-        for (ci, ch) in preedit_text.chars().enumerate() {
-            let key = GlyphKey {
-                charcode: ch as u32,
-                face_id: FaceId::new(0),
-                font_size_bits,
-                font_identity: glyph_font_identity(None),
-                x_bin: SubpixelBin::Zero,
-                y_bin: SubpixelBin::Zero,
-            };
-            if let Some(handle) = glyph_atlas.get_or_create_atlas(
-                &self.device,
-                &self.queue,
-                &key,
-                None,
-                SubpixelRequest::Disabled,
-            ) {
-                overlay_glyphs.push((handle, px + 2.0 + (ci as f32) * char_width, py, text_color));
-            }
-        }
+        let mut overlay_glyphs: Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])> = shaped_preedit
+            .map(|handle| vec![(handle, px + 2.0, py, text_color)])
+            .unwrap_or_default();
         self.render_overlay_glyphs(view, &mut overlay_glyphs, glyph_atlas);
     }
 

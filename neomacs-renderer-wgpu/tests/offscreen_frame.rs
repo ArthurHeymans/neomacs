@@ -20,6 +20,7 @@ use neomacs_display_protocol::{
     PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
     PresentedPointerRegion, PresentedPrimitiveKind,
 };
+use neomacs_renderer_wgpu::types::SubpixelRequest;
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 
 const W: u32 = 96;
@@ -190,6 +191,77 @@ fn offscreen_frame_renders_background_and_cursor() {
         }
     }
     assert!(found_red, "expected the red bar cursor to be drawn");
+}
+
+#[test]
+fn ime_preedit_cjk_background_covers_the_shaped_run() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::rgb(0.10, 0.12, 0.16);
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let base = read_back(&h);
+
+    let preedit = "你好";
+    let shaped = h
+        .atlas
+        .get_or_create_composed_atlas(
+            h.renderer.device(),
+            h.renderer.queue(),
+            preedit,
+            FaceId::new(0),
+            0.0_f32.to_bits(),
+            None,
+            cosmic_text::SubpixelBin::Zero,
+            cosmic_text::SubpixelBin::Zero,
+            SubpixelRequest::Disabled,
+        )
+        .expect("the GUI test environment must provide a CJK fallback font");
+    let shaped_width = shaped.advance_width;
+    let fixed_cell_width = preedit.chars().count() as f32 * h.atlas.default_char_width();
+    assert!(
+        shaped_width > fixed_cell_width + 2.0,
+        "the regression needs a wide CJK run: shaped={shaped_width}, fixed={fixed_cell_width}"
+    );
+
+    let cursor_x = 8.0;
+    let cursor_y = 8.0;
+    h.renderer.render_ime_preedit(
+        &h.view,
+        preedit,
+        cursor_x,
+        cursor_y,
+        24.0,
+        &mut h.atlas,
+        W,
+        H,
+    );
+    let rendered = read_back(&h);
+
+    // Sample inside the final shaped advance.  The preedit background must
+    // cover the complete run; using `chars().count() * default_char_width`
+    // leaves this pixel untouched and also places adjacent CJK glyphs on top
+    // of one another.
+    let tail_x = (cursor_x + 2.0 + shaped_width - 1.0).floor() as u32;
+    let sample_y = (cursor_y + 2.0) as u32;
+    assert_ne!(
+        px(&rendered, tail_x, sample_y),
+        px(&base, tail_x, sample_y),
+        "the preedit visual must cover its shaped run through x={tail_x}"
+    );
 }
 
 #[test]

@@ -124,8 +124,14 @@ pub(crate) struct GuiFrameRenderState {
     pointer_damage_appearance_lookups: usize,
     /// Retirements pinned while a presented interaction still references them.
     deferred_pointer_retirements: Vec<u64>,
-    /// Transient overlays (popup, tooltip, bell, fps, typing, idle, ime).
+    /// Transient renderer-owned overlays (popup, tooltip, bell, fps, typing, idle).
     pub overlays: OverlayState,
+    /// The current native input-method composition, if any.
+    ///
+    /// `Option` is the active-state invariant: a preedit cannot be "active"
+    /// while carrying an empty or stale string.  Each native preedit event
+    /// atomically replaces this complete value.
+    pub(super) input_method: InputMethodState,
     /// Text cursor animation and blink state for this frame window.
     pub(super) cursor: CursorState,
     /// Last known pointer position in this frame's logical coordinates.
@@ -153,8 +159,40 @@ pub(crate) struct OverlayState {
     pub(super) fps: FpsCounter,
     pub(super) typing_speed: TypingSpeedState,
     pub(super) idle_dim: IdleDimState,
-    pub ime_preedit_active: bool,
-    pub ime_preedit_text: String,
+}
+
+/// One complete native input-method preedit update.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ImePreedit {
+    pub text: String,
+    /// UTF-8 byte offsets supplied by winit.  A zero-width range is the IME
+    /// caret; a non-empty range is the IME selection.
+    pub cursor_range: Option<(usize, usize)>,
+}
+
+/// Native input-method state, kept separate from renderer-owned overlays.
+/// Its methods are the only way to transition between inactive and preedit.
+#[derive(Default)]
+pub(super) struct InputMethodState {
+    preedit: Option<ImePreedit>,
+}
+
+impl InputMethodState {
+    pub(super) fn replace_preedit(&mut self, text: String, cursor_range: Option<(usize, usize)>) {
+        self.preedit = (!text.is_empty()).then_some(ImePreedit { text, cursor_range });
+    }
+
+    pub(super) fn clear(&mut self) {
+        self.preedit = None;
+    }
+
+    pub(super) fn preedit(&self) -> Option<&ImePreedit> {
+        self.preedit.as_ref()
+    }
+
+    pub(super) fn has_preedit(&self) -> bool {
+        self.preedit.is_some()
+    }
 }
 
 /// Glyph composition and rendering state for a frame window.
@@ -339,9 +377,8 @@ impl GuiFrameRenderState {
                 },
                 typing_speed: TypingSpeedState::default(),
                 idle_dim: IdleDimState::default(),
-                ime_preedit_active: false,
-                ime_preedit_text: String::new(),
             },
+            input_method: InputMethodState::default(),
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
             pointer_inside: false,
@@ -384,9 +421,8 @@ impl GuiFrameRenderState {
                 },
                 typing_speed: TypingSpeedState::default(),
                 idle_dim: IdleDimState::default(),
-                ime_preedit_active: false,
-                ime_preedit_text: String::new(),
             },
+            input_method: InputMethodState::default(),
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
             pointer_inside: false,
@@ -747,16 +783,18 @@ impl GuiFrameRenderState {
         }
     }
 
-    pub(super) fn set_ime_preedit(&mut self, text: String) {
-        self.overlays.ime_preedit_active = !text.is_empty();
-        self.overlays.ime_preedit_text = text;
+    pub(super) fn set_ime_preedit(&mut self, text: String, cursor_range: Option<(usize, usize)>) {
+        self.input_method.replace_preedit(text, cursor_range);
         self.compositor.dirty = true;
     }
 
     pub(super) fn clear_ime_preedit(&mut self) {
-        self.overlays.ime_preedit_active = false;
-        self.overlays.ime_preedit_text.clear();
+        self.input_method.clear();
         self.compositor.dirty = true;
+    }
+
+    pub(super) fn has_ime_preedit(&self) -> bool {
+        self.input_method.has_preedit()
     }
 
     #[cfg(feature = "wpe-webkit")]
@@ -1217,8 +1255,7 @@ impl GuiFrameRenderState {
             .is_some_and(|target| removed_ids.contains(&target.frame_id))
         {
             self.cursor.clear_target();
-            self.overlays.ime_preedit_active = false;
-            self.overlays.ime_preedit_text.clear();
+            self.input_method.clear();
             self.compositor.dirty = true;
             return true;
         }
@@ -1608,10 +1645,8 @@ impl GuiFrameWindowState {
     }
 
     pub(super) fn clear_ime_preedit(&mut self) {
-        self.render.overlays.ime_preedit_active = false;
-        self.render.overlays.ime_preedit_text.clear();
+        self.render.clear_ime_preedit();
         self.reset_ime_cursor_area();
-        self.render.compositor.dirty = true;
     }
 
     pub(super) fn remove_child_frame(&mut self, frame_id: u64) -> bool {
