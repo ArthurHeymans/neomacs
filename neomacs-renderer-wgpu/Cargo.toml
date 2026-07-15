@@ -24,18 +24,17 @@ bytemuck.workspace = true
 pollster.workspace = true
 ash.workspace = true
 image.workspace = true
-resvg.workspace = true
 libc.workspace = true
+librsvg.workspace = true
+cairo-rs.workspace = true
+gio.workspace = true
+glib.workspace = true
 gstreamer = { workspace = true, optional = true }
 gstreamer-video = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }
 gstreamer-allocators = { workspace = true, optional = true }
 neomacs-display-protocol.workspace = true
 neomacs-layout-engine.workspace = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-librsvg-rebind.workspace = true
-cairo-rs.workspace = true
 
 [lints]
 workspace = true

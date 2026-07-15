@@ -33,7 +33,9 @@ jobs:
             libfontconfig1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
-            librsvg2-dev \
+            libcairo2-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev \
@@ -112,7 +114,9 @@ jobs:
             libfontconfig1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
-            librsvg2-dev \
+            libcairo2-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev \

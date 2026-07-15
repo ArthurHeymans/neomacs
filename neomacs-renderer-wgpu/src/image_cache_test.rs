@@ -298,34 +298,22 @@ fn test_convert_rgb24_invalid_data_size() {
 #[test]
 fn test_constrain_dimensions() {
     // No constraints (uses MAX_TEXTURE_SIZE internally)
-    assert_eq!(ImageCache::constrain_dimensions(100, 100, 0, 0), (100, 100));
+    assert_eq!(constrain_dimensions(100, 100, 0, 0), (100, 100));
 
     // Width constrained
-    assert_eq!(
-        ImageCache::constrain_dimensions(200, 100, 100, 0),
-        (100, 50)
-    );
+    assert_eq!(constrain_dimensions(200, 100, 100, 0), (100, 50));
 
     // Height constrained
-    assert_eq!(
-        ImageCache::constrain_dimensions(100, 200, 0, 100),
-        (50, 100)
-    );
+    assert_eq!(constrain_dimensions(100, 200, 0, 100), (50, 100));
 
     // Both constrained, width is limiting factor
-    assert_eq!(
-        ImageCache::constrain_dimensions(400, 200, 100, 100),
-        (100, 50)
-    );
+    assert_eq!(constrain_dimensions(400, 200, 100, 100), (100, 50));
 
     // Both constrained, height is limiting factor
-    assert_eq!(
-        ImageCache::constrain_dimensions(200, 400, 100, 100),
-        (50, 100)
-    );
+    assert_eq!(constrain_dimensions(200, 400, 100, 100), (50, 100));
 
     // Minimum 1x1 - very narrow image
-    let (w, h) = ImageCache::constrain_dimensions(1, 1000, 10, 100);
+    let (w, h) = constrain_dimensions(1, 1000, 10, 100);
     assert_eq!(w, 1);
     assert_eq!(h, 100); // Height is constrained to 100, width stays 1 (min)
 }

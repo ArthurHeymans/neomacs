@@ -21,6 +21,38 @@ use crate::external_buffer::DmaBufBuffer;
 /// Maximum texture dimension (width or height)
 const MAX_TEXTURE_SIZE: u32 = 4096;
 
+/// Constrain dimensions to the renderer's limits while preserving aspect ratio.
+pub(crate) fn constrain_dimensions(
+    width: u32,
+    height: u32,
+    max_width: u32,
+    max_height: u32,
+) -> (u32, u32) {
+    let mut width = width;
+    let mut height = height;
+    let width_limit = if max_width > 0 {
+        max_width.min(MAX_TEXTURE_SIZE)
+    } else {
+        MAX_TEXTURE_SIZE
+    };
+    let height_limit = if max_height > 0 {
+        max_height.min(MAX_TEXTURE_SIZE)
+    } else {
+        MAX_TEXTURE_SIZE
+    };
+
+    if width > width_limit {
+        height = (f64::from(height) * f64::from(width_limit) / f64::from(width)) as u32;
+        width = width_limit;
+    }
+    if height > height_limit {
+        width = (f64::from(width) * f64::from(height_limit) / f64::from(height)) as u32;
+        height = height_limit;
+    }
+
+    (width.max(1), height.max(1))
+}
+
 /// Maximum total cache memory in bytes (64MB)
 const MAX_CACHE_MEMORY: usize = 64 * 1024 * 1024;
 
@@ -521,7 +553,7 @@ impl ImageCache {
         max_width: u32,
         max_height: u32,
     ) -> Option<(u32, u32, Vec<u8>)> {
-        let decoded = crate::svg::decode(data, max_width, max_height, MAX_TEXTURE_SIZE)?;
+        let decoded = crate::svg::decode(data, max_width, max_height)?;
         Some((decoded.width, decoded.height, decoded.rgba))
     }
 
@@ -614,7 +646,7 @@ impl ImageCache {
         }
 
         // Apply size constraints if needed
-        let (cw, ch) = Self::constrain_dimensions(width, height, max_width, max_height);
+        let (cw, ch) = constrain_dimensions(width, height, max_width, max_height);
         if cw != width || ch != height {
             // Need to resize - use image crate
             let img = image::RgbaImage::from_raw(width, height, rgba)?;
@@ -669,7 +701,7 @@ impl ImageCache {
         }
 
         // Apply size constraints if needed
-        let (cw, ch) = Self::constrain_dimensions(width, height, max_width, max_height);
+        let (cw, ch) = constrain_dimensions(width, height, max_width, max_height);
         if cw != width || ch != height {
             // Need to resize - use image crate
             let img = image::RgbaImage::from_raw(width, height, rgba)?;
@@ -785,7 +817,7 @@ impl ImageCache {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -822,7 +854,7 @@ impl ImageCache {
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_file_dimensions(path) {
             // Apply max constraints to dimensions
-            let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -864,7 +896,7 @@ impl ImageCache {
 
         // Query dimensions for the pending-image placeholder.
         if let Some(dims) = Self::query_data_dimensions(data) {
-            let (w, h) = Self::constrain_dimensions(dims.width, dims.height, max_width, max_height);
+            let (w, h) = constrain_dimensions(dims.width, dims.height, max_width, max_height);
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
@@ -904,7 +936,7 @@ impl ImageCache {
         let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = Self::constrain_dimensions(width, height, max_width, max_height);
+        let (w, h) = constrain_dimensions(width, height, max_width, max_height);
         self.pending_dimensions.insert(
             id,
             ImageDimensions {
@@ -948,7 +980,7 @@ impl ImageCache {
         let load = self.begin_load(id);
 
         // Store pending dimensions immediately (we know the exact size)
-        let (w, h) = Self::constrain_dimensions(width, height, max_width, max_height);
+        let (w, h) = constrain_dimensions(width, height, max_width, max_height);
         self.pending_dimensions.insert(
             id,
             ImageDimensions {
@@ -1092,39 +1124,6 @@ impl ImageCache {
         }
 
         id
-    }
-
-    /// Constrain dimensions to max values while preserving aspect ratio
-    fn constrain_dimensions(
-        width: u32,
-        height: u32,
-        max_width: u32,
-        max_height: u32,
-    ) -> (u32, u32) {
-        let mut w = width;
-        let mut h = height;
-
-        let mw = if max_width > 0 {
-            max_width
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-        let mh = if max_height > 0 {
-            max_height
-        } else {
-            MAX_TEXTURE_SIZE
-        };
-
-        if w > mw {
-            h = (h as f64 * mw as f64 / w as f64) as u32;
-            w = mw;
-        }
-        if h > mh {
-            w = (w as f64 * mh as f64 / h as f64) as u32;
-            h = mh;
-        }
-
-        (w.max(1), h.max(1))
     }
 
     /// Process pending decoded images (call each frame)

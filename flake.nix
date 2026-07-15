@@ -59,6 +59,7 @@
         harfbuzz
         libotf
         cairo
+        pango
         glib
         gst_all_1.gstreamer
         gst_all_1.gst-plugins-base
@@ -251,6 +252,7 @@
             PKG_CONFIG_PATH = pkgs.lib.makeSearchPath "lib/pkgconfig" (with pkgs; [
               glib.dev
               cairo.dev
+              pango.dev
               gst_all_1.gstreamer.dev
               gst_all_1.gst-plugins-base.dev
               fontconfig.dev
@@ -309,6 +311,7 @@
               export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath (with pkgs; [
                 glib
                 cairo
+                pango
                 gst_all_1.gstreamer
                 gst_all_1.gst-plugins-base
                 fontconfig
