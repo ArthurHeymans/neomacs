@@ -7,10 +7,30 @@
 
 use colored::Colorize;
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+
+#[cfg(unix)]
+fn apply_virtual_memory_limit(cmd: &mut Command, mem_limit: u64) {
+    unsafe {
+        cmd.pre_exec(move || {
+            let rlim = libc::rlimit {
+                rlim_cur: mem_limit as libc::rlim_t,
+                rlim_max: mem_limit as libc::rlim_t,
+            };
+            if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+}
+
+#[cfg(not(unix))]
+fn apply_virtual_memory_limit(_cmd: &mut Command, _mem_limit: u64) {}
 
 /// Maximum virtual address space (in bytes) for each spawned oracle Emacs
 /// process.  This prevents runaway evaluations from consuming unbounded
@@ -481,18 +501,7 @@ fn run_oracle_eval_inner_with_tmpdir(
     }
     apply_extra_env(&mut cmd, extra_env);
 
-    unsafe {
-        cmd.pre_exec(move || {
-            let rlim = libc::rlimit {
-                rlim_cur: mem_limit as libc::rlim_t,
-                rlim_max: mem_limit as libc::rlim_t,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    apply_virtual_memory_limit(&mut cmd, mem_limit);
 
     let output = cmd
         .output()
@@ -539,18 +548,7 @@ fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, 
             EVAL_PROGRAM_RAW,
         ]);
 
-    unsafe {
-        cmd.pre_exec(move || {
-            let rlim = libc::rlimit {
-                rlim_cur: mem_limit as libc::rlim_t,
-                rlim_max: mem_limit as libc::rlim_t,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    apply_virtual_memory_limit(&mut cmd, mem_limit);
 
     let output = cmd
         .output()
@@ -656,18 +654,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     apply_extra_env(&mut cmd, extra_env);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
-        unsafe {
-            cmd.pre_exec(move || {
-                let rlim = libc::rlimit {
-                    rlim_cur: mem_limit as libc::rlim_t,
-                    rlim_max: mem_limit as libc::rlim_t,
-                };
-                if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        apply_virtual_memory_limit(&mut cmd, mem_limit);
     }
 
     let output = cmd
@@ -714,18 +701,7 @@ fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<
         ]);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
-        unsafe {
-            cmd.pre_exec(move || {
-                let rlim = libc::rlimit {
-                    rlim_cur: mem_limit as libc::rlim_t,
-                    rlim_max: mem_limit as libc::rlim_t,
-                };
-                if libc::setrlimit(libc::RLIMIT_AS, &rlim) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        apply_virtual_memory_limit(&mut cmd, mem_limit);
     }
 
     let output = cmd
