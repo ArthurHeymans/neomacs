@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! TUI comparison test harness for Neomacs vs GNU Emacs.
 //!
 //! Spawns both editors in isolated pseudo-terminals, feeds identical

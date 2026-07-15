@@ -12,7 +12,7 @@ publish = false
 # that exercises a specific area of TUI behaviour and compares the
 # rendered output of GNU Emacs against Neomacs.
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 vt100 = "0.16"
 pty-process = "0.5"
 libc = { workspace = true }
