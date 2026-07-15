@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
+use crate::buffer::{BufferId, BufferManager, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
 use crate::window::{
     CursorTypeSymbol, FrameFullscreen, FrameId, FrameManager, FrameParam, FrameParamKey, Rect,
@@ -6052,34 +6052,35 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
         let Some(buf) = buffers.get(buffer_id) else {
             return Ok(Value::NIL);
         };
-        let text = buf.full_text_string();
         let accessible = buf.accessible_emacs_byte_region();
-        let pt = accessible
-            .clamp(buf.lisp_pos_to_emacs_byte_pos(window_point))
-            .get();
-        let bytes = text.as_bytes();
-        let begv = accessible.start().get();
+        let begv = accessible.start();
+        let pt = accessible.clamp(buf.lisp_pos_to_emacs_byte_pos(window_point));
 
-        // Go to beginning of current line.
-        let mut pos = pt;
-        while pos > begv && bytes[pos - 1] != b'\n' {
-            pos -= 1;
-        }
-        // Move backward target_line lines.
+        // Walk backward over newlines directly on the buffer bytes to find the
+        // new window-start.  GNU `Frecenter` scans lines with `find_newline`,
+        // touching only the bytes near point; materializing the whole buffer as
+        // a String here was ~16% of redisplay CPU on large font-locked buffers
+        // scrolled with recenter.
+        //
+        // Beginning of the line containing `from` (or begv when no newline
+        // precedes it): the byte just past the last `\n` in `[begv, from)`.
+        let line_start = |from: EmacsBytePos| {
+            buf.prev_newline_emacs_byte(from, begv)
+                .map(|nl| nl.add_len(EmacsByteLen::new(1)))
+                .unwrap_or(begv)
+        };
+        let mut pos = line_start(pt);
+        // Move backward `target_line` lines from point's line.  Each step drops
+        // onto the `\n` that ends the previous line, then finds that line's BOL.
         for _ in 0..target_line {
             if pos <= begv {
                 break;
             }
-            pos -= 1;
-            while pos > begv && bytes[pos - 1] != b'\n' {
-                pos -= 1;
-            }
+            pos = line_start(pos.saturating_sub_len(EmacsByteLen::new(1)));
         }
 
         // Set window-start.
-        let pos_lisp = buf
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(pos))
-            .as_i64();
+        let pos_lisp = buf.emacs_byte_pos_to_lisp_char_pos(pos).as_i64();
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
         {
             if let Some(window) = frames

@@ -7398,6 +7398,29 @@ fn recenter_uses_current_buffer_point_for_selected_window() {
     assert_eq!(results[0], "OK (7 4 4)");
 }
 
+/// `recenter` walks backward `target_line` lines from point directly over the
+/// buffer bytes (no full-buffer String copy). Exercises the multi-line backward
+/// walk and the begv clamp -- the paths the 0-line / 1-line cases above miss.
+#[test]
+fn recenter_backward_multiple_lines_scans_bytes_to_window_start() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let ((w (selected-window)))
+           (save-current-buffer (set-buffer (window-buffer w))
+             (erase-buffer)
+             (insert \"l0\nl1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\n\"))
+           (list
+             ;; point on line 8 (l7); recenter 5 -> window-start at line 3 (l2)
+             (progn (goto-char (point-min)) (forward-line 7) (recenter 5)
+                    (line-number-at-pos (window-start)))
+             ;; point on line 2 (l1); only one line precedes it, so recenter 5
+             ;; clamps the backward walk at the buffer start -> line 1
+             (progn (goto-char (point-min)) (forward-line 1) (recenter 5)
+                    (line-number-at-pos (window-start)))))",
+    );
+    assert_eq!(results[0], "OK (3 1)");
+}
+
 #[test]
 fn scroll_up_down_updates_window_start_for_multibyte_content() {
     crate::test_utils::init_test_tracing();
