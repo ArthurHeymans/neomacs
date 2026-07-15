@@ -671,6 +671,26 @@ impl FontMetricsService {
         Some(matched)
     }
 
+    /// Return this layout service's generation-local fontdb id for an exact
+    /// platform match. The durable file/index identity is authoritative; no
+    /// character is shaped here because a primary face may intentionally be
+    /// symbols-only and contain neither ASCII nor space.
+    fn fontdb_id_for_platform_match(
+        &self,
+        matched: &crate::font_backend::PlatformFontMatch,
+    ) -> Option<fontdb::ID> {
+        let path = matched.file_path()?;
+        let face_index = matched.identity.file_face_index();
+        self.font_system.db().faces().find_map(|face| {
+            let source_path = match &face.source {
+                fontdb::Source::File(path) | fontdb::Source::SharedFile(path, _) => path,
+                fontdb::Source::Binary(_) => return None,
+            };
+            (face.index == face_index && source_path.as_os_str() == std::ffi::OsStr::new(path))
+                .then_some(face.id)
+        })
+    }
+
     fn compute_primary_pin(
         &mut self,
         family: &str,
@@ -1006,12 +1026,11 @@ impl FontMetricsService {
 
     /// Resolve a face's primary font to an exact identity.
     ///
-    /// This is the face-level half of the render-boundary design: the same
-    /// probe path that produces the face's layout metrics
-    /// (`selected_font_id_and_space_width`) yields the concrete fontdb face,
-    /// so the identity the renderer rasterizes is the font the metrics came
-    /// from by construction. GNU analog: `font_open_for_lface` filling the
-    /// realized `face->font` that both `font-at` and the draw path consume.
+    /// This is the face-level half of the render-boundary design: the
+    /// platform backend's exact materialized file/index identifies the
+    /// primary font independently of character coverage. GNU analog:
+    /// `font_open_for_lface` filling the realized `face->font` that both
+    /// `font-at` and the draw path consume.
     pub fn resolved_font_for_face(
         &mut self,
         family: &str,
@@ -1035,13 +1054,17 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> Option<ResolvedFont> {
-        // Same alias + probe-shape path as the ASCII metrics code
-        // (`resolve_font_for_char`), so identity == metrics font.
+        // The platform-selected file/index is the primary face identity.
+        // Only the semantic fallback path needs a representative-glyph probe.
         let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
         let platform = self.platform_primary_match(&resolved_family, weight, italic);
-        let (font_id, _space_width) =
-            self.selected_font_id_and_space_width(&resolved_family, weight, italic, font_size);
-        let font_id = font_id?;
+        let font_id = match platform.as_ref() {
+            Some(matched) => self.fontdb_id_for_platform_match(matched)?,
+            None => {
+                self.selected_font_id_and_space_width(&resolved_family, weight, italic, font_size)
+                    .0?
+            }
+        };
         let effective_weight = crate::font_match::resolve_weight_in_family(
             &self.font_system,
             &resolved_family,

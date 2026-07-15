@@ -1860,6 +1860,54 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+#[tracing_test::traced_test]
+fn realize_frame_fonts_resolves_an_installed_symbols_only_primary_face() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+
+    let family = "Symbols Nerd Font Mono";
+    let Some(platform) = crate::fontconfig::find_font_for_spec(
+        Some(family),
+        None,
+        None,
+        Some(FontWeight::Normal),
+        Some(FontSlant::Normal),
+    ) else {
+        return;
+    };
+    if !platform.family.eq_ignore_ascii_case(family) {
+        return;
+    }
+    let Some(expected_file) = platform.file else {
+        return;
+    };
+
+    let face_id = FaceId::new(226);
+    let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
+    let mut face = Face::new(face_id);
+    face.font_family = family.to_string();
+    face.font_size = 10.0;
+    state.faces.insert(face_id, face);
+
+    let mut service = Some(make_svc());
+    realize_frame_fonts(&mut state, &mut service);
+
+    let resolved_id = state.faces[&face_id]
+        .default_resolved_font_id
+        .expect("an installed symbols-only primary font crosses the GUI boundary");
+    assert_eq!(
+        state.fonts[&resolved_id].identity.file_path.as_deref(),
+        Some(expected_file.as_str()),
+        "primary realization must publish Fontconfig's exact symbols font"
+    );
+    assert!(
+        !logs_contain("GUI face has no resolvable primary font"),
+        "a resolvable installed font must not fall back to render-side font selection"
+    );
+}
+
 /// Not a pass/fail perf gate (wall-clock asserts flake in CI) — this prints
 /// the steady-state cost of the per-frame font realization pass so its
 /// evaluator-thread overhead is measurable on demand:
