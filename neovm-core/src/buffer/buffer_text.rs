@@ -1280,6 +1280,38 @@ impl BufferText {
         next.map(|next| self.char_pos_to_emacs_byte_pos(next))
     }
 
+    /// Display-engine bounded variant: like
+    /// [`Self::text_props_next_single_change_after_emacs_byte_pos`] but stops
+    /// scanning at `limit` (an emacs byte position), returning it as a soft
+    /// boundary if `name` has not changed by then. Used only by the layout
+    /// invisible/display scans; see
+    /// `TextPropertyTable::next_single_property_change_after_char_pos_bounded`.
+    pub fn text_props_next_single_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        // Callers derive `limit` as `pos + distance`, which can run past the
+        // buffer end; clamp before converting so byte->char never overflows.
+        // A limit at the buffer end means "no cap in range", and the scan then
+        // reduces to the exact unbounded answer.
+        let limit = limit.min(self.emacs_byte_end_pos());
+        let char_pos = self
+            .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
+            .start();
+        let limit_char = self
+            .byte_range_to_char_range(EmacsByteRange::new(limit, limit))
+            .start();
+        let next = {
+            self.storage
+                .borrow()
+                .text_props
+                .next_single_property_change_after_char_pos_bounded(char_pos, name, limit_char)
+        };
+        next.map(|next| self.char_pos_to_emacs_byte_pos(next))
+    }
+
     pub fn text_props_previous_change_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

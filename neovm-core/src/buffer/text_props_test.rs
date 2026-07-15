@@ -84,6 +84,17 @@ fn next_single_change_after_char(
         .map(CharPos0::get)
 }
 
+fn next_single_change_after_char_bounded(
+    table: &TextPropertyTable,
+    pos: usize,
+    name: Value,
+    limit: usize,
+) -> Option<usize> {
+    table
+        .next_single_property_change_after_char_pos_bounded(char_pos(pos), name, char_pos(limit))
+        .map(CharPos0::get)
+}
+
 fn previous_change_before_char(table: &TextPropertyTable, pos: usize) -> Option<usize> {
     table
         .previous_property_change_before_char_pos(char_pos(pos))
@@ -1870,4 +1881,55 @@ fn decode_loop_get_property_at_gap_boundaries() {
     );
     // Note: if get_at_char(58) correctly returns nil, this put would NEVER happen
     // because the Lisp (if val ...) guard prevents it
+}
+
+#[test]
+fn next_single_property_change_bounded_matches_unbounded_within_limit_and_soft_stops_beyond() {
+    // Ten `face` runs create interval boundaries every 10 chars across [0, 100)
+    // -- the fontified-buffer shape -- with a single `invisible` run far along
+    // at [80, 90). This is the scenario the display scan hits: many interval
+    // boundaries to walk before any `invisible` change.
+    let mut table = TextPropertyTable::new();
+    for i in 0..10 {
+        let face = if i % 2 == 0 { "a" } else { "b" };
+        put_chars(
+            &mut table,
+            i * 10,
+            i * 10 + 10,
+            Value::symbol("face"),
+            Value::symbol(face),
+        );
+    }
+    put_chars(
+        &mut table,
+        80,
+        90,
+        Value::symbol("invisible"),
+        Value::symbol("t"),
+    );
+    let invisible = Value::symbol("invisible");
+
+    // Unbounded: the scan coalesces `invisible == nil` across every face
+    // boundary and reports the first real change, at 80.
+    assert_eq!(
+        next_single_change_after_char(&table, 0, invisible),
+        Some(80)
+    );
+    // A generous limit reproduces the exact answer.
+    assert_eq!(
+        next_single_change_after_char_bounded(&table, 0, invisible, 200),
+        Some(80),
+    );
+    // A limit at 30 (before the invisible run) soft-stops: the interval boundary
+    // at 30 is >= limit, so the walk stops early and returns the limit. Never
+    // larger than the true boundary (80), so the caller only re-checks sooner.
+    assert_eq!(
+        next_single_change_after_char_bounded(&table, 0, invisible, 30),
+        Some(30),
+    );
+    // A limit that is not on a boundary still soft-stops at the limit itself.
+    assert_eq!(
+        next_single_change_after_char_bounded(&table, 0, invisible, 32),
+        Some(32),
+    );
 }

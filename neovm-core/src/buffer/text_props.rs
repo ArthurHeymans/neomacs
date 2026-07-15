@@ -2169,6 +2169,36 @@ impl TextPropertyTable {
         pos: CharPos0,
         name: Value,
     ) -> Option<CharPos0> {
+        self.next_single_property_change_after_char_pos_limited(pos, name, None)
+    }
+
+    /// Display-engine variant of [`Self::next_single_property_change_after_char_pos`]
+    /// that stops scanning at `limit` and reports `Some(limit)` as a soft
+    /// boundary when `name` has not changed by then. Mirrors GNU's
+    /// `TEXT_PROP_DISTANCE_LIMIT` cap in `compute_stop_pos`: the display code
+    /// only needs the next boundary within the visible window, and a boundary
+    /// that is *too small* merely makes the caller re-check sooner -- it never
+    /// changes what is rendered, because the invisible/display status at each
+    /// position is looked up exactly and independently. This turns the layout's
+    /// per-redisplay invisible/display scan from O(buffer) into O(window).
+    ///
+    /// Lisp `next-single-property-change` MUST return the exact boundary, so it
+    /// keeps calling the unbounded method above (the `None` limit path).
+    pub fn next_single_property_change_after_char_pos_bounded(
+        &self,
+        pos: CharPos0,
+        name: Value,
+        limit: CharPos0,
+    ) -> Option<CharPos0> {
+        self.next_single_property_change_after_char_pos_limited(pos, name, Some(limit))
+    }
+
+    fn next_single_property_change_after_char_pos_limited(
+        &self,
+        pos: CharPos0,
+        name: Value,
+        limit: Option<CharPos0>,
+    ) -> Option<CharPos0> {
         // GNU's Fnext_single_property_change shape: locate the interval at `pos`
         // once, capture `name`'s value there, then step siblings comparing only
         // `name` and return the first boundary where it differs -- O(log n + N)
@@ -2178,6 +2208,15 @@ impl TextPropertyTable {
         let current = plist_value_get(first_node.plist, name).unwrap_or(Value::NIL);
         let mut boundary = first_end;
         for (start, end, node) in cursor {
+            // Soft cap: once the next interval begins at or beyond `limit`, stop
+            // and report `limit` -- `name` has held `current` continuously across
+            // it, so this is a valid (merely early) boundary. Checked on `start`
+            // only: the natural tail below still handles running out of intervals
+            // within `[pos, limit]`, so a `limit` past the tree end reduces to the
+            // exact unbounded answer (never a spurious stop at buffer end).
+            if limit.is_some_and(|limit| start >= limit) {
+                return limit;
+            }
             let value = plist_value_get(node.plist, name).unwrap_or(Value::NIL);
             if !eq_value(&current, &value) {
                 return Some(start);

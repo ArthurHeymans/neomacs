@@ -1730,6 +1730,18 @@ impl BufferTextSnapshot {
             .text_props_next_single_change_after_emacs_byte_pos(pos, name)
     }
 
+    /// Display-engine bounded variant; see
+    /// [`BufferText::text_props_next_single_change_after_emacs_byte_pos_bounded`].
+    pub fn next_single_text_prop_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_next_single_change_after_emacs_byte_pos_bounded(pos, name, limit)
+    }
+
     pub fn previous_single_text_prop_change_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -2687,6 +2699,22 @@ impl Buffer {
             .text_props_next_single_change_after_emacs_byte_pos(
                 self.clamped_emacs_byte_pos(pos),
                 name,
+            )
+    }
+
+    /// Display-engine bounded variant; see
+    /// [`BufferText::text_props_next_single_change_after_emacs_byte_pos_bounded`].
+    pub fn text_props_next_single_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text
+            .text_props_next_single_change_after_emacs_byte_pos_bounded(
+                self.clamped_emacs_byte_pos(pos),
+                name,
+                self.clamped_emacs_byte_pos(limit),
             )
     }
 

@@ -119,6 +119,16 @@ pub(crate) trait LayoutBufferView {
         pos: EmacsBytePos,
         name: Value,
     ) -> Option<EmacsBytePos>;
+    /// Bounded variant for display scans that only need the next boundary
+    /// within the visible window (invisible/display): stops at `limit` and
+    /// returns it as a soft boundary if `name` has not changed by then. Must
+    /// NOT be used where the exact extent matters (e.g. mouse-face highlight).
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos>;
     fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -283,6 +293,15 @@ impl LayoutBufferView for Buffer {
         self.text_props_next_single_change_after_emacs_byte_pos(pos, name)
     }
 
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text_props_next_single_change_after_emacs_byte_pos_bounded(pos, name, limit)
+    }
+
     fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -369,6 +388,16 @@ impl LayoutBufferView for LayoutBufferSnapshot {
     ) -> Option<EmacsBytePos> {
         self.text_snapshot
             .next_single_text_prop_change_after_emacs_byte_pos(pos, name)
+    }
+
+    fn layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
+        &self,
+        pos: EmacsBytePos,
+        name: Value,
+        limit: EmacsBytePos,
+    ) -> Option<EmacsBytePos> {
+        self.text_snapshot
+            .next_single_text_prop_change_after_emacs_byte_pos_bounded(pos, name, limit)
     }
 
     fn layout_previous_single_text_prop_change_before_emacs_byte_pos(
@@ -1861,6 +1890,14 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
     }
 }
 
+/// Soft cap (in emacs bytes) on how far ahead the display `invisible` scan
+/// walks the text-property interval tree per redisplay. Beyond this the scan
+/// returns a soft boundary and the checkpoint cache re-scans a screenful later;
+/// a code buffer with no invisible text no longer walks to buffer-end on every
+/// redisplay. Chosen to comfortably span a tall window so most redisplays scan
+/// once. Mirrors GNU's `TEXT_PROP_DISTANCE_LIMIT` in `compute_stop_pos`.
+const INVISIBLE_SCAN_BYTE_LIMIT: usize = 2048;
+
 /// Text property and overlay accessor for the layout engine.
 ///
 /// Wraps a reference to a neovm-core `Buffer` and provides query methods
@@ -2115,11 +2152,21 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     /// contiguous invisible region at every `face` change in a fontified buffer.
     fn next_invisible_boundary(&self, charpos: i64) -> i64 {
         let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
+        // Bound the `invisible` scan to a window-sized distance ahead instead of
+        // walking the whole interval tree to buffer-end. The checkpoint cache
+        // (`InvisibleTextScanCheckpoint`) only re-scans once the walk reaches the
+        // returned boundary, so a soft boundary at `bytepos + LIMIT` just makes
+        // the next re-scan happen a screenful later -- the invisible status at
+        // every position is still looked up exactly, so nothing rendered changes.
+        // Turns this per-redisplay scan from O(buffer) into O(window).
+        // Mirrors GNU's TEXT_PROP_DISTANCE_LIMIT cap in `compute_stop_pos`.
+        let scan_limit = EmacsBytePos::new(bytepos.get().saturating_add(INVISIBLE_SCAN_BYTE_LIMIT));
         let next_text_change = self
             .buffer
-            .layout_next_single_text_prop_change_after_emacs_byte_pos(
+            .layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
                 bytepos,
                 Value::symbol("invisible"),
+                scan_limit,
             )
             .map(|next| buffer_emacs_byte_pos_to_charpos(self.buffer, next))
             .unwrap_or_else(|| self.buffer.layout_point_max_char_pos().get());
