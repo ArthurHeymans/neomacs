@@ -555,6 +555,31 @@ impl<'a> Iterator for IntervalCursor<'a> {
     }
 }
 
+/// Backward in-order iterator over a tree's intervals (see
+/// [`IntervalTree::reverse_cursor_at`]). Yields `(start, end, &node)` for the
+/// interval containing the seed position, then each preceding interval; the
+/// predecessor's start is derived as `start - node_len(prev)`, never from the
+/// dead per-node position.
+struct ReverseIntervalCursor<'a> {
+    tree: &'a IntervalTree,
+    next: Option<(CharPos0, IntervalId)>,
+}
+
+impl<'a> Iterator for ReverseIntervalCursor<'a> {
+    type Item = (CharPos0, CharPos0, &'a IntervalNode);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (start, id) = self.next?;
+        let end = self.tree.interval_end(start, id);
+        let node = &self.tree.nodes[id.0];
+        self.next = self.tree.prev_id(id).map(|prev_id| {
+            let prev_start = start.saturating_sub_len(self.tree.node_len(prev_id));
+            (prev_start, prev_id)
+        });
+        Some((start, end, node))
+    }
+}
+
 impl IntervalTree {
     fn new() -> Self {
         Self::default()
@@ -696,6 +721,24 @@ impl IntervalTree {
         id
     }
 
+    /// In-order predecessor of `id` -- the mirror of [`IntervalTree::next_id`]
+    /// (rightmost of the left subtree, else climb to the first right-child
+    /// ancestor). O(1) amortized over a full reverse walk.
+    fn prev_id(&self, id: IntervalId) -> Option<IntervalId> {
+        if let Some(left) = self.nodes[id.0].left {
+            return Some(self.rightmost_id(left));
+        }
+
+        let mut child = id;
+        while let Some(parent) = self.nodes[child.0].parent {
+            if self.nodes[parent.0].right == Some(child) {
+                return Some(parent);
+            }
+            child = parent;
+        }
+        None
+    }
+
     fn rightmost_id(&self, mut id: IntervalId) -> IntervalId {
         while let Some(right) = self.nodes[id.0].right {
             id = right;
@@ -732,6 +775,27 @@ impl IntervalTree {
             tree: self,
             next: self.find_id(pos),
         }
+    }
+
+    /// Seat a [`ReverseIntervalCursor`] at an explicit `(start, id)` so callers
+    /// can begin the backward walk at a chosen interval (e.g. the one *before* a
+    /// boundary, or the last interval when a position is past the tree end).
+    fn reverse_cursor_from(
+        &self,
+        seat: Option<(CharPos0, IntervalId)>,
+    ) -> ReverseIntervalCursor<'_> {
+        ReverseIntervalCursor {
+            tree: self,
+            next: seat,
+        }
+    }
+
+    /// `(start, id)` of the last interval, or None when the tree is empty.
+    fn last_interval(&self) -> Option<(CharPos0, IntervalId)> {
+        let root = self.root?;
+        let id = self.rightmost_id(root);
+        let end = CharPos0::ZERO.add_len(self.len());
+        Some((end.saturating_sub_len(self.node_len(id)), id))
     }
 
     fn interval_end(&self, start: CharPos0, id: IntervalId) -> CharPos0 {
@@ -2155,26 +2219,50 @@ impl TextPropertyTable {
         pos: CharPos0,
         name: Value,
     ) -> Option<CharPos0> {
-        let current = self.get_property_raw(pos, name);
-        let mut cursor = pos.add_len(CharLen::new(1));
-        while let Some(previous) = self.previous_interval_boundary_raw(cursor) {
-            if previous == CharPos0::ZERO {
+        // Backward mirror of next_single_property_change_after_char_pos. `current`
+        // is `name`'s value at pos (nil past the tree end); `boundary` is the start
+        // of the run of `current` reached so far. We step the intervals STRICTLY
+        // BEFORE `boundary` via prev_id, comparing `current` to each one's value
+        // (the value just before `boundary`) and returning `boundary` on the first
+        // difference -- the same positions the old two-find_id-per-boundary walk
+        // reported, with one seat + O(1) steps.
+        let (current, mut boundary, seat) = match self.intervals.find_id(pos) {
+            Some((start, id)) => {
+                let current = plist_value_get(self.intervals.nodes[id.0].plist, name);
+                let seat = self.intervals.prev_id(id).map(|prev| {
+                    let prev_start = start.saturating_sub_len(self.intervals.node_len(prev));
+                    (prev_start, prev)
+                });
+                (current, start, seat)
+            }
+            None => {
+                // pos is past the last interval: the value there is nil, and the
+                // nearest change back is at the tree end (last interval's value vs
+                // the implicit trailing nil).
+                let Some(last) = self.intervals.last_interval() else {
+                    return None;
+                };
+                let tree_len = CharPos0::ZERO.add_len(self.intervals.len());
+                (None, tree_len, Some(last))
+            }
+        };
+        let current_norm = current.unwrap_or(Value::NIL);
+        let mut cursor = self.intervals.reverse_cursor_from(seat);
+        loop {
+            if boundary == CharPos0::ZERO {
                 return current.is_some().then_some(CharPos0::ZERO);
             }
-            let previous_value =
-                self.get_property_raw(previous.saturating_sub_len(CharLen::new(1)), name);
-            if !eq_value(
-                &current.unwrap_or(Value::NIL),
-                &previous_value.unwrap_or(Value::NIL),
-            ) {
-                return Some(previous);
+            match cursor.next() {
+                Some((start, _, node)) => {
+                    let value_before = plist_value_get(node.plist, name).unwrap_or(Value::NIL);
+                    if !eq_value(&current_norm, &value_before) {
+                        return Some(boundary);
+                    }
+                    boundary = start;
+                }
+                None => return current.is_some().then_some(CharPos0::ZERO),
             }
-            if previous.get() >= cursor.get() {
-                return None;
-            }
-            cursor = previous;
         }
-        current.is_some().then_some(CharPos0::ZERO)
     }
 
     fn previous_property_change_raw(&self, pos: CharPos0) -> Option<CharPos0> {

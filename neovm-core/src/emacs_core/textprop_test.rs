@@ -1489,6 +1489,52 @@ fn next_single_property_change_coalesces_and_reports_trailing_nil() {
     );
 }
 
+/// Backward mirror of the coalescing guard: previous-single-property-change now
+/// walks intervals via a reverse cursor (prev_id) instead of a find_id re-descent
+/// per boundary. Covers coalescing past an unrelated-property boundary and the
+/// point-min (position 0) return.
+#[test]
+fn previous_single_property_change_coalesces_backward_and_reports_point_min() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("0123456789");
+    let put = |eval: &mut _, s, e, k, v| {
+        builtin_put_text_property(
+            eval,
+            vec![Value::fixnum(s), Value::fixnum(e), Value::symbol(k), v],
+        )
+        .unwrap();
+    };
+    put(&mut eval, 1, 7, "face", Value::symbol("bold"));
+    put(&mut eval, 4, 7, "invisible", Value::T);
+    put(&mut eval, 7, 11, "face", Value::symbol("italic"));
+
+    // From 8 (face=italic), scanning back the previous face change is at 7.
+    let at7 = builtin_previous_single_property_change(
+        &mut eval,
+        vec![Value::fixnum(8), Value::symbol("face")],
+    )
+    .unwrap();
+    assert_eq!(
+        at7.as_fixnum(),
+        Some(7),
+        "previous face change from 8 is at 7"
+    );
+
+    // From 6 (face=bold), the bold run coalesces past the invisible-only boundary
+    // at 4 all the way to point-min, so previous-single-property-change is nil
+    // (GNU: nil when the property is constant to the start). A walk that wrongly
+    // stopped at the invisible boundary would instead return 4.
+    let at_min = builtin_previous_single_property_change(
+        &mut eval,
+        vec![Value::fixnum(6), Value::symbol("face")],
+    )
+    .unwrap();
+    assert!(
+        at_min.is_nil(),
+        "bold run constant to point-min must yield nil (coalesced past invisible), got {at_min:?}"
+    );
+}
+
 #[test]
 fn next_single_property_change_nil_when_none() {
     crate::test_utils::init_test_tracing();
