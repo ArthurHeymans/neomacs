@@ -194,7 +194,13 @@ pub(crate) fn ensure_face_new_frame_defaults_entry(
         .obarray()
         .symbol_value("face--new-frame-defaults")
         .copied()?;
-    seed_face_new_frame_defaults_table(table);
+    // The table is fully seeded once at bootstrap (`register_bootstrap_vars`)
+    // and again at startup (`ensure_startup_compat_variables`). Re-seeding here
+    // -- on every ensure/lookup -- rebuilt every face's cons + lface vector only
+    // to discard them in `insert_..._if_absent`, an O(faces) allocation storm
+    // that made `internal-lisp-face-p` the top self-time hotspot. A genuine miss
+    // for the single requested face is still handled by the create-on-miss path
+    // below, so dropping the blanket re-seed changes no results.
     let key = Value::symbol(face_name);
     if let Some(entry) = lookup_frame_face_hash_entry(table, key) {
         return Some(entry);
@@ -225,6 +231,28 @@ pub(crate) fn face_new_frame_defaults_vector(
     face_name: &str,
 ) -> Option<Value> {
     let entry = ensure_face_new_frame_defaults_entry(eval, face_name)?;
+    if entry.is_cons() {
+        Some(entry.cons_cdr())
+    } else {
+        None
+    }
+}
+
+/// Pure, allocation-free read of the global `face--new-frame-defaults` table,
+/// mirroring GNU's `lface_from_face_name` for the null-frame case: one
+/// symbol-keyed hash lookup, no seeding and no create-on-miss. `key` must be an
+/// already-interned symbol `Value`. Returns the lface vector (entry CDR), or
+/// None when the face is absent. Callers that need create-on-miss (defface,
+/// copy-face, make-lisp-face) use `face_new_frame_defaults_vector` instead.
+pub(crate) fn lookup_face_new_frame_defaults_vector(
+    eval: &crate::emacs_core::eval::Context,
+    key: Value,
+) -> Option<Value> {
+    let table = eval
+        .obarray()
+        .symbol_value("face--new-frame-defaults")
+        .copied()?;
+    let entry = lookup_frame_face_hash_entry(table, key)?;
     if entry.is_cons() {
         Some(entry.cons_cdr())
     } else {

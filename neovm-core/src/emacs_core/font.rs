@@ -4426,6 +4426,31 @@ fn lookup_frame_lisp_face_vector(
     crate::emacs_core::xfaces::lookup_frame_face_hash_entry(table, Value::symbol(face_name))
 }
 
+/// Symbol-keyed frame face lookup for callers that already hold the interned
+/// face symbol, avoiding the `&str` -> `Value::symbol` re-intern in
+/// `lookup_frame_lisp_face_vector`. `key` must be an interned symbol `Value`.
+fn lookup_frame_lisp_face_vector_by_symbol(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    key: Value,
+) -> Option<Value> {
+    let table = eval.frames.get(frame_id)?.face_hash_table();
+    crate::emacs_core::xfaces::lookup_frame_face_hash_entry(table, key)
+}
+
+/// Resolve a face argument to the interned symbol used as the face-table key,
+/// mirroring GNU's `resolve_face_name`: strings are interned, symbols pass
+/// through unchanged. Returns None for values that can never key a lisp face
+/// (numbers, conses, and the self-evaluating `nil`/`t`), for which the lookup
+/// yields nil anyway. No heap `String` is allocated on the symbol fast path.
+fn face_lookup_key(face: &Value) -> Option<Value> {
+    match face.kind() {
+        ValueKind::Symbol(_) => Some(*face),
+        ValueKind::String => font_string_text(face).map(|name| Value::symbol(&name)),
+        _ => None,
+    }
+}
+
 fn ensure_frame_lisp_face_vector(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
@@ -5107,26 +5132,50 @@ pub(crate) fn builtin_internal_lisp_face_p(
 ) -> EvalResult {
     expect_min_args("internal-lisp-face-p", &args, 1)?;
     expect_max_args("internal-lisp-face-p", &args, 2)?;
-    if let Some(face_name) = known_face_name(&args[0]) {
-        if let Some(frame) = args.get(1) {
-            if frame.is_nil() {
-                Ok(ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL))
-            } else if live_frame_designator_in_state(&eval.frames, frame) {
-                let frame_id = frame_id_from_designator(frame)
-                    .expect("live frame designator should decode to frame id");
-                Ok(lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL))
-            } else {
-                Err(signal(
+
+    // Fast path mirroring GNU's `Finternal_lisp_face_p`: resolve the argument to
+    // its interned face symbol and do a single allocation-free, symbol-keyed
+    // hash lookup -- in the frame face table (2-arg live frame) or the global
+    // `face--new-frame-defaults` table (null frame). GNU never allocates, seeds,
+    // or creates here; neither does this path. The `known_face_name`/`ensure`
+    // gate is retained only as a cold fallback for a table miss, so results are
+    // identical to the old form while the common hit case allocates nothing.
+    let key = face_lookup_key(&args[0]);
+
+    if let Some(frame) = args.get(1) {
+        if !frame.is_nil() {
+            if !live_frame_designator_in_state(&eval.frames, frame) {
+                return Err(signal(
                     LispCondition::WrongTypeArgument,
                     vec![Value::symbol("frame-live-p"), *frame],
-                ))
+                ));
             }
-        } else {
-            Ok(ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL))
+            let frame_id = frame_id_from_designator(frame)
+                .expect("live frame designator should decode to frame id");
+            if let Some(vector) =
+                key.and_then(|k| lookup_frame_lisp_face_vector_by_symbol(eval, frame_id, k))
+            {
+                return Ok(vector);
+            }
+            return Ok(match known_face_name(&args[0]) {
+                Some(face_name) => {
+                    lookup_frame_lisp_face_vector(eval, frame_id, &face_name).unwrap_or(Value::NIL)
+                }
+                None => Value::NIL,
+            });
         }
-    } else {
-        Ok(Value::NIL)
     }
+
+    // Null-frame (or omitted-frame) global path.
+    if let Some(vector) =
+        key.and_then(|k| crate::emacs_core::xfaces::lookup_face_new_frame_defaults_vector(eval, k))
+    {
+        return Ok(vector);
+    }
+    Ok(match known_face_name(&args[0]) {
+        Some(face_name) => ensure_global_lisp_face_vector(eval, &face_name).unwrap_or(Value::NIL),
+        None => Value::NIL,
+    })
 }
 
 /// Eval-backed version of `internal-make-lisp-face` that also ensures the face

@@ -1291,6 +1291,79 @@ fn internal_lisp_face_p_non_symbol() {
     assert!(result.is_nil());
 }
 
+/// Regression guard for the `internal-lisp-face-p` hotspot fix.
+///
+/// The predicate used to re-seed `face--new-frame-defaults` on every call --
+/// rebuilding a cons + a fresh lface vector for *every* known face only to
+/// discard them -- and routed known faces through the create-on-miss `ensure`
+/// path. That made it the top self-time hotspot (~300us/call, ~150x a raw
+/// gethash). GNU's `Finternal_lisp_face_p` is a single allocation-free,
+/// symbol-keyed hash read. Lock in that contract: a known face returns the live
+/// table vector *by identity* (proving no per-call allocation/copy), and neither
+/// a hit nor an unknown miss ever mutates the table.
+#[test]
+fn internal_lisp_face_p_is_a_pure_read_of_the_live_table() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let table = eval
+        .obarray()
+        .symbol_value("face--new-frame-defaults")
+        .copied()
+        .expect("face--new-frame-defaults is bound at startup");
+    let count_before = table.as_hash_table().expect("hash table").data.len();
+
+    // Known face: the returned vector must be eq-identical to the entry already
+    // stored in the table -- i.e. read straight from the canonical store, not a
+    // freshly allocated or seeded copy.
+    let hit = builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol("default")]).unwrap();
+    assert!(hit.is_vector());
+    let live = crate::emacs_core::xfaces::lookup_face_new_frame_defaults_vector(
+        &eval,
+        Value::symbol("default"),
+    )
+    .expect("default face present in table");
+    assert!(
+        crate::emacs_core::value::eq_value(&hit, &live),
+        "predicate must return the live table vector by identity, not a copy",
+    );
+
+    // Unknown face: nil, and no entry gets created for it.
+    let miss = builtin_internal_lisp_face_p(
+        &mut eval,
+        vec![Value::symbol("__neovm_pure_read_unknown_face")],
+    )
+    .unwrap();
+    assert!(miss.is_nil());
+
+    let count_after = table.as_hash_table().expect("hash table").data.len();
+    assert_eq!(
+        count_before, count_after,
+        "internal-lisp-face-p must not mutate face--new-frame-defaults",
+    );
+
+    // Red-capable guard for the allocation storm itself: the old form re-seeded
+    // the table on every call, allocating a cons + a fresh lface vector for each
+    // of ~190 faces (~40 KB of tagged-heap garbage per call). The GNU-shaped read
+    // path allocates nothing. `total_allocated_bytes` is monotonic across GC, so
+    // the delta over a batch is a stable signal. Old: ~500 * 40 KB ~= 20 MB; new:
+    // ~0. The 100 KB bound sits ~200x below the old cost and far above any
+    // incidental allocation, so it separates the two without flaking.
+    let bytes_before = crate::tagged::gc::with_tagged_heap(|heap| heap.total_allocated_bytes());
+    let default_sym = Value::symbol("default");
+    for _ in 0..500 {
+        let v = builtin_internal_lisp_face_p(&mut eval, vec![default_sym]).unwrap();
+        assert!(v.is_vector());
+    }
+    let bytes_after = crate::tagged::gc::with_tagged_heap(|heap| heap.total_allocated_bytes());
+    let grew = bytes_after.saturating_sub(bytes_before);
+    assert!(
+        grew < 100_000,
+        "internal-lisp-face-p must be an allocation-free read; 500 calls grew the \
+         tagged heap by {grew} bytes (a re-seed/create-on-miss regression)",
+    );
+}
+
 #[test]
 fn internal_lisp_face_p_nil_returns_nil() {
     crate::test_utils::init_test_tracing();
