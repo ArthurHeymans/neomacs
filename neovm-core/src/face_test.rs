@@ -24,6 +24,19 @@ fn color_from_name() {
 }
 
 #[test]
+fn named_colors_follow_gnu_x11_rgb_database() {
+    crate::test_utils::init_test_tracing();
+    for (name, expected) in [
+        ("green", Color::rgb(0, 255, 0)),
+        ("gray", Color::rgb(190, 190, 190)),
+        ("purple", Color::rgb(160, 32, 240)),
+        ("maroon", Color::rgb(176, 48, 96)),
+    ] {
+        assert_eq!(Color::from_name(name), Some(expected), "{name}");
+    }
+}
+
+#[test]
 fn lface_attr_keyword_mapping_matches_gnu_slots() {
     crate::test_utils::init_test_tracing();
     let attrs = [
@@ -401,8 +414,8 @@ fn color_from_name_case_insensitive() {
     crate::test_utils::init_test_tracing();
     assert_eq!(Color::from_name("Black"), Some(Color::rgb(0, 0, 0)));
     assert_eq!(Color::from_name("CYAN"), Some(Color::rgb(0, 255, 255)));
-    assert_eq!(Color::from_name("Gray"), Some(Color::rgb(128, 128, 128)));
-    assert_eq!(Color::from_name("grey"), Some(Color::rgb(128, 128, 128)));
+    assert_eq!(Color::from_name("Gray"), Some(Color::rgb(190, 190, 190)));
+    assert_eq!(Color::from_name("grey"), Some(Color::rgb(190, 190, 190)));
 }
 
 #[test]
@@ -413,11 +426,9 @@ fn color_from_name_full_palette() {
         ("orange", Color::rgb(255, 165, 0)),
         ("pink", Color::rgb(255, 192, 203)),
         ("navy", Color::rgb(0, 0, 128)),
-        ("teal", Color::rgb(0, 128, 128)),
         ("coral", Color::rgb(255, 127, 80)),
         ("ivory", Color::rgb(255, 255, 240)),
         ("wheat", Color::rgb(245, 222, 179)),
-        ("crimson", Color::rgb(220, 20, 60)),
         ("lavender", Color::rgb(230, 230, 250)),
         ("snow", Color::rgb(255, 250, 250)),
     ];

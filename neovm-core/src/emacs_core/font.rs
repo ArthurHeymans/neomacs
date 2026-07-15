@@ -6339,25 +6339,12 @@ fn parse_hex_color_16bit(hex: &str) -> Option<(i64, i64, i64)> {
 }
 
 fn parse_named_color_16bit(name: &str) -> Option<(i64, i64, i64)> {
-    match name {
-        "black" => Some((0, 0, 0)),
-        "white" => Some((65535, 65535, 65535)),
-        "red" => Some((65535, 0, 0)),
-        "green" => Some((0, 65535, 0)),
-        "blue" => Some((0, 0, 65535)),
-        "yellow" => Some((65535, 65535, 0)),
-        "cyan" => Some((0, 65535, 65535)),
-        "magenta" => Some((65535, 0, 65535)),
-        "gray" | "grey" => Some((48573, 48573, 48573)),
-        "dark gray" | "dark grey" | "darkgray" | "darkgrey" => Some((43690, 43690, 43690)),
-        "light gray" | "light grey" | "lightgray" | "lightgrey" => Some((55512, 55512, 55512)),
-        "orange" => Some((65535, 42405, 0)),
-        "orange red" | "orangered" => Some((65535, 17990, 0)),
-        "pink" => Some((65535, 49344, 52171)),
-        "brown" => Some((42405, 10794, 10794)),
-        "purple" => Some((32896, 0, 32896)),
-        _ => None,
-    }
+    let color = crate::face::Color::from_name(name)?;
+    Some((
+        i64::from(color.r) * 257,
+        i64::from(color.g) * 257,
+        i64::from(color.b) * 257,
+    ))
 }
 
 fn approximate_tty_color((r, g, b): (i64, i64, i64)) -> (i64, i64, i64) {

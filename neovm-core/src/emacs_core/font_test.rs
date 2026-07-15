@@ -3794,6 +3794,33 @@ fn xw_color_primitives_follow_live_gui_frame_state() {
 }
 
 #[test]
+fn xw_color_values_follow_gnu_x11_rgb_database() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .window_system = Some(Value::symbol("neo"));
+
+    for (name, component) in [("gray", 190 * 257), ("DarkGray", 169 * 257)] {
+        assert_eq!(
+            builtin_xw_color_values_ctx(
+                &eval,
+                vec![Value::string(name), Value::make_frame(frame_id.0)],
+            )
+            .expect("xw-color-values should evaluate"),
+            Value::list(vec![
+                Value::fixnum(component),
+                Value::fixnum(component),
+                Value::fixnum(component),
+            ]),
+            "{name}",
+        );
+    }
+}
+
+#[test]
 fn color_distance_errors_match_oracle_shape() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

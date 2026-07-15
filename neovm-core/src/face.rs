@@ -160,54 +160,7 @@ impl Color {
 
     /// Named color lookup (common X11/Emacs colors).
     pub fn from_name(name: &str) -> Option<Self> {
-        match name.to_lowercase().as_str() {
-            "black" => Some(Color::rgb(0, 0, 0)),
-            "white" => Some(Color::rgb(255, 255, 255)),
-            "red" => Some(Color::rgb(255, 0, 0)),
-            "green" => Some(Color::rgb(0, 128, 0)),
-            "blue" => Some(Color::rgb(0, 0, 255)),
-            "cyan" => Some(Color::rgb(0, 255, 255)),
-            "magenta" => Some(Color::rgb(255, 0, 255)),
-            "yellow" => Some(Color::rgb(255, 255, 0)),
-            "gray" | "grey" => Some(Color::rgb(128, 128, 128)),
-            "darkgray" | "darkgrey" => Some(Color::rgb(64, 64, 64)),
-            "lightgray" | "lightgrey" => Some(Color::rgb(192, 192, 192)),
-            "orange" => Some(Color::rgb(255, 165, 0)),
-            "pink" => Some(Color::rgb(255, 192, 203)),
-            "brown" => Some(Color::rgb(165, 42, 42)),
-            "purple" => Some(Color::rgb(128, 0, 128)),
-            "violet" => Some(Color::rgb(238, 130, 238)),
-            "gold" => Some(Color::rgb(255, 215, 0)),
-            "navy" => Some(Color::rgb(0, 0, 128)),
-            "teal" => Some(Color::rgb(0, 128, 128)),
-            "olive" => Some(Color::rgb(128, 128, 0)),
-            "maroon" => Some(Color::rgb(128, 0, 0)),
-            "coral" => Some(Color::rgb(255, 127, 80)),
-            "salmon" => Some(Color::rgb(250, 128, 114)),
-            "tomato" => Some(Color::rgb(255, 99, 71)),
-            "aquamarine" => Some(Color::rgb(127, 255, 212)),
-            "turquoise" => Some(Color::rgb(64, 224, 208)),
-            "ivory" => Some(Color::rgb(255, 255, 240)),
-            "beige" => Some(Color::rgb(245, 245, 220)),
-            "khaki" => Some(Color::rgb(240, 230, 140)),
-            "wheat" => Some(Color::rgb(245, 222, 179)),
-            "tan" => Some(Color::rgb(210, 180, 140)),
-            "chocolate" => Some(Color::rgb(210, 105, 30)),
-            "firebrick" => Some(Color::rgb(178, 34, 34)),
-            "crimson" => Some(Color::rgb(220, 20, 60)),
-            "indianred" => Some(Color::rgb(205, 92, 92)),
-            "lavender" => Some(Color::rgb(230, 230, 250)),
-            "plum" => Some(Color::rgb(221, 160, 221)),
-            "orchid" => Some(Color::rgb(218, 112, 214)),
-            "thistle" => Some(Color::rgb(216, 191, 216)),
-            "linen" => Some(Color::rgb(250, 240, 230)),
-            "mintcream" => Some(Color::rgb(245, 255, 250)),
-            "snow" => Some(Color::rgb(255, 250, 250)),
-            "seashell" => Some(Color::rgb(255, 245, 238)),
-            "honeydew" => Some(Color::rgb(240, 255, 240)),
-            // Fall back to X11 color database (compiled from etc/rgb.txt)
-            _ => x11_color_lookup(name).map(|(r, g, b)| Color::rgb(r, g, b)),
-        }
+        x11_color_lookup(name).map(|(r, g, b)| Color::rgb(r, g, b))
     }
 
     /// Parse a color spec: hex string or named color.
