@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn box_line_width_preserves_gnu_inside_and_outside_semantics() {
+    let inside = BoxLineWidth::from_gnu(-2);
+    assert!(inside.is_visible());
+    assert_eq!(inside.paint_thickness(), 2);
+    assert!(!inside.expands_row_height());
+    assert_eq!(inside.row_expansion_per_edge(), 0);
+
+    let outside = BoxLineWidth::from_gnu(2);
+    assert!(outside.is_visible());
+    assert_eq!(outside.paint_thickness(), 2);
+    assert!(outside.expands_row_height());
+    assert_eq!(outside.row_expansion_per_edge(), 2);
+}
+
+#[test]
 fn basic_face_ids_preserve_gnu_slots_and_names() {
     let faces = [
         (BasicFaceId::Default, 0, "default"),
@@ -147,7 +162,7 @@ fn test_default_face_values() {
     assert_eq!(face.attributes, FaceAttributes::empty());
     assert_eq!(face.underline_style, UnderlineStyle::None);
     assert_eq!(face.box_type, BoxType::None);
-    assert_eq!(face.box_line_width, 0);
+    assert_eq!(face.box_line_width.gnu_value(), 0);
     assert_eq!(face.box_corner_radius, 0);
     assert!(face.underline_color.is_none());
     assert!(face.overline_color.is_none());
@@ -336,12 +351,12 @@ fn test_box_attribute_and_types() {
     // Line box
     face.box_type = BoxType::Line;
     face.attributes |= FaceAttributes::BOX;
-    face.box_line_width = 2;
+    face.box_line_width = 2.into();
     face.box_corner_radius = 4;
     face.box_color = Some(Color::RED);
     assert!(face.attributes.contains(FaceAttributes::BOX));
     assert_eq!(face.box_type, BoxType::Line);
-    assert_eq!(face.box_line_width, 2);
+    assert_eq!(face.box_line_width.gnu_value(), 2);
     assert_eq!(face.box_corner_radius, 4);
     assert_eq!(face.box_color.unwrap(), Color::RED);
 

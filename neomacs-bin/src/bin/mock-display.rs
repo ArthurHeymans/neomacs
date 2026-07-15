@@ -938,7 +938,7 @@ fn build_faces() -> HashMap<FaceId, Face> {
         box_face.background = Color::new(0.3, 0.3, 0.3, 1.0);
         box_face.font_weight = 400;
         box_face.box_type = neomacs_display_protocol::face::BoxType::Line;
-        box_face.box_line_width = 2;
+        box_face.box_line_width = 2.into();
         box_face.box_corner_radius = 8;
         box_face.box_color = Some(Color::new(1.0, 0.84, 0.0, 1.0));
         f.insert(FaceId::new(8), box_face);

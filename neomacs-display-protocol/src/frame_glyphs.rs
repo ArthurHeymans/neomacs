@@ -1119,7 +1119,7 @@ impl FrameGlyphBuffer {
             attributes: attrs,
             underline_style,
             box_type: BoxType::None,
-            box_line_width: 0,
+            box_line_width: Default::default(),
             box_corner_radius: 0,
             box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,

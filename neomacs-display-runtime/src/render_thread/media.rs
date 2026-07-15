@@ -825,7 +825,7 @@ fn terminal_cell_face(
         attributes: attrs,
         underline_style,
         box_type: BoxType::None,
-        box_line_width: 0,
+        box_line_width: Default::default(),
         box_corner_radius: 0,
         box_border_style: neomacs_display_protocol::face::BoxBorderStyle::Solid,
         box_border_speed: 1.0,

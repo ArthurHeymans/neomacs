@@ -53,7 +53,10 @@ impl WgpuRenderer {
                 // background is the face's background (the value materialization used
                 // to inline on the glyph as `Some(face.background)`).
                 let g_bg = match faces.get(&gface_id) {
-                    Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                    Some(f)
+                        if !matches!(f.box_type, BoxType::None)
+                            && f.box_line_width.is_visible() =>
+                    {
                         Some(f.background)
                     }
                     _ => continue,

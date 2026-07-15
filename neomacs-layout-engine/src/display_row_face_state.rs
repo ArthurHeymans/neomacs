@@ -9,7 +9,7 @@ use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::{
-    BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle,
+    BoxBorderStyle, BoxLineWidth, BoxType, Face, FaceAttributes, UnderlineStyle,
 };
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
@@ -39,7 +39,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) overline_color: Option<Color>,
     pub(crate) box_type: BoxType,
     pub(crate) box_color: Option<Color>,
-    pub(crate) box_line_width: i32,
+    pub(crate) box_line_width: BoxLineWidth,
     pub(crate) box_corner_radius: i32,
     pub(crate) box_border_style: BoxBorderStyle,
     pub(crate) box_border_speed: f32,
@@ -330,8 +330,8 @@ impl<'a> DisplayRowFaceRealizer<'a> {
             fallback.row_height(),
         );
         let line_height = face.metrics.line_height_px().ceil();
-        let box_edge = if face.box_type != BoxType::None && face.box_line_width != 0 {
-            face.box_line_width.unsigned_abs() as f32
+        let box_edge = if face.box_type != BoxType::None {
+            face.box_line_width.row_expansion_per_edge() as f32
         } else {
             0.0
         };

@@ -1143,7 +1143,7 @@ impl WgpuRenderer {
                     height: clip.height,
                 });
                 let bx_color = face.box_color.as_ref().unwrap_or(&face.foreground);
-                let bw = face.box_line_width as f32;
+                let bw = face.box_line_width.paint_thickness() as f32;
 
                 // Rounded box background fill
                 if face.box_corner_radius > 0
@@ -1909,7 +1909,10 @@ impl WgpuRenderer {
                 // background is the face's background (the value materialization used
                 // to inline on the glyph as `Some(face.background)`).
                 let g_bg = match faces.get(&gface_id) {
-                    Some(f) if !matches!(f.box_type, BoxType::None) && f.box_line_width > 0 => {
+                    Some(f)
+                        if !matches!(f.box_type, BoxType::None)
+                            && f.box_line_width.is_visible() =>
+                    {
                         Some(f.background)
                     }
                     _ => continue,

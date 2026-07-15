@@ -25,7 +25,7 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
     face.font_ascent = 9.0;
     face.font_line_height = 12.0;
     face.box_type = 1;
-    face.box_line_width = 1;
+    face.box_line_width = 1.into();
 
     assert_eq!(
         window_chrome_row_height_for_face(
@@ -34,6 +34,28 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 20.0, 12.0),
         ),
         14.0
+    );
+}
+
+#[test]
+fn negative_box_line_width_draws_inside_without_increasing_chrome_row_height() {
+    let mut font_metrics = None;
+    let mut face = ResolvedFace::default();
+    face.font_family = "monospace".to_string();
+    face.font_size = 14.0;
+    face.font_ascent = 9.0;
+    face.font_line_height = 12.0;
+    face.box_type = 1;
+    face.box_line_width = (-2).into();
+
+    assert_eq!(
+        window_chrome_row_height_for_face(
+            &mut font_metrics,
+            &face,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 20.0, 12.0),
+        ),
+        12.0,
+        "GNU :box line-width < 0 paints inside the glyph row"
     );
 }
 

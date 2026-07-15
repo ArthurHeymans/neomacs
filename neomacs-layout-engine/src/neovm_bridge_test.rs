@@ -283,7 +283,7 @@ fn chrome_face_pixel_height_uses_ceil_for_fractional_metrics() {
     let mut face = ResolvedFace::default();
     face.font_line_height = 17.2;
     face.box_type = 1;
-    face.box_line_width = 1;
+    face.box_line_width = 1.into();
 
     assert_eq!(chrome_face_pixel_height(&face, 14.1), 20.0);
 

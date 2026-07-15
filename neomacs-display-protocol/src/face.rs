@@ -108,6 +108,53 @@ impl BoxType {
     }
 }
 
+/// GNU Emacs scalar `:box :line-width` semantics.
+///
+/// The magnitude is the painted border thickness. A positive value expands
+/// the glyph row vertically; a negative value paints the top and bottom edges
+/// inside the existing row. GNU uses the absolute magnitude for the left and
+/// right edges in both cases (`struct face::box_{vertical,horizontal}_line_width`).
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct BoxLineWidth(i32);
+
+impl BoxLineWidth {
+    pub const fn from_gnu(value: i32) -> Self {
+        Self(value)
+    }
+
+    pub const fn gnu_value(self) -> i32 {
+        self.0
+    }
+
+    pub const fn is_visible(self) -> bool {
+        self.0 != 0
+    }
+
+    pub const fn paint_thickness(self) -> u32 {
+        self.0.unsigned_abs()
+    }
+
+    pub const fn expands_row_height(self) -> bool {
+        self.0 > 0
+    }
+
+    pub const fn row_expansion_per_edge(self) -> u32 {
+        if self.expands_row_height() {
+            self.paint_thickness()
+        } else {
+            0
+        }
+    }
+}
+
+impl From<i32> for BoxLineWidth {
+    fn from(value: i32) -> Self {
+        Self::from_gnu(value)
+    }
+}
+
 /// Fancy box border style — a Neomacs extension to GNU's box faces.
 ///
 /// The numeric codes are the wire values used by the C-side
@@ -281,8 +328,8 @@ pub struct Face {
     /// Box type
     pub box_type: BoxType,
 
-    /// Box line width
-    pub box_line_width: i32,
+    /// GNU scalar box line width, including inside/outside sign semantics.
+    pub box_line_width: BoxLineWidth,
 
     /// Box corner radius (0 = sharp corners)
     pub box_corner_radius: i32,
@@ -349,7 +396,7 @@ impl Default for Face {
             attributes: FaceAttributes::empty(),
             underline_style: UnderlineStyle::None,
             box_type: BoxType::None,
-            box_line_width: 0,
+            box_line_width: BoxLineWidth::default(),
             box_corner_radius: 0,
             box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
@@ -567,7 +614,7 @@ impl FaceDataFFI {
             attributes: attrs,
             underline_style,
             box_type,
-            box_line_width: self.box_line_width,
+            box_line_width: BoxLineWidth::from_gnu(self.box_line_width),
             box_corner_radius: self.box_corner_radius,
             // FFI edge: decode the raw C style code; unknown codes fall back
             // to the solid border rather than propagating garbage.

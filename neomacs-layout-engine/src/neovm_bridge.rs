@@ -34,6 +34,7 @@ use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
+use neomacs_display_protocol::face::BoxLineWidth;
 use neomacs_display_protocol::types::{FaceId, Rect};
 use strum::{EnumString, IntoStaticStr};
 
@@ -684,8 +685,8 @@ fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f
     } else {
         fallback_char_height.ceil()
     };
-    let box_pixels = if face.box_type != 0 && face.box_line_width != 0 {
-        2.0 * face.box_line_width.unsigned_abs() as f32
+    let box_pixels = if face.box_type != 0 {
+        2.0 * face.box_line_width.row_expansion_per_edge() as f32
     } else {
         0.0
     };
@@ -2434,8 +2435,8 @@ pub struct ResolvedFace {
     pub box_type: u8,
     /// Box color (sRGB pixel).
     pub box_color: u32,
-    /// Box line width.
-    pub box_line_width: i32,
+    /// GNU scalar box line width, including inside/outside sign semantics.
+    pub box_line_width: BoxLineWidth,
     /// Extend background to end of line.
     pub extend: bool,
     /// Simulate bold by drawing twice at x and x+1.
@@ -2476,7 +2477,7 @@ impl Default for ResolvedFace {
             overline_color: 0,
             box_type: 0,
             box_color: 0,
-            box_line_width: 0,
+            box_line_width: BoxLineWidth::default(),
             extend: false,
             overstrike: false,
             terminal_inverse_video: false,
@@ -2622,7 +2623,7 @@ impl FaceResolver {
         if let Some(bb) = &neo_default.box_border {
             df.box_type = box_style_to_u8(&bb.style);
             df.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(0);
-            df.box_line_width = bb.width;
+            df.box_line_width = BoxLineWidth::from_gnu(bb.width);
         }
 
         Self {
@@ -2760,7 +2761,7 @@ impl FaceResolver {
                 .as_ref()
                 .map(color_to_pixel)
                 .unwrap_or(rf.fg);
-            rf.box_line_width = box_border.width;
+            rf.box_line_width = BoxLineWidth::from_gnu(box_border.width);
         }
         if let Some(extend) = face.extend {
             rf.extend = extend;
@@ -3434,7 +3435,7 @@ impl FaceResolver {
         if let Some(bb) = &face.box_border {
             rf.box_type = box_style_to_u8(&bb.style);
             rf.box_color = bb.color.as_ref().map(color_to_pixel).unwrap_or(rf.fg);
-            rf.box_line_width = bb.width;
+            rf.box_line_width = BoxLineWidth::from_gnu(bb.width);
         }
         // Extend
         if let Some(ext) = face.extend {

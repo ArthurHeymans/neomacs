@@ -101,7 +101,7 @@ fn rounded_box_background_suppression_matches_exact_face_paint() {
     let face_id = FaceId::new(7);
     let mut face = Face::new(face_id);
     face.box_type = BoxType::Line;
-    face.box_line_width = 1;
+    face.box_line_width = 1.into();
     face.box_corner_radius = 4;
     let faces = HashMap::from([(face_id, face)]);
     let spans = [BoxSpan {

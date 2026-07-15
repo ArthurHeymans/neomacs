@@ -11,14 +11,14 @@
 
 use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, PhysCursor,
+    CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
 };
-use neomacs_display_protocol::types::{Color, DisplayWindowId};
+use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
 use neomacs_display_protocol::{
-    FrameRect, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
-    PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
-    PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance, PresentedPointerRegion,
-    PresentedPrimitiveKind,
+    BoxType, FaceAttributes, FrameRect, PointerAppearanceId, PointerAppearancePhase,
+    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
+    PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
+    PresentedPointerRegion, PresentedPrimitiveKind,
 };
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
 
@@ -190,6 +190,61 @@ fn offscreen_frame_renders_background_and_cursor() {
         }
     }
     assert!(found_red, "expected the red bar cursor to be drawn");
+}
+
+#[test]
+fn negative_box_line_width_paints_an_inset_border() {
+    let Some(mut h) = try_harness() else {
+        return;
+    };
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::BLACK;
+    let face_id = FaceId::new(20);
+    frame.set_face(
+        face_id,
+        Color::WHITE,
+        Some(Color::BLACK),
+        700,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    let face = frame.faces.get_mut(&face_id).unwrap();
+    face.attributes |= FaceAttributes::BOX;
+    face.box_type = BoxType::Line;
+    face.box_color = Some(Color::GREEN);
+    face.box_line_width = (-2).into();
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::TabBar, None);
+    frame.add_stretch(20.0, 20.0, 40.0, 20.0, Color::BLACK, face_id, false);
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        W,
+        H,
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+    let top = px(&buf, 40, 20);
+    let interior = px(&buf, 40, 25);
+    assert!(
+        top[1] > 180 && top[1] > top[0] + 80 && top[1] > top[2] + 80,
+        "negative line-width must still paint its top box edge, got {top:?}"
+    );
+    assert!(
+        interior[0] < 30 && interior[1] < 30 && interior[2] < 30,
+        "inset border must not fill the box interior, got {interior:?}"
+    );
 }
 
 #[test]
