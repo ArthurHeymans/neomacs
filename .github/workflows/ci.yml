@@ -228,8 +228,8 @@ jobs:
             --partition slice:${{ matrix.partition }}/10 \
             --no-fail-fast
 
-  fresh-release-build:
-    name: fresh release build (linux x86_64)
+  neovm-oracle-test-assets:
+    name: neovm-oracle test assets (linux x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 150
     env: *ci_env
@@ -238,12 +238,16 @@ jobs:
       - *install_linux_deps
       - *install_rust
       - *cache_cargo
+      - *install_nextest
 
-      - name: release cargo build
-        run: cargo build --release -p neomacs --verbose
+      - name: Build fresh release runtime
+        run: cargo xtask fresh-build --release
 
-      - name: fresh release runtime generation
-        run: cargo xtask fresh-build --release --skip-build
+      - name: Build and archive neovm-oracle-tests
+        run: |
+          cargo nextest archive \
+            -p neovm-oracle-tests \
+            --archive-file neovm-oracle-tests-nextest.tar.zst
 
       - name: Package release runtime for oracle tests
         run: |
@@ -261,18 +265,60 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Upload neovm-oracle-tests archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: neovm-oracle-tests-nextest-archive-linux-x86_64
+          path: neovm-oracle-tests-nextest.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
   neovm-oracle-tests:
-    name: neovm-oracle-tests (linux x86_64)
-    needs: fresh-release-build
+    name: neovm-oracle-tests shard ${{ matrix.partition }}/20 (linux x86_64)
+    needs: neovm-oracle-test-assets
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    env: *ci_env
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      NEOVM_ORACLE_MODE: snapshot
+      NEOVM_BINARY_PATH: ${{ github.workspace }}/target/release/neomacs
+    strategy:
+      fail-fast: false
+      matrix:
+        partition:
+          - 1
+          - 2
+          - 3
+          - 4
+          - 5
+          - 6
+          - 7
+          - 8
+          - 9
+          - 10
+          - 11
+          - 12
+          - 13
+          - 14
+          - 15
+          - 16
+          - 17
+          - 18
+          - 19
+          - 20
     steps:
       - *checkout
       - *install_linux_deps
       - *install_rust
-      - *cache_cargo
       - *install_nextest
+
+      - name: Install and configure libfaketime
+        run: |
+          sudo apt-get install -y --no-install-recommends libfaketime
+          libfaketime_so="$(dpkg -L libfaketime | rg '/libfaketime\.so\.1$' | head -n 1)"
+          test -n "$libfaketime_so"
+          echo "NEOVM_LIBFAKETIME_SO=$libfaketime_so" >> "$GITHUB_ENV"
 
       - name: Download release runtime
         uses: actions/download-artifact@v5
@@ -285,5 +331,16 @@ jobs:
           tar xzf neomacs-release-runtime-linux-x86_64.tar.gz
           chmod +x target/release/neomacs
 
-      - name: neovm-oracle-tests
-        run: cargo nextest run -p neovm-oracle-tests --no-fail-fast
+      - name: Download neovm-oracle-tests archive
+        uses: actions/download-artifact@v5
+        with:
+          name: neovm-oracle-tests-nextest-archive-linux-x86_64
+          path: .
+
+      - name: Run neovm-oracle-tests shard
+        run: |
+          cargo nextest run \
+            --archive-file neovm-oracle-tests-nextest.tar.zst \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --partition slice:${{ matrix.partition }}/20 \
+            --no-fail-fast
