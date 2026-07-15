@@ -149,7 +149,12 @@ cairo-rs = "0.22"
 gio = "0.22"
 glib = "0.22"
 cosmic-text = "0.18.2"
-swash = "0.2.6"
+# >=0.2.9 required: 0.2.7 rebuilt the TrueType hinting instance for every
+# rasterized glyph (dfrg/swash#114 -- default-weight variation coords made the
+# hinting-cache key never match, ~7.7% of our redisplay CPU); 0.2.8 fixed that
+# but regressed to wrong-size glyphs after cache eviction (dfrg/swash#120);
+# 0.2.9 has both fixes.
+swash = "0.2.9"
 fontdb = "0.23"
 ttf-parser = "0.25"
 arboard = "3.4"
