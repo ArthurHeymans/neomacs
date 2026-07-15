@@ -86,7 +86,15 @@ struct BufferTextStorage {
     /// GNU `END_UNCHANGED` analog: chars at the buffer END unchanged since ack.
     end_unchanged: i64,
     save_modified_tick: i64,
-    text_props: TextPropertyTable,
+    /// Copy-on-write text-property table. Shared via `Rc` so a layout snapshot
+    /// (`BufferText::clone` / `Buffer::text_snapshot`, taken every redisplay)
+    /// is O(1) instead of deep-copying the whole interval tree per frame.
+    /// Mutations go through `Rc::make_mut`, which copies only while a snapshot
+    /// still holds the old table -- and snapshots are dropped before the next
+    /// mutation, so it copies ~never. Because you cannot obtain `&mut
+    /// TextPropertyTable` from `&Rc<_>` except via `make_mut`, the compiler
+    /// forces every mutation site to opt in; no site can silently share-mutate.
+    text_props: Rc<TextPropertyTable>,
     /// Head of the intrusive per-buffer marker chain (GNU `buffer->own_text.markers`).
     /// Authoritative since T6; the parallel `Vec<MarkerEntry>` was deleted in T7.
     markers_head: *mut crate::tagged::header::MarkerObj,
@@ -256,7 +264,7 @@ impl BufferText {
                 beg_unchanged: i64::MAX,
                 end_unchanged: i64::MAX,
                 save_modified_tick: 1,
-                text_props: TextPropertyTable::new(),
+                text_props: Rc::new(TextPropertyTable::new()),
                 markers_head: std::ptr::null_mut(),
                 pos_cache: Cell::new(PositionCache::default()),
                 anchor_cache: RefCell::new(Vec::new()),
@@ -998,11 +1006,13 @@ impl BufferText {
     }
 
     pub fn text_props_snapshot(&self) -> TextPropertyTable {
-        self.storage.borrow().text_props.clone()
+        // Callers here (transpose-regions, pdump, buffer-copy) want an owned,
+        // independent table, so deep-clone the shared inner table -- not the Rc.
+        self.storage.borrow().text_props.as_ref().clone()
     }
 
     pub fn text_props_replace(&self, table: TextPropertyTable) {
-        self.storage.borrow_mut().text_props = table;
+        self.storage.borrow_mut().text_props = Rc::new(table);
     }
 
     pub fn replace_storage(&self, text: &str, multibyte: bool, text_props: TextPropertyTable) {
@@ -1029,7 +1039,7 @@ impl BufferText {
             storage.metrics,
             EmacsByteLen::new(GAP_BYTES_DFL),
         );
-        storage.text_props = text_props;
+        storage.text_props = Rc::new(text_props);
     }
 
     /// Walk the intrusive marker chain and remap each marker's cached
@@ -1072,9 +1082,7 @@ impl BufferText {
                 storage.metrics.char_len(),
             )
         };
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .put_property_for_object_char_len(range, object_len, name, value)
     }
 
@@ -1195,17 +1203,13 @@ impl BufferText {
         name: Value,
     ) -> bool {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .remove_property_in_char_range(range, name)
     }
 
     pub fn text_props_remove_all_in_emacs_byte_range(&self, byte_range: EmacsByteRange) {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .remove_all_properties_in_char_range(range);
     }
 
@@ -1221,9 +1225,7 @@ impl BufferText {
                 storage.metrics.char_len(),
             )
         };
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .set_properties_for_object_char_len(range, object_len, plist);
     }
 
@@ -1238,9 +1240,7 @@ impl BufferText {
         plist: Vec<(Value, Value)>,
     ) {
         let object_len = self.storage.borrow().metrics.char_len();
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .set_properties_for_object_char_len(range, object_len, plist);
     }
 
@@ -1367,9 +1367,7 @@ impl BufferText {
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
             .start();
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .append_shifted_at_char_pos(other, char_pos);
     }
 
@@ -1382,9 +1380,7 @@ impl BufferText {
             .byte_range_to_char_range(EmacsByteRange::new(byte_pos, byte_pos))
             .start()
             .get();
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .merge_missing_shifted_at_char_offset(other, CharLen::new(char_offset));
     }
 
@@ -1393,9 +1389,7 @@ impl BufferText {
         byte_range: EmacsByteRange,
     ) {
         let range = self.byte_range_to_char_range(byte_range);
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .merge_adjacent_equal_properties_around_char_range(range);
     }
 
@@ -1431,17 +1425,12 @@ impl BufferText {
     }
 
     pub(crate) fn adjust_text_props_for_insert_at(&self, pos: CharPos0, len: CharLen) {
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .adjust_for_insert_at_char_pos(pos, len);
     }
 
     pub(crate) fn adjust_text_props_for_delete_range(&self, range: CharRange) {
-        self.storage
-            .borrow_mut()
-            .text_props
-            .adjust_for_delete_char_range(range);
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props).adjust_for_delete_char_range(range);
     }
 
     pub(crate) fn adjust_text_props_for_replace_at(
@@ -1450,9 +1439,7 @@ impl BufferText {
         old_len: CharLen,
         new_len: CharLen,
     ) {
-        self.storage
-            .borrow_mut()
-            .text_props
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .adjust_for_replace_at_char_pos(start, old_len, new_len);
     }
 
