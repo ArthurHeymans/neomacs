@@ -5,8 +5,6 @@
 use neomacs_display_protocol::types::{FaceId, Rect};
 use std::collections::HashSet;
 
-use cosmic_text::SubpixelBin;
-
 use neomacs_display_protocol::face::{BoxType, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::Color;
@@ -267,9 +265,13 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                         tessellation.verbatim_only = true;
                     }
 
-                    // Decompose physical-pixel positions into integer + subpixel bin.
-                    // The bin is baked into the rasterized bitmap by swash for subpixel
-                    // accuracy; vertex positions stay on integer pixels (no Linear blur).
+                    // Snap glyph origins to whole physical pixels via the SAME
+                    // shared helper the child-frame path uses (see
+                    // `content::snap_glyph_origin`), so both text surfaces keep one
+                    // subpixel policy -- the atlas key must be position-invariant or
+                    // scrolling re-rasterizes every glyph. Keeping this call (not a
+                    // local `SubpixelBin::new`) is what makes content.rs's
+                    // "full parity with the main frame" claim structurally true.
                     let sf = self.renderer.scale_factor;
                     let y_offset = if has_line_anims {
                         self.renderer.line_y_offset(*x, *y)
@@ -279,8 +281,8 @@ impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
                     let phys_x = (*x) * sf;
                     let baseline_y = *baseline + y_offset;
                     let phys_y = baseline_y * sf;
-                    let (x_int, x_bin) = SubpixelBin::new(phys_x);
-                    let (y_int, y_bin) = SubpixelBin::new(phys_y);
+                    let (x_int, y_int, x_bin, y_bin) =
+                        super::content::snap_glyph_origin(phys_x, phys_y);
                     let font_identity = glyph_font_identity(face);
 
                     let subpixel_request = if enable_subpixel {

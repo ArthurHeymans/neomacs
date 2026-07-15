@@ -39,7 +39,7 @@ use std::collections::HashSet;
 /// the key to `(char, face, size, font)` so each glyph rasterizes once and later
 /// frames are pure cache hits. The vertex is placed at the returned integer
 /// origin, so bitmap and placement stay consistent.
-fn snap_glyph_origin(phys_x: f32, phys_y: f32) -> (i32, i32, SubpixelBin, SubpixelBin) {
+pub(super) fn snap_glyph_origin(phys_x: f32, phys_y: f32) -> (i32, i32, SubpixelBin, SubpixelBin) {
     (
         phys_x.round() as i32,
         phys_y.round() as i32,
