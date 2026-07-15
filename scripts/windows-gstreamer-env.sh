@@ -30,7 +30,8 @@ if [[ "${1:-}" == "--verify" ]]; then
     -name 'gstreamer-1.0.pc' -o \
     -name 'cairo.pc' -o \
     -name 'pango.pc' -o \
-    -name 'pangocairo.pc' \
+    -name 'pangocairo.pc' -o \
+    -name 'pangoft2.pc' \
   \)
   "$pkg_config_posix" --version
   "$pkg_config_posix" --modversion glib-2.0
@@ -38,4 +39,5 @@ if [[ "${1:-}" == "--verify" ]]; then
   "$pkg_config_posix" --modversion cairo
   "$pkg_config_posix" --modversion pango
   "$pkg_config_posix" --modversion pangocairo
+  "$pkg_config_posix" --modversion pangoft2
 fi
