@@ -1054,6 +1054,13 @@ impl super::eval::Context {
 
             let wait_timeout = self.next_wait_request_timeout(&request, now);
             let activity = self.block_for_wait_request(&request, wait_timeout.duration)?;
+            // Service cross-thread eval-tasks (e.g. a diagnostics profile
+            // capture) here: a `Poller::notify()` wakes this inner block without
+            // host input, and the block would otherwise re-loop without ever
+            // returning to the outer read_char drain point. Tasks are only the
+            // diagnostics profiler ops today (safe at any wait point); a general
+            // task must stay non-reentrant here.
+            self.drain_eval_tasks();
             // GNU services a wake in [read fds] → [loop-top deadline check] →
             // [timer_check] order, so when the deadline elapses during the
             // block, ready process output is still drained but ripe timers are
