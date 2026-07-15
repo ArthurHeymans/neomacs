@@ -1439,6 +1439,56 @@ fn next_single_property_change_basic() {
     assert!(result.is_fixnum());
 }
 
+/// Regression guard for the interval-cursor rewrite of
+/// next_single_property_change (locate-once + O(1) sibling stepping instead of a
+/// find_id re-descent per boundary). Exercises the two edges the cursor walk must
+/// get right: (1) COALESCING -- a boundary that changes a DIFFERENT property must
+/// not be reported (the walk compares only the named property off each node's
+/// plist); (2) the TRAILING implicit-nil region past the last interval.
+#[test]
+fn next_single_property_change_coalesces_and_reports_trailing_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("0123456789");
+    let put = |eval: &mut _, s, e, k, v| {
+        builtin_put_text_property(
+            eval,
+            vec![Value::fixnum(s), Value::fixnum(e), Value::symbol(k), v],
+        )
+        .unwrap();
+    };
+    // face=bold on [1,7) but split by an invisible-only interval at [4,7); then
+    // face=italic on [7,11) to the buffer end.
+    put(&mut eval, 1, 7, "face", Value::symbol("bold"));
+    put(&mut eval, 4, 7, "invisible", Value::T);
+    put(&mut eval, 7, 11, "face", Value::symbol("italic"));
+
+    // From 1, the next `face` change must skip the [4,7) invisible boundary
+    // (face is still bold there) and land at 7 where face becomes italic.
+    let at7 = builtin_next_single_property_change(
+        &mut eval,
+        vec![Value::fixnum(1), Value::symbol("face")],
+    )
+    .unwrap();
+    assert_eq!(
+        at7.as_fixnum(),
+        Some(7),
+        "must coalesce past the invisible-only boundary"
+    );
+
+    // From 7, face=italic is constant to the buffer end, so next-single-property-change
+    // returns nil (GNU: nil when the property never changes before point-max). This
+    // exercises the cursor walk running to the last interval with no reported change.
+    let at_end = builtin_next_single_property_change(
+        &mut eval,
+        vec![Value::fixnum(7), Value::symbol("face")],
+    )
+    .unwrap();
+    assert!(
+        at_end.is_nil(),
+        "property constant to the buffer end must yield nil, got {at_end:?}"
+    );
+}
+
 #[test]
 fn next_single_property_change_nil_when_none() {
     crate::test_utils::init_test_tracing();

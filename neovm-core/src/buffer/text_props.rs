@@ -534,6 +534,27 @@ struct IntervalTree {
     nodes: Vec<IntervalNode>,
 }
 
+/// Forward in-order iterator over a tree's intervals (see [`IntervalTree::cursor_at`]).
+/// Yields `(start, end, &node)` per interval; `start` is carried via `interval_end`
+/// so no `find_id` re-descent (or stale per-node position) is ever needed after the
+/// initial seat.
+struct IntervalCursor<'a> {
+    tree: &'a IntervalTree,
+    next: Option<(CharPos0, IntervalId)>,
+}
+
+impl<'a> Iterator for IntervalCursor<'a> {
+    type Item = (CharPos0, CharPos0, &'a IntervalNode);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (start, id) = self.next?;
+        let end = self.tree.interval_end(start, id);
+        let node = &self.tree.nodes[id.0];
+        self.next = self.tree.next_id(id).map(|next_id| (end, next_id));
+        Some((start, end, node))
+    }
+}
+
 impl IntervalTree {
     fn new() -> Self {
         Self::default()
@@ -695,6 +716,22 @@ impl IntervalTree {
             child = parent;
         }
         None
+    }
+
+    /// A forward in-order walk over intervals, seated at the interval containing
+    /// `pos` (or empty when `pos` is past the last interval). Mirrors GNU's
+    /// `find_interval` + `next_interval` access pattern: ONE `find_id` descent to
+    /// seat, then O(1) amortized `next_id` steps, with each interval's start
+    /// carried forward via `interval_end` (contiguous partition). Property scans
+    /// use this instead of re-descending the tree (`find_id`) per boundary, which
+    /// was the O(N log n) hotspot. Encapsulating the walk in an iterator is also
+    /// the misuse guard: callers get correct `(start, end)` for free and cannot
+    /// accidentally re-search or read the stale per-node position.
+    fn cursor_at(&self, pos: CharPos0) -> IntervalCursor<'_> {
+        IntervalCursor {
+            tree: self,
+            next: self.find_id(pos),
+        }
     }
 
     fn interval_end(&self, start: CharPos0, id: IntervalId) -> CharPos0 {
@@ -1439,30 +1476,17 @@ impl IntervalTree {
 // Plist helpers
 // ---------------------------------------------------------------------------
 
-/// Value of `key` in a materialized `[(key, value)]` plist run, or None.
-fn plist_pairs_get(pairs: &[(Value, Value)], key: Value) -> Option<Value> {
-    pairs
-        .iter()
-        .find(|(k, _)| eq_value(k, &key))
-        .map(|(_, v)| *v)
-}
-
 /// True when `left` and `right` agree (by `eq`) on every property in `keys`,
-/// treating an absent key as nil-equal-to-absent. Ignores all other properties,
-/// so two plists differing only in e.g. `face` compare equal for the watched
-/// display keys.
-fn watched_keys_equal_eq(
-    left: &[(Value, Value)],
-    right: &[(Value, Value)],
-    keys: &[Value],
-) -> bool {
-    keys.iter().all(
-        |k| match (plist_pairs_get(left, *k), plist_pairs_get(right, *k)) {
-            (Some(a), Some(b)) => eq_value(&a, &b),
-            (None, None) => true,
-            _ => false,
-        },
-    )
+/// reading each plist straight off its interval-node `Value` spine (no `Vec`
+/// materialization). An absent key reads as nil, so two plists differing only in
+/// e.g. `face` compare equal for the watched display keys, and passing
+/// `Value::NIL` as `right` tests whether `left`'s watched keys are all nil.
+fn watched_keys_equal_eq_plist(left: Value, right: Value, keys: &[Value]) -> bool {
+    keys.iter().all(|k| {
+        let a = plist_value_get(left, *k).unwrap_or(Value::NIL);
+        let b = plist_value_get(right, *k).unwrap_or(Value::NIL);
+        eq_value(&a, &b)
+    })
 }
 
 fn plists_equal_eq(left: &[(Value, Value)], right: &[(Value, Value)]) -> bool {
@@ -1790,22 +1814,34 @@ impl TextPropertyTable {
         if cap <= pos {
             return cap;
         }
-        let current = self.plist_at(pos).unwrap_or_default();
-        let mut cursor = pos;
-        while let Some(next) = self.next_interval_boundary_raw(cursor) {
-            if next >= cap {
+        // Same locate-once-then-step-siblings walk as
+        // `next_single_property_change_after_char_pos`, comparing the watched keys
+        // directly off each node's plist spine and bounded by `cap`.
+        let mut cursor = self.intervals.cursor_at(pos);
+        let Some((_, mut boundary, first_node)) = cursor.next() else {
+            return cap;
+        };
+        let current = first_node.plist;
+        loop {
+            if boundary >= cap {
                 return cap;
             }
-            if next.get() <= cursor.get() {
-                return cap;
+            match cursor.next() {
+                Some((_, end, node)) => {
+                    if !watched_keys_equal_eq_plist(current, node.plist, keys) {
+                        return boundary;
+                    }
+                    boundary = end;
+                }
+                None => {
+                    // Trailing implicit-nil region at the tree end.
+                    if !watched_keys_equal_eq_plist(current, Value::NIL, keys) {
+                        return boundary;
+                    }
+                    return cap;
+                }
             }
-            let next_plist = self.plist_at(next).unwrap_or_default();
-            if !watched_keys_equal_eq(&current, &next_plist, keys) {
-                return next;
-            }
-            cursor = next;
         }
-        cap
     }
 
     pub fn get_properties_at_char_pos(&self, pos: CharPos0) -> HashMap<Value, Value> {
@@ -2069,20 +2105,25 @@ impl TextPropertyTable {
         pos: CharPos0,
         name: Value,
     ) -> Option<CharPos0> {
-        let current = self.get_property_raw(pos, name);
-        let mut cursor = pos;
-        while let Some(next) = self.next_interval_boundary_raw(cursor) {
-            let next_val = self.get_property_raw(next, name);
-            if !eq_value(
-                &current.unwrap_or(Value::NIL),
-                &next_val.unwrap_or(Value::NIL),
-            ) {
-                return Some(next);
+        // GNU's Fnext_single_property_change shape: locate the interval at `pos`
+        // once, capture `name`'s value there, then step siblings comparing only
+        // `name` and return the first boundary where it differs -- O(log n + N)
+        // instead of two find_id descents per boundary.
+        let mut cursor = self.intervals.cursor_at(pos);
+        let (_, first_end, first_node) = cursor.next()?;
+        let current = plist_value_get(first_node.plist, name).unwrap_or(Value::NIL);
+        let mut boundary = first_end;
+        for (start, end, node) in cursor {
+            let value = plist_value_get(node.plist, name).unwrap_or(Value::NIL);
+            if !eq_value(&current, &value) {
+                return Some(start);
             }
-            if next.get() <= cursor.get() {
-                return None;
-            }
-            cursor = next;
+            boundary = end;
+        }
+        // Past the last interval the buffer is implicitly nil: report the change
+        // to nil at the tree end (matching the old walk, which read nil there).
+        if !eq_value(&current, &Value::NIL) {
+            return Some(boundary);
         }
         None
     }
