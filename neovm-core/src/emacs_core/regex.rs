@@ -51,7 +51,18 @@ use crate::heap_types::LispString;
 
 pub(crate) const REPLACE_MATCH_SUBEXP_MISSING: &str = "replace-match subexpression does not exist";
 const GNU_SEARCH_REGS_BASE_CAPACITY: usize = 7;
-const SEARCH_PATTERN_CACHE_SIZE: usize = 20;
+// Compiled-pattern LRU caches. GNU's `regexp_cache` (search.c) holds 20 entries
+// and that suffices there because GNU compiles a pattern into a cheap 256-byte
+// fastmap. neomacs compiles into a `regex_automata` Teddy prefilter, which is far
+// more expensive to build, so an eviction re-pays a much higher cost. font-lock
+// searches with *every* regexp in `font-lock-keywords` per fontified region — a
+// typical major mode has well over 20 — so a 20-entry cache thrashes and rebuilds
+// prefilters on every redisplay. Size these to comfortably hold a few modes'
+// worth of keyword patterns; the lookup is a short linear scan of small byte
+// slices, negligible next to a single prefilter rebuild. Each cache has its own
+// constant so they can be tuned independently.
+const SEARCH_PATTERN_CACHE_SIZE: usize = 128;
+const LISP_REGEX_PATTERN_CACHE_SIZE: usize = 128;
 // GNU's `\=` assertion compares against the current buffer's PT_BYTE even
 // during `string-match` (`regex-emacs.c:5201`). A standalone string has no
 // matching buffer byte address, so pass an unreachable point to the translated
@@ -1237,8 +1248,8 @@ fn compile_lisp_pattern_with_posix_translation(
                 compiled.clone(),
             ),
         );
-        if cache.len() > SEARCH_PATTERN_CACHE_SIZE {
-            cache.truncate(SEARCH_PATTERN_CACHE_SIZE);
+        if cache.len() > LISP_REGEX_PATTERN_CACHE_SIZE {
+            cache.truncate(LISP_REGEX_PATTERN_CACHE_SIZE);
         }
     });
 
