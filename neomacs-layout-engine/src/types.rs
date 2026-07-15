@@ -6,6 +6,7 @@
 
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::types::Rect;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
 /// Parameters for a window that the layout engine needs.
 /// Populated from Emacs data via FFI before layout runs.
@@ -116,6 +117,8 @@ pub struct WindowParams {
     pub window_system: bool,
     /// Font pixel size
     pub font_pixel_size: f32,
+    /// Immutable GNU image-scaling facts inherited from the containing frame.
+    pub image_scale_environment: ImageScaleEnvironment,
     /// Font ascent
     pub font_ascent: f32,
 
@@ -264,6 +267,8 @@ pub struct FrameParams {
     pub char_height: f32,
     /// Font pixel size
     pub font_pixel_size: f32,
+    /// Immutable GNU image-scaling facts for this frame attempt.
+    pub image_scale_environment: ImageScaleEnvironment,
     /// Whether this frame is backed by a window-system display.
     pub window_system: bool,
     /// Frame background color (sRGB pixel)

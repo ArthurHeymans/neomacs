@@ -4,6 +4,7 @@ use super::super::image_cache::ImageCache;
 #[cfg(any(feature = "video", feature = "wpe-webkit"))]
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
+use neomacs_display_protocol::ImageRealization;
 
 impl WgpuRenderer {
     /// Load image from file path (async - returns immediately)
@@ -34,18 +35,18 @@ impl WgpuRenderer {
         path: &str,
         max_width: u32,
         max_height: u32,
+        realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
     ) {
-        let raster_scale = self.scale_factor;
         self.caches.image.load_file_with_id(
             id,
             path,
             max_width,
             max_height,
+            realization,
             fg_color,
             bg_color,
-            raster_scale,
         )
     }
 
@@ -76,18 +77,18 @@ impl WgpuRenderer {
         data: &[u8],
         max_width: u32,
         max_height: u32,
+        realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
     ) {
-        let raster_scale = self.scale_factor;
         self.caches.image.load_data_with_id(
             id,
             data,
             max_width,
             max_height,
+            realization,
             fg_color,
             bg_color,
-            raster_scale,
         )
     }
 

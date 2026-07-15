@@ -4,7 +4,155 @@
 //! Callers receive a complete state immediately and never infer readiness
 //! from optional metadata.
 
+use crate::emacs_core::Value;
+use crate::emacs_core::symbol::Obarray;
 use crate::heap_types::LispString;
+use crate::window::Frame;
+pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
+
+/// A finite, non-negative image scale stored by bits so image requests remain
+/// exact cache keys.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageScaleFactor(u32);
+
+impl ImageScaleFactor {
+    #[must_use]
+    pub fn get(self) -> f32 {
+        f32::from_bits(self.0)
+    }
+}
+
+impl TryFrom<f32> for ImageScaleFactor {
+    type Error = &'static str;
+
+    fn try_from(value: f32) -> Result<Self, Self::Error> {
+        if value.is_finite() && value >= 0.0 {
+            Ok(Self(if value == 0.0 {
+                0.0_f32.to_bits()
+            } else {
+                value.to_bits()
+            }))
+        } else {
+            Err("image scale must be finite and non-negative")
+        }
+    }
+}
+
+/// Meaning of an image spec's `:scale` property before frame realization.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ImageScalePolicy {
+    /// Resolve through GNU's `image-scaling-factor` variable.
+    Default,
+    /// A numeric scale written directly in the image spec.
+    Explicit(ImageScaleFactor),
+}
+
+/// Parsed value of GNU's global `image-scaling-factor` variable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ImageDefaultScale {
+    Auto,
+    Explicit(ImageScaleFactor),
+}
+
+/// Frame facts needed to resolve semantic GNU image scaling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImageScaleEnvironment {
+    frame_column_width: ImageScaleFactor,
+    device_scale: ImageScaleFactor,
+    default_scale: ImageDefaultScale,
+}
+
+impl ImageScaleEnvironment {
+    #[must_use]
+    pub fn new(
+        frame_column_width: f32,
+        device_scale: f32,
+        default_scale: ImageDefaultScale,
+    ) -> Self {
+        let frame_column_width = if frame_column_width.is_finite() && frame_column_width > 0.0 {
+            frame_column_width
+        } else {
+            10.0
+        };
+        let device_scale = if device_scale.is_finite() && device_scale > 0.0 {
+            device_scale
+        } else {
+            1.0
+        };
+        Self {
+            frame_column_width: ImageScaleFactor::try_from(frame_column_width)
+                .expect("sanitized frame column width is valid"),
+            device_scale: ImageScaleFactor::try_from(device_scale)
+                .expect("sanitized device scale is valid"),
+            default_scale,
+        }
+    }
+
+    #[must_use]
+    pub fn resolve(self, policy: ImageScalePolicy) -> ResolvedImageRealization {
+        let device_scale = self.device_scale.get();
+        let layout_scale = match policy {
+            ImageScalePolicy::Explicit(scale) => scale.get(),
+            ImageScalePolicy::Default => {
+                let device_factor = match self.default_scale {
+                    ImageDefaultScale::Auto => {
+                        // GNU's FRAME_COLUMN_WIDTH is an integer device-pixel
+                        // font metric.  Neomacs stores frame geometry in
+                        // logical pixels, so recover the enclosing device
+                        // column instead of rounding to the nearest pixel:
+                        // the latter turns a 7px cell at 1.75 scale into 12px
+                        // and loses the 13th pixel occupied by the font.
+                        let device_column_width =
+                            (self.frame_column_width.get() * device_scale).ceil();
+                        if device_column_width > 10.0 {
+                            device_column_width / 10.0
+                        } else {
+                            1.0
+                        }
+                    }
+                    ImageDefaultScale::Explicit(scale) => scale.get(),
+                };
+                device_factor / device_scale
+            }
+        };
+        ResolvedImageRealization::new(layout_scale, device_scale)
+    }
+}
+
+impl Default for ImageScaleEnvironment {
+    fn default() -> Self {
+        Self::new(10.0, 1.0, ImageDefaultScale::Auto)
+    }
+}
+
+/// Resolve GNU's dynamically bound `image-scaling-factor` together with the
+/// selected frame facts.  Redisplay and synchronous image builtins share this
+/// entry point so the same image spec cannot acquire two geometries.
+#[must_use]
+pub fn image_scale_environment(frame: &Frame, obarray: &Obarray) -> ImageScaleEnvironment {
+    let default_scale = match obarray.symbol_value("image-scaling-factor").copied() {
+        Some(value) if value.is_symbol_named("auto") => ImageDefaultScale::Auto,
+        Some(value) => numeric_image_scale(value)
+            .map(ImageDefaultScale::Explicit)
+            .unwrap_or(ImageDefaultScale::Auto),
+        None => ImageDefaultScale::Auto,
+    };
+    ImageScaleEnvironment::new(
+        frame.char_width,
+        frame.device_scale_factor as f32,
+        default_scale,
+    )
+}
+
+#[must_use]
+pub fn numeric_image_scale(value: Value) -> Option<ImageScaleFactor> {
+    let scale = value
+        .as_float()
+        .or_else(|| value.as_int().map(|value| value as f64))?;
+    (scale.is_finite() && scale >= 0.0)
+        .then(|| ImageScaleFactor::try_from(scale as f32).ok())
+        .flatten()
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageResolveSource {
@@ -19,6 +167,7 @@ pub struct ImageResolveRequest {
     pub max_height: u32,
     pub fg_color: u32,
     pub bg_color: u32,
+    pub realization: ResolvedImageRealization,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -161,4 +310,62 @@ pub trait ImageCatalog {
     /// The next lookup must allocate a fresh renderer identity and decode the
     /// source again.  Hosts without an image cache may keep the default no-op.
     fn invalidate(&self, _source: &ImageResolveSource) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy};
+
+    #[test]
+    fn auto_scale_realizes_gnu_x11_sized_pixels_on_fractional_wayland() {
+        let environment = ImageScaleEnvironment::new(7.2, 1.75, ImageDefaultScale::Auto);
+
+        let realization = environment.resolve(ImageScalePolicy::Default);
+
+        // GNU's auto policy sees a 13-device-pixel frame column and therefore
+        // realizes 24px at 1.3x.  Neomacs lays that out in logical pixels and
+        // rasterizes it in device pixels.
+        assert_eq!(realization.layout_dimension(24), 18);
+        assert_eq!(realization.raster_dimension(18), 32);
+    }
+
+    #[test]
+    fn auto_scale_reconstructs_gnu_device_column_from_integer_logical_geometry() {
+        // Neomacs exposes an integer logical `frame-char-width`, while GNU's
+        // FRAME_COLUMN_WIDTH is the corresponding integer device-pixel font
+        // metric.  At 1.75 scale a 7px logical cell therefore occupies the
+        // 13px device column used by GNU's automatic image scale, not 12px.
+        let environment = ImageScaleEnvironment::new(7.0, 1.75, ImageDefaultScale::Auto);
+
+        let realization = environment.resolve(ImageScalePolicy::Default);
+
+        assert_eq!(realization.layout_dimension(24), 18);
+        assert_eq!(realization.raster_dimension(18), 32);
+    }
+
+    #[test]
+    fn auto_scale_is_identity_at_one_x_when_the_column_is_under_ten_pixels() {
+        let environment = ImageScaleEnvironment::new(7.2, 1.0, ImageDefaultScale::Auto);
+
+        let realization = environment.resolve(ImageScalePolicy::Default);
+
+        assert_eq!(realization.layout_dimension(24), 24);
+        assert_eq!(realization.raster_dimension(24), 24);
+    }
+
+    #[test]
+    fn explicit_image_scale_does_not_consult_the_default_policy() {
+        let environment = ImageScaleEnvironment::new(
+            7.2,
+            1.75,
+            ImageDefaultScale::Explicit(2.0.try_into().expect("valid scale")),
+        );
+
+        let realization = environment.resolve(ImageScalePolicy::Explicit(
+            0.5.try_into().expect("valid scale"),
+        ));
+
+        assert_eq!(realization.layout_dimension(24), 12);
+        assert_eq!(realization.raster_dimension(12), 21);
+    }
 }

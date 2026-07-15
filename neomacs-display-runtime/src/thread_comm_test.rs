@@ -587,16 +587,19 @@ fn input_event_window_resize_construction() {
     let event = InputEvent::WindowResize {
         width: 1920,
         height: 1080,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     };
     match event {
         InputEvent::WindowResize {
             width,
             height,
+            scale_factor,
             emacs_frame_id,
         } => {
             assert_eq!(width, 1920);
             assert_eq!(height, 1080);
+            assert_eq!(scale_factor, 1.0);
             assert_eq!(emacs_frame_id, 0);
         }
         _ => panic!("Wrong variant"),
@@ -795,6 +798,7 @@ fn render_command_image_load_file() {
         path: "/home/user/photo.png".to_string(),
         max_width: 1024,
         max_height: 768,
+        realization: neomacs_display_protocol::ImageRealization::default(),
         fg_color: 0,
         bg_color: 0,
     });
@@ -804,6 +808,7 @@ fn render_command_image_load_file() {
             path,
             max_width,
             max_height,
+            realization,
             fg_color,
             bg_color,
         }) => {
@@ -811,6 +816,10 @@ fn render_command_image_load_file() {
             assert_eq!(path, "/home/user/photo.png");
             assert_eq!(max_width, 1024);
             assert_eq!(max_height, 768);
+            assert_eq!(
+                realization,
+                neomacs_display_protocol::ImageRealization::default()
+            );
             assert_eq!(fg_color, 0);
             assert_eq!(bg_color, 0);
         }
@@ -1865,6 +1874,7 @@ fn channel_sends_multiple_input_events_in_order() {
         InputEvent::WindowResize {
             width: 800,
             height: 600,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         },
     ];
@@ -1951,6 +1961,7 @@ fn cross_thread_input_event_delivery() {
         render.send_input(InputEvent::WindowResize {
             width: 1920,
             height: 1080,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         });
     });

@@ -37,6 +37,7 @@ fn window_params() -> WindowParams {
         char_height: 16.0,
         window_system: true,
         font_pixel_size: 14.0,
+        image_scale_environment: Default::default(),
         font_ascent: 11.0,
         mode_line_height: 0.0,
         header_line_height: 0.0,

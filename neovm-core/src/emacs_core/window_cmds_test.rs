@@ -12,6 +12,20 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[test]
+fn frame_scale_factor_reads_the_selected_frames_presented_device_scale() {
+    let mut eval = Context::new();
+    let frame_id = super::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .device_scale_factor = 1.75;
+
+    let value = super::builtin_frame_scale_factor(&mut eval, vec![]).expect("scale factor");
+
+    assert_eq!(value, Value::make_float(1.75));
+}
+
 /// Evaluate all forms with a fresh evaluator that has a frame+window set up.
 fn eval_with_frame(src: &str) -> Vec<String> {
     let mut ev = Context::new();
@@ -4996,6 +5010,7 @@ fn x_create_frame_syncs_pending_resize_before_adopting_opening_gui_frame() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 1500,
         height: 1900,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .expect("queue resize");
@@ -5830,6 +5845,7 @@ fn modify_frame_parameters_after_live_font_change_defers_gui_resize_until_geomet
     tx.send(crate::keyboard::InputEvent::Resize {
         width: expected_width as u32,
         height: 775,
+        scale_factor: 1.0,
         emacs_frame_id: fid.0,
     })
     .expect("queue resize ack");
@@ -6094,7 +6110,7 @@ fn set_frame_size_builtins_resize_live_gui_frames_and_notify_host() {
 
     drop(requests);
 
-    ev.apply_resize_input_event(824, 560, fid.0, false);
+    ev.apply_resize_input_event(824, 560, 1.0, fid.0, false);
 
     let frame = ev
         .frames
@@ -6324,7 +6340,7 @@ fn resize_input_preserves_buffer_local_fixed_width_side_window() {
     )
     .expect("display fixed side window");
 
-    ev.apply_resize_input_event(800, 260, fid.0, false);
+    ev.apply_resize_input_event(800, 260, 1.0, fid.0, false);
 
     let result = ev
         .eval_str(
@@ -6369,6 +6385,7 @@ fn set_frame_size_syncs_resize_event_before_followup_frame_width_queries() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 2144,
         height: 1386,
+        scale_factor: 1.0,
         emacs_frame_id: fid.0,
     })
     .expect("queue resize ack");
@@ -6423,6 +6440,7 @@ fn set_frame_size_keeps_resize_pending_until_geometry_queries_force_sync() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 2144,
         height: 1386,
+        scale_factor: 1.0,
         emacs_frame_id: fid.0,
     })
     .expect("queue resize ack");

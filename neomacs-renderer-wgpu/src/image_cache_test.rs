@@ -154,7 +154,13 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
         <text x="2" y="20">HiDPI</text>
     </svg>"##;
 
-    let decoded = crate::svg::decode(data, 0, 24, 1.75).expect("SVG decode");
+    let decoded = crate::svg::decode(
+        data,
+        0,
+        24,
+        neomacs_display_protocol::ImageRealization::new(1.0, 1.75),
+    )
+    .expect("SVG decode");
 
     assert_eq!((decoded.layout_width, decoded.layout_height), (48, 24));
     assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
@@ -162,6 +168,42 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
         decoded.rgba.len(),
         decoded.raster_width as usize * decoded.raster_height as usize * 4
     );
+}
+
+#[test]
+fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+        <text x="2" y="20">HiDPI</text>
+    </svg>"##;
+
+    let decoded = crate::svg::decode(
+        data,
+        0,
+        24,
+        neomacs_display_protocol::ImageRealization::new(1.3 / 1.75, 1.75),
+    )
+    .expect("SVG decode");
+
+    assert_eq!((decoded.layout_width, decoded.layout_height), (36, 18));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (63, 32));
+}
+
+#[test]
+fn resolved_auto_scale_controls_bitmap_layout_and_raster_extents() {
+    let data = png_bytes([0x12, 0x34, 0x56, 0xff].repeat(48 * 24), 48, 24);
+
+    let decoded = ImageCache::decode_data_with_metadata_at_realization(
+        &data,
+        0,
+        24,
+        (0, 0),
+        1.3 / 1.75,
+        1.75,
+    )
+    .expect("PNG decode");
+
+    assert_eq!((decoded.metadata.width, decoded.metadata.height), (36, 18));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (63, 32));
 }
 
 #[test]

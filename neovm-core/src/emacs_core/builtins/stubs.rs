@@ -1540,14 +1540,6 @@ pub(crate) fn builtin_frame_right_divider_width(args: Vec<Value>) -> EvalResult 
     Ok(Value::fixnum(0))
 }
 
-pub(crate) fn builtin_frame_scale_factor(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-scale-factor", &args, 0, 1)?;
-    if let Some(frame) = args.first() {
-        expect_frame_live_or_nil(frame)?;
-    }
-    Ok(Value::make_float(1.0))
-}
-
 pub(crate) fn builtin_frame_scroll_bar_height(args: Vec<Value>) -> EvalResult {
     expect_range_args("frame-scroll-bar-height", &args, 0, 1)?;
     if let Some(frame) = args.first() {

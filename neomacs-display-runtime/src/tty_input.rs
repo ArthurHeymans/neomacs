@@ -336,6 +336,7 @@ fn read_tty_events(
             let event = InputEvent::WindowResize {
                 width: size.0 as u32,
                 height: size.1 as u32,
+                scale_factor: 1.0,
                 emacs_frame_id: 0,
             };
             if tx.send(event).is_err() {
@@ -420,6 +421,7 @@ fn read_tty_events(
                         let event = InputEvent::WindowResize {
                             width: cols as u32,
                             height: rows as u32,
+                            scale_factor: 1.0,
                             emacs_frame_id: 0,
                         };
                         if tx.send(event).is_err() {

@@ -130,6 +130,7 @@ impl ImageCatalog for AsyncImageCatalog {
                 max_height: 0,
                 fg_color: 0,
                 bg_color: 0,
+                realization: Default::default(),
             },
             self.home_directory.as_deref(),
         )
@@ -288,6 +289,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             path: path.as_utf8_str().unwrap_or_default().to_owned(),
             max_width: request.max_width,
             max_height: request.max_height,
+            realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,
         }),
@@ -296,6 +298,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             data: data.clone(),
             max_width: request.max_width,
             max_height: request.max_height,
+            realization: request.realization,
             fg_color: request.fg_color,
             bg_color: request.bg_color,
         }),
@@ -303,12 +306,16 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
 }
 
 fn placeholder_image_dimensions(request: &ImageResolveRequest) -> (u32, u32) {
-    match (request.max_width.max(1), request.max_height.max(1)) {
+    let (width, height) = match (request.max_width.max(1), request.max_height.max(1)) {
         (width, height) if request.max_width > 0 && request.max_height > 0 => (width, height),
         (width, _) if request.max_width > 0 => (width, width),
         (_, height) if request.max_height > 0 => (height, height),
         _ => (1, 1),
-    }
+    };
+    (
+        request.realization.layout_dimension(width),
+        request.realization.layout_dimension(height),
+    )
 }
 
 fn home_directory_from_environment() -> Option<String> {
@@ -361,6 +368,9 @@ fn normalize_image_file_request_with_home(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neovm_core::emacs_core::image_catalog::{
+        ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy,
+    };
     use std::sync::{Arc, Condvar, Mutex};
 
     fn file_request(path: &str) -> ImageResolveRequest {
@@ -370,6 +380,7 @@ mod tests {
             max_height: 24,
             fg_color: 0,
             bg_color: 0,
+            realization: Default::default(),
         }
     }
 
@@ -401,6 +412,30 @@ mod tests {
                 if path.as_utf8_str() == Some("~some-user/Pictures/icon.png")
         ));
         assert!(requires_deferred_path_expansion(&command));
+    }
+
+    #[test]
+    fn pending_slot_and_decode_command_share_one_resolved_realization() {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+        let mut request = file_request("/tmp/icon.svg");
+        request.max_width = 0;
+        request.realization = ImageScaleEnvironment::new(7.2, 1.75, ImageDefaultScale::Auto)
+            .resolve(ImageScalePolicy::Default);
+
+        let placement = catalog.lookup(request).placement();
+
+        assert_eq!(placement.width(), 18);
+        assert_eq!(placement.height(), 18);
+        assert!(matches!(
+            cmd_rx.try_recv().expect("image load command"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile {
+                realization,
+                ..
+            }) if (realization.layout_scale() - (1.3 / 1.75)).abs() < 0.0001
+                && (realization.device_scale() - 1.75).abs() < f32::EPSILON
+        ));
     }
 
     #[test]

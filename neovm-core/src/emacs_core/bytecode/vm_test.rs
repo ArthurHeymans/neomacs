@@ -2569,6 +2569,7 @@ fn vm_frame_native_metrics_sync_pending_resize_events() {
             tx.send(crate::keyboard::InputEvent::Resize {
                 width: 1400,
                 height: 1600,
+                scale_factor: 1.0,
                 emacs_frame_id: 0,
             })
             .expect("queue resize");
@@ -2765,6 +2766,7 @@ fn vm_x_create_frame_syncs_pending_resize_before_adopting_opening_gui_frame() {
             tx.send(crate::keyboard::InputEvent::Resize {
                 width: 1500,
                 height: 1900,
+                scale_factor: 1.0,
                 emacs_frame_id: 0,
             })
             .expect("queue resize");

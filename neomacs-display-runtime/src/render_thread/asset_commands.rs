@@ -43,6 +43,7 @@ impl RenderApp {
                 path,
                 max_width,
                 max_height,
+                realization,
                 fg_color,
                 bg_color,
             } => {
@@ -56,7 +57,13 @@ impl RenderApp {
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_file_with_id(
-                        id, &path, max_width, max_height, fg_color, bg_color,
+                        id,
+                        &path,
+                        max_width,
+                        max_height,
+                        realization,
+                        fg_color,
+                        bg_color,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image {}", id);
@@ -67,6 +74,7 @@ impl RenderApp {
                 data,
                 max_width,
                 max_height,
+                realization,
                 fg_color,
                 bg_color,
             } => {
@@ -80,7 +88,13 @@ impl RenderApp {
                 );
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.load_image_data_with_id(
-                        id, &data, max_width, max_height, fg_color, bg_color,
+                        id,
+                        &data,
+                        max_width,
+                        max_height,
+                        realization,
+                        fg_color,
+                        bg_color,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image data {}", id);

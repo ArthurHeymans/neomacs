@@ -593,6 +593,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .resolve_at_checkpoint(
         &mut BufferSourceFaceResolutionState::new(
@@ -668,6 +669,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .resolve_at_checkpoint(
         &mut BufferSourceFaceResolutionState::new(
@@ -5976,6 +5978,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
             ),
         ),
         None,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let mut resolver = crate::display_source_resolver::DisplaySourcePropertyResolver::new(
         params,
@@ -6014,7 +6017,11 @@ fn display_source_resolve_params_are_built_from_typed_face_basis() {
         fallback,
     );
 
-    let params = crate::display_source_resolver::DisplaySourceResolveParams::new(basis, None);
+    let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
+        basis,
+        None,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+    );
 
     assert_eq!(params.face_basis().base_face_id(), FaceId::new(7));
     assert_eq!(params.face_basis().fallback_metrics(), fallback);
@@ -6065,6 +6072,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
                 ),
             ),
             None,
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         ),
         &mut resolve_state,
         &mut face_ids,
@@ -6118,6 +6126,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
                 ),
             ),
             None,
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         ),
         &mut resolve_state,
         &mut face_ids,
@@ -6632,6 +6641,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
@@ -6774,6 +6784,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
@@ -6923,6 +6934,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
@@ -7074,6 +7086,7 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         false,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
         buf_id,
@@ -10174,6 +10187,7 @@ fn test_display_space_window_params() -> WindowParams {
         char_height: 16.0,
         window_system: true,
         font_pixel_size: 14.0,
+        image_scale_environment: Default::default(),
         font_ascent: 12.0,
         mode_line_height: 0.0,
         header_line_height: 0.0,
@@ -10413,6 +10427,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
         None,
         &active_face,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .expect("direct media replacement");
 
@@ -10438,6 +10453,7 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
         None,
         &active_face,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .expect("image placeholder");
 
@@ -11333,6 +11349,7 @@ impl<S: crate::display_source::DisplayItemSource> DisplayRowSourceWalker<S> {
             crate::display_source_resolver::DisplaySourceResolveParams::new(
                 face_basis,
                 display_host,
+                neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
             ),
             face_ids,
         );
@@ -11538,6 +11555,7 @@ fn display_property_live_render_outcome(
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             false,
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         );
         let loop_context = BufferSourceLoopRequestContext::new(
             buf_id,

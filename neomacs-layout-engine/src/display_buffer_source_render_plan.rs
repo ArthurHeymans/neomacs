@@ -433,6 +433,7 @@ impl BufferSourceOutputSetup {
             default_face.metrics(),
             window_metrics,
             window_system,
+            params.image_scale_environment,
         );
         let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(

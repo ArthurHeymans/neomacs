@@ -8,6 +8,7 @@ use cairo::{Format, ImageSurface};
 use rsvg::{CairoRenderer, Length, LengthUnit, Loader, SvgHandle};
 
 use crate::image_cache::constrain_dimensions;
+use neomacs_display_protocol::ImageRealization;
 
 pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
@@ -32,27 +33,24 @@ pub(crate) fn decode(
     data: &[u8],
     max_width: u32,
     max_height: u32,
-    raster_scale: f32,
+    realization: ImageRealization,
 ) -> Option<DecodedSvg> {
     let handle = load(data)?;
     let renderer = CairoRenderer::new(&handle);
     let (natural_width, natural_height) = natural_dimensions(&renderer)?;
-    let (layout_width, layout_height) = constrain_dimensions(
+    let (base_width, base_height) = constrain_dimensions(
         natural_width.ceil() as u32,
         natural_height.ceil() as u32,
         max_width,
         max_height,
     );
-    let raster_scale = if raster_scale.is_finite() && raster_scale > 0.0 {
-        f64::from(raster_scale)
-    } else {
-        1.0
-    };
+    let layout_width = realization.layout_dimension(base_width);
+    let layout_height = realization.layout_dimension(base_height);
     // Match GNU `scale_image_size`: ceil so fractional device scales never
     // discard a partial SVG pixel.  Constrain once more to the GPU limit.
     let (raster_width, raster_height) = constrain_dimensions(
-        (f64::from(layout_width) * raster_scale).ceil() as u32,
-        (f64::from(layout_height) * raster_scale).ceil() as u32,
+        realization.raster_dimension(layout_width),
+        realization.raster_dimension(layout_height),
         0,
         0,
     );

@@ -1723,6 +1723,9 @@ pub struct Frame {
     /// Frame pixel dimensions.
     pub width: u32,
     pub height: u32,
+    /// Physical device pixels per logical Emacs pixel for this native frame.
+    /// TTY and X11 frames use 1.0; Wayland can publish fractional values.
+    pub device_scale_factor: f64,
     /// Pixel/cell position of the frame on its display, or relative to its
     /// parent for child frames.
     pub left_pos: i64,
@@ -1921,6 +1924,7 @@ impl Frame {
             font_pixel_size: 16.0,
             char_width: 8.0,
             char_height: 16.0,
+            device_scale_factor: 1.0,
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             presentation_state: FramePresentationState::default(),

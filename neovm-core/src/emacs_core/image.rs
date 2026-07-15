@@ -16,7 +16,10 @@ use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::Context;
-use crate::emacs_core::image_catalog::{ImageResolveRequest, ImageResolveSource};
+use crate::emacs_core::image_catalog::{
+    ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
+    image_scale_environment, numeric_image_scale,
+};
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
 
@@ -355,7 +358,10 @@ fn parse_image_dimension(value: Value) -> Option<u32> {
     }
 }
 
-fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> {
+fn image_resolve_request_from_spec(
+    spec: &Value,
+    environment: ImageScaleEnvironment,
+) -> Option<ImageResolveRequest> {
     let items = list_to_vec(spec)?;
     if items.first()?.as_symbol_name() != Some("image") {
         return None;
@@ -364,6 +370,7 @@ fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> 
     let mut source = None;
     let mut max_width = 0u32;
     let mut max_height = 0u32;
+    let mut scale = ImageScalePolicy::Default;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -386,6 +393,14 @@ fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> 
             Some(ImageSpecKey::Height | ImageSpecKey::MaxHeight) => {
                 max_height = parse_image_dimension(value).unwrap_or(max_height);
             }
+            Some(ImageSpecKey::Scale) if value.is_symbol_named("default") => {
+                scale = ImageScalePolicy::Default;
+            }
+            Some(ImageSpecKey::Scale) => {
+                scale = numeric_image_scale(value)
+                    .map(ImageScalePolicy::Explicit)
+                    .unwrap_or(scale);
+            }
             _ => {}
         }
         i += 2;
@@ -397,7 +412,27 @@ fn image_resolve_request_from_spec(spec: &Value) -> Option<ImageResolveRequest> 
         max_height,
         fg_color: 0,
         bg_color: 0,
+        realization: environment.resolve(scale),
     })
+}
+
+fn image_scale_environment_for_frame(
+    eval: &Context,
+    frame_arg: Option<&Value>,
+) -> Option<ImageScaleEnvironment> {
+    let frame = if let Some(frame_arg) = frame_arg.filter(|value| !value.is_nil()) {
+        let frame_id = match frame_arg.kind() {
+            ValueKind::Fixnum(id) => crate::window::FrameId(id as u64),
+            ValueKind::Veclike(VecLikeType::Frame) => {
+                crate::window::FrameId(frame_arg.as_frame_id()?)
+            }
+            _ => return None,
+        };
+        eval.frame_manager().get(frame_id)?
+    } else {
+        eval.frame_manager().selected_frame()?
+    };
+    Some(image_scale_environment(frame, eval.obarray()))
 }
 
 /// Validate that a value looks like an image spec.
@@ -610,13 +645,19 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
 
     require_image_window_system_frame(eval, "image-size", args.get(2))?;
 
+    let environment = image_scale_environment_for_frame(eval, args.get(2)).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        )
+    })?;
     let Some(display_host) = eval.display_host.as_ref() else {
         return Err(signal(
             "error",
             vec![Value::string("Window system frame should be used")],
         ));
     };
-    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+    let Some(request) = image_resolve_request_from_spec(&args[0], environment) else {
         return Err(signal(
             "error",
             vec![Value::string("Invalid image specification")],
@@ -720,13 +761,19 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
 
     require_image_window_system_frame(eval, "image-mask-p", args.get(1))?;
 
+    let environment = image_scale_environment_for_frame(eval, args.get(1)).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        )
+    })?;
     let Some(display_host) = eval.display_host.as_ref() else {
         return Err(signal(
             "error",
             vec![Value::string("Window system frame should be used")],
         ));
     };
-    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+    let Some(request) = image_resolve_request_from_spec(&args[0], environment) else {
         return Err(signal(
             "error",
             vec![Value::string("Invalid image specification")],
@@ -885,7 +932,10 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         ));
     }
 
-    let Some(request) = image_resolve_request_from_spec(&args[0]) else {
+    let Some(request) = image_resolve_request_from_spec(
+        &args[0],
+        image_scale_environment_for_frame(eval, args.get(1)).unwrap_or_default(),
+    ) else {
         return Err(signal(
             "error",
             vec![Value::string("Invalid image specification")],

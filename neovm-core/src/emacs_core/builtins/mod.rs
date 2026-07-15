@@ -5196,9 +5196,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-scale-factor",
-        |_ctx, args| builtin_frame_scale_factor(args),
+        super::window_cmds::builtin_frame_scale_factor,
         0,
-        None,
+        Some(1),
     );
     ctx.defsubr(
         "frame-scroll-bar-height",

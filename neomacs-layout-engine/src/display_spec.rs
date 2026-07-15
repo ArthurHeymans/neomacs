@@ -10,7 +10,10 @@ use neovm_core::emacs_core::eval::{
     VideoResolveRequest, VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
-use neovm_core::emacs_core::image_catalog::{ImageResolveRequest, ImageResolveSource};
+use neovm_core::emacs_core::image_catalog::{
+    ImageResolveRequest, ImageResolveSource, ImageScaleEnvironment, ImageScalePolicy,
+    numeric_image_scale,
+};
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
 use strum::{EnumString, IntoStaticStr};
@@ -52,9 +55,19 @@ impl DisplayMediaKey {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayImageLayout {
     pub(crate) request: ImageResolveRequest,
-    pub(crate) scale: f32,
+    pub(crate) scale: ImageScalePolicy,
     pub(crate) ascent: DisplayImageAscentPolicy,
     pub(crate) margin: DisplayImageMargin,
+}
+
+impl DisplayImageLayout {
+    pub(crate) fn into_resolve_request(
+        mut self,
+        environment: ImageScaleEnvironment,
+    ) -> ImageResolveRequest {
+        self.request.realization = environment.resolve(self.scale);
+        self.request
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -162,7 +175,7 @@ pub(crate) fn parse_display_image_layout(
     let mut source = None;
     let mut max_width = 0u32;
     let mut max_height = 0u32;
-    let mut scale = 1.0f32;
+    let mut scale = ImageScalePolicy::Default;
     let mut ascent = DisplayImageAscentPolicy::default();
     let mut margin = DisplayImageMargin::default();
     let mut fg_color = default_fg;
@@ -218,6 +231,7 @@ pub(crate) fn parse_display_image_layout(
             max_height,
             fg_color,
             bg_color,
+            realization: Default::default(),
         },
         scale,
         ascent,
@@ -398,15 +412,11 @@ fn parse_image_dimension(value: Value) -> Option<u32> {
     }
 }
 
-fn parse_image_scale(value: Value) -> Option<f32> {
+fn parse_image_scale(value: Value) -> Option<ImageScalePolicy> {
     if value.is_symbol_named("default") {
-        return None;
+        return Some(ImageScalePolicy::Default);
     }
-    match value.kind() {
-        ValueKind::Fixnum(_) => Some(value.as_int()?.max(0) as f32),
-        ValueKind::Float => Some(value.as_float()?.max(0.0) as f32),
-        _ => None,
-    }
+    Some(ImageScalePolicy::Explicit(numeric_image_scale(value)?))
 }
 
 fn parse_image_ascent(value: Value) -> Option<DisplayImageAscentPolicy> {
@@ -589,6 +599,32 @@ mod tests {
         parse_display_image_layout(&image_spec(value), 0, 0)
             .expect("valid image spec")
             .ascent
+    }
+
+    #[test]
+    fn image_scale_default_survives_parsing_until_frame_realization() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let image = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("height"),
+            Value::fixnum(24),
+            Value::keyword("scale"),
+            Value::symbol("default"),
+        ]);
+
+        let parsed = parse_display_image_layout(&image, 0, 0).expect("valid image spec");
+        assert_eq!(parsed.scale, ImageScalePolicy::Default);
+
+        let request = parsed.into_resolve_request(ImageScaleEnvironment::new(
+            7.2,
+            1.75,
+            neovm_core::emacs_core::image_catalog::ImageDefaultScale::Auto,
+        ));
+        assert_eq!(request.realization.layout_dimension(24), 18);
+        assert_eq!(request.realization.raster_dimension(18), 32);
     }
 
     #[test]

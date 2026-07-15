@@ -42,6 +42,7 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
 #[cfg(test)]
 pub(crate) use crate::display_row_face_state::{
@@ -232,6 +233,16 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         self
     }
 
+    pub(crate) fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.row_request = self
+            .row_request
+            .with_image_scale_environment(image_scale_environment);
+        self
+    }
+
     fn into_render_parts(
         self,
     ) -> (
@@ -291,6 +302,7 @@ struct DisplayRowSourceRequestPolicy {
     geometry: DisplayRowGeometry,
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 impl DisplayRowSourceRequestPolicy {
@@ -307,6 +319,7 @@ impl DisplayRowSourceRequestPolicy {
             geometry: DisplayRowGeometry::new(y, width, height, char_width, ascent, tab_policy),
             role,
             symbol_values: std::collections::HashMap::new(),
+            image_scale_environment: ImageScaleEnvironment::default(),
         }
     }
 
@@ -315,6 +328,7 @@ impl DisplayRowSourceRequestPolicy {
             geometry,
             role,
             symbol_values: std::collections::HashMap::new(),
+            image_scale_environment: ImageScaleEnvironment::default(),
         }
     }
 
@@ -346,12 +360,14 @@ impl DisplayRowSourceRequestPolicy {
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &'face ResolvedFace,
     ) -> DisplayRowSourceRenderRequest<'face> {
+        let image_scale_environment = self.image_scale_environment;
         DisplayRowSourceRenderRequest::from_base_face(
             self.geometry,
             face_ids,
             base_face,
             self.role,
             self.symbol_values,
+            image_scale_environment,
         )
     }
 
@@ -362,6 +378,7 @@ impl DisplayRowSourceRequestPolicy {
     ) -> DisplayRowSourceRenderRequest<'face> {
         debug_assert!(self.symbol_values.is_empty());
         DisplayRowSourceRenderRequest::whole_row(self.geometry, base_face_id, base_face, self.role)
+            .with_image_scale_environment(self.image_scale_environment)
     }
 }
 
@@ -374,6 +391,7 @@ struct DisplayRowRenderPlan<'a> {
     role: GlyphRowRole,
     chrome_text_area_left_px: f32,
     symbol_values: std::collections::HashMap<String, Value>,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 pub(crate) struct DisplayRowSourceRenderRequest<'a> {
@@ -385,6 +403,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     role: GlyphRowRole,
     chrome_text_area_left_px: f32,
     symbol_values: std::collections::HashMap<String, Value>,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 impl<'a> DisplayRowSourceRenderRequest<'a> {
@@ -404,6 +423,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             role,
             chrome_text_area_left_px: 0.0,
             symbol_values: std::collections::HashMap::new(),
+            image_scale_environment: ImageScaleEnvironment::default(),
         }
     }
 
@@ -413,6 +433,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
         symbol_values: std::collections::HashMap<String, Value>,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         let base_face_id = if base_face.face_id != 0 {
             base_face.display_face_id()
@@ -429,6 +450,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             role,
             chrome_text_area_left_px: 0.0,
             symbol_values,
+            image_scale_environment,
         }
     }
 
@@ -483,6 +505,14 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     pub(crate) fn with_chrome_text_area_left_px(mut self, text_area_left_px: f32) -> Self {
         self.chrome_text_area_left_px = text_area_left_px.max(0.0);
+        self
+    }
+
+    pub(crate) fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.image_scale_environment = image_scale_environment;
         self
     }
 
@@ -651,6 +681,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             role: self.role,
             chrome_text_area_left_px: self.chrome_text_area_left_px,
             symbol_values: self.symbol_values,
+            image_scale_environment: self.image_scale_environment,
         }
     }
 }
@@ -679,6 +710,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
         base_face_id: FaceId,
         base_face: &'b ResolvedFace,
         fallback: DisplayRowFallbackMetrics,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> DisplaySourceResolveParams<'b>
     where
         'a: 'b,
@@ -686,6 +718,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
         DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(self.face_resolver, base_face_id, base_face, fallback),
             self.display_host.map(|host| host as &'b dyn DisplayHost),
+            image_scale_environment,
         )
     }
 
@@ -854,6 +887,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             role,
             chrome_text_area_left_px,
             symbol_values,
+            image_scale_environment,
         } = plan;
         context.face_ids().reserve_after(base_face_id);
         let mut face_realizer = DisplayRowFaceRealizer::new(&mut *self.font_metrics);
@@ -908,8 +942,12 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             geometry.ascent(),
         );
         let stop = loop {
-            let params =
-                context.source_resolve_params(row_face.face_id, base_face, fallback_metrics);
+            let params = context.source_resolve_params(
+                row_face.face_id,
+                base_face,
+                fallback_metrics,
+                image_scale_environment,
+            );
             let resolved = state.next_resolved_item(source, params, context.face_ids());
             let (item, pending_faces) = resolved.into_parts();
             for pending in pending_faces {

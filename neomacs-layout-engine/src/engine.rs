@@ -558,8 +558,11 @@ impl LayoutEngine {
                 tracing::error!("layout_frame_rust: frame {:?} not found", frame_id);
                 return;
             };
-            let bootstrap =
-                super::neovm_bridge::frame_params_from_neovm(frame, evaluator.face_table());
+            let bootstrap = super::neovm_bridge::frame_params_from_neovm(
+                frame,
+                evaluator.face_table(),
+                evaluator.obarray(),
+            );
             let ws = frame
                 .effective_window_system()
                 .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
@@ -1945,6 +1948,7 @@ impl LayoutEngine {
                 metrics,
                 base_face: &tab_bar_face,
                 text: tab_bar.text,
+                image_scale_environment: frame_params.image_scale_environment,
             },
             ChromeRowRenderServices::new(&mut self.font_metrics, face_resolver, &mut face_ids),
             evaluator.display_host.as_deref(),

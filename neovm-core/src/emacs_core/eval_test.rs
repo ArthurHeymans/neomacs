@@ -1270,6 +1270,7 @@ fn read_char_applies_resize_event_before_returning_next_keypress() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -1506,6 +1507,7 @@ fn read_char_triggers_redisplay_after_resize_event() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -1551,6 +1553,7 @@ fn read_char_redisplays_when_resize_arrives_after_pre_block_redisplay() {
                 .send(crate::keyboard::InputEvent::Resize {
                     width: 700,
                     height: 800,
+                    scale_factor: 1.0,
                     emacs_frame_id: 0,
                 })
                 .expect("enqueue resize after first redisplay");
@@ -1925,6 +1928,7 @@ fn redisplay_applies_pending_resize_before_callback() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -2443,6 +2447,7 @@ fn frame_native_width_syncs_pending_resize_without_read_char() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -2469,6 +2474,7 @@ fn fire_pending_timers_does_not_service_pending_resize_input() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -2500,6 +2506,7 @@ fn wait_for_pending_resize_events_blocks_until_resize_and_preserves_keypress() {
         tx.send(crate::keyboard::InputEvent::Resize {
             width: 700,
             height: 800,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         })
         .expect("send resize");
@@ -2542,6 +2549,7 @@ fn frame_native_width_syncs_pending_resize_behind_focus_event() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .unwrap();
@@ -2589,6 +2597,7 @@ fn redisplay_applies_resize_already_queued_behind_focus_event() {
         .push_back(crate::keyboard::InputEvent::Resize {
             width: 700,
             height: 800,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         });
 
@@ -2627,6 +2636,7 @@ fn read_char_preserves_keypress_after_queued_focus_and_resize() {
         .push_back(crate::keyboard::InputEvent::Resize {
             width: 700,
             height: 800,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         });
     ev.command_loop.keyboard.pending_input_events.push_back(

@@ -218,6 +218,7 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::WindowResize {
             width,
             height,
+            scale_factor,
             emacs_frame_id,
         } => {
             tracing::debug!(
@@ -229,6 +230,7 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             Some(KbInputEvent::Resize {
                 width: *width,
                 height: *height,
+                scale_factor: *scale_factor,
                 emacs_frame_id: *emacs_frame_id,
             })
         }

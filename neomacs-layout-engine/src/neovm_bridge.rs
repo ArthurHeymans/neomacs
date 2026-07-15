@@ -10,6 +10,7 @@ use neovm_core::buffer::{
     buffer::{BUFFER_SLOT_COUNT, lookup_buffer_slot},
     overlay::OverlayList,
 };
+use neovm_core::emacs_core::image_catalog::image_scale_environment;
 use neovm_core::emacs_core::intern;
 use neovm_core::emacs_core::symbol::Obarray;
 use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
@@ -438,7 +439,11 @@ fn face_bg_pixel(face_table: &FaceTable, name: &str, fallback: u32) -> u32 {
 
 /// Build `FrameParams` from a neovm-core `Frame`, reading default face
 /// colors from the face table.
-pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FrameParams {
+pub fn frame_params_from_neovm(
+    frame: &Frame,
+    face_table: &FaceTable,
+    obarray: &Obarray,
+) -> FrameParams {
     // Read default face background from face table
     let default_face = face_table.get("default");
     let bg = default_face
@@ -460,6 +465,7 @@ pub fn frame_params_from_neovm(frame: &Frame, face_table: &FaceTable) -> FramePa
         char_width: frame.char_width,
         char_height: frame.char_height,
         font_pixel_size: frame.font_pixel_size,
+        image_scale_environment: image_scale_environment(frame, obarray),
         window_system: frame.effective_window_system().is_some(),
         background: bg,
         vertical_border_fg: face_fg_pixel(face_table, "vertical-border", fg),
@@ -1563,6 +1569,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         char_height,
         window_system: is_window_system,
         font_pixel_size: frame.font_pixel_size,
+        image_scale_environment: image_scale_environment(frame, obarray),
         font_ascent: if is_window_system {
             default_font_ascent
                 .filter(|ascent| *ascent > 0.0)
@@ -1659,7 +1666,7 @@ pub fn collect_layout_params_with_font_sizing(
         .frame_manager()
         .selected_frame()
         .is_some_and(|selected| selected.id == frame_id);
-    let frame_params = frame_params_from_neovm(frame, evaluator.face_table());
+    let frame_params = frame_params_from_neovm(frame, evaluator.face_table(), evaluator.obarray());
 
     let mut window_params = Vec::new();
 

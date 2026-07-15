@@ -5151,6 +5151,7 @@ fn accept_process_output_services_pending_resize_from_shared_wait_request() {
     tx.send(crate::keyboard::InputEvent::Resize {
         width: 700,
         height: 800,
+        scale_factor: 1.0,
         emacs_frame_id: 0,
     })
     .expect("queue resize event");
@@ -5190,6 +5191,7 @@ fn accept_process_output_services_resize_arriving_during_wait() {
             .send(crate::keyboard::InputEvent::Resize {
                 width: 710,
                 height: 820,
+                scale_factor: 1.0,
                 emacs_frame_id: 0,
             })
             .expect("queue resize event during wait");

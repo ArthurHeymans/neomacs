@@ -15,6 +15,7 @@ pub type WakeupFd = RawFd;
 #[cfg(windows)]
 pub type WakeupFd = RawHandle;
 
+use neomacs_display_protocol::ImageRealization;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 pub use neomacs_display_protocol::{
     CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource,
@@ -100,6 +101,8 @@ pub enum InputEvent {
     WindowResize {
         width: u32,
         height: u32,
+        /// Physical device pixels per logical Emacs pixel.
+        scale_factor: f64,
         /// Emacs frame_id of the window that resized
         emacs_frame_id: u64,
     },
@@ -333,6 +336,8 @@ pub enum AssetCommand {
         path: String,
         max_width: u32,
         max_height: u32,
+        /// Immutable logical/device geometry captured for this load.
+        realization: ImageRealization,
         /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
         fg_color: u32,
         /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -344,6 +349,8 @@ pub enum AssetCommand {
         data: Vec<u8>,
         max_width: u32,
         max_height: u32,
+        /// Immutable logical/device geometry captured for this load.
+        realization: ImageRealization,
         /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
         fg_color: u32,
         /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.

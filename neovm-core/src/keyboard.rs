@@ -934,6 +934,7 @@ pub enum InputEvent {
     Resize {
         width: u32,
         height: u32,
+        scale_factor: f64,
         emacs_frame_id: u64,
     },
     /// Window focus change.
@@ -1992,6 +1993,7 @@ fn apply_resize_input_event_in_keyboard_runtime(
     buffers: &crate::buffer::BufferManager,
     width: u32,
     height: u32,
+    scale_factor: f64,
     emacs_frame_id: u64,
 ) {
     let target_fid = if emacs_frame_id == 0 {
@@ -2003,6 +2005,11 @@ fn apply_resize_input_event_in_keyboard_runtime(
     if let Some(fid) = target_fid
         && let Some(frame) = frames.get_mut(fid)
     {
+        frame.device_scale_factor = if scale_factor.is_finite() && scale_factor > 0.0 {
+            scale_factor
+        } else {
+            1.0
+        };
         frame.resize_pixelwise_with_buffer_constraints(buffers, width, height);
     }
 }
@@ -2041,18 +2048,21 @@ fn sync_pending_resize_events_in_keyboard_runtime(
             Some(InputEvent::Resize {
                 width,
                 height,
+                scale_factor,
                 emacs_frame_id,
             }) => {
                 if pending_live_gui_resize_target(frames, *emacs_frame_id).is_some() {
                     break;
                 }
-                let (width, height, emacs_frame_id) = (*width, *height, *emacs_frame_id);
+                let (width, height, scale_factor, emacs_frame_id) =
+                    (*width, *height, *scale_factor, *emacs_frame_id);
                 pending_input_events.pop_visible_front();
                 apply_resize_input_event_in_keyboard_runtime(
                     frames,
                     buffers,
                     width,
                     height,
+                    scale_factor,
                     emacs_frame_id,
                 );
                 applied_resize = true;
@@ -2080,6 +2090,7 @@ fn sync_pending_resize_events_in_keyboard_runtime(
             Ok(InputEvent::Resize {
                 width,
                 height,
+                scale_factor,
                 emacs_frame_id,
             }) => {
                 if pending_live_gui_resize_target(frames, emacs_frame_id).is_some() {
@@ -2088,6 +2099,7 @@ fn sync_pending_resize_events_in_keyboard_runtime(
                     deferred.push_back(InputEvent::Resize {
                         width,
                         height,
+                        scale_factor,
                         emacs_frame_id,
                     });
                     break;
@@ -2097,6 +2109,7 @@ fn sync_pending_resize_events_in_keyboard_runtime(
                     buffers,
                     width,
                     height,
+                    scale_factor,
                     emacs_frame_id,
                 );
                 applied_resize = true;
@@ -2939,6 +2952,7 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         width: u32,
         height: u32,
+        scale_factor: f64,
         emacs_frame_id: u64,
         trigger_redisplay: bool,
     ) {
@@ -2977,6 +2991,7 @@ impl crate::emacs_core::eval::Context {
                 &self.buffers,
                 width,
                 height,
+                scale_factor,
                 emacs_frame_id,
             );
             if let Some(frame) = self.frames.get(fid) {
@@ -3233,10 +3248,17 @@ impl crate::emacs_core::eval::Context {
                 InputEvent::Resize {
                     width,
                     height,
+                    scale_factor,
                     emacs_frame_id,
                 } => {
                     outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
-                    self.apply_resize_input_event(width, height, emacs_frame_id, false);
+                    self.apply_resize_input_event(
+                        width,
+                        height,
+                        scale_factor,
+                        emacs_frame_id,
+                        false,
+                    );
                 }
                 InputEvent::MonitorsChanged { monitors } => {
                     outcome = outcome.merge(SpecialInputServiceOutcome::any_activity());
@@ -3906,9 +3928,10 @@ impl crate::emacs_core::eval::Context {
             InputEvent::Resize {
                 width,
                 height,
+                scale_factor,
                 emacs_frame_id,
             } => {
-                self.apply_resize_input_event(width, height, emacs_frame_id, true);
+                self.apply_resize_input_event(width, height, scale_factor, emacs_frame_id, true);
                 self.redisplay();
                 self.timer_resume_idle();
                 Ok(None)

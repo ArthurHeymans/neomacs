@@ -7456,6 +7456,7 @@ struct GuiFrameMetrics {
     char_height: f32,
     font_pixel_size: f32,
     minibuffer_height: f32,
+    device_scale_factor: f64,
 }
 
 fn stringish_value(value: &Value) -> Option<Value> {
@@ -7571,6 +7572,7 @@ fn current_gui_frame_metrics_in_state(frames: &FrameManager) -> GuiFrameMetrics 
             char_height: frame.char_height.max(1.0),
             font_pixel_size: frame.font_pixel_size.max(1.0),
             minibuffer_height,
+            device_scale_factor: frame.device_scale_factor,
         };
     }
     GuiFrameMetrics {
@@ -7580,6 +7582,7 @@ fn current_gui_frame_metrics_in_state(frames: &FrameManager) -> GuiFrameMetrics 
         char_height: 16.0,
         font_pixel_size: 16.0,
         minibuffer_height: 32.0,
+        device_scale_factor: 1.0,
     }
 }
 
@@ -7664,6 +7667,7 @@ pub(crate) fn x_create_frame_impl(
             char_width: parent.char_width.max(1.0),
             char_height: parent.char_height.max(1.0),
             font_pixel_size: parent.font_pixel_size.max(1.0),
+            device_scale_factor: parent.device_scale_factor,
             minibuffer_height: parent
                 .minibuffer_leaf
                 .as_ref()
@@ -7762,6 +7766,7 @@ pub(crate) fn x_create_frame_impl(
         frame.char_width = metrics.char_width;
         frame.char_height = metrics.char_height;
         frame.font_pixel_size = metrics.font_pixel_size;
+        frame.device_scale_factor = metrics.device_scale_factor;
         frame.set_window_system(Some(Value::symbol(
             crate::emacs_core::display::gui_window_system_symbol(),
         )));
@@ -8335,6 +8340,25 @@ pub(crate) fn builtin_frame_right_divider_width(
         frame,
         FrameParam::RightDividerWidth,
     )))
+}
+
+pub(crate) fn builtin_frame_scale_factor(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-scale-factor", &args, 1)?;
+    let fid =
+        resolve_frame_id_in_state(&mut eval.frames, &mut eval.buffers, args.first(), "framep")?;
+    let frame = eval
+        .frames
+        .get(fid)
+        .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+    let scale = if frame.device_scale_factor.is_finite() && frame.device_scale_factor > 0.0 {
+        frame.device_scale_factor
+    } else {
+        1.0
+    };
+    Ok(Value::make_float(scale))
 }
 
 pub(crate) fn builtin_window_bottom_divider_width(

@@ -47,6 +47,7 @@ use crate::window_output::{
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
 pub(crate) struct BufferSourceWalkSetupRequest<'a> {
     window_start: i64,
@@ -69,6 +70,7 @@ pub(crate) struct BufferSourceWalkSetupRequest<'a> {
     tab_stop_list: &'a [i32],
     trailing_whitespace_enabled: bool,
     trailing_whitespace_bg: u32,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 pub(crate) struct BufferSourceWalkSetup {
@@ -166,7 +168,16 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             tab_stop_list,
             trailing_whitespace_enabled,
             trailing_whitespace_bg,
+            image_scale_environment: ImageScaleEnvironment::default(),
         }
+    }
+
+    fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.image_scale_environment = image_scale_environment;
+        self
     }
 
     pub(crate) fn from_window_geometry(
@@ -204,6 +215,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             params.show_trailing_whitespace,
             params.trailing_ws_bg,
         )
+        .with_image_scale_environment(params.image_scale_environment)
     }
 
     pub(crate) fn into_setup(self) -> BufferSourceWalkSetup {
@@ -238,7 +250,8 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
                 self.tab_width,
                 self.tab_stop_list,
             )
-            .into_surface(),
+            .into_surface()
+            .with_image_scale_environment(self.image_scale_environment),
             row_geometry_defaults,
             row_geometry: row_geometry_defaults.initial_state(),
             row_y_positions: DisplayRowYPositions::with_capacity_and_first_row(

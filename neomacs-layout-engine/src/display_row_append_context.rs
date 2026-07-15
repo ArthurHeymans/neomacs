@@ -13,6 +13,7 @@ use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::Glyph;
 use neomacs_display_protocol::types::FaceId;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendPlacement {
@@ -88,11 +89,24 @@ impl DisplayRowAppendArea {
 pub(crate) struct DisplayRowAppendSurface {
     area: DisplayRowAppendArea,
     tab_policy: DisplayTabPolicy,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 impl DisplayRowAppendSurface {
     pub(crate) fn new(area: DisplayRowAppendArea, tab_policy: DisplayTabPolicy) -> Self {
-        Self { area, tab_policy }
+        Self {
+            area,
+            tab_policy,
+            image_scale_environment: ImageScaleEnvironment::default(),
+        }
+    }
+
+    pub(crate) fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.image_scale_environment = image_scale_environment;
+        self
     }
 
     pub(crate) fn content_x(&self) -> f32 {
@@ -111,6 +125,7 @@ impl DisplayRowAppendSurface {
         Self {
             area: self.area.full_text_width(),
             tab_policy: self.tab_policy.clone(),
+            image_scale_environment: self.image_scale_environment,
         }
     }
 
@@ -119,7 +134,13 @@ impl DisplayRowAppendSurface {
         placement: DisplayRowAppendPlacement,
         metrics: DisplayRowAppendMetrics,
     ) -> DisplayRowAppendFrame {
-        DisplayRowAppendFrame::from_parts(placement, self.area, metrics, self.tab_policy.clone())
+        DisplayRowAppendFrame::from_parts(
+            placement,
+            self.area,
+            metrics,
+            self.tab_policy.clone(),
+            self.image_scale_environment,
+        )
     }
 
     pub(crate) fn frame_from_geometry_state(
@@ -529,6 +550,7 @@ pub(crate) struct DisplayRowAppendFrame {
     text_width: f32,
     line_number_width: f32,
     face_space_width: f32,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 pub(crate) struct DisplayRowAppendSourceRenderRequest<'face> {
@@ -616,6 +638,7 @@ impl DisplayRowAppendFrame {
         area: DisplayRowAppendArea,
         metrics: DisplayRowAppendMetrics,
         tab_policy: DisplayTabPolicy,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         Self {
             row: placement.row,
@@ -633,6 +656,7 @@ impl DisplayRowAppendFrame {
             text_width: area.text_width(),
             line_number_width: area.line_number_width(),
             face_space_width: metrics.space_width(),
+            image_scale_environment,
         }
     }
 
@@ -673,6 +697,7 @@ impl DisplayRowAppendFrame {
             base_face,
             GlyphRowRole::Text,
         )
+        .with_image_scale_environment(self.image_scale_environment)
         .with_render_bounds(DisplayRowRenderBounds::new(position, kind.max_x(self)))
     }
 

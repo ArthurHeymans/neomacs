@@ -22,6 +22,7 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
 pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     buffer: &'a B,
@@ -31,6 +32,7 @@ pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     default_face_metrics: DisplayRowFallbackMetrics,
     window_metrics: DisplayRowFallbackMetrics,
     window_system: bool,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 #[derive(Clone, Copy)]
@@ -77,6 +79,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         default_face_metrics: DisplayRowFallbackMetrics,
         window_metrics: DisplayRowFallbackMetrics,
         window_system: bool,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         Self {
             buffer,
@@ -86,6 +89,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             default_face_metrics,
             window_metrics,
             window_system,
+            image_scale_environment,
         }
     }
 
@@ -169,6 +173,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
                 self.default_face_metrics,
             ),
             display_host,
+            self.image_scale_environment,
         )
     }
 

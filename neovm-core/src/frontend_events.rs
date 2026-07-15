@@ -353,6 +353,7 @@ mod tests {
             InputEvent::Resize {
                 width: 1,
                 height: 1,
+                scale_factor: 1.0,
                 emacs_frame_id: 0,
             },
             FrontendEventClass::LispSpecial,

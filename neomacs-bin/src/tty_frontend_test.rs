@@ -247,6 +247,7 @@ fn tty_resize_event_tracks_signal_and_dimension_changes() {
         InputEvent::WindowResize {
             width: 160,
             height: 50,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         }
     ));
@@ -258,6 +259,7 @@ fn tty_resize_event_tracks_signal_and_dimension_changes() {
         InputEvent::WindowResize {
             width: 100,
             height: 30,
+            scale_factor: 1.0,
             emacs_frame_id: 0,
         }
     ));

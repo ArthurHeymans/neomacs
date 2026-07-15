@@ -898,6 +898,7 @@ fn record_primary_window_resize(shared: &SharedPrimaryWindowSize, event: &Displa
     let DisplayInputEvent::WindowResize {
         width,
         height,
+        scale_factor: _,
         emacs_frame_id,
     } = event
     else {

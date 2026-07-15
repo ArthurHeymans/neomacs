@@ -144,7 +144,7 @@ fn collect_layout_params_reads_nobreak_char_display_global() {
 
 #[test]
 fn test_frame_params_from_neovm() {
-    let _runtime = neovm_core::emacs_core::Context::new();
+    let runtime = neovm_core::emacs_core::Context::new();
 
     let mut buf_mgr = BufferManager::new();
     let buf_id = buf_mgr.create_buffer("*scratch*");
@@ -153,7 +153,7 @@ fn test_frame_params_from_neovm() {
     let frame = frame_mgr.get(fid).unwrap();
 
     let face_table = FaceTable::new();
-    let fp = frame_params_from_neovm(frame, &face_table);
+    let fp = frame_params_from_neovm(frame, &face_table, runtime.obarray());
     assert_eq!(fp.width, 1024.0);
     assert_eq!(fp.height, 768.0);
     assert_eq!(fp.tab_bar_height, 0.0);
@@ -259,7 +259,7 @@ fn window_params_resolve_special_display_face_colors() {
 
 #[test]
 fn frame_params_from_neovm_reads_window_divider_parameters() {
-    let _runtime = neovm_core::emacs_core::Context::new();
+    let runtime = neovm_core::emacs_core::Context::new();
 
     let mut buf_mgr = BufferManager::new();
     let buf_id = buf_mgr.create_buffer("*scratch*");
@@ -273,7 +273,7 @@ fn frame_params_from_neovm_reads_window_divider_parameters() {
     let frame = frame_mgr.get(fid).unwrap();
 
     let face_table = FaceTable::new();
-    let fp = frame_params_from_neovm(frame, &face_table);
+    let fp = frame_params_from_neovm(frame, &face_table, runtime.obarray());
     assert_eq!(fp.right_divider_width, 6);
     assert_eq!(fp.bottom_divider_width, 4);
 }

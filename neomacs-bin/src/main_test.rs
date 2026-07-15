@@ -919,6 +919,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         max_height: 50,
         fg_color: 0,
         bg_color: 0,
+        realization: Default::default(),
     };
 
     let started = Instant::now();
@@ -1010,6 +1011,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         max_height: 24,
         fg_color: 0,
         bg_color: 0,
+        realization: Default::default(),
     };
     let (done_tx, done_rx) = crossbeam_channel::bounded(1);
     let worker = std::thread::spawn(move || {
@@ -1048,6 +1050,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
                 max_height: 24,
                 fg_color: 0,
                 bg_color: 0,
+                realization: Default::default(),
             }
         ),
         ImageLookup::Pending(image.clone())
@@ -1081,6 +1084,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         max_height: 18,
         fg_color: 0,
         bg_color: 0,
+        realization: Default::default(),
     };
     let ImageLookup::Pending(expected) = ImageCatalog::lookup(&host.image_catalog, request.clone())
     else {
@@ -1141,6 +1145,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         max_height: 24,
         fg_color: 0,
         bg_color: 0,
+        realization: Default::default(),
     };
 
     assert!(matches!(
@@ -1224,6 +1229,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         max_height: 0,
         fg_color: 0,
         bg_color: 0,
+        realization: Default::default(),
     };
     let ImageLookup::Pending(image) = ImageCatalog::lookup(&host.image_catalog, request.clone())
     else {

@@ -58,6 +58,7 @@ use neovm_core::buffer::BufferId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::keymap::{KeymapMarker, MenuItemProperty, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
@@ -253,6 +254,7 @@ pub(crate) struct FrameTabBarDisplayRowRequest<'face> {
     pub(crate) metrics: DisplayRowFallbackMetrics,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) text: Value,
+    pub(crate) image_scale_environment: ImageScaleEnvironment,
 }
 
 impl<'face> FrameTabBarDisplayRowRequest<'face> {
@@ -266,6 +268,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             self.base_face,
             self.text,
         )
+        .with_image_scale_environment(self.image_scale_environment)
     }
 
     fn lisp_string_source_request(
@@ -343,6 +346,7 @@ struct ChromeLispStringRowRequest<'face> {
     base_face: &'face ResolvedFace,
     text: Value,
     symbol_values: std::collections::HashMap<String, Value>,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 impl<'face> ChromeLispStringRowRequest<'face> {
@@ -365,6 +369,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             base_face,
             text,
             symbol_values: std::collections::HashMap::new(),
+            image_scale_environment: ImageScaleEnvironment::default(),
         }
     }
 
@@ -373,6 +378,14 @@ impl<'face> ChromeLispStringRowRequest<'face> {
         symbol_values: std::collections::HashMap<String, Value>,
     ) -> Self {
         self.symbol_values = symbol_values;
+        self
+    }
+
+    fn with_image_scale_environment(
+        mut self,
+        image_scale_environment: ImageScaleEnvironment,
+    ) -> Self {
+        self.image_scale_environment = image_scale_environment;
         self
     }
 
@@ -387,6 +400,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             base_face: _,
             text: _,
             symbol_values,
+            image_scale_environment: _,
         } = self;
         let role = origin
             .glyph_row_role()
@@ -415,6 +429,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             base_face,
             text,
             symbol_values,
+            image_scale_environment,
         } = self;
         DisplayRowLispStringSourceRenderRequest::from_origin_value(
             y,
@@ -429,6 +444,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
             text,
             symbol_values,
         )
+        .with_image_scale_environment(image_scale_environment)
     }
 }
 
@@ -445,6 +461,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
     pub(crate) text: Value,
+    pub(crate) image_scale_environment: ImageScaleEnvironment,
 }
 
 pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
@@ -653,6 +670,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .expect("tab-line face should exist when tab-line height is positive"),
                     symbol_values: status_line_symbol_values.clone(),
                     text: tab_line_text,
+                    image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
             ) {
@@ -695,6 +713,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                     ),
                     symbol_values: status_line_symbol_values.clone(),
                     text: header_line_text,
+                    image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
             ) {
@@ -750,6 +769,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .expect("mode-line face should exist when mode-line height is positive"),
                     symbol_values: status_line_symbol_values,
                     text: mode_line_text,
+                    image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Bottom(window_bottom),
             ) {
@@ -919,6 +939,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.base_face,
             self.text,
         )
+        .with_image_scale_environment(self.image_scale_environment)
     }
 
     fn into_render_request(

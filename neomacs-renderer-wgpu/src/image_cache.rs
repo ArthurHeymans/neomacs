@@ -6,6 +6,7 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
+use neomacs_display_protocol::ImageRealization;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -125,6 +126,40 @@ impl DecodedPixels {
 
     fn from_raster_tuple((width, height, rgba): (u32, u32, Vec<u8>)) -> Self {
         Self::raster(width, height, rgba)
+    }
+
+    /// Apply one resolved realization to bitmap pixels after format-specific
+    /// decoding.  SVG performs the same realization while painting vectors,
+    /// so every codec publishes identical logical/raster semantics.
+    fn realize_bitmap(self, realization: ImageRealization) -> Option<Self> {
+        let layout_width = realization.layout_dimension(self.layout_width);
+        let layout_height = realization.layout_dimension(self.layout_height);
+        let (raster_width, raster_height) = constrain_dimensions(
+            realization.raster_dimension(layout_width),
+            realization.raster_dimension(layout_height),
+            0,
+            0,
+        );
+        let rgba = if raster_width == self.raster_width && raster_height == self.raster_height {
+            self.rgba
+        } else {
+            let source =
+                image::RgbaImage::from_raw(self.raster_width, self.raster_height, self.rgba)?;
+            image::imageops::resize(
+                &source,
+                raster_width,
+                raster_height,
+                image::imageops::FilterType::Lanczos3,
+            )
+            .into_raw()
+        };
+        Some(Self {
+            layout_width,
+            layout_height,
+            raster_width,
+            raster_height,
+            rgba,
+        })
     }
 }
 
@@ -253,9 +288,8 @@ struct DecodeRequest {
     source: ImageSource,
     max_width: u32,
     max_height: u32,
-    /// Physical device pixels per logical Emacs pixel.  Only scalable image
-    /// formats consume this; bitmap formats retain their native resolution.
-    raster_scale: f32,
+    /// Semantic and device geometry resolved by evaluator/layout.
+    realization: ImageRealization,
     /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
     fg_color: u32,
     /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -392,14 +426,14 @@ impl ImageCache {
                             request.max_width,
                             request.max_height,
                             fg_bg,
-                            request.raster_scale,
+                            request.realization,
                         ),
                         ImageSource::Data(data) => Self::decode_data(
                             &data,
                             request.max_width,
                             request.max_height,
                             fg_bg,
-                            request.raster_scale,
+                            request.realization,
                         ),
                         ImageSource::RawArgb32 {
                             data,
@@ -468,14 +502,14 @@ impl ImageCache {
         max_width: u32,
         max_height: u32,
         fg_bg: (u32, u32),
-        raster_scale: f32,
+        realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
-            return Self::process_image(img, max_width, max_height);
+            return Self::process_image(img, max_width, max_height)?.realize_bitmap(realization);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path), max_width, max_height) {
-            return Some(DecodedPixels::from_raster_tuple(result));
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
@@ -483,11 +517,11 @@ impl ImageCache {
         if let Some(result) =
             crate::xbm::decode_xbm_file(Path::new(path), fg, bg, max_width, max_height)
         {
-            return Some(DecodedPixels::from_raster_tuple(result));
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
         // Fallback: try SVG via the shared librsvg backend.
         let data = std::fs::read(path).ok()?;
-        Self::decode_svg_data(&data, max_width, max_height, raster_scale)
+        Self::decode_svg_data(&data, max_width, max_height, realization)
     }
 
     /// Decode image data with size constraints
@@ -496,23 +530,23 @@ impl ImageCache {
         max_width: u32,
         max_height: u32,
         fg_bg: (u32, u32),
-        raster_scale: f32,
+        realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
-            return Self::process_image(img, max_width, max_height);
+            return Self::process_image(img, max_width, max_height)?.realize_bitmap(realization);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data, max_width, max_height) {
-            return Some(DecodedPixels::from_raster_tuple(result));
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg, max_width, max_height) {
-            return Some(DecodedPixels::from_raster_tuple(result));
+            return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
         // Fallback: try SVG via the shared librsvg backend.
-        Self::decode_svg_data(data, max_width, max_height, raster_scale)
+        Self::decode_svg_data(data, max_width, max_height, realization)
     }
 
     #[cfg(test)]
@@ -533,7 +567,32 @@ impl ImageCache {
         fg_bg: (u32, u32),
         raster_scale: f32,
     ) -> Option<DecodedImage> {
-        let pixels = Self::decode_data(data, max_width, max_height, fg_bg, raster_scale)?;
+        Self::decode_data_with_metadata_at_realization(
+            data,
+            max_width,
+            max_height,
+            fg_bg,
+            1.0,
+            raster_scale,
+        )
+    }
+
+    #[cfg(test)]
+    fn decode_data_with_metadata_at_realization(
+        data: &[u8],
+        max_width: u32,
+        max_height: u32,
+        fg_bg: (u32, u32),
+        layout_scale: f32,
+        device_scale: f32,
+    ) -> Option<DecodedImage> {
+        let pixels = Self::decode_data(
+            data,
+            max_width,
+            max_height,
+            fg_bg,
+            ImageRealization::new(layout_scale, device_scale),
+        )?;
         Some(Self::decoded_image(
             ImageLoadToken {
                 id: 0,
@@ -616,9 +675,9 @@ impl ImageCache {
         data: &[u8],
         max_width: u32,
         max_height: u32,
-        raster_scale: f32,
+        realization: ImageRealization,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, max_width, max_height, raster_scale)?;
+        let decoded = crate::svg::decode(data, max_width, max_height, realization)?;
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
@@ -877,9 +936,9 @@ impl ImageCache {
             path,
             max_width,
             max_height,
+            ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
-            raster_scale,
         );
         id
     }
@@ -891,9 +950,9 @@ impl ImageCache {
         data: &[u8],
         max_width: u32,
         max_height: u32,
+        realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
-        raster_scale: f32,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -902,8 +961,8 @@ impl ImageCache {
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
-                    width: w,
-                    height: h,
+                    width: realization.layout_dimension(w),
+                    height: realization.layout_dimension(h),
                 },
             );
         }
@@ -915,7 +974,7 @@ impl ImageCache {
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
-            raster_scale,
+            realization,
             fg_color,
             bg_color,
         });
@@ -929,9 +988,9 @@ impl ImageCache {
         path: &str,
         max_width: u32,
         max_height: u32,
+        realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
-        raster_scale: f32,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -941,8 +1000,8 @@ impl ImageCache {
             self.pending_dimensions.insert(
                 id,
                 ImageDimensions {
-                    width: w,
-                    height: h,
+                    width: realization.layout_dimension(w),
+                    height: realization.layout_dimension(h),
                 },
             );
         }
@@ -954,7 +1013,7 @@ impl ImageCache {
             source: ImageSource::File(path.to_string()),
             max_width,
             max_height,
-            raster_scale,
+            realization,
             fg_color,
             bg_color,
         });
@@ -998,7 +1057,7 @@ impl ImageCache {
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
-            raster_scale,
+            realization: ImageRealization::new(1.0, raster_scale),
             fg_color,
             bg_color,
         });
@@ -1043,7 +1102,7 @@ impl ImageCache {
             },
             max_width,
             max_height,
-            raster_scale: 1.0,
+            realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
         });
@@ -1088,7 +1147,7 @@ impl ImageCache {
             },
             max_width,
             max_height,
-            raster_scale: 1.0,
+            realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
         });
@@ -1119,7 +1178,7 @@ impl ImageCache {
             },
             max_width: 0,
             max_height: 0,
-            raster_scale: 1.0,
+            realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
         });
@@ -1148,7 +1207,7 @@ impl ImageCache {
             },
             max_width: 0,
             max_height: 0,
-            raster_scale: 1.0,
+            realization: ImageRealization::default(),
             fg_color: 0,
             bg_color: 0,
         });

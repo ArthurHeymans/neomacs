@@ -585,7 +585,12 @@ fn display_row_render_context_builds_source_resolve_params() {
         8.0, 16.0, 12.0,
     );
 
-    let params = context.source_resolve_params(FaceId::new(7), base_face, fallback);
+    let params = context.source_resolve_params(
+        FaceId::new(7),
+        base_face,
+        fallback,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+    );
 
     assert_eq!(params.face_basis().base_face_id(), FaceId::new(7));
     assert_eq!(params.face_basis().fallback_metrics(), fallback);
@@ -898,6 +903,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
                         ),
                     ),
                     None,
+                    neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
                 ),
                 &mut face_ids,
             )
@@ -1604,6 +1610,7 @@ fn render_tab_line_with_sized_media_host(
         row_height,
         row_ascent,
         None,
+        neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
 }
 
@@ -1617,6 +1624,7 @@ fn render_tab_line_with_sized_media_metadata_host(
     row_height: f32,
     row_ascent: f32,
     image_metadata: Option<ResolvedImageMetadata>,
+    image_scale_environment: neovm_core::emacs_core::image_catalog::ImageScaleEnvironment,
 ) -> (RenderedDisplayRow, RecordingDisplayRowMediaHost) {
     let mut host = RecordingDisplayRowMediaHost::with_image_size(image_width, image_height);
     host.image_metadata = image_metadata;
@@ -1642,7 +1650,8 @@ fn render_tab_line_with_sized_media_metadata_host(
         &base_face,
         GlyphRowRole::TabLine,
         std::collections::HashMap::new(),
-    );
+    )
+    .with_image_scale_environment(image_scale_environment);
     let rendered = render_lisp_string_row_with_display_host(
         &mut renderer,
         spec,
@@ -1749,6 +1758,54 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
 }
 
 #[test]
+fn chrome_image_request_carries_the_rows_fractional_frame_realization() {
+    let _eval = Context::new();
+    let rendered_text = Value::string_with_text_properties(
+        "X",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("svg"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/chrome.svg"),
+                    Value::keyword("height"),
+                    Value::fixnum(24),
+                    Value::keyword("scale"),
+                    Value::symbol("default"),
+                ]),
+            ]),
+        }],
+    );
+    let environment = neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::new(
+        7.2,
+        1.75,
+        neovm_core::emacs_core::image_catalog::ImageDefaultScale::Auto,
+    );
+
+    let (_, host) = render_tab_line_with_sized_media_metadata_host(
+        rendered_text,
+        0,
+        0,
+        18,
+        18,
+        17.0,
+        13.0,
+        None,
+        environment,
+    );
+
+    let requests = host.image_requests.lock().expect("image requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].realization.layout_dimension(24), 18);
+    assert_eq!(requests[0].realization.raster_dimension(18), 32);
+}
+
+#[test]
 fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
     let mut eval = Context::new();
     eval.setup_thread_locals();
@@ -1773,7 +1830,18 @@ fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
         )
     };
     let render = |text, metadata| {
-        render_tab_line_with_sized_media_metadata_host(text, 0, 0, 16, 16, 18.0, 14.0, metadata).0
+        render_tab_line_with_sized_media_metadata_host(
+            text,
+            0,
+            0,
+            16,
+            16,
+            18.0,
+            14.0,
+            metadata,
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        )
+        .0
     };
     let opaque = render(
         image_text(false),

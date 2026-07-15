@@ -136,6 +136,8 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         base_face: &base_face,
         symbol_values,
         text: Value::string("mode"),
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)
@@ -221,6 +223,8 @@ fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
             base_face: &base_face,
             symbol_values: std::collections::HashMap::new(),
             text: Value::string(".agent-sh"),
+            image_scale_environment:
+                neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         }
         .into_render_request(render_services.face_ids())
         .render_measured(&mut render_services, None)
@@ -252,6 +256,8 @@ fn frame_tab_bar_gui_uses_font_backed_glyph_advances() {
         metrics: DisplayRowFallbackMetrics::from_default_face_extents(7.2, 17.0, 10.0),
         base_face: &base_face,
         text: Value::string(".agent-sh"),
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
     .into_chrome_render_request(render_services.face_ids())
     .render_row(&mut render_services, None)
@@ -804,6 +810,8 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         base_face: &base_face,
         symbol_values: std::collections::HashMap::new(),
         text: Value::string("AB"),
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)
@@ -839,6 +847,8 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         base_face: &base_face,
         symbol_values: std::collections::HashMap::new(),
         text: tall_text,
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     }
     .into_render_request(render_services.face_ids())
     .render_measured(&mut render_services, None)

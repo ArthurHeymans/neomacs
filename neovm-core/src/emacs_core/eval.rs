@@ -3993,7 +3993,8 @@ impl Context {
         obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
         obarray.set_symbol_value("max-image-size", Value::make_float(10.0));
         obarray.set_symbol_value("max-mini-window-height", Value::make_float(0.25));
-        obarray.set_symbol_value("image-scaling-factor", Value::make_float(1.0));
+        obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
+        obarray.make_special("image-scaling-factor");
         obarray.set_symbol_value("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.set_symbol_value("global-mode-string", Value::NIL);
@@ -4735,7 +4736,8 @@ impl Context {
             ]),
         );
         obarray.set_symbol_value("image-types", super::image::supported_image_types_value());
-        obarray.set_symbol_value("image-scaling-factor", Value::make_float(1.0));
+        obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
+        obarray.make_special("image-scaling-factor");
 
         // User init / startup (C DEFVAR in official Emacs)
         obarray.set_symbol_value("user-init-file", Value::NIL);

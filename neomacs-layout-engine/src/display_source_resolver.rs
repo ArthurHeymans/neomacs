@@ -31,6 +31,7 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
@@ -91,16 +92,19 @@ impl<'a> DisplaySourceFaceBasis<'a> {
 pub(crate) struct DisplaySourceResolveParams<'a> {
     face_basis: DisplaySourceFaceBasis<'a>,
     display_host: Option<&'a dyn DisplayHost>,
+    image_scale_environment: ImageScaleEnvironment,
 }
 
 impl<'a> DisplaySourceResolveParams<'a> {
     pub(crate) fn new(
         face_basis: DisplaySourceFaceBasis<'a>,
         display_host: Option<&'a dyn DisplayHost>,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         Self {
             face_basis,
             display_host,
+            image_scale_environment,
         }
     }
 
@@ -110,6 +114,10 @@ impl<'a> DisplaySourceResolveParams<'a> {
 
     fn display_host(self) -> Option<&'a dyn DisplayHost> {
         self.display_host
+    }
+
+    fn image_scale_environment(self) -> ImageScaleEnvironment {
+        self.image_scale_environment
     }
 }
 
@@ -344,14 +352,20 @@ pub(crate) fn resolve_display_replacement(
     display_host: Option<&dyn DisplayHost>,
     resolved_face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
+    image_scale_environment: ImageScaleEnvironment,
 ) -> Option<ResolvedDisplayReplacement> {
     if let Some(media) = replacement.direct_replacement() {
         return Some(resolved_media_replacement(media));
     }
 
-    if let Some(media) =
-        resolve_display_property_media(&display_prop, display_host, resolved_face, fallback_metrics)
-            .filter(|media| replacement.accepts_media_replacement(media))
+    if let Some(media) = resolve_display_property_media(
+        &display_prop,
+        display_host,
+        resolved_face,
+        fallback_metrics,
+        image_scale_environment,
+    )
+    .filter(|media| replacement.accepts_media_replacement(media))
     {
         return Some(resolved_media_replacement(media));
     }
@@ -369,6 +383,7 @@ impl DisplayReplacementMediaSourceItem {
         display_host: Option<&dyn DisplayHost>,
         active_face_state: &DisplayRowActiveFaceState,
         fallback_metrics: DisplayRowFallbackMetrics,
+        image_scale_environment: ImageScaleEnvironment,
     ) -> Option<DisplayReplacementMediaSourceResolution> {
         match resolve_display_replacement(
             display_prop,
@@ -376,6 +391,7 @@ impl DisplayReplacementMediaSourceItem {
             display_host,
             active_face_state.resolved_face(),
             fallback_metrics,
+            image_scale_environment,
         )? {
             ResolvedDisplayReplacement::Media(media) => {
                 Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
@@ -470,6 +486,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                     self.display_host,
                     self.active_face_state,
                     fallback_metrics,
+                    self.params.image_scale_environment,
                 )?;
                 DisplayPropertyReplacementSourceInputs::empty().with_media(media)
             }
@@ -651,6 +668,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             self.params.display_host(),
             &resolved_face,
             fallback,
+            self.params.image_scale_environment(),
         )
     }
 }
@@ -688,6 +706,7 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
             self.params.display_host(),
             &resolved_face,
             fallback,
+            self.params.image_scale_environment(),
         )
     }
 }
@@ -720,6 +739,7 @@ pub(crate) struct DisplayMediaResolveParams<'a> {
     pub(crate) default_fg: u32,
     pub(crate) default_bg: u32,
     pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
+    pub(crate) image_scale_environment: ImageScaleEnvironment,
 }
 
 pub(crate) fn resolve_display_media_property(
@@ -736,29 +756,27 @@ fn resolve_image_display_property(
     params: DisplayMediaResolveParams<'_>,
 ) -> Option<DisplayMediaReplacement> {
     let spec = parse_display_image_layout(display_prop, params.default_fg, params.default_bg)?;
-    let scale = spec.scale;
-    let lookup = params.display_host.image_catalog()?.lookup(spec.request);
+    let ascent = spec.ascent;
+    let margin = spec.margin;
+    let request = spec.into_resolve_request(params.image_scale_environment);
+    let lookup = params.display_host.image_catalog()?.lookup(request);
     let placement = lookup.placement();
     let opaque_background = lookup
         .ready_metadata()
         .and_then(|metadata| (!metadata.background_transparent).then_some(metadata.background));
-    let mut width = placement.width().max(1) as f32;
-    let mut height = placement.height().max(1) as f32;
-    if (scale - 1.0).abs() > f32::EPSILON && scale.is_finite() && scale > 0.0 {
-        width = (width * scale).round().max(1.0);
-        height = (height * scale).round().max(1.0);
-    }
+    let width = placement.width().max(1) as f32;
+    let height = placement.height().max(1) as f32;
     Some(DisplayMediaReplacement::image(DisplayImageItem {
         image_id: display_media_id(placement.image_id()),
         width,
         height,
-        ascent: spec.ascent.resolve(
+        ascent: ascent.resolve(
             height,
             params.fallback_metrics.row_height(),
             params.fallback_metrics.ascent(),
         ),
-        horizontal_margin: spec.margin.horizontal,
-        vertical_margin: spec.margin.vertical,
+        horizontal_margin: margin.horizontal,
+        vertical_margin: margin.vertical,
         opaque_background,
     }))
 }
@@ -816,6 +834,7 @@ pub(crate) fn resolve_display_property_media(
     display_host: Option<&dyn DisplayHost>,
     resolved_face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
+    image_scale_environment: ImageScaleEnvironment,
 ) -> Option<DisplayMediaReplacement> {
     let face_metrics = display_media_face_metrics(resolved_face, fallback_metrics);
     resolve_display_media_property(
@@ -825,6 +844,7 @@ pub(crate) fn resolve_display_property_media(
             default_fg: resolved_face.fg,
             default_bg: resolved_face.bg,
             fallback_metrics: face_metrics,
+            image_scale_environment,
         },
     )
 }
@@ -940,6 +960,7 @@ mod tests {
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
             None,
+            ImageScaleEnvironment::default(),
         );
 
         let highlighted_id = {
@@ -986,6 +1007,7 @@ mod tests {
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
             None,
+            ImageScaleEnvironment::default(),
         );
 
         let (blue_hl_id, purple_hl_id) = {
@@ -1080,6 +1102,7 @@ mod tests {
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
             None,
+            ImageScaleEnvironment::default(),
         );
 
         let highlighted_id = {
@@ -1274,6 +1297,7 @@ mod tests {
             None,
             resolver.default_face(),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            ImageScaleEnvironment::default(),
         );
 
         assert_eq!(resolved, Some(ResolvedDisplayReplacement::Media(media)));
@@ -1290,6 +1314,7 @@ mod tests {
             None,
             resolver.default_face(),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            ImageScaleEnvironment::default(),
         );
 
         assert_eq!(
