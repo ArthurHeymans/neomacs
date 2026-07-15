@@ -11,7 +11,54 @@
 //! frame column-width derivation (a metrics policy detail) and the
 //! renderer's emergency fallback (deliberately render-side and counted).
 
-use crate::fontconfig::FontMatch;
+use neomacs_display_protocol::font::ResolvedFontIdentity;
+use neovm_core::face::FontSlant;
+
+/// One exact font selected by a platform backend.
+///
+/// This is deliberately deeper than a file path: collection and variable-font
+/// named instances can share a file while representing different drawable
+/// fonts.  Layout consumes this complete answer and transports its identity to
+/// the renderer; neither layer reconstructs selection from family attributes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlatformFontMatch {
+    pub identity: ResolvedFontIdentity,
+    pub family: String,
+    pub weight: Option<u16>,
+    pub slant: FontSlant,
+}
+
+impl PlatformFontMatch {
+    fn from_fontconfig(mut matched: crate::fontconfig::FontMatch) -> Option<Self> {
+        let file = matched.file.as_deref()?;
+        if matched.variation_coords.is_empty() && (matched.face_index >> 16) & 0x7fff != 0 {
+            matched.variation_coords =
+                crate::font_probe::named_instance_variation_coords(file, matched.face_index);
+        }
+        let weight = matched
+            .variation_coords
+            .iter()
+            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .map(|coord| coord.value().round().clamp(1.0, 1000.0) as u16)
+            .or(matched.weight);
+        let identity = ResolvedFontIdentity::from_file_with_variations(
+            file,
+            matched.face_index,
+            matched.postscript_name.clone(),
+            matched.variation_coords,
+        );
+        Some(Self {
+            identity,
+            family: matched.family,
+            weight,
+            slant: matched.slant,
+        })
+    }
+
+    pub fn file_path(&self) -> Option<&str> {
+        self.identity.file_path.as_deref()
+    }
+}
 
 pub trait FontBackend: Send {
     /// Resolve a generic family alias ("monospace", "sans-serif", …) to the
@@ -33,14 +80,17 @@ pub trait FontBackend: Send {
         prefer_monospace: bool,
         requested_weight: u16,
         italic: bool,
-    ) -> Option<FontMatch>;
+    ) -> Option<PlatformFontMatch>;
 
-    /// The font FILE the platform would open for a PRIMARY (family, weight,
-    /// slant) request — fontconfig's authoritative choice. This is what
-    /// `find-font` / GNU pick, and notably prefers a variable font over a
-    /// same-family static face. `None` on platforms without fontconfig (the
-    /// caller then keeps cosmic-text/fontdb's own selection).
-    fn find_primary_font_file(&self, family: &str, weight: u16, italic: bool) -> Option<String>;
+    /// The exact font the platform would open for a primary face request.
+    /// This is the same concrete entity `find-font` / GNU select, including
+    /// collection or variable-font named-instance identity.
+    fn match_primary_font(
+        &self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<PlatformFontMatch>;
 }
 
 /// Linux backend: fontconfig via [`crate::fontconfig`].
@@ -62,7 +112,7 @@ impl FontBackend for FontconfigBackend {
         prefer_monospace: bool,
         requested_weight: u16,
         italic: bool,
-    ) -> Option<FontMatch> {
+    ) -> Option<PlatformFontMatch> {
         crate::fontconfig::match_font_for_char(
             family,
             ch,
@@ -70,9 +120,15 @@ impl FontBackend for FontconfigBackend {
             requested_weight,
             italic,
         )
+        .and_then(PlatformFontMatch::from_fontconfig)
     }
 
-    fn find_primary_font_file(&self, family: &str, weight: u16, italic: bool) -> Option<String> {
+    fn match_primary_font(
+        &self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<PlatformFontMatch> {
         use neovm_core::face::{FontSlant, FontWeight};
         let slant = if italic {
             FontSlant::Italic
@@ -86,7 +142,17 @@ impl FontBackend for FontconfigBackend {
             Some(FontWeight::from_css_weight(weight)),
             Some(slant),
         )
-        .and_then(|matched| matched.file)
+        .and_then(|matched| {
+            PlatformFontMatch::from_fontconfig(crate::fontconfig::FontMatch {
+                family: matched.family,
+                file: matched.file,
+                face_index: matched.face_index,
+                variation_coords: matched.variation_coords,
+                postscript_name: matched.postscript_name,
+                weight: matched.weight,
+                slant: matched.slant,
+            })
+        })
     }
 }
 

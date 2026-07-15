@@ -66,27 +66,133 @@ impl FontVariationCoord {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedFontIdentity {
     pub backend: FontBackendKind,
-    /// Durable backend-specific key (Linux: `"{file_path}#{face_index}"`).
+    /// Durable backend-specific key (Linux:
+    /// `"{file_path}#{face_index}@{axis}={value_bits},..."`).
     pub stable_key: String,
     /// Absolute font file path when the backend exposes one.
     pub file_path: Option<String>,
-    /// Face index within a collection file (0 for single-face files).
-    pub face_index: u32,
+    /// Backend-native face selector.
+    ///
+    /// For Fontconfig/FreeType, bits 0-15 are the face index within the font
+    /// file and bits 16-30 select a named variable-font instance. Consumers
+    /// which use `fontdb`/`ttf-parser` must call [`Self::file_face_index`]
+    /// instead of passing this value through directly.
+    face_selector: BackendFontSelector,
     pub postscript_name: Option<String>,
     /// Variable font instance coordinates, if any.
     pub variation_coords: Vec<FontVariationCoord>,
 }
 
+/// Opaque selector understood by the platform font backend.
+///
+/// This is intentionally not interchangeable with a collection face index:
+/// Fontconfig/FreeType also encode a named variable-font instance in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct BackendFontSelector(u32);
+
+impl BackendFontSelector {
+    const fn from_raw(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    const fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 impl ResolvedFontIdentity {
     /// Linux fontconfig/fontdb identity from a file path + face index.
     pub fn from_file(file_path: &str, face_index: u32, postscript_name: Option<String>) -> Self {
+        Self::from_file_with_variations(file_path, face_index, postscript_name, Vec::new())
+    }
+
+    /// Linux fontconfig/fontdb identity for an exact variable-font instance.
+    ///
+    /// Variation coordinates are sorted by OpenType tag so backend ordering
+    /// cannot create distinct identities for the same instance. Their raw
+    /// floating-point bits are part of the stable key; renderer caches must
+    /// never alias two instances from the same file and collection index.
+    pub fn from_file_with_variations(
+        file_path: &str,
+        face_index: u32,
+        postscript_name: Option<String>,
+        mut variation_coords: Vec<FontVariationCoord>,
+    ) -> Self {
+        variation_coords.sort_unstable_by_key(|coord| (coord.tag, coord.value_bits));
+
+        let mut stable_key = format!("{file_path}#{face_index}");
+        if !variation_coords.is_empty() {
+            stable_key.push('@');
+            for (index, coord) in variation_coords.iter().enumerate() {
+                if index != 0 {
+                    stable_key.push(',');
+                }
+                let tag = coord.tag.to_be_bytes();
+                stable_key.extend(tag.into_iter().map(char::from));
+                stable_key.push('=');
+                stable_key.push_str(&format!("{:08x}", coord.value_bits));
+            }
+        }
+
         Self {
             backend: FontBackendKind::Fontconfig,
-            stable_key: format!("{file_path}#{face_index}"),
+            stable_key,
             file_path: Some(file_path.to_string()),
-            face_index,
+            face_selector: BackendFontSelector::from_raw(face_index),
+            postscript_name,
+            variation_coords,
+        }
+    }
+
+    /// Identity for a font already resident in the layout font database.
+    pub fn from_memory(
+        backend: FontBackendKind,
+        stable_key: String,
+        backend_selector: u32,
+        postscript_name: Option<String>,
+    ) -> Self {
+        Self {
+            backend,
+            stable_key,
+            file_path: None,
+            face_selector: BackendFontSelector::from_raw(backend_selector),
             postscript_name,
             variation_coords: Vec::new(),
+        }
+    }
+
+    /// The opaque selector value for diagnostics and platform-native APIs.
+    pub fn backend_selector(&self) -> u32 {
+        self.face_selector.raw()
+    }
+
+    /// Selector accepted by FreeType, including named-instance bits.
+    pub fn freetype_selector(&self) -> Option<u32> {
+        (self.backend == FontBackendKind::Fontconfig).then(|| self.face_selector.raw())
+    }
+
+    /// Face index understood by font-file parsers such as fontdb and
+    /// ttf-parser.
+    ///
+    /// Those parsers enumerate collection faces but do not enumerate
+    /// FreeType's named variable-font instances. Keeping this conversion at
+    /// the identity boundary prevents layout and rendering from confusing a
+    /// Fontconfig selector such as `0x0007_0000` with collection face 458752.
+    pub fn file_face_index(&self) -> u32 {
+        match self.backend {
+            FontBackendKind::Fontconfig => self.face_selector.raw() & 0x0000_ffff,
+            FontBackendKind::CoreText | FontBackendKind::DirectWrite => self.face_selector.raw(),
+        }
+    }
+
+    /// FreeType named-instance index carried by a Fontconfig selector.
+    pub fn named_instance_index(&self) -> Option<u32> {
+        match self.backend {
+            FontBackendKind::Fontconfig => {
+                let index = (self.face_selector.raw() >> 16) & 0x7fff;
+                (index != 0).then_some(index)
+            }
+            FontBackendKind::CoreText | FontBackendKind::DirectWrite => None,
         }
     }
 }

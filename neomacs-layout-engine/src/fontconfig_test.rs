@@ -288,6 +288,17 @@ fn style_weight_prefers_semibold_over_regular_alias() {
 }
 
 #[test]
+fn font_variations_parse_as_exact_opentype_coordinates() {
+    let coords = super::parse_font_variations("wght=650,wdth=90.5,broken,toolong=1");
+
+    assert_eq!(coords.len(), 2);
+    assert_eq!(coords[0].tag, u32::from_be_bytes(*b"wght"));
+    assert_eq!(coords[0].value(), 650.0);
+    assert_eq!(coords[1].tag, u32::from_be_bytes(*b"wdth"));
+    assert_eq!(coords[1].value(), 90.5);
+}
+
+#[test]
 fn spacing_categories_follow_gnu_numeric_ranges() {
     assert_eq!(normalize_spacing(0), Some(SpacingClass::Proportional));
     assert_eq!(normalize_spacing(90), Some(SpacingClass::Dual));
@@ -302,6 +313,8 @@ fn monospace_preference_penalizes_proportional_candidates() {
         matched: super::FontMatch {
             family: "Noto Sans Mono CJK SC".to_string(),
             file: None,
+            face_index: 0,
+            variation_coords: Vec::new(),
             postscript_name: None,
             weight: Some(700),
             slant: FontSlant::Normal,
@@ -316,6 +329,8 @@ fn monospace_preference_penalizes_proportional_candidates() {
         matched: super::FontMatch {
             family: "Noto Sans CJK SC".to_string(),
             file: None,
+            face_index: 0,
+            variation_coords: Vec::new(),
             postscript_name: None,
             weight: Some(700),
             slant: FontSlant::Normal,
@@ -359,6 +374,8 @@ fn family_affinity_prefers_requested_family_over_unrelated_fixed_pitch_fallback(
         matched: super::FontMatch {
             family: "Noto Sans Mono CJK SC".to_string(),
             file: None,
+            face_index: 0,
+            variation_coords: Vec::new(),
             postscript_name: None,
             weight: Some(400),
             slant: FontSlant::Normal,
@@ -373,6 +390,8 @@ fn family_affinity_prefers_requested_family_over_unrelated_fixed_pitch_fallback(
         matched: super::FontMatch {
             family: "Sarasa Fixed Slab SC".to_string(),
             file: None,
+            face_index: 0,
+            variation_coords: Vec::new(),
             postscript_name: None,
             weight: Some(400),
             slant: FontSlant::Normal,
@@ -427,6 +446,8 @@ fn find_font_candidate_prefers_the_requested_family_over_an_earlier_fallback() {
         matched: super::FontMatch {
             family: family.to_string(),
             file: Some(file.to_string()),
+            face_index: 0,
+            variation_coords: Vec::new(),
             postscript_name: None,
             weight: Some(400),
             slant: FontSlant::Normal,
@@ -466,6 +487,8 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
             matched: super::FontMatch {
                 family: "Noto Sans Mono CJK SC".to_string(),
                 file: Some("mono.ttc".to_string()),
+                face_index: 0,
+                variation_coords: Vec::new(),
                 postscript_name: Some("Mono-Medium".to_string()),
                 weight: Some(500),
                 slant: FontSlant::Normal,
@@ -480,6 +503,8 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
             matched: super::FontMatch {
                 family: "Noto Sans CJK JP".to_string(),
                 file: Some("sans.ttc".to_string()),
+                face_index: 0,
+                variation_coords: Vec::new(),
                 postscript_name: Some("Sans-Regular".to_string()),
                 weight: Some(400),
                 slant: FontSlant::Normal,
@@ -494,6 +519,8 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
             matched: super::FontMatch {
                 family: "Noto Sans Mono CJK SC".to_string(),
                 file: Some("mono.ttc".to_string()),
+                face_index: 0,
+                variation_coords: Vec::new(),
                 postscript_name: Some("Mono-Regular".to_string()),
                 weight: Some(400),
                 slant: FontSlant::Normal,

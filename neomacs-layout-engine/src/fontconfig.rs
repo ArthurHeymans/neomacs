@@ -15,6 +15,7 @@
 use fontconfig_sys::constants::{
     FC_RGBA, FC_RGBA_BGR, FC_RGBA_NONE, FC_RGBA_RGB, FC_RGBA_VBGR, FC_RGBA_VRGB,
 };
+use neomacs_display_protocol::font::FontVariationCoord;
 use neovm_core::emacs_core::font::alternative_font_families;
 use neovm_core::emacs_core::fontset::{
     FontSpecEntry, StoredFontSpec, fontset_generation, matching_entries_for_char,
@@ -51,6 +52,11 @@ static XFT_DPI: OnceLock<f32> = OnceLock::new();
 pub struct FontMatch {
     pub family: String,
     pub file: Option<String>,
+    /// Fontconfig's exact `FC_INDEX`, including the named-instance bits for
+    /// variable fonts (for example Noto Sans Bold is `7 << 16`).
+    pub face_index: u32,
+    /// Exact variable-font coordinates selected by Fontconfig.
+    pub variation_coords: Vec<FontVariationCoord>,
     pub postscript_name: Option<String>,
     pub weight: Option<u16>,
     pub slant: FontSlant,
@@ -90,6 +96,8 @@ pub struct SpecFontMatch {
     pub foundry: Option<String>,
     pub registry: Option<String>,
     pub file: Option<String>,
+    pub face_index: u32,
+    pub variation_coords: Vec<FontVariationCoord>,
     pub weight: Option<u16>,
     pub slant: FontSlant,
     pub width: Option<FontWidth>,
@@ -449,6 +457,8 @@ pub fn find_font_for_spec(
         foundry: candidate.foundry,
         registry: Some("iso10646-1".to_string()),
         file: candidate.matched.file,
+        face_index: candidate.matched.face_index,
+        variation_coords: candidate.matched.variation_coords,
         weight: candidate
             .weight_css
             .or_else(|| style_weight(&candidate.style)),
@@ -1076,7 +1086,7 @@ fn build_candidate_object_set(include_charset: bool) -> Option<FcObjectSetGuard>
         return None;
     }
     let guard = FcObjectSetGuard(object_set);
-    let keys: [&CStr; 15] = [
+    let keys: [&CStr; 17] = [
         fontconfig::FC_FOUNDRY,
         fontconfig::FC_FAMILY,
         fontconfig::FC_WEIGHT,
@@ -1088,10 +1098,12 @@ fn build_candidate_object_set(include_charset: bool) -> Option<FcObjectSetGuard>
         fontconfig::FC_STYLE,
         fontconfig::FC_FILE,
         fontconfig::FC_INDEX,
+        fontconfig::FC_POSTSCRIPT_NAME,
         fontconfig_sys::constants::FC_CAPABILITY,
         fontconfig::FC_FONTFORMAT,
         fontconfig::FC_COLOR,
         fontconfig::FC_VARIABLE,
+        fontconfig_sys::constants::FC_FONT_VARIATIONS,
     ];
     for key in keys {
         let ok = unsafe { fontconfig_sys::FcObjectSetAdd(object_set, key.as_ptr()) };
@@ -1133,6 +1145,20 @@ fn raw_pattern_int(pattern: *mut fontconfig_sys::FcPattern, key: &CStr) -> Optio
     (result == fontconfig_sys::FcResultMatch).then_some(value)
 }
 
+fn parse_font_variations(value: &str) -> Vec<FontVariationCoord> {
+    value
+        .split(',')
+        .filter_map(|assignment| {
+            let (tag, value) = assignment.trim().split_once('=')?;
+            let tag: [u8; 4] = tag.trim().as_bytes().try_into().ok()?;
+            let value = value.trim().parse::<f32>().ok()?;
+            value
+                .is_finite()
+                .then(|| FontVariationCoord::new(u32::from_be_bytes(tag), value))
+        })
+        .collect()
+}
+
 #[cfg(unix)]
 fn raw_pattern_bool(pattern: *mut fontconfig_sys::FcPattern, key: &CStr) -> Option<bool> {
     let mut value = 0;
@@ -1171,7 +1197,11 @@ fn listed_font_from_raw_pattern(pattern: *mut fontconfig_sys::FcPattern) -> Opti
         return None;
     }
     let file = raw_pattern_string(pattern, fontconfig::FC_FILE)?;
-    let _index = raw_pattern_int(pattern, fontconfig::FC_INDEX)?;
+    let face_index = u32::try_from(raw_pattern_int(pattern, fontconfig::FC_INDEX)?).ok()?;
+    let variation_coords =
+        raw_pattern_string(pattern, fontconfig_sys::constants::FC_FONT_VARIATIONS)
+            .map(|value| parse_font_variations(&value))
+            .unwrap_or_default();
     if raw_pattern_bool(pattern, fontconfig::FC_VARIABLE).unwrap_or(false)
         && raw_pattern_int(pattern, fontconfig::FC_WEIGHT).is_none()
     {
@@ -1185,6 +1215,8 @@ fn listed_font_from_raw_pattern(pattern: *mut fontconfig_sys::FcPattern) -> Opti
         matched: FontMatch {
             family: matched_family,
             file: Some(file),
+            face_index,
+            variation_coords,
             postscript_name: raw_pattern_string(pattern, fontconfig::FC_POSTSCRIPT_NAME),
             weight: weight_css,
             slant: raw_pattern_int(pattern, fontconfig::FC_SLANT)
@@ -1560,6 +1592,8 @@ fn fc_list_candidates(
                 matched: FontMatch {
                     family: matched_family,
                     file,
+                    face_index: 0,
+                    variation_coords: Vec::new(),
                     postscript_name,
                     weight: weight_css,
                     slant: style_slant(&style),

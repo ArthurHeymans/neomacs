@@ -26,7 +26,7 @@ fn identity_from_file_builds_stable_key() {
     let identity = ResolvedFontIdentity::from_file("/fonts/a.ttc", 3, None);
     assert_eq!(identity.stable_key, "/fonts/a.ttc#3");
     assert_eq!(identity.file_path.as_deref(), Some("/fonts/a.ttc"));
-    assert_eq!(identity.face_index, 3);
+    assert_eq!(identity.backend_selector(), 3);
     assert_eq!(identity.backend, FontBackendKind::Fontconfig);
 }
 
@@ -54,6 +54,54 @@ fn identity_equality_and_hash_are_field_exact() {
 fn variation_coord_round_trips_value() {
     let coord = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.5);
     assert_eq!(coord.value(), 650.5);
+}
+
+#[test]
+fn identity_stable_key_canonicalizes_variation_coordinates() {
+    let weight = FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 650.0);
+    let width = FontVariationCoord::new(u32::from_be_bytes(*b"wdth"), 90.0);
+
+    let a = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/a.ttf",
+        0,
+        Some("VariableA".to_string()),
+        vec![weight, width],
+    );
+    let reordered = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/a.ttf",
+        0,
+        Some("VariableA".to_string()),
+        vec![width, weight],
+    );
+    let different_weight = ResolvedFontIdentity::from_file_with_variations(
+        "/fonts/a.ttf",
+        0,
+        Some("VariableA".to_string()),
+        vec![FontVariationCoord::new(u32::from_be_bytes(*b"wght"), 700.0)],
+    );
+
+    assert_eq!(a, reordered);
+    assert_eq!(a.stable_key, reordered.stable_key);
+    assert!(a.stable_key.contains("wght=44228000"));
+    assert!(a.stable_key.contains("wdth=42b40000"));
+    assert_ne!(a, different_weight);
+    assert_ne!(a.stable_key, different_weight.stable_key);
+}
+
+#[test]
+fn fontconfig_identity_distinguishes_backend_and_file_face_indices() {
+    // FreeType/Fontconfig encode named instance 7 of collection face 3 as
+    // 0x0007_0003. fontdb/ttf-parser, however, can only open collection face
+    // 3 and apply the requested variation attributes separately.
+    let identity = ResolvedFontIdentity::from_file("/fonts/variable.ttc", 0x0007_0003, None);
+
+    assert_eq!(identity.backend_selector(), 0x0007_0003);
+    assert_eq!(identity.file_face_index(), 3);
+    assert_eq!(identity.named_instance_index(), Some(7));
+
+    let ordinary_collection_face = ResolvedFontIdentity::from_file("/fonts/ordinary.ttc", 12, None);
+    assert_eq!(ordinary_collection_face.file_face_index(), 12);
+    assert_eq!(ordinary_collection_face.named_instance_index(), None);
 }
 
 #[test]

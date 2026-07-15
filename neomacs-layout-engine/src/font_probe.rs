@@ -26,6 +26,8 @@
 //! The GSUB/GPOS `otf_capability` reader uses ttf-parser and is fully
 //! cross-platform (all three).
 
+use neomacs_display_protocol::font::FontVariationCoord;
+
 /// Metrics of one font file probed at an exact pixel size, shaped like the
 /// `font-info` elements GNU fills in `ftcrfont_open` + `font_open_entity`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,6 +124,56 @@ std::cfg_select! {
             weights.sort_unstable();
             weights.dedup();
             weights
+        }
+
+        /// Decode the complete axis tuple selected by a Fontconfig/FreeType
+        /// encoded face selector. FreeType numbers named instances from one in
+        /// bits 16-30; the raw collection face remains in bits 0-15.
+        pub fn named_instance_variation_coords(
+            file: &str,
+            face_selector: u32,
+        ) -> Vec<FontVariationCoord> {
+            use freetype::freetype_sys as ft;
+            let named_instance = ((face_selector >> 16) & 0x7fff) as usize;
+            if named_instance == 0 {
+                return Vec::new();
+            }
+            let Ok(library) = Library::init() else {
+                return Vec::new();
+            };
+            let Ok(face) = library.new_face(file, (face_selector & 0xffff) as isize) else {
+                return Vec::new();
+            };
+            unsafe {
+                let raw = face.raw() as *const ft::FT_FaceRec as *mut ft::FT_FaceRec;
+                let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
+                if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
+                    return Vec::new();
+                }
+                let axis_count = (*mm).num_axis as usize;
+                let style_count = (*mm).num_namedstyles as usize;
+                if named_instance > style_count {
+                    ft::FT_Done_MM_Var(library.raw(), mm);
+                    return Vec::new();
+                }
+                let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
+                let styles = std::slice::from_raw_parts((*mm).namedstyle, style_count);
+                let coords = std::slice::from_raw_parts(
+                    styles[named_instance - 1].coords,
+                    axis_count,
+                );
+                let result = axes
+                    .iter()
+                    .zip(coords)
+                    .filter_map(|(axis, value)| {
+                        (*value != axis.def).then(|| {
+                            FontVariationCoord::new(axis.tag as u32, *value as f32 / 65536.0)
+                        })
+                    })
+                    .collect();
+                ft::FT_Done_MM_Var(library.raw(), mm);
+                result
+            }
         }
 
         /// Set the `wght` design axis (OT axis units == CSS weight), leaving
@@ -229,6 +281,13 @@ std::cfg_select! {
 
         /// Non-unix stub: no FreeType, so no named-instance enumeration.
         pub fn named_instance_wght_values(_file: &str, _face_index: u32) -> Vec<u16> {
+            Vec::new()
+        }
+
+        pub fn named_instance_variation_coords(
+            _file: &str,
+            _face_selector: u32,
+        ) -> Vec<FontVariationCoord> {
             Vec::new()
         }
     }

@@ -3942,6 +3942,7 @@ dependencies = [
  "pollster",
  "swash",
  "tracing",
+ "tracing-test",
  "wgpu",
  "wgpu-hal",
 ]

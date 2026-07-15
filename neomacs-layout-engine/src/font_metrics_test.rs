@@ -15,7 +15,7 @@ fn realized_face_info(
     font_size: f32,
 ) -> Option<SelectedFontInfo> {
     let resolved = svc.resolve_font_for_char(ch, family, weight, italic);
-    let attrs = svc.build_attrs(&resolved.family, resolved.weight, resolved.slant);
+    let attrs = svc.build_attrs_for_resolved_char(&resolved)?;
     let line_height = font_size * 1.3;
     let metrics = safe_metrics(font_size, line_height);
 
@@ -50,9 +50,15 @@ fn realized_face_info(
             .and_then(crate::fontconfig::foundry_for_file),
         family: resolved.family.clone(),
         file,
-        postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
-        weight: FontWeight::from_css_weight(face.weight.0),
-        slant: font_slant_from_fontdb(face.style),
+        postscript_name: resolved
+            .platform
+            .as_ref()
+            .and_then(|matched| matched.identity.postscript_name.clone())
+            .or_else(|| Some(face.post_script_name.clone()).filter(|name| !name.is_empty())),
+        // A variable-font file exposes one base face through fontdb.  The
+        // backend-selected instance attributes remain the realized answer.
+        weight: FontWeight::from_css_weight(resolved.weight),
+        slant: resolved.slant,
         width: font_width_from_stretch_number(face.stretch.to_number()),
     })
 }
@@ -487,6 +493,42 @@ struct FixedPrimaryFontBackend {
 }
 
 #[cfg(unix)]
+struct FixedCharFontBackend {
+    matched: crate::font_backend::PlatformFontMatch,
+}
+
+#[cfg(unix)]
+impl crate::font_backend::FontBackend for FixedCharFontBackend {
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_string()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        true
+    }
+
+    fn match_font_for_char(
+        &self,
+        _family: &str,
+        _ch: char,
+        _prefer_monospace: bool,
+        _requested_weight: u16,
+        _italic: bool,
+    ) -> Option<crate::font_backend::PlatformFontMatch> {
+        Some(self.matched.clone())
+    }
+
+    fn match_primary_font(
+        &self,
+        _family: &str,
+        _weight: u16,
+        _italic: bool,
+    ) -> Option<crate::font_backend::PlatformFontMatch> {
+        None
+    }
+}
+
+#[cfg(unix)]
 impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
     fn resolve_family(&self, family: &str) -> String {
         family.to_string()
@@ -503,12 +545,26 @@ impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
         _prefer_monospace: bool,
         _requested_weight: u16,
         _italic: bool,
-    ) -> Option<crate::fontconfig::FontMatch> {
+    ) -> Option<crate::font_backend::PlatformFontMatch> {
         None
     }
 
-    fn find_primary_font_file(&self, _family: &str, _weight: u16, _italic: bool) -> Option<String> {
-        Some(self.file.clone())
+    fn match_primary_font(
+        &self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<crate::font_backend::PlatformFontMatch> {
+        Some(crate::font_backend::PlatformFontMatch {
+            identity: ResolvedFontIdentity::from_file(&self.file, 0, None),
+            family: family.to_string(),
+            weight: Some(weight),
+            slant: if italic {
+                FontSlant::Italic
+            } else {
+                FontSlant::Normal
+            },
+        })
     }
 }
 
@@ -835,101 +891,48 @@ fn opentype_width_class_maps_to_emacs_width_names() {
 // it proves layout and rendering will agree.
 // ---------------------------------------------------------------
 
-/// Measure a character using a raw FontSystem + Buffer, exactly
-/// as the render thread's rasterize_text() does in glyph_atlas.rs.
-fn measure_with_raw_fontsystem(
-    font_system: &mut FontSystem,
-    font_file_cache: &mut FontFileCache,
+/// Measure through a second font system using only the exact identity that
+/// layout published. This is the render-boundary contract: the consumer may
+/// translate a backend selector for its font parser, but must not repeat font
+/// selection from family attributes.
+fn measure_with_resolved_fontsystem(
+    layout: &mut FontMetricsService,
+    renderer: &mut FontMetricsService,
     ch: char,
     requested_family: &str,
-    weight: Weight,
+    weight: u16,
     italic: bool,
     font_size: f32,
 ) -> f32 {
-    let requested_slant = if italic {
-        FontSlant::Italic
+    let font = if ch.is_ascii() {
+        layout.resolved_font_for_face(requested_family, weight, italic, font_size)
     } else {
-        FontSlant::Normal
-    };
-    let (effective_family, effective_weight, effective_slant) = if ch.is_ascii() {
-        (
-            requested_family.to_string(),
-            crate::font_match::resolve_weight_in_family(
-                font_system,
-                requested_family,
-                weight.0,
-                italic,
-            ),
-            requested_slant,
-        )
-    } else {
-        let prefer_monospace = crate::fontconfig::family_prefers_monospace(requested_family);
-        crate::fontconfig::match_font_for_char(
-            requested_family,
-            ch,
-            prefer_monospace,
-            weight.0,
-            italic,
-        )
-        .map(|matched| {
-            if let Some(path) = matched.file.as_deref() {
-                let _ = font_file_cache.prime_file(font_system, path);
-            }
-            let effective_family = matched.family;
-            (
-                effective_family.clone(),
-                crate::font_match::resolve_weight_in_family(
-                    font_system,
-                    &effective_family,
-                    weight.0,
-                    italic,
-                ),
-                requested_slant,
-            )
-        })
-        .unwrap_or_else(|| {
-            (
-                requested_family.to_string(),
-                crate::font_match::resolve_weight_in_family(
-                    font_system,
-                    requested_family,
-                    weight.0,
-                    italic,
-                ),
-                requested_slant,
-            )
-        })
-    };
-    let mut attrs = Attrs::new();
-    attrs = match crate::font_match::select_cosmic_family(font_system, &effective_family) {
-        crate::font_match::CosmicFamilySelection::Name(family) => {
-            attrs.family(Family::Name(Box::leak(family.to_string().into_boxed_str())))
-        }
-        crate::font_match::CosmicFamilySelection::Monospace => attrs.family(Family::Monospace),
-        crate::font_match::CosmicFamilySelection::Serif => attrs.family(Family::Serif),
-        crate::font_match::CosmicFamilySelection::SansSerif => attrs.family(Family::SansSerif),
-    };
-    attrs = attrs.weight(Weight(effective_weight));
-    if let Some(style) = font_slant_to_cosmic_style(effective_slant) {
-        attrs = attrs.style(style);
+        layout.resolved_font_for_char(ch, requested_family, weight, italic, font_size)
     }
-    let line_height = font_size * 1.3;
-    let metrics = safe_metrics(font_size, line_height);
-    let mut buffer = Buffer::new(font_system, metrics);
-    buffer.set_size(font_system, Some(font_size * 8.0), Some(font_size * 3.0));
-    let text = String::from(ch);
-    buffer.set_text(
-        font_system,
-        &text,
-        &attrs,
-        cosmic_text::Shaping::Advanced,
-        None,
-    );
-    buffer.shape_until_scroll(font_system, false);
-    buffer
-        .layout_runs()
-        .find_map(|run| run.glyphs.iter().next().map(|glyph| glyph.w))
-        .unwrap_or(0.0)
+    .unwrap_or_else(|| {
+        panic!(
+            "layout must publish an exact font for render-boundary test: {} U+{:04X} family={requested_family} weight={weight} italic={italic}",
+            ch.escape_default(),
+            ch as u32
+        )
+    });
+    let slant = match font.slant {
+        FontSlantKind::Normal => FontSlant::Normal,
+        FontSlantKind::Italic => FontSlant::Italic,
+        FontSlantKind::Oblique => FontSlant::Oblique,
+    };
+    let resolved = ResolvedCharFont {
+        family: font.family.clone(),
+        weight: font.weight,
+        slant,
+        platform: Some(crate::font_backend::PlatformFontMatch {
+            identity: font.identity,
+            family: font.family,
+            weight: Some(font.weight),
+            slant,
+        }),
+    };
+    renderer.measure_resolved_char(ch, &resolved, font_size)
 }
 
 #[test]
@@ -937,9 +940,8 @@ fn two_fontsystems_produce_identical_widths() {
     // FontMetricsService (layout thread)
     let mut svc = make_svc();
 
-    // Independent FontSystem (simulating render thread)
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    // Independent font system (simulating the render thread).
+    let mut renderer = make_svc();
 
     let test_cases: &[(&str, u16)] = &[
         ("JetBrains Mono", 400),
@@ -953,12 +955,12 @@ fn two_fontsystems_produce_identical_widths() {
         for cp in 32u32..127 {
             let ch = char::from_u32(cp).unwrap();
             let layout_w = svc.char_width(ch, family_str, weight, false, 14.0);
-            let render_w = measure_with_raw_fontsystem(
-                &mut render_fs,
-                &mut render_font_file_cache,
+            let render_w = measure_with_resolved_fontsystem(
+                &mut svc,
+                &mut renderer,
                 ch,
                 family_str,
-                Weight(weight),
+                weight,
                 false,
                 14.0,
             );
@@ -974,18 +976,17 @@ fn two_fontsystems_produce_identical_widths() {
 #[test]
 fn two_fontsystems_identical_for_cjk() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     let cjk_chars = ['漢', '字', '日', '本', '語', '中', '文'];
     for &ch in &cjk_chars {
         let layout_w = svc.char_width(ch, "monospace", 400, false, 14.0);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             "monospace",
-            Weight(400),
+            400,
             false,
             14.0,
         );
@@ -1011,8 +1012,7 @@ fn explicit_mono_family_cjk_fallback_stays_wider_than_ascii() {
 #[test]
 fn explicit_mono_family_cjk_matches_renderer_across_face_matrix_sizes() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
     let families = [
         "JetBrains Mono",
         "Hack",
@@ -1026,12 +1026,12 @@ fn explicit_mono_family_cjk_matches_renderer_across_face_matrix_sizes() {
         for size in sizes {
             for weight in weights {
                 let layout_w = svc.char_width('好', family, weight, false, size);
-                let render_w = measure_with_raw_fontsystem(
-                    &mut render_fs,
-                    &mut render_font_file_cache,
+                let render_w = measure_with_resolved_fontsystem(
+                    &mut svc,
+                    &mut renderer,
                     '好',
                     family,
-                    Weight(weight),
+                    weight,
                     false,
                     size,
                 );
@@ -1095,8 +1095,7 @@ fn select_font_for_char_resolves_generic_ascii_family() {
 #[test]
 fn two_fontsystems_identical_for_missing_font() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     // Fonts that definitely don't exist on the system
     let fake_families = [
@@ -1111,12 +1110,12 @@ fn two_fontsystems_identical_for_missing_font() {
         for cp in 32u32..127 {
             let ch = char::from_u32(cp).unwrap();
             let layout_w = svc.char_width(ch, family_str, 400, false, 14.0);
-            let render_w = measure_with_raw_fontsystem(
-                &mut render_fs,
-                &mut render_font_file_cache,
+            let render_w = measure_with_resolved_fontsystem(
+                &mut svc,
+                &mut renderer,
                 ch,
                 family_str,
-                Weight(400),
+                400,
                 false,
                 14.0,
             );
@@ -1140,8 +1139,7 @@ fn two_fontsystems_identical_for_missing_font() {
 #[test]
 fn two_fontsystems_identical_across_weights() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     // CSS font weights: 100=Thin, 200=ExtraLight, 300=Light,
     // 400=Normal, 500=Medium, 600=SemiBold, 700=Bold, 800=ExtraBold, 900=Black
@@ -1153,12 +1151,12 @@ fn two_fontsystems_identical_across_weights() {
             for cp in 32u32..127 {
                 let ch = char::from_u32(cp).unwrap();
                 let layout_w = svc.char_width(ch, family, weight, false, 14.0);
-                let render_w = measure_with_raw_fontsystem(
-                    &mut render_fs,
-                    &mut render_font_file_cache,
+                let render_w = measure_with_resolved_fontsystem(
+                    &mut svc,
+                    &mut renderer,
                     ch,
                     family,
-                    Weight(weight),
+                    weight,
                     false,
                     14.0,
                 );
@@ -1175,8 +1173,7 @@ fn two_fontsystems_identical_across_weights() {
 #[test]
 fn two_fontsystems_identical_across_styles() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     let families = [
         "JetBrains Mono",
@@ -1193,12 +1190,12 @@ fn two_fontsystems_identical_across_styles() {
                 for cp in 32u32..127 {
                     let ch = char::from_u32(cp).unwrap();
                     let layout_w = svc.char_width(ch, family, weight, italic, 14.0);
-                    let render_w = measure_with_raw_fontsystem(
-                        &mut render_fs,
-                        &mut render_font_file_cache,
+                    let render_w = measure_with_resolved_fontsystem(
+                        &mut svc,
+                        &mut renderer,
                         ch,
                         family,
-                        Weight(weight),
+                        weight,
                         italic,
                         14.0,
                     );
@@ -1216,19 +1213,18 @@ fn two_fontsystems_identical_across_styles() {
 #[test]
 fn two_fontsystems_identical_at_multiple_sizes() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     for font_size in [10.0, 14.0, 18.0, 24.0, 36.0] {
         for cp in 32u32..127 {
             let ch = char::from_u32(cp).unwrap();
             let layout_w = svc.char_width(ch, "JetBrains Mono", 400, false, font_size);
-            let render_w = measure_with_raw_fontsystem(
-                &mut render_fs,
-                &mut render_font_file_cache,
+            let render_w = measure_with_resolved_fontsystem(
+                &mut svc,
+                &mut renderer,
                 ch,
                 "JetBrains Mono",
-                Weight(400),
+                400,
                 false,
                 font_size,
             );
@@ -1298,18 +1294,17 @@ fn buffer_size_does_not_affect_width() {
 #[test]
 fn two_fontsystems_identical_at_extreme_sizes() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     for font_size in [1.0, 4.0, 6.0, 72.0, 144.0] {
         for &ch in &['A', 'M', 'i', '.', ' '] {
             let layout_w = svc.char_width(ch, "monospace", 400, false, font_size);
-            let render_w = measure_with_raw_fontsystem(
-                &mut render_fs,
-                &mut render_font_file_cache,
+            let render_w = measure_with_resolved_fontsystem(
+                &mut svc,
+                &mut renderer,
                 ch,
                 "monospace",
-                Weight(400),
+                400,
                 false,
                 font_size,
             );
@@ -1336,18 +1331,17 @@ fn two_fontsystems_identical_at_extreme_sizes() {
 #[test]
 fn two_fontsystems_identical_for_emoji() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     let emoji = ['😀', '🎉', '❤', '👍', '🔥', '⭐', '✅', '🚀'];
     for &ch in &emoji {
         let layout_w = svc.char_width(ch, "monospace", 400, false, 14.0);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             "monospace",
-            Weight(400),
+            400,
             false,
             14.0,
         );
@@ -1372,8 +1366,7 @@ fn two_fontsystems_identical_for_emoji() {
 #[test]
 fn two_fontsystems_identical_for_zero_width_chars() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     let special: &[(char, &str)] = &[
         ('\u{200B}', "zero-width space"),
@@ -1385,12 +1378,12 @@ fn two_fontsystems_identical_for_zero_width_chars() {
 
     for &(ch, name) in special {
         let layout_w = svc.char_width(ch, "monospace", 400, false, 14.0);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             "monospace",
-            Weight(400),
+            400,
             false,
             14.0,
         );
@@ -1407,10 +1400,10 @@ fn two_fontsystems_identical_for_zero_width_chars() {
 // ---------------------------------------------------------------
 
 #[test]
+#[tracing_test::traced_test]
 fn two_fontsystems_identical_for_rtl() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     let rtl: &[(char, &str)] = &[
         ('א', "Hebrew Alef"),
@@ -1422,12 +1415,12 @@ fn two_fontsystems_identical_for_rtl() {
 
     for &(ch, name) in rtl {
         let layout_w = svc.char_width(ch, "monospace", 400, false, 14.0);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             "monospace",
-            Weight(400),
+            400,
             false,
             14.0,
         );
@@ -1452,8 +1445,7 @@ fn two_fontsystems_identical_for_rtl() {
 #[test]
 fn two_fontsystems_identical_for_combining_marks() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     // Standalone combining marks — these may have zero advance (expected),
     // but both systems must agree
@@ -1468,12 +1460,12 @@ fn two_fontsystems_identical_for_combining_marks() {
 
     for &(ch, name) in combining {
         let layout_w = svc.char_width(ch, "monospace", 400, false, 14.0);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             "monospace",
-            Weight(400),
+            400,
             false,
             14.0,
         );
@@ -1500,8 +1492,7 @@ fn two_fontsystems_identical_for_combining_marks() {
 #[test]
 fn two_fontsystems_identical_mixed_heights_in_line() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     // Each tuple: (char, family, weight, italic, font_size)
     // Simulates a real line: "Hello WORLD tiny Bold"
@@ -1549,12 +1540,12 @@ fn two_fontsystems_identical_mixed_heights_in_line() {
 
     for (i, &(ch, family, weight, italic, font_size)) in line.iter().enumerate() {
         let layout_w = svc.char_width(ch, family, weight, italic, font_size);
-        let render_w = measure_with_raw_fontsystem(
-            &mut render_fs,
-            &mut render_font_file_cache,
+        let render_w = measure_with_resolved_fontsystem(
+            &mut svc,
+            &mut renderer,
             ch,
             family,
-            Weight(weight),
+            weight,
             italic,
             font_size,
         );
@@ -1589,8 +1580,7 @@ fn two_fontsystems_identical_mixed_heights_in_line() {
 #[test]
 fn two_fontsystems_identical_org_heading_sizes() {
     let mut svc = make_svc();
-    let mut render_fs = FontSystem::new();
-    let mut render_font_file_cache = FontFileCache::new();
+    let mut renderer = make_svc();
 
     // Simulates org-mode: "* H1  ** H2  *** H3  body"
     // with decreasing :height per heading level
@@ -1608,12 +1598,12 @@ fn two_fontsystems_identical_org_heading_sizes() {
     for (seg_text, family, weight, font_size) in segments {
         for ch in seg_text.chars() {
             let layout_w = svc.char_width(ch, family, *weight, false, *font_size);
-            let render_w = measure_with_raw_fontsystem(
-                &mut render_fs,
-                &mut render_font_file_cache,
+            let render_w = measure_with_resolved_fontsystem(
+                &mut svc,
+                &mut renderer,
                 ch,
                 family,
-                Weight(*weight),
+                *weight,
                 false,
                 *font_size,
             );
@@ -1669,7 +1659,7 @@ fn resolved_font_for_face_yields_exact_file_identity() {
     );
     assert_eq!(
         font.identity.stable_key,
-        format!("{path}#{}", font.identity.face_index)
+        format!("{path}#{}", font.identity.backend_selector())
     );
     assert_eq!(
         font.source,
@@ -1692,6 +1682,111 @@ fn resolved_font_for_face_matches_char_selection_for_ascii() {
     assert_eq!(face_font.identity.file_path, char_font.file);
     assert_eq!(face_font.postscript_name, char_font.postscript_name);
     assert_eq!(face_font.family, char_font.family);
+}
+
+#[cfg(unix)]
+#[test]
+#[tracing_test::traced_test]
+fn resolved_font_for_face_preserves_platform_named_instance() {
+    use neovm_core::face::{FontSlant, FontWeight};
+
+    let Some(platform) = crate::fontconfig::find_font_for_spec(
+        Some("Noto Sans"),
+        None,
+        None,
+        Some(FontWeight::Bold),
+        Some(FontSlant::Normal),
+    ) else {
+        tracing::info!("skipping: Noto Sans is not installed");
+        return;
+    };
+    let Some(platform_file) = platform.file.as_deref() else {
+        tracing::info!("skipping: platform did not expose the matched font file");
+        return;
+    };
+    let platform_postscript = platform
+        .postscript_name
+        .expect("an installed Fontconfig match must preserve its PostScript name");
+    if !platform_postscript.to_ascii_lowercase().contains("bold") {
+        tracing::info!("skipping: Noto Sans has no distinct bold instance");
+        return;
+    }
+
+    let mut svc = make_svc();
+    // Frame face realization currently primes the platform file before the
+    // finished-frame font table is materialized.  The exact realization
+    // contract must survive that ordinary pipeline ordering.
+    svc.resolve_family("Noto Sans", Some(platform_file));
+    let regular = svc
+        .resolved_font_for_face("Noto Sans", 400, false, 12.0)
+        .expect("Noto Sans Regular resolves before its derived bold face");
+    assert_ne!(
+        regular.postscript_name.as_deref(),
+        Some(platform_postscript.as_str()),
+        "test setup requires distinct regular and bold instances"
+    );
+    let resolved = svc
+        .resolved_font_for_face("Noto Sans", 700, false, 12.0)
+        .expect("Noto Sans Bold resolves to a concrete font instance");
+    let selected = svc
+        .select_font_for_char('A', "Noto Sans", 700, false, 12.0)
+        .expect("font-at style query resolves the same concrete instance");
+
+    assert_eq!(
+        resolved.postscript_name.as_deref(),
+        Some(platform_postscript.as_str()),
+        "the realized face must preserve the platform-selected named instance"
+    );
+    assert_eq!(resolved.weight, 700);
+    assert_eq!(
+        resolved
+            .identity
+            .variation_coords
+            .iter()
+            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .map(|coord| coord.value()),
+        Some(700.0),
+        "the FreeType named-instance selector must decode to its weight axis"
+    );
+    assert_eq!(
+        selected.postscript_name.as_deref(),
+        Some(platform_postscript.as_str()),
+        "character selection must reuse the face's primary realization"
+    );
+    assert_eq!(selected.weight, FontWeight::Bold);
+    let metrics = svc.font_metrics("Noto Sans", 700, false, 12.0);
+    let explicit_weight = resolved
+        .identity
+        .variation_coords
+        .iter()
+        .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+        .map(|coord| coord.value());
+    let exact_metrics = crate::font_probe::probe_font_px_metrics(
+        platform_file,
+        resolved
+            .identity
+            .freetype_selector()
+            .expect("Fontconfig identity has a FreeType selector"),
+        12,
+        explicit_weight,
+    )
+    .expect("FreeType opens the exact named instance");
+    assert_eq!(metrics.ascent, exact_metrics.ascent as f32);
+    assert_eq!(metrics.descent, exact_metrics.descent as f32);
+    assert_eq!(metrics.line_height, exact_metrics.height as f32);
+    assert_eq!(
+        resolved.identity.backend_selector(),
+        platform.face_index,
+        "the exact platform named-instance index must cross the realization boundary"
+    );
+    assert_ne!(
+        regular.identity, resolved.identity,
+        "regular and bold instances in one variable-font file need distinct exact identities"
+    );
+    assert_ne!(
+        regular.id, resolved.id,
+        "the frame font table must not alias regular and bold instances"
+    );
 }
 
 #[test]
@@ -1881,6 +1976,67 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
         .select_font_for_char('好', "Monospace", 400, false, 14.0)
         .expect("char font");
     assert_eq!(font.identity.file_path, selected.file);
+}
+
+#[cfg(unix)]
+#[test]
+#[tracing_test::traced_test]
+fn resolved_font_for_char_preserves_platform_collection_face() {
+    let platform = crate::fontconfig::match_font_for_char("Monospace", '好', true, 400, false)
+        .expect("installed CJK fallback");
+    let Some(platform_file) = platform.file.as_deref() else {
+        tracing::info!("skipping: fontconfig CJK fallback has no file identity");
+        return;
+    };
+    if platform.face_index == 0 {
+        tracing::info!("skipping: installed CJK fallback is not a collection face");
+        return;
+    }
+
+    let mut svc = make_svc();
+    let resolved = svc
+        .resolved_font_for_char('好', "Monospace", 400, false, 14.0)
+        .expect("resolved CJK fallback");
+
+    assert_eq!(resolved.identity.file_path.as_deref(), Some(platform_file));
+    assert_eq!(
+        resolved.identity.backend_selector(),
+        platform.face_index,
+        "the layout answer must preserve Fontconfig's exact TTC face"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn resolved_font_for_char_treats_platform_identity_as_authoritative() {
+    let platform = crate::fontconfig::match_font_for_char("Monospace", '好', true, 400, false)
+        .expect("installed CJK fallback");
+    let platform_file = platform.file.expect("fontconfig file identity");
+    let identity = ResolvedFontIdentity::from_file_with_variations(
+        &platform_file,
+        platform.face_index,
+        platform.postscript_name.clone(),
+        platform.variation_coords,
+    );
+    let expected_identity = identity.clone();
+
+    let mut svc = make_svc();
+    svc.backend = Box::new(FixedCharFontBackend {
+        matched: crate::font_backend::PlatformFontMatch {
+            identity,
+            // Native backends are allowed to publish a selector/display name
+            // that fontdb does not know. The exact identity must still win.
+            family: "neomacs-platform-display-alias".to_string(),
+            weight: platform.weight,
+            slant: platform.slant,
+        },
+    });
+
+    let resolved = svc
+        .resolved_font_for_char('好', "Monospace", 400, false, 14.0)
+        .expect("resolved exact platform fallback");
+
+    assert_eq!(resolved.identity, expected_identity);
 }
 
 #[test]

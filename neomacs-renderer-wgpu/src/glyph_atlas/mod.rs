@@ -20,7 +20,7 @@ use cosmic_text::{
 
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::font::{
-    CharFontTable, ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph,
+    CharFontTable, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph,
     ShapedClusterTable,
 };
 use neomacs_layout_engine::font_loader::FontFileCache;
@@ -328,9 +328,6 @@ pub struct WgpuGlyphAtlas {
     /// cosmic-text shapes with THAT exact file, matching the font layout
     /// resolved. See [`Self::pin_file_as_family`].
     pinned_families: HashMap<String, &'static str>,
-    /// Cache: font file path → whether it is a variable font (has fvar
-    /// named instances). Only variable resolved fonts are pinned.
-    variable_file_cache: HashMap<String, bool>,
     /// Total GUI text lookups whose face had no layout-resolved font and no
     /// font-file bridge — i.e. the renderer had to make a semantic font
     /// decision on its own (design §10 "emergency fallback"). Must stay 0
@@ -404,7 +401,6 @@ impl WgpuGlyphAtlas {
             frame_shaped_clusters: ShapedClusterTable::new(),
             resolved_fontdb_ids: HashMap::new(),
             pinned_families: HashMap::new(),
-            variable_file_cache: HashMap::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
@@ -919,6 +915,21 @@ impl WgpuGlyphAtlas {
         char_fonts: &CharFontTable,
         shaped_clusters: &ShapedClusterTable,
     ) {
+        if fonts.iter().any(|(id, incoming)| {
+            self.frame_fonts
+                .get(id)
+                .is_some_and(|existing| existing.identity != incoming.identity)
+        }) {
+            // ResolvedFontId is stable within one layout resolver. If a
+            // resolver restart reuses an id, every cache that hashed or mapped
+            // that id belongs to the old identity and must be invalidated
+            // before the replacement becomes visible.
+            tracing::warn!(
+                target: "font_boundary",
+                "resolved font id was reused for a different identity; clearing renderer font caches"
+            );
+            self.clear();
+        }
         for (id, font) in fonts {
             self.frame_fonts.insert(*id, font.clone());
         }
@@ -969,17 +980,6 @@ impl WgpuGlyphAtlas {
     /// fontdb face the layout metrics came from. Primes the identity's font
     /// file first. No fontconfig, no weight re-resolution: the render thread
     /// makes no semantic font decision here.
-    /// Whether `file` is a variable font (has fvar named instances). Cached.
-    fn file_is_variable(&mut self, file: &str) -> bool {
-        if let Some(&cached) = self.variable_file_cache.get(file) {
-            return cached;
-        }
-        let is_var =
-            !neomacs_layout_engine::font_probe::named_instance_wght_values(file, 0).is_empty();
-        self.variable_file_cache.insert(file.to_string(), is_var);
-        is_var
-    }
-
     /// Register `file`[`face_index`] under a unique synthetic family so
     /// cosmic-text shapes with THAT exact file — the one layout resolved —
     /// instead of re-picking a same-family static face. Mirrors the layout
@@ -996,12 +996,12 @@ impl WgpuGlyphAtlas {
             let target = ids
                 .iter()
                 .copied()
-                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index))
-                .or_else(|| ids.first().copied())?;
-            let mut info = db.face(target)?.clone();
+                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index));
+            let info = target.and_then(|id| db.face(id).cloned());
             for id in &ids {
                 db.remove_face(*id);
             }
+            let mut info = info?;
             info.families = vec![(synthetic.clone(), fontdb::Language::English_UnitedStates)];
             db.push_face_info(info);
         }
@@ -1010,52 +1010,37 @@ impl WgpuGlyphAtlas {
         Some(interned)
     }
 
-    fn exact_attrs_for_resolved_font(
-        &mut self,
-        font: &ResolvedFont,
-        style: Option<Style>,
-    ) -> Attrs<'static> {
-        if let Some(path) = font.identity.file_path.as_deref() {
-            let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
-            // Variable fonts: pin the exact file so cosmic-text uses it (and
-            // applies the weight axis) rather than a same-family static face,
-            // keeping the render in sync with the font layout resolved.
-            if self.file_is_variable(path)
-                && let Some(synthetic) = self.pin_file_as_family(path, font.identity.face_index)
-            {
-                let mut attrs = Attrs::new()
-                    .family(Family::Name(synthetic))
-                    .weight(Weight(font.weight));
-                if let Some(style) = style {
-                    attrs = attrs.style(style);
-                }
-                return attrs;
-            }
-        }
-        let mut attrs = Attrs::new();
-        attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
-            &self.font_system,
-            &font.family,
-        ) {
-            neomacs_layout_engine::font_match::CosmicFamilySelection::Name(name) => {
-                let interned = self.intern_family(name);
-                attrs.family(Family::Name(interned))
-            }
-            neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
-                attrs.family(Family::Monospace)
-            }
-            neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
-                attrs.family(Family::Serif)
-            }
-            neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
-                attrs.family(Family::SansSerif)
-            }
+    fn exact_attrs_for_resolved_font(&mut self, font: &ResolvedFont) -> Option<Attrs<'static>> {
+        let path = font.identity.file_path.as_deref()?;
+        let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
+        // Every resolved file face is exact, not merely variable fonts: TTC
+        // faces and same-family static files are equally capable of being
+        // re-selected incorrectly by semantic attributes.
+        let synthetic = self.pin_file_as_family(path, font.identity.file_face_index())?;
+        let mut attrs = Attrs::new()
+            .family(Family::Name(synthetic))
+            .weight(Weight(font.weight));
+        attrs = match font.slant {
+            FontSlantKind::Normal => attrs,
+            FontSlantKind::Italic => attrs.style(Style::Italic),
+            FontSlantKind::Oblique => attrs.style(Style::Oblique),
         };
-        attrs = attrs.weight(Weight(font.weight));
-        if let Some(style) = style {
-            attrs = attrs.style(style);
+        Some(attrs)
+    }
+
+    fn record_emergency_font_fallback(&mut self, face: &Face, reason: &'static str) {
+        self.unresolved_face_text_total += 1;
+        if self.unresolved_face_warned.insert(face.id) {
+            tracing::warn!(
+                target: "font_boundary",
+                face_id = face.id.get(),
+                family = %face.font_family,
+                weight = face.font_weight,
+                lisp_name = face.lisp_name.as_deref().unwrap_or(""),
+                reason,
+                "resolved GUI font could not be replayed; using emergency font fallback"
+            );
         }
-        attrs
     }
 
     fn intern_family(&mut self, family: &str) -> &'static str {
@@ -1089,8 +1074,8 @@ impl WgpuGlyphAtlas {
                 let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
             }
             let mut effective_family = f.font_family.clone();
-            let effective_weight = f.font_weight;
-            let effective_style = if requested_italic {
+            let mut effective_weight = f.font_weight;
+            let mut effective_style = if requested_italic {
                 Some(Style::Italic)
             } else {
                 None
@@ -1114,7 +1099,17 @@ impl WgpuGlyphAtlas {
                     .and_then(|id| self.frame_fonts.get(id))
                     .cloned()
                 {
-                    return self.exact_attrs_for_resolved_font(&font, effective_style);
+                    if let Some(attrs) = self.exact_attrs_for_resolved_font(&font) {
+                        return attrs;
+                    }
+                    effective_family = font.family;
+                    effective_weight = font.weight;
+                    effective_style = match font.slant {
+                        FontSlantKind::Normal => None,
+                        FontSlantKind::Italic => Some(Style::Italic),
+                        FontSlantKind::Oblique => Some(Style::Oblique),
+                    };
+                    self.record_emergency_font_fallback(f, "exact char font is not openable");
                 }
                 // Per-character coverage fallback (CJK/emoji/symbols). This
                 // stays a render-side decision until shaped runs carry
@@ -1145,7 +1140,17 @@ impl WgpuGlyphAtlas {
             } else if let Some(font) = resolved.as_ref().cloned() {
                 // Exact face-primary path: no per-char fallback needed and
                 // layout resolved this face's font — replay it verbatim.
-                return self.exact_attrs_for_resolved_font(&font, effective_style);
+                if let Some(attrs) = self.exact_attrs_for_resolved_font(&font) {
+                    return attrs;
+                }
+                effective_family = font.family;
+                effective_weight = font.weight;
+                effective_style = match font.slant {
+                    FontSlantKind::Normal => None,
+                    FontSlantKind::Italic => Some(Style::Italic),
+                    FontSlantKind::Oblique => Some(Style::Oblique),
+                };
+                self.record_emergency_font_fallback(f, "exact primary font is not openable");
             }
 
             if resolved.is_none() && prime_path.is_none() {
@@ -1153,17 +1158,7 @@ impl WgpuGlyphAtlas {
                 // no resolved font identity and no font-file bridge, so the
                 // semantic selection below is the renderer's own decision
                 // (design §10). Normal GUI text must never take this path.
-                self.unresolved_face_text_total += 1;
-                if self.unresolved_face_warned.insert(f.id) {
-                    tracing::warn!(
-                        target: "font_boundary",
-                        face_id = f.id.get(),
-                        family = %f.font_family,
-                        weight = f.font_weight,
-                        lisp_name = f.lisp_name.as_deref().unwrap_or(""),
-                        "unresolved GUI text reached render thread; using emergency font fallback"
-                    );
-                }
+                self.record_emergency_font_fallback(f, "layout published no font identity");
             }
 
             attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
@@ -1274,7 +1269,7 @@ impl WgpuGlyphAtlas {
         let _ = self
             .font_file_cache
             .prime_file(&mut self.font_system, &path);
-        let face_index = font.identity.face_index;
+        let face_index = font.identity.file_face_index();
         let found = self.font_system.db().faces().find_map(|face| {
             let source_path = match &face.source {
                 fontdb::Source::File(p) | fontdb::Source::SharedFile(p, _) => p,
@@ -1293,7 +1288,6 @@ impl WgpuGlyphAtlas {
     fn rasterize_resolved_cluster(
         &mut self,
         glyphs: &[ResolvedGlyph],
-        requested_weight: u16,
         font_size: f32,
         x_bin: SubpixelBin,
         y_bin: SubpixelBin,
@@ -1305,6 +1299,7 @@ impl WgpuGlyphAtlas {
         let scale = self.scale_factor;
         let mut sub_glyphs: Vec<SubGlyph> = Vec::new();
         for glyph in glyphs {
+            let resolved_weight = self.frame_fonts.get(&glyph.resolved_font_id)?.weight;
             let font_id = self.local_fontdb_id_for(glyph.resolved_font_id)?;
             let cache_key = cosmic_text::CacheKey {
                 font_id,
@@ -1312,7 +1307,7 @@ impl WgpuGlyphAtlas {
                 font_size_bits: (font_size * scale).to_bits(),
                 x_bin,
                 y_bin,
-                font_weight: fontdb::Weight(requested_weight),
+                font_weight: fontdb::Weight(resolved_weight),
                 flags: CacheKeyFlags::empty(),
             };
             let image = self.render_cache_key_image(cache_key, enable_subpixel)?;
@@ -1354,14 +1349,7 @@ impl WgpuGlyphAtlas {
         let face = face?;
         let glyphs = self.frame_shaped_clusters.get(&face.id)?.get(text)?.clone();
         let font_size = effective_font_size(Some(face.font_size), self.default_font_size);
-        self.rasterize_resolved_cluster(
-            &glyphs,
-            face.font_weight,
-            font_size,
-            x_bin,
-            y_bin,
-            enable_subpixel,
-        )
+        self.rasterize_resolved_cluster(&glyphs, font_size, x_bin, y_bin, enable_subpixel)
     }
 
     /// Update the scale factor and clear the cache so glyphs are

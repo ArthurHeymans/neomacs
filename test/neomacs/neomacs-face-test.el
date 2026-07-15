@@ -257,7 +257,7 @@
 
 ;; --- Font family / height / weight matrix ---
 (defvar neomacs-face-test-font-combo-families
-  '("JetBrains Mono" "Hack" "DejaVu Sans Mono" "Noto Sans Mono")
+  '("JetBrains Mono" "Hack" "DejaVu Sans Mono" "Noto Sans Mono" "Noto Sans")
   "Font families used in family/height/weight combination tests.")
 
 (defvar neomacs-face-test-font-combo-heights

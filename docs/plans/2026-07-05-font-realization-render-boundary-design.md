@@ -23,7 +23,8 @@ Decisions made while shipping Phases 0–2 and 3a:
   layout-side `FontMetricsService` and are stable for the service's
   lifetime (the interner survives `clear_caches`, append-only). Frame
   snapshots carry the subset used. Renderer caches must key on the
-  *identity* (or a hash including it), never the raw id alone.
+  *identity* (or a resolver-lifetime id whose incoming mapping is validated
+  and whose reuse invalidates renderer caches), never an unchecked raw id.
 - **Phase 3a shipped as a fontset projection.** Instead of per-glyph
   fields, frames carry `char_fonts: face_id → representative char →
   ResolvedFontId` for the non-ASCII characters actually on screen —
@@ -49,6 +50,35 @@ Decisions made while shipping Phases 0–2 and 3a:
 - **Enforcement.** `real_gui_smoke` gates on: every face in the frame
   snapshot carries `default_resolved_font_id`, and every referenced id
   exists in the frame's font table.
+
+### Exact platform matches (2026-07-15)
+
+- `FontBackend` returns a complete `PlatformFontMatch`, never a file path.
+  On Linux that identity includes Fontconfig's full `FC_INDEX` (including
+  named-instance bits) and `FC_FONT_VARIATIONS` coordinates.
+- File path, an opaque backend-native face selector, and canonicalized
+  non-default variation coordinates form one `ResolvedFontIdentity` and one
+  renderer-cache identity. Fontconfig's selector is deliberately kept intact:
+  its low 16 bits select a collection face and its high bits select a FreeType
+  named instance. The raw selector is private behind explicit FreeType and
+  file-parser accessors, so consumers cannot accidentally interchange them.
+- Consumers translate identity only at their capability boundary. FreeType
+  receives the full Fontconfig selector, while fontdb/ttf-parser receive
+  `ResolvedFontIdentity::file_face_index()`. The current cosmic/swash boundary
+  exactly replays resolved weight and slant; named instances with other
+  non-default axes explicitly take the resolved fallback path until cosmic can
+  accept an arbitrary variation tuple. An encoded named-instance selector is
+  never treated as a collection index.
+- A materializable platform selection is authoritative. Layout first proves
+  that the shared fontdb/cosmic stack can open the exact file face, then
+  preserves the platform's named-instance identity and PostScript name; the
+  renderer reopens that same file face and replays its resolved attributes.
+  Platform formats outside that capability boundary (for example PCF bitmap
+  fonts) take an explicit semantic fallback which is itself realized and
+  transported. Neither side silently substitutes the first face in a
+  collection or publishes an identity the renderer cannot open.
+- Semantic family, weight, and slant remain useful request/reporting metadata,
+  but they are not permitted to reconstruct drawable truth after realization.
 
 ## 1. Problem Statement
 

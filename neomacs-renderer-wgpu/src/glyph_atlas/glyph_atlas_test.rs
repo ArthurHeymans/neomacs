@@ -140,3 +140,151 @@ fn glyph_font_identity_discriminates_resolved_font_id() {
     b.default_resolved_font_id = None;
     assert_ne!(glyph_font_identity(Some(&a)), glyph_font_identity(Some(&b)));
 }
+
+fn try_test_atlas() -> Option<WgpuGlyphAtlas> {
+    let instance =
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+    let adapter =
+        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .ok()?;
+    let (device, _) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("glyph-atlas-font-boundary-test"),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::default(),
+        memory_hints: Default::default(),
+        experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        trace: wgpu::Trace::Off,
+    }))
+    .ok()?;
+    Some(WgpuGlyphAtlas::new(&device))
+}
+
+#[cfg(unix)]
+#[test]
+#[tracing_test::traced_test]
+fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
+    use cosmic_text::{Buffer, Metrics, Shaping};
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
+    };
+    use neomacs_layout_engine::font_backend::{FontBackend, FontconfigBackend};
+
+    let Some(matched) = FontconfigBackend.match_primary_font("Noto Sans", 700, false) else {
+        tracing::info!("skipping: Noto Sans Bold is not installed");
+        return;
+    };
+    if matched.identity.file_path.is_none() {
+        tracing::info!("skipping: Fontconfig match has no file");
+        return;
+    }
+    let Some(mut atlas) = try_test_atlas() else {
+        tracing::info!("skipping: no headless wgpu adapter");
+        return;
+    };
+    let identity = matched.identity;
+    let font = ResolvedFont {
+        id: ResolvedFontId(1),
+        identity: identity.clone(),
+        family: matched.family,
+        full_name: None,
+        postscript_name: identity.postscript_name.clone(),
+        weight: matched.weight.unwrap_or(700),
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 18.0,
+        ascent_px: 0.0,
+        descent_px: 0.0,
+        source: FontResolutionSource::FacePrimary,
+    };
+
+    let attrs = atlas
+        .exact_attrs_for_resolved_font(&font)
+        .expect("renderer must open the layout-resolved face");
+    let mut buffer = Buffer::new(&mut atlas.font_system, Metrics::new(18.0, 24.0));
+    buffer.set_size(&mut atlas.font_system, Some(72.0), Some(36.0));
+    buffer.set_text(&mut atlas.font_system, "M", &attrs, Shaping::Advanced, None);
+    buffer.shape_until_scroll(&mut atlas.font_system, false);
+    let cache_key = buffer
+        .layout_runs()
+        .find_map(|run| run.glyphs.first())
+        .expect("shaped glyph")
+        .physical((0.0, 0.0), 1.0)
+        .cache_key;
+    let face = atlas
+        .font_system
+        .db()
+        .face(cache_key.font_id)
+        .expect("renderer fontdb face");
+
+    assert_eq!(face.index, identity.file_face_index());
+    assert_eq!(cache_key.font_weight.0, 700);
+    assert!(atlas.render_cache_key_image(cache_key, false).is_some());
+}
+
+#[test]
+fn renderer_exact_attrs_reject_an_unopenable_identity() {
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+    };
+
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let font = ResolvedFont {
+        id: ResolvedFontId(1),
+        identity: ResolvedFontIdentity::from_file("/neomacs/missing/font.ttf", 0, None),
+        family: "missing".to_string(),
+        full_name: None,
+        postscript_name: None,
+        weight: 400,
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 14.0,
+        ascent_px: 0.0,
+        descent_px: 0.0,
+        source: FontResolutionSource::FacePrimary,
+    };
+
+    assert!(atlas.exact_attrs_for_resolved_font(&font).is_none());
+}
+
+#[test]
+fn reused_resolved_font_id_invalidates_renderer_identity_caches() {
+    use neomacs_display_protocol::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+        ResolvedFontTable,
+    };
+
+    let Some(mut atlas) = try_test_atlas() else {
+        return;
+    };
+    let id = ResolvedFontId(9);
+    let font = |path: &str| ResolvedFont {
+        id,
+        identity: ResolvedFontIdentity::from_file(path, 0, None),
+        family: "Fixture".to_string(),
+        full_name: None,
+        postscript_name: None,
+        weight: 400,
+        slant: FontSlantKind::Normal,
+        width: 5,
+        pixel_size: 14.0,
+        ascent_px: 0.0,
+        descent_px: 0.0,
+        source: FontResolutionSource::FacePrimary,
+    };
+    let mut first = ResolvedFontTable::new();
+    first.insert(id, font("/fonts/first.ttf"));
+    atlas.install_frame_fonts(&first, &Default::default(), &Default::default());
+    atlas.resolved_fontdb_ids.insert(id, None);
+
+    let mut replacement = ResolvedFontTable::new();
+    replacement.insert(id, font("/fonts/replacement.ttf"));
+    atlas.install_frame_fonts(&replacement, &Default::default(), &Default::default());
+
+    assert!(!atlas.resolved_fontdb_ids.contains_key(&id));
+    assert_eq!(
+        atlas.frame_fonts.get(&id).unwrap().identity,
+        replacement.get(&id).unwrap().identity
+    );
+}
