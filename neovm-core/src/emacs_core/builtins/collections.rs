@@ -896,7 +896,7 @@ fn builtin_remhash_user_defined(
     Ok(Some(()))
 }
 
-fn builtin_remhash_values(
+pub(crate) fn builtin_remhash_values(
     key_value: Value,
     table: Value,
     symbols_with_pos_enabled: bool,

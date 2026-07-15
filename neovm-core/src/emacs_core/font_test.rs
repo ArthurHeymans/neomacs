@@ -1408,6 +1408,42 @@ fn internal_lisp_face_p_with_frame_designator_returns_resolved_vector() {
     assert!(values[10].as_utf8_str().is_some());
 }
 
+/// Regression guard for the fast-path/known-set desync the footgun review found:
+/// `internal-lisp-face-p`'s fast path reads the `face--new-frame-defaults` table,
+/// but `clear_created_lisp_face` (source unload) only clears the created-face set.
+/// Without also removing the table entry the predicate keeps reporting a stale
+/// face (a table hit short-circuits the known-set gate). Assert removal keeps the
+/// two stores in agreement.
+#[test]
+fn internal_lisp_face_p_returns_nil_after_face_table_entry_removed() {
+    crate::test_utils::init_test_tracing();
+    let face_name = "__neovm_face_unload_desync_test";
+    let mut eval = Context::new();
+
+    // Create it: predicate sees it (table entry + created-set both present).
+    builtin_internal_make_lisp_face(&mut eval, vec![Value::symbol(face_name)]).unwrap();
+    assert!(
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)])
+            .unwrap()
+            .is_vector(),
+        "freshly made face must be visible to internal-lisp-face-p"
+    );
+
+    // Unload it exactly as the source-unload path now does: drop from the
+    // created-set AND the canonical table.
+    clear_created_lisp_face(face_name);
+    crate::emacs_core::xfaces::remove_face_new_frame_defaults_entry(&eval, face_name);
+
+    // The fast path must now agree that the face is gone (would return the stale
+    // vector if the table entry had been left behind).
+    assert!(
+        builtin_internal_lisp_face_p(&mut eval, vec![Value::symbol(face_name)])
+            .unwrap()
+            .is_nil(),
+        "internal-lisp-face-p must return nil after the face is unloaded"
+    );
+}
+
 #[test]
 fn internal_make_lisp_face_creates_symbol_visible_to_internal_lisp_face_p() {
     crate::test_utils::init_test_tracing();

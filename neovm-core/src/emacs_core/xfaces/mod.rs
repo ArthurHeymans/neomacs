@@ -226,6 +226,38 @@ pub(crate) fn ensure_face_new_frame_defaults_entry(
     Some(entry)
 }
 
+/// Remove a face's entry from `face--new-frame-defaults`.
+///
+/// The table is the canonical existence store that `internal-lisp-face-p`'s fast
+/// path reads (via [`lookup_face_new_frame_defaults_vector`]). Every OTHER face
+/// predicate decides existence from the known/created-face set
+/// (`is_known_lisp_face_name` UNION `CREATED_LISP_FACES`). Those two stores must
+/// agree, so any code that removes a face from the created-face set
+/// (`clear_created_lisp_face`, e.g. on source unload) MUST also call this, or the
+/// predicate would keep reporting a stale face (a hit short-circuits the
+/// known-set gate). Keeping creation (`ensure_face_new_frame_defaults_entry`) and
+/// removal here is the single source of truth for table membership.
+pub(crate) fn remove_face_new_frame_defaults_entry(
+    eval: &crate::emacs_core::eval::Context,
+    face_name: &str,
+) {
+    let Some(table) = eval
+        .obarray()
+        .symbol_value("face--new-frame-defaults")
+        .copied()
+    else {
+        return;
+    };
+    if table.is_hash_table() {
+        // Face keys are plain interned symbols; symbols_with_pos is irrelevant.
+        let _ = crate::emacs_core::builtins::collections::builtin_remhash_values(
+            Value::symbol(face_name),
+            table,
+            false,
+        );
+    }
+}
+
 pub(crate) fn face_new_frame_defaults_vector(
     eval: &mut crate::emacs_core::eval::Context,
     face_name: &str,

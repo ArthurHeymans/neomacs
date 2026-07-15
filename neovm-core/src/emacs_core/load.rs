@@ -3778,6 +3778,10 @@ fn normalize_bootstrap_runtime_surface(
     }
     for name in &runtime_source_state.face_names {
         super::font::clear_created_lisp_face(name);
+        // Keep the canonical existence store (face--new-frame-defaults) in sync
+        // with the created-face set so internal-lisp-face-p stops reporting the
+        // unloaded face (its fast path reads the table, not the created-set).
+        super::xfaces::remove_face_new_frame_defaults_entry(eval, name);
     }
     let referenced_symbol_names = collect_runtime_referenced_symbol_names(eval);
     for name in &runtime_source_state.symbol_names {
@@ -3977,6 +3981,10 @@ pub(crate) fn normalize_final_dump_runtime_surface(
     }
     for name in &runtime_source_state.face_names {
         super::font::clear_created_lisp_face(name);
+        // Keep the canonical existence store (face--new-frame-defaults) in sync
+        // with the created-face set so internal-lisp-face-p stops reporting the
+        // unloaded face (its fast path reads the table, not the created-set).
+        super::xfaces::remove_face_new_frame_defaults_entry(eval, name);
     }
 
     let autoload_entries = eval.autoloads.entries_snapshot();
