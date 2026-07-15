@@ -11,6 +11,13 @@ use super::symbol::Obarray;
 use super::value::Value;
 
 #[cfg(windows)]
+use super::{
+    error::{EvalResult, Flow, LispCondition, signal},
+    eval::Context,
+    value::ValueKind,
+};
+
+#[cfg(windows)]
 thread_local! {
     static W32_VALID_CODEPAGES: std::cell::RefCell<Vec<i64>> = const { std::cell::RefCell::new(Vec::new()) };
 }
