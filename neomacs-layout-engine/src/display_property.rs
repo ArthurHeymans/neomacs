@@ -202,6 +202,7 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         DisplayTextPropertyModifiers {
             raise: parse_display_raise_factor(value),
             height: parse_display_height_factor(value),
+            space_width: parse_display_space_width_factor(value),
         }
     };
 
@@ -220,6 +221,9 @@ fn merge_modifiers(
     }
     if let Some(height) = element.height {
         modifiers.height = Some(height);
+    }
+    if let Some(space_width) = element.space_width {
+        modifiers.space_width = Some(space_width);
     }
 }
 
@@ -341,6 +345,22 @@ fn parse_display_raise_factor(value: Value) -> Option<f32> {
     }
 
     plist_number(value, ":raise")
+}
+
+fn parse_display_space_width_factor(value: Value) -> Option<f32> {
+    if value.is_cons() {
+        let car = value.cons_car();
+        let cdr = value.cons_cdr();
+        if car.is_symbol_named("space-width") {
+            let factor = if cdr.is_cons() {
+                cdr.cons_car().as_number_f64()
+            } else {
+                cdr.as_number_f64()
+            }? as f32;
+            return (factor.is_finite() && factor > 0.0).then_some(factor);
+        }
+    }
+    None
 }
 
 fn parse_display_height_factor(value: Value) -> Option<f32> {

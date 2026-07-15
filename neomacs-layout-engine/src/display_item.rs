@@ -314,6 +314,7 @@ impl DisplayItem {
             layout: DisplayItemLayout {
                 raise: None,
                 height: None,
+                space_width: None,
             },
             pointer_appearance: None,
         }
@@ -342,13 +343,27 @@ impl DisplayItem {
 pub(crate) struct DisplayItemLayout {
     pub(crate) raise: Option<f32>,
     pub(crate) height: Option<f32>,
+    pub(crate) space_width: Option<f32>,
 }
 
 impl DisplayItemLayout {
+    pub(crate) fn horizontal_advance_px(self, ch: char, advance_px: f32) -> f32 {
+        if ch != ' ' {
+            return advance_px;
+        }
+        self.space_width
+            .filter(|factor| factor.is_finite() && *factor > 0.0)
+            .map(|factor| advance_px * factor)
+            .unwrap_or(advance_px)
+    }
+
     pub(crate) fn vertical_offset_px(self, row_height_px: f32) -> f32 {
         self.raise
             .filter(|factor| factor.is_finite())
-            .map(|factor| -(factor * row_height_px.max(1.0)))
+            // GNU stores `it->voffset` as an integer.  The floating product
+            // is therefore truncated toward zero before it reaches glyph
+            // metrics or drawing (xdisp.c `handle_single_display_spec`).
+            .map(|factor| -(factor * row_height_px.max(1.0)).trunc())
             .unwrap_or(0.0)
     }
 }

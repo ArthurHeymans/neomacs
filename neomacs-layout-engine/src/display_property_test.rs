@@ -102,6 +102,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         DisplayTextPropertyModifiers {
             raise: Some(0.25),
             height: None,
+            space_width: None,
         }
     );
     assert_eq!(
@@ -115,6 +116,7 @@ fn classify_display_property_separates_replacements_from_text_modifiers() {
         DisplayTextPropertyModifiers {
             raise: Some(0.2),
             height: Some(1.4),
+            space_width: None,
         }
     );
 }
@@ -180,6 +182,19 @@ fn classify_display_property_parses_space_width_height_and_ascent() {
             ascent: Some(DisplayLength::Em(50.0)),
         }))
     );
+}
+
+#[test]
+fn classify_display_property_keeps_space_width_with_raise_modifier() {
+    let _eval = Context::new();
+    let classified = classify_display_property(Value::list(vec![
+        Value::list(vec![Value::symbol("space-width"), Value::make_float(0.4)]),
+        Value::list(vec![Value::symbol("raise"), Value::make_float(0.15)]),
+    ]));
+
+    assert!(classified.replacement().is_none());
+    assert_eq!(classified.modifiers().space_width, Some(0.4));
+    assert_eq!(classified.modifiers().raise, Some(0.15));
 }
 
 #[test]

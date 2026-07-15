@@ -435,6 +435,147 @@ fn font_metrics_match_selected_font_face_table_metrics() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn selected_face_vertical_metrics_use_the_gnu_freetype_probe() {
+    let mut svc = make_svc();
+    let font_size = 10.0;
+    let fixture = svc
+        .font_system
+        .db()
+        .faces()
+        .filter_map(|face| {
+            let file = fontdb_face_file(face)?;
+            let probed = crate::font_probe::probe_font_px_metrics(
+                &file,
+                face.index,
+                font_size as u32,
+                None,
+            )?;
+            let table = svc
+                .font_system
+                .db()
+                .with_face_data(face.id, |data, index| {
+                    let parsed = TtfFace::parse(data, index).ok()?;
+                    let scale = font_size / f32::from(parsed.units_per_em().max(1));
+                    Some((
+                        (f32::from(parsed.ascender()) * scale).ceil(),
+                        (f32::from(-parsed.descender()) * scale).ceil(),
+                    ))
+                })
+                .flatten()?;
+            ((table.0 as i32, table.1 as i32) != (probed.ascent, probed.descent))
+                .then_some((face.id, file, probed))
+        })
+        .next()
+        .expect("installed font whose hinted FreeType metrics differ from raw TTF rounding");
+
+    let actual = svc
+        .font_metrics_from_selected_face(fixture.0, font_size)
+        .expect("selected font metrics");
+    assert_eq!(
+        (actual.ascent as i32, actual.descent as i32),
+        (fixture.2.ascent, fixture.2.descent),
+        "layout must use GNU/Cairo-compatible hinted metrics for {}",
+        fixture.1
+    );
+}
+
+#[cfg(unix)]
+struct FixedPrimaryFontBackend {
+    file: String,
+}
+
+#[cfg(unix)]
+impl crate::font_backend::FontBackend for FixedPrimaryFontBackend {
+    fn resolve_family(&self, family: &str) -> String {
+        family.to_string()
+    }
+
+    fn family_prefers_monospace(&self, _family: &str) -> bool {
+        false
+    }
+
+    fn match_font_for_char(
+        &self,
+        _family: &str,
+        _ch: char,
+        _prefer_monospace: bool,
+        _requested_weight: u16,
+        _italic: bool,
+    ) -> Option<crate::fontconfig::FontMatch> {
+        None
+    }
+
+    fn find_primary_font_file(&self, _family: &str, _weight: u16, _italic: bool) -> Option<String> {
+        Some(self.file.clone())
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_primary_font_uses_fontconfig_static_file_when_cosmic_would_fallback() {
+    let mut svc = make_svc();
+    let requested_family = "neomacs-missing-primary-font-fixture";
+    let cosmic_fallback = svc
+        .cosmic_probe_file(requested_family, 400, false)
+        .expect("cosmic fallback file");
+    let target = svc
+        .font_system
+        .db()
+        .faces()
+        .filter_map(fontdb_face_file)
+        .find(|file| {
+            file != &cosmic_fallback
+                && crate::font_probe::named_instance_wght_values(file, 0).is_empty()
+        })
+        .expect("different static font file");
+    svc.backend = Box::new(FixedPrimaryFontBackend {
+        file: target.clone(),
+    });
+
+    let resolved = svc
+        .resolved_font_for_char(' ', requested_family, 400, false, 10.0)
+        .expect("resolved primary font");
+    assert_eq!(
+        resolved.identity.file_path.as_deref(),
+        Some(target.as_str()),
+        "fontconfig's primary file is GNU's authority even when it is static"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn installed_symbols_only_primary_font_uses_fontconfig_metrics_without_ascii_fallback() {
+    let family = "Symbols Nerd Font Mono";
+    let Some(platform) = crate::fontconfig::find_font_for_spec(
+        Some(family),
+        None,
+        None,
+        Some(FontWeight::Normal),
+        Some(FontSlant::Normal),
+    ) else {
+        return;
+    };
+    if !platform.family.eq_ignore_ascii_case(family) {
+        return;
+    }
+    let Some(expected_file) = platform.file else {
+        return;
+    };
+
+    let expected = crate::font_probe::probe_font_px_metrics(&expected_file, 0, 10, None)
+        .expect("fontconfig primary font should be measurable");
+    let mut svc = make_svc();
+    let actual = svc.font_metrics(family, 400, false, 10.0);
+
+    assert_eq!(actual.ascent, expected.ascent as f32);
+    assert_eq!(actual.descent, expected.descent as f32);
+    assert_eq!(actual.line_height, expected.height as f32);
+    assert_eq!(actual.space_width, expected.space_width as f32);
+    assert_eq!(actual.char_width, expected.max_width as f32);
+}
+
 // ---------------------------------------------------------------
 // bold / italic variants
 // ---------------------------------------------------------------

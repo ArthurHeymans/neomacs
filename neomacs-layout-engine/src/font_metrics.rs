@@ -37,6 +37,10 @@ pub struct FontMetrics {
     pub line_height: f32,
     /// Default character width (space character width for monospace)
     pub char_width: f32,
+    /// Advance of the primary font's space glyph.  This is distinct from
+    /// `char_width` for proportional fonts and remains the face font's value
+    /// even when a concrete space character would be shaped by a fallback.
+    pub space_width: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -44,6 +48,11 @@ struct FontVerticalMetrics {
     ascent: f32,
     descent: f32,
     line_height: f32,
+}
+
+struct CosmicPrimaryProbe {
+    file: String,
+    matches_requested_family: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +96,22 @@ impl FontAdvanceMetrics {
         let tolerance = max_width.max(1.0) * 0.02;
         let fixed_pitch = count > 0 && (max_width - min_width).abs() <= tolerance.max(0.25);
 
+        Self {
+            space_width,
+            average_width,
+            max_width,
+            fixed_pitch,
+        }
+    }
+
+    fn from_font_probe(metrics: crate::font_probe::FontPxMetrics) -> Self {
+        let space_width = metrics.space_width.max(0) as f32;
+        let average_width = metrics.average_width.max(0) as f32;
+        let max_width = metrics.max_width.max(0) as f32;
+        let tolerance = max_width.max(1.0) * 0.02;
+        let fixed_pitch = valid_advance(max_width)
+            && valid_advance(average_width)
+            && (max_width - average_width).abs() <= tolerance.max(0.25);
         Self {
             space_width,
             average_width,
@@ -188,6 +213,13 @@ impl FrameCellMetrics {
 
 fn valid_advance(width: f32) -> bool {
     width.is_finite() && width > 0.0
+}
+
+fn is_generic_font_family(family: &str) -> bool {
+    matches!(
+        family.trim().to_ascii_lowercase().as_str(),
+        "" | "mono" | "monospace" | "serif" | "sans" | "sans-serif" | "sans serif"
+    )
 }
 
 fn fontdb_face_file(face: &fontdb::FaceInfo) -> Option<String> {
@@ -461,10 +493,10 @@ impl FontMetricsService {
     /// Mirrors the logic in `glyph_atlas.rs:face_to_attrs()`.
     ///
     /// When fontconfig's authoritative file for this (family, weight, slant)
-    /// differs from what cosmic-text/fontdb would otherwise pick (a variable
-    /// vs same-family static face), we pin fontconfig's file under a
-    /// synthetic family so shaping and metrics use it — matching GNU. In the
-    /// common case (they agree) this is byte-identical to the plain path.
+    /// differs from what cosmic-text/fontdb would otherwise pick, pin
+    /// fontconfig's file under a synthetic family so shaping and metrics use
+    /// the same primary font GNU opens. In the common case (they agree) this
+    /// is byte-identical to the plain path.
     fn build_attrs(&mut self, family: &str, weight: u16, slant: FontSlant) -> Attrs<'static> {
         if let Some(synthetic) = self.pinned_primary_family(family, weight, slant.is_italic()) {
             let effective_weight = crate::font_match::resolve_weight_in_family(
@@ -550,17 +582,20 @@ impl FontMetricsService {
             .backend
             .find_primary_font_file(family, weight, italic)?;
         // What file would cosmic-text/fontdb pick on its own?
-        let cosmic_file = self.cosmic_probe_file(family, weight, italic)?;
-        // Surgical scope: only correct the specific divergence GNU/fontconfig
-        // cause — fontconfig opens a VARIABLE font's instance where fontdb
-        // picked a different, same-family STATIC face (the reverse never
-        // happens). If fontdb already agrees, or fontconfig's own choice is
-        // not a variable font, leave the selection to fontdb so this stays a
-        // targeted fix, not a wholesale font-selection swap.
-        if cosmic_file == fc_file {
+        let cosmic = self.cosmic_primary_probe(family, weight, italic)?;
+        // GNU's platform font backend is authoritative for the primary file.
+        // Correct the two disagreements we can identify without replacing
+        // fontdb's ordinary same-family selection policy: fontconfig chose a
+        // variable instance, or fontdb missed an explicitly named family and
+        // silently shaped with a generic fallback.
+        if cosmic.file == fc_file {
             return None;
         }
-        if crate::font_probe::named_instance_wght_values(&fc_file, 0).is_empty() {
+        let fontconfig_selected_variable =
+            !crate::font_probe::named_instance_wght_values(&fc_file, 0).is_empty();
+        if !fontconfig_selected_variable
+            && (is_generic_font_family(family) || cosmic.matches_requested_family)
+        {
             return None;
         }
         tracing::debug!(
@@ -569,15 +604,59 @@ impl FontMetricsService {
             weight,
             italic,
             fontconfig_file = %fc_file,
-            cosmic_file = %cosmic_file,
-            "primary-font pin: fontconfig opens a variable font fontdb passed over; pinning it"
+            cosmic_file = %cosmic.file,
+            "primary-font pin: fontconfig and fontdb disagree; pinning fontconfig file"
         );
         self.pin_file_as_family(&fc_file, 0)
     }
 
+    /// Probe the platform-selected primary face when fontdb cannot represent
+    /// it as the primary ASCII font.  Symbol-only fonts are the important
+    /// case: shaping an ASCII probe necessarily falls through to another
+    /// font, but GNU still uses the requested face font's global metrics for
+    /// stretch spaces produced by `(space-width ...)`.
+    fn platform_primary_metrics_override(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<crate::font_probe::FontPxMetrics> {
+        if is_generic_font_family(family) {
+            return None;
+        }
+        let platform_file = self
+            .backend
+            .find_primary_font_file(family, weight, italic)?;
+        let cosmic = self.cosmic_primary_probe(family, weight, italic)?;
+        if cosmic.file == platform_file || cosmic.matches_requested_family {
+            return None;
+        }
+        let variable_weight = (!crate::font_probe::named_instance_wght_values(&platform_file, 0)
+            .is_empty())
+        .then_some(f32::from(weight));
+        crate::font_probe::probe_font_px_metrics(
+            &platform_file,
+            0,
+            font_size.round().max(1.0) as u32,
+            variable_weight,
+        )
+    }
+
     /// The font file cosmic-text/fontdb selects on its own for this request
     /// (probe by shaping a representative ASCII glyph, unpinned).
+    #[cfg(test)]
     fn cosmic_probe_file(&mut self, family: &str, weight: u16, italic: bool) -> Option<String> {
+        self.cosmic_primary_probe(family, weight, italic)
+            .map(|probe| probe.file)
+    }
+
+    fn cosmic_primary_probe(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<CosmicPrimaryProbe> {
         let slant = if italic {
             FontSlant::Italic
         } else {
@@ -601,10 +680,14 @@ impl FontMetricsService {
             .physical((0.0, 0.0), 1.0)
             .cache_key
             .font_id;
-        self.font_system
-            .db()
-            .face(font_id)
-            .and_then(fontdb_face_file)
+        let face = self.font_system.db().face(font_id)?;
+        Some(CosmicPrimaryProbe {
+            file: fontdb_face_file(face)?,
+            matches_requested_family: face
+                .families
+                .iter()
+                .any(|(name, _)| name.eq_ignore_ascii_case(family)),
+        })
     }
 
     fn selected_font_id_and_space_width(
@@ -709,6 +792,24 @@ impl FontMetricsService {
         font_id: fontdb::ID,
         font_size: f32,
     ) -> Option<FontVerticalMetrics> {
+        let probe_target = self
+            .font_system
+            .db()
+            .face(font_id)
+            .and_then(|face| fontdb_face_file(face).map(|file| (file, face.index)));
+        if let Some((file, face_index)) = probe_target {
+            let pixel_size = font_size.round().max(1.0) as u32;
+            if let Some(metrics) =
+                crate::font_probe::probe_font_px_metrics(&file, face_index, pixel_size, None)
+            {
+                return Some(FontVerticalMetrics {
+                    ascent: metrics.ascent.max(0) as f32,
+                    descent: metrics.descent.max(0) as f32,
+                    line_height: metrics.height.max(1) as f32,
+                });
+            }
+        }
+
         self.font_system
             .db()
             .with_face_data(font_id, |font_data, face_index| {
@@ -1427,18 +1528,32 @@ impl FontMetricsService {
             return *m;
         }
 
-        let (selected_font_id, measured_space_width) =
-            self.selected_font_id_and_space_width(family, weight, italic, font_size);
-        let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
-        let advances = FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths);
-
-        let vertical = if let Some(font_id) = selected_font_id {
-            self.font_metrics_from_selected_face(font_id, font_size)
-                .unwrap_or_else(|| {
-                    self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
-                })
+        let primary_override =
+            self.platform_primary_metrics_override(family, weight, italic, font_size);
+        let (vertical, advances) = if let Some(probe) = primary_override {
+            (
+                FontVerticalMetrics {
+                    ascent: probe.ascent.max(0) as f32,
+                    descent: probe.descent.max(0) as f32,
+                    line_height: probe.height.max(1) as f32,
+                },
+                FontAdvanceMetrics::from_font_probe(probe),
+            )
         } else {
-            self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+            let (selected_font_id, measured_space_width) =
+                self.selected_font_id_and_space_width(family, weight, italic, font_size);
+            let ascii_widths = self.fill_ascii_widths(family, weight, italic, font_size);
+            let advances =
+                FontAdvanceMetrics::from_ascii_widths(measured_space_width, &ascii_widths);
+            let vertical = if let Some(font_id) = selected_font_id {
+                self.font_metrics_from_selected_face(font_id, font_size)
+                    .unwrap_or_else(|| {
+                        self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+                    })
+            } else {
+                self.glyph_box_fallback_vertical_metrics(family, weight, italic, font_size)
+            };
+            (vertical, advances)
         };
         let frame_cell = FrameCellMetrics::derive(family, font_size, vertical, advances);
         if frame_cell.confidence == MetricConfidence::Degraded {
@@ -1451,6 +1566,7 @@ impl FontMetricsService {
             descent: frame_cell.descent,
             line_height: frame_cell.line_height,
             char_width: frame_cell.column_width,
+            space_width: advances.space_width,
         };
 
         self.metrics_cache.insert(key, fm);

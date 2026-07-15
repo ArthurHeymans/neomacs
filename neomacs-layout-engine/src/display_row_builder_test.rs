@@ -406,6 +406,41 @@ fn append_measured_display_item_to_current_text_row_uses_glyph_measurer() {
 }
 
 #[test]
+fn measured_text_glyph_carries_the_selected_font_vertical_metrics() {
+    struct FallbackFontMeasurer;
+
+    impl DisplayGlyphMeasurer for FallbackFontMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            _ch: char,
+            _face_id: FaceId,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            Some(10.0)
+        }
+
+        fn glyph_vertical_metrics_px(
+            &mut self,
+            _ch: char,
+            _face_id: FaceId,
+        ) -> Option<DisplayRowVerticalMetrics> {
+            Some(DisplayRowVerticalMetrics::new(12.0, 9.0))
+        }
+    }
+
+    let row_layout = layout();
+    let mut row = GlyphRow::new(GlyphRowRole::TabLine);
+    let mut measurer = FallbackFontMeasurer;
+    let mut writer = DisplayRowWriter::with_glyph_measurer(&row_layout, &mut row, &mut measurer);
+    writer.push_item(text_item("\u{e632}"));
+
+    let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+    assert_eq!(glyph.pixel_height, 12.0);
+    assert_eq!(glyph.pixel_ascent, 9.0);
+}
+
+#[test]
 fn display_row_append_cursor_updates_position_after_append() {
     let row_layout = layout();
     let mut matrix = DisplayOutputBuilder::new();
@@ -679,6 +714,74 @@ fn display_row_builder_emits_ascii_text_items() {
             .iter()
             .all(|glyph| glyph.face_id == FaceId::new(2))
     );
+}
+
+#[test]
+fn display_row_builder_emits_space_width_as_primary_face_stretch() {
+    struct SymbolFaceMeasurer;
+
+    impl DisplayGlyphMeasurer for SymbolFaceMeasurer {
+        fn glyph_advance_px(
+            &mut self,
+            ch: char,
+            _face_id: FaceId,
+            _columns: u8,
+            _fallback_advance_px: f32,
+        ) -> Option<f32> {
+            match ch {
+                '\u{e6ad}' => Some(10.0),
+                // A concrete ASCII space falls back to a taller text font.
+                ' ' => Some(9.0),
+                _ => None,
+            }
+        }
+
+        fn glyph_vertical_metrics_px(
+            &mut self,
+            ch: char,
+            _face_id: FaceId,
+        ) -> Option<DisplayRowVerticalMetrics> {
+            match ch {
+                '\u{e6ad}' => Some(DisplayRowVerticalMetrics::new(10.0, 8.0)),
+                ' ' => Some(DisplayRowVerticalMetrics::new(14.0, 11.0)),
+                _ => None,
+            }
+        }
+
+        fn face_vertical_metrics_px(
+            &mut self,
+            _face_id: FaceId,
+        ) -> Option<DisplayRowVerticalMetrics> {
+            Some(DisplayRowVerticalMetrics::new(10.0, 8.0))
+        }
+
+        fn face_space_width_px(&mut self, _face_id: FaceId) -> Option<f32> {
+            Some(10.0)
+        }
+    }
+
+    let mut row_layout = layout();
+    row_layout.height_px = 12.0;
+    row_layout.ascent_px = 9.0;
+    let mut measurer = SymbolFaceMeasurer;
+    let mut builder = DisplayRowBuilder::with_glyph_measurer(row_layout, &mut measurer);
+    builder.push_item(text_item("\u{e6ad} ").with_layout(DisplayItemLayout {
+        raise: Some(0.15),
+        height: None,
+        space_width: Some(0.4),
+    }));
+
+    let row = builder.finish();
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs[0].pixel_width, 10.0);
+    assert_eq!(glyphs[1].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert_eq!(glyphs[1].pixel_width, 4.0);
+    assert_eq!(glyphs[1].pixel_height, 10.0);
+    assert_eq!(glyphs[1].pixel_ascent, 8.0);
+    assert_eq!(glyphs[0].vertical_offset_px, -1.0);
+    assert_eq!(glyphs[1].vertical_offset_px, -1.0);
+    assert_eq!(row.height_px, 12.0);
+    assert_eq!(row.ascent_px, 9.0);
 }
 
 #[test]

@@ -63,6 +63,10 @@ impl DisplayRowLispStringSourceId {
     }
 }
 
+fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
+    face.metrics.include_in_layout(layout);
+}
+
 #[derive(Clone)]
 pub(crate) struct DisplayRowSourceFragmentFrame<'face> {
     policy: DisplayRowSourceRequestPolicy,
@@ -651,10 +655,6 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     }
 }
 
-fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {
-    face.metrics.include_in_layout(layout);
-}
-
 pub(crate) struct DisplayRowRenderContext<'a, 'ids> {
     face_resolver: &'a FaceResolver,
     display_host: Option<&'a dyn DisplayHost>,
@@ -921,7 +921,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     geometry.ascent(),
                     geometry.height(),
                 );
-                include_display_row_face_metrics(&mut row_layout, &row_face);
+                if !self.allow_proportional_advances || !face_realizer.has_font_metrics() {
+                    include_display_row_face_metrics(&mut row_layout, &row_face);
+                }
                 row_faces.push(row_face);
             }
             let Some(item) = item else {
@@ -942,7 +944,9 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     geometry.ascent(),
                     geometry.height(),
                 );
-                include_display_row_face_metrics(&mut row_layout, &realized);
+                if !self.allow_proportional_advances || !face_realizer.has_font_metrics() {
+                    include_display_row_face_metrics(&mut row_layout, &realized);
+                }
                 row_faces.push(realized);
             }
             let render_item = DisplayRowRenderItem::from_source_item(item);
@@ -979,11 +983,26 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     row_writer.push_item(render_item.row_item_for_write())
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
-                    let mut row_writer =
-                        DisplayRowProgressWriter::with_text_run_measurement_for_area(
+                    let mut glyph_measurer = if self.allow_proportional_advances {
+                        DisplayRowGlyphMeasurer::with_proportional_advances(
+                            &row_faces,
+                            face_realizer.font_metrics_service_mut(),
+                            char_width,
+                            crate::glyph_advance::GlyphAdvanceQuantization::PreserveLogicalPixels,
+                        )
+                    } else {
+                        DisplayRowGlyphMeasurer::new(
+                            &row_faces,
+                            face_realizer.font_metrics_service_mut(),
+                            char_width,
+                        )
+                    };
+                    let mut row_writer = DisplayRowProgressWriter::
+                        with_text_run_measurement_and_glyph_measurer_for_area(
                             &row_layout,
                             &mut *row,
                             measurement,
+                            &mut glyph_measurer,
                             position,
                             render_bounds.max_x().to_f32(),
                             area,

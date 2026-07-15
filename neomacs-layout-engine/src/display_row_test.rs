@@ -333,6 +333,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
             descent: 3.0,
             line_height: 13.0,
             char_width: 7.0,
+            space_width: 7.0,
         }),
     );
 
@@ -610,6 +611,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
             descent: 4.0,
             line_height: 15.0,
             char_width: 7.5,
+            space_width: 4.0,
         }),
         7.0,
         DisplayRowFallbackMetrics {
@@ -651,6 +653,7 @@ fn display_row_resolved_measured_face_builds_active_face_state_directly() {
                 descent: 4.0,
                 line_height: 15.0,
                 char_width: 7.5,
+                space_width: 4.0,
             }),
             7.0,
             DisplayRowFallbackMetrics {
@@ -2480,6 +2483,7 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
         descent: 5.0,
         line_height: 18.0,
         char_width: 9.0,
+        space_width: 6.0,
     };
     let policy = DisplayRowMeasurementPolicy::for_frame(true);
     let mut font_metrics = None;

@@ -4,8 +4,8 @@ use super::{
     combined_query_langs, fallback_frame_res_y, family_affinity_score, family_search_order,
     fc_list_candidates, fontconfig_handle, listed_font_from_raw_pattern, normalize_spacing,
     parse_fontconfig_weight, points_to_pixels_for_dpi, query_charset_ranges, registry_hint,
-    registry_query_chars, representative_char_for_spec, spacing_score, style_weight,
-    wildcard_casefold_match,
+    registry_query_chars, representative_char_for_spec, select_find_font_candidate, spacing_score,
+    style_weight, wildcard_casefold_match,
 };
 use neovm_core::emacs_core::fontset::{FontRepertory, StoredFontSpec};
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
@@ -418,6 +418,44 @@ fn family_affinity_treats_cjk_companion_as_close_match() {
         family_affinity_score(Some("Noto Sans Mono"), "Sarasa Fixed SC"),
         80
     );
+}
+
+#[test]
+fn find_font_candidate_prefers_the_requested_family_over_an_earlier_fallback() {
+    let candidate = |family: &str, file: &str| ListedFont {
+        foundry: None,
+        matched: super::FontMatch {
+            family: family.to_string(),
+            file: Some(file.to_string()),
+            postscript_name: None,
+            weight: Some(400),
+            slant: FontSlant::Normal,
+        },
+        style: "Regular".to_string(),
+        weight_css: Some(400),
+        width: Some(FontWidth::Normal),
+        spacing: None,
+    };
+    let spec = StoredFontSpec {
+        family: Some(font_sym("Symbols Nerd Font Mono")),
+        registry: None,
+        lang: None,
+        weight: Some(FontWeight::Normal),
+        slant: Some(FontSlant::Normal),
+        width: None,
+        repertory: None,
+    };
+
+    let selected = select_find_font_candidate(
+        vec![
+            candidate("Noto Sans", "noto.ttf"),
+            candidate("Symbols Nerd Font Mono", "symbols.ttf"),
+        ],
+        &spec,
+    )
+    .expect("matching candidate");
+
+    assert_eq!(selected.matched.file.as_deref(), Some("symbols.ttf"));
 }
 
 #[test]

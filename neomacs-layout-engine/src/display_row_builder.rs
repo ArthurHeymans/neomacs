@@ -61,6 +61,14 @@ impl DisplayRowVerticalMetrics {
         (glyph.pixel_height > 0.0).then(|| Self::new(glyph.pixel_height, glyph.pixel_ascent))
     }
 
+    fn with_vertical_offset(self, offset_px: f32) -> Self {
+        let ascent = self.ascent_px.max(0.0).min(self.height_px.max(0.0));
+        let descent = (self.height_px - ascent).max(0.0);
+        let shifted_ascent = (ascent - offset_px).max(0.0);
+        let shifted_descent = (descent + offset_px).max(0.0);
+        Self::new(shifted_ascent + shifted_descent, shifted_ascent)
+    }
+
     pub(crate) fn include_in_row(self, row: &mut GlyphRow) {
         if self.height_px <= 0.0 {
             return;
@@ -276,6 +284,28 @@ pub(crate) trait DisplayGlyphMeasurer {
         columns: u8,
         fallback_advance_px: f32,
     ) -> Option<f32>;
+
+    fn glyph_vertical_metrics_px(
+        &mut self,
+        _ch: char,
+        _face_id: FaceId,
+    ) -> Option<DisplayRowVerticalMetrics> {
+        None
+    }
+
+    /// Global metrics of the face's primary font, independent of which font
+    /// would cover a concrete character.  GNU uses these for stretch glyphs
+    /// produced by `(space-width ...)`.
+    fn face_vertical_metrics_px(&mut self, _face_id: FaceId) -> Option<DisplayRowVerticalMetrics> {
+        None
+    }
+
+    /// The face primary font's space advance.  This deliberately differs
+    /// from `glyph_advance_px(' ', ...)`, which may select an ASCII fallback
+    /// when the requested face is a symbol-only font.
+    fn face_space_width_px(&mut self, _face_id: FaceId) -> Option<f32> {
+        None
+    }
 
     fn text_run_advances_px(
         &mut self,
@@ -1039,6 +1069,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn with_text_run_measurement_for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -1048,6 +1079,26 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         area: GlyphArea,
     ) -> Self {
         let writer = DisplayRowWriter::for_area(layout, row, area);
+        let position = append_start_position(position, writer.current_text_position());
+        Self {
+            writer,
+            position,
+            max_x_px,
+            text_run_measurement: Some(text_run_measurement),
+        }
+    }
+
+    pub(crate) fn with_text_run_measurement_and_glyph_measurer_for_area(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        text_run_measurement: DisplayTextRunMeasurement,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+        area: GlyphArea,
+    ) -> Self {
+        let writer =
+            DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
         let position = append_start_position(position, writer.current_text_position());
         Self {
             writer,
@@ -1164,7 +1215,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 byte_offset,
                 &measurement,
             );
-            let advance = advance_request.resolve_advance_px_with_writer(&mut self.writer);
+            let natural_advance = advance_request.resolve_advance_px_with_writer(&mut self.writer);
+            let advance =
+                self.writer
+                    .item_horizontal_advance_px(ch, face_id, natural_advance, item_layout);
             if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
                 status = DisplayRowAppendStatus::Clipped;
                 break;
@@ -1176,7 +1230,8 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 source_mapping.charpos(start_char, char_offset),
                 advance_request,
             );
-            self.writer.apply_item_layout_since(before_len, item_layout);
+            self.writer
+                .apply_item_layout_since(before_len, face_id, item_layout);
             if self.area_len() > before_len
                 && pointer_metadata.is_none()
                 && let Some(appearance) = glyph_pointer_appearance
@@ -1230,6 +1285,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         Self::for_area(layout, row, GlyphArea::Text)
     }
 
+    #[cfg(test)]
     fn for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -1306,7 +1362,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             DisplayItemKind::RowBreak(_) => {}
         }
-        self.apply_item_layout_since(before_len, item_layout);
+        self.apply_item_layout_since(before_len, face_id, item_layout);
         let pointer_appearance = if self.row.glyphs[area_index].len() > before_len {
             pointer_appearance.and_then(|appearance| self.row.intern_pointer_appearance(appearance))
         } else {
@@ -1410,6 +1466,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         advance_request: DisplayRowTextCharAdvanceRequest<'_>,
     ) {
         let ch = advance_request.ch();
+        let face_id = advance_request.face_id;
+        let before_len = self.row.glyphs[self.area_index].len();
         match advance_request.kind() {
             DisplayRowTextNaturalAdvanceKind::Tab => {
                 self.push_tab_at_position(advance_request.face_id, advance_request.position);
@@ -1457,16 +1515,90 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 );
             }
         }
+        let Some(metrics) = self
+            .glyph_measurer
+            .as_deref_mut()
+            .and_then(|measurer| measurer.glyph_vertical_metrics_px(ch, face_id))
+        else {
+            return;
+        };
+        for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
+            if !glyph.padding {
+                glyph.pixel_height = metrics.height_px;
+                glyph.pixel_ascent = metrics.ascent_px;
+            }
+        }
     }
 
-    fn apply_item_layout_since(&mut self, before_len: usize, item_layout: DisplayItemLayout) {
-        let vertical_offset_px = item_layout.vertical_offset_px(self.layout.height_px);
-        if vertical_offset_px == 0.0 {
-            return;
-        }
+    fn apply_item_layout_since(
+        &mut self,
+        before_len: usize,
+        face_id: FaceId,
+        item_layout: DisplayItemLayout,
+    ) {
+        let face_space_width = item_layout.space_width.and_then(|_| {
+            self.glyph_measurer
+                .as_deref_mut()
+                .and_then(|measurer| measurer.face_space_width_px(face_id))
+                .filter(|width| width.is_finite() && *width > 0.0)
+        });
+        let face_vertical_metrics = item_layout.space_width.and_then(|_| {
+            self.glyph_measurer
+                .as_deref_mut()
+                .and_then(|measurer| measurer.face_vertical_metrics_px(face_id))
+        });
         for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
-            glyph.vertical_offset_px = vertical_offset_px;
+            if matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' }) {
+                // GNU xdisp turns a space carrying `(space-width FACTOR)`
+                // into a stretch glyph.  Its width and vertical box come
+                // from the face's PRIMARY font, not from the fallback font
+                // that happens to cover U+0020.
+                if item_layout.space_width.is_some() {
+                    glyph.glyph_type = GlyphType::Stretch { width_cols: 1 };
+                    let natural_width = face_space_width.unwrap_or(glyph.pixel_width);
+                    glyph.pixel_width = item_layout.horizontal_advance_px(' ', natural_width);
+                    if let Some(metrics) = face_vertical_metrics {
+                        glyph.pixel_height = metrics.height_px;
+                        glyph.pixel_ascent = metrics.ascent_px;
+                    }
+                }
+            }
+            let reference_height = if glyph.pixel_height > 0.0 {
+                glyph.pixel_height
+            } else {
+                self.layout.height_px
+            };
+            glyph.vertical_offset_px = item_layout.vertical_offset_px(reference_height);
         }
+        let vertical_metrics = self.row.glyphs[self.area_index][before_len..]
+            .iter()
+            .filter_map(|glyph| {
+                DisplayRowVerticalMetrics::from_glyph(glyph)
+                    .map(|metrics| metrics.with_vertical_offset(glyph.vertical_offset_px))
+            })
+            .collect::<Vec<_>>();
+        for metrics in vertical_metrics {
+            metrics.include_in_row(self.row);
+        }
+    }
+
+    fn item_horizontal_advance_px(
+        &mut self,
+        ch: char,
+        face_id: FaceId,
+        natural_advance_px: f32,
+        item_layout: DisplayItemLayout,
+    ) -> f32 {
+        let natural_advance_px = if ch == ' ' && item_layout.space_width.is_some() {
+            self.glyph_measurer
+                .as_deref_mut()
+                .and_then(|measurer| measurer.face_space_width_px(face_id))
+                .filter(|width| width.is_finite() && *width > 0.0)
+                .unwrap_or(natural_advance_px)
+        } else {
+            natural_advance_px
+        };
+        item_layout.horizontal_advance_px(ch, natural_advance_px)
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {

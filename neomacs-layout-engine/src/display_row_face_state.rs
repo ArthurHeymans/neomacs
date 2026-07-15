@@ -289,6 +289,10 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         Self { font_metrics }
     }
 
+    pub(crate) fn has_font_metrics(&self) -> bool {
+        self.font_metrics.is_some()
+    }
+
     pub(crate) fn realize_face(
         &mut self,
         face_id: FaceId,
@@ -517,6 +521,65 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             fallback_advance_px.max(column_advance),
             min_advance,
         ))
+    }
+
+    fn glyph_vertical_metrics_px(
+        &mut self,
+        ch: char,
+        face_id: FaceId,
+    ) -> Option<crate::display_row_builder::DisplayRowVerticalMetrics> {
+        if !self.allow_proportional_advances {
+            return None;
+        }
+        let face = self.face(face_id)?.clone();
+        let font = self.font_metrics.as_mut()?.resolved_font_for_char(
+            ch,
+            &face.font_family,
+            face.font_weight,
+            face.italic,
+            face.font_size.max(1.0),
+        )?;
+        let height = font.ascent_px + font.descent_px;
+        (height > 0.0).then(|| {
+            crate::display_row_builder::DisplayRowVerticalMetrics::new(height, font.ascent_px)
+        })
+    }
+
+    fn face_vertical_metrics_px(
+        &mut self,
+        face_id: FaceId,
+    ) -> Option<crate::display_row_builder::DisplayRowVerticalMetrics> {
+        if !self.allow_proportional_advances {
+            return None;
+        }
+        let face = self.face(face_id)?.clone();
+        let metrics = self.font_metrics.as_mut()?.font_metrics(
+            &face.font_family,
+            face.font_weight,
+            face.italic,
+            face.font_size.max(1.0),
+        );
+        (metrics.line_height > 0.0).then(|| {
+            crate::display_row_builder::DisplayRowVerticalMetrics::new(
+                metrics.line_height,
+                metrics.ascent,
+            )
+        })
+    }
+
+    fn face_space_width_px(&mut self, face_id: FaceId) -> Option<f32> {
+        if !self.allow_proportional_advances {
+            return None;
+        }
+        let face = self.face(face_id)?.clone();
+        let metrics = self.font_metrics.as_mut()?.font_metrics(
+            &face.font_family,
+            face.font_weight,
+            face.italic,
+            face.font_size.max(1.0),
+        );
+        (metrics.space_width.is_finite() && metrics.space_width > 0.0)
+            .then_some(metrics.space_width)
     }
 
     fn text_run_advances_px(

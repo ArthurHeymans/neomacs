@@ -444,22 +444,37 @@ pub fn find_font_for_spec(
         &query_langs,
     );
 
+    select_find_font_candidate(candidates, &spec).map(|candidate| SpecFontMatch {
+        family: candidate.matched.family,
+        foundry: candidate.foundry,
+        registry: Some("iso10646-1".to_string()),
+        file: candidate.matched.file,
+        weight: candidate
+            .weight_css
+            .or_else(|| style_weight(&candidate.style)),
+        slant: candidate.matched.slant,
+        width: candidate.width,
+        spacing: candidate.spacing,
+        postscript_name: candidate.matched.postscript_name,
+    })
+}
+
+fn select_find_font_candidate(
+    candidates: Vec<ListedFont>,
+    spec: &StoredFontSpec,
+) -> Option<ListedFont> {
+    let requested_family = spec.family.map(resolve_sym);
     candidates
         .into_iter()
-        .find(|candidate| candidate_matches_find_font_spec(candidate, &spec))
-        .map(|candidate| SpecFontMatch {
-            family: candidate.matched.family,
-            foundry: candidate.foundry,
-            registry: Some("iso10646-1".to_string()),
-            file: candidate.matched.file,
-            weight: candidate
-                .weight_css
-                .or_else(|| style_weight(&candidate.style)),
-            slant: candidate.matched.slant,
-            width: candidate.width,
-            spacing: candidate.spacing,
-            postscript_name: candidate.matched.postscript_name,
+        .enumerate()
+        .filter(|(_, candidate)| candidate_matches_find_font_spec(candidate, spec))
+        .min_by_key(|(ordinal, candidate)| {
+            (
+                family_affinity_score(requested_family, &candidate.matched.family),
+                *ordinal,
+            )
         })
+        .map(|(_, candidate)| candidate)
 }
 
 pub fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {
