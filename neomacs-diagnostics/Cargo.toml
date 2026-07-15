@@ -18,6 +18,9 @@ tracing.workspace = true
 inferno = { version = "0.12", default-features = false }
 # In-process native (Rust) CPU sampling profiler. SIGPROF-based; complements the
 # Lisp poll-sampler (no conflict — the Lisp profiler is not signal-based).
+# backtrace-based unwinding (default) keeps the interpreter/JIT call tree; the
+# "frame-pointer" feature loses it (JIT'd frames omit frame pointers) in exchange
+# for dropping a cosmetic libunwind leaf — not worth it. See project memory.
 pprof = { version = "0.15", default-features = false, features = ["flamegraph", "protobuf-codec"] }
 
 [dev-dependencies]
