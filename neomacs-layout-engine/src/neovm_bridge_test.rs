@@ -292,11 +292,11 @@ fn chrome_face_pixel_height_uses_ceil_for_fractional_metrics() {
 }
 
 #[test]
-fn chrome_face_pixel_height_never_shrinks_below_frame_line_height() {
+fn chrome_face_pixel_height_uses_smaller_realized_face_like_gnu() {
     let mut face = ResolvedFace::default();
     face.font_line_height = 12.0;
 
-    assert_eq!(chrome_face_pixel_height(&face, 14.1), 15.0);
+    assert_eq!(chrome_face_pixel_height(&face, 14.1), 12.0);
 }
 
 #[test]

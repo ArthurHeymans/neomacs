@@ -12213,6 +12213,70 @@ fn layout_frame_rust_retries_tall_tab_line_before_publishing_body_geometry() {
     );
 }
 
+/// GNU `estimate_mode_line_height` uses the tab-line face's realized
+/// `normal_char_height`, even when it is smaller than the frame's default
+/// line height.  A relative `:height` must therefore shrink both the
+/// published tab-line row and the body partition below it.
+#[test]
+fn layout_frame_rust_tab_line_can_be_shorter_than_default_face() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("first body line\n");
+        buffer.set_buffer_local("tab-line-format", Value::string("tab"));
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("small-tab-line-face", 640, 240, buffer_id);
+    realize_test_gui_frame(&mut eval, frame_id);
+    let results = eval
+        .eval_str_each("(internal-set-lisp-face-attribute 'tab-line :height 0.5 (selected-frame))");
+    assert!(
+        results.iter().all(Result::is_ok),
+        "configure a deliberately small tab-line face, got {results:?}"
+    );
+    let selected = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected.0 as i64)
+        .expect("selected window matrix");
+    let tab_line = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::TabLine)
+        .expect("tab-line row");
+
+    assert!(
+        tab_line.height_px < state.char_height,
+        "relative tab-line face should shrink below default row: tab-line={} default={}",
+        tab_line.height_px,
+        state.char_height
+    );
+    assert_eq!(entry.text_area_clip_rect().y, tab_line.height_px);
+}
+
 /// The single-eval invariant: a full `layout_frame_rust` must evaluate
 /// `mode-line-format` exactly ONCE per window with a mode line. The chrome
 /// rows are laid out once up front (their measured height feeds the geometry)

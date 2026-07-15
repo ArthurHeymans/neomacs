@@ -44,8 +44,6 @@ pub(crate) struct DisplayRowFace {
     pub(crate) box_border_style: BoxBorderStyle,
     pub(crate) box_border_speed: f32,
     pub(crate) box_color2: Option<Color>,
-    #[cfg(test)]
-    pub(crate) box_h_line_width: i32,
     pub(crate) terminal_inverse_video: bool,
     pub(crate) metrics: DisplayRowFaceMetrics,
     pub(crate) underline_position: i32,
@@ -181,8 +179,6 @@ impl DisplayRowFace {
             box_border_style: BoxBorderStyle::Solid,
             box_border_speed: 1.0,
             box_color2: None,
-            #[cfg(test)]
-            box_h_line_width: face.box_line_width,
             terminal_inverse_video: face.terminal_inverse_video,
             lisp_name: face.lisp_name.clone(),
             metrics: DisplayRowFaceMetrics::from_resolved(face),
@@ -306,6 +302,43 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         face
     }
 
+    pub(crate) fn row_metrics_for_face(
+        &mut self,
+        face: &ResolvedFace,
+        fallback: DisplayRowFallbackMetrics,
+    ) -> DisplayRowFallbackMetrics {
+        // GNU TTY frames use 1x1 character cells for chrome rows; GUI font
+        // metrics must not make mode/header/tab-line rows taller there.
+        if fallback.char_width() <= 1.0 && fallback.row_height() <= 1.0 {
+            return fallback;
+        }
+        // GNU's early redisplay path falls back to the frame font until the
+        // chrome face has a realized font.  A zero/invalid size is that same
+        // unresolved state, not a request for a one-pixel font.
+        if !face.font_size.is_finite() || face.font_size <= 0.0 {
+            return fallback;
+        }
+        let face = self.realize_face(
+            FaceId::new(0),
+            face,
+            fallback.char_width(),
+            fallback.ascent(),
+            fallback.row_height(),
+        );
+        let line_height = face.metrics.line_height_px().ceil();
+        let box_edge = if face.box_type != BoxType::None && face.box_line_width != 0 {
+            face.box_line_width.unsigned_abs() as f32
+        } else {
+            0.0
+        };
+        let row_height = (line_height + 2.0 * box_edge).max(1.0);
+        DisplayRowFallbackMetrics::from_default_face_extents(
+            face.metrics.char_width_px(fallback.char_width()),
+            row_height,
+            (face.metrics.ascent_px() + box_edge).min(row_height),
+        )
+    }
+
     #[cfg(test)]
     pub(crate) fn row_height_for_face(
         &mut self,
@@ -314,26 +347,15 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         fallback_ascent: f32,
         fallback_row_height: f32,
     ) -> f32 {
-        // GNU TTY frames use 1x1 character cells for chrome rows; GUI font
-        // metrics must not make mode/header/tab-line rows taller there.
-        if char_w <= 1.0 && fallback_row_height <= 1.0 {
-            return fallback_row_height.max(1.0);
-        }
-        let face = self.realize_face(
-            FaceId::new(0),
+        self.row_metrics_for_face(
             face,
-            char_w,
-            fallback_ascent,
-            fallback_row_height,
-        );
-        let line_height = face.metrics.line_height_px().ceil();
-        let box_pixels = if face.box_type != BoxType::None && face.box_h_line_width != 0 {
-            2.0 * face.box_h_line_width.unsigned_abs() as f32
-        } else {
-            0.0
-        };
-        let minimum_row_height = fallback_row_height.ceil().max(1.0);
-        (line_height + box_pixels).max(minimum_row_height)
+            DisplayRowFallbackMetrics::from_default_face_extents(
+                char_w,
+                fallback_row_height,
+                fallback_ascent,
+            ),
+        )
+        .row_height()
     }
 
     pub(crate) fn char_width(&mut self, face: &DisplayRowFace, fallback_char_width: f32) -> f32 {
@@ -372,7 +394,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
     ) {
         let needs_metrics = !face.has_char_width(fallback_char_width)
             || face.metrics.ascent_px() <= 0.0
-            || face.metrics.line_height_px() <= 0.0;
+            || face.metrics.descent_px() <= 0;
 
         if needs_metrics && let Some(metrics) = self.measured_font_metrics_for_face(face) {
             if !face.has_char_width(fallback_char_width) {
@@ -383,9 +405,9 @@ impl<'a> DisplayRowFaceRealizer<'a> {
             if face.metrics.ascent_px() <= 0.0 && metrics.ascent > 0.0 {
                 face.metrics.set_ascent_px(metrics.ascent);
             }
-            if face.metrics.line_height_px() <= 0.0 && metrics.line_height > 0.0 {
+            if face.metrics.descent_px() <= 0 && metrics.descent > 0.0 {
                 face.metrics
-                    .set_descent_px((metrics.line_height - metrics.ascent).max(0.0).ceil() as i32);
+                    .set_descent_px(metrics.descent.max(0.0).ceil() as i32);
             }
         }
 
@@ -393,9 +415,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         if face.metrics.ascent_px() <= 0.0 {
             face.metrics.set_ascent_px(fallback_ascent.max(1.0));
         }
-        if face.metrics.line_height_px() <= 0.0
-            || (face.metrics.descent_px() <= 0 && row_height > face.metrics.ascent_px())
-        {
+        if face.metrics.descent_px() <= 0 && row_height > face.metrics.ascent_px() {
             face.metrics
                 .set_descent_px((row_height - face.metrics.ascent_px()).max(0.0).ceil() as i32);
         }

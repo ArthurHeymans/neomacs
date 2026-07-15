@@ -26,7 +26,6 @@ use crate::display_row::{
     DisplayRowSourceRenderRequest,
 };
 use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
-#[cfg(test)]
 pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
 use crate::display_row_measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
@@ -173,6 +172,17 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
 
     pub(crate) fn face_ids(&mut self) -> &mut FrameFaceIdAllocator {
         self.face_ids
+    }
+
+    fn intrinsic_metrics_for_face(
+        &mut self,
+        face: &ResolvedFace,
+        fallback: DisplayRowFallbackMetrics,
+    ) -> DisplayRowFallbackMetrics {
+        if !self.window_system {
+            return fallback;
+        }
+        DisplayRowFaceRealizer::new(&mut *self.font_metrics).row_metrics_for_face(face, fallback)
     }
 
     fn render_lisp_string_source_request(
@@ -927,7 +937,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             },
             display_row_index: self.display_row_index.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
-            bounds_policy: DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+            bounds_policy: DisplayRowBoundsPolicy::MeasureIntrinsic,
             render_request,
         };
         WindowChromeDisplayRowRenderRequest {
@@ -961,9 +971,12 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
 
     fn render_display_row(
         &mut self,
-        request: WindowChromeDisplayRowRequest<'face>,
+        mut request: WindowChromeDisplayRowRequest<'face>,
         anchor: ChromeRowVerticalAnchor,
     ) -> Option<f32> {
+        request.metrics = self
+            .render_services
+            .intrinsic_metrics_for_face(request.base_face, request.metrics);
         request
             .into_render_request(self.render_services.face_ids())
             .render_and_apply(self, anchor)

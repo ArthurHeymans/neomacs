@@ -30,7 +30,15 @@ pub(crate) enum DisplayRowOwner {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowBoundsPolicy {
+    /// Legacy allocation behavior retained only by lifecycle unit fixtures.
+    #[cfg(test)]
     PreserveAllocatedMinimum,
+    /// Use the row produced by shaping, including its face metrics, display
+    /// properties, and media.  A previous window allocation is not intrinsic
+    /// content and must not prevent a chrome row from shrinking.
+    MeasureIntrinsic,
+    /// Ignore row layout metrics and fit only the materialized glyph/media
+    /// content.  Frame chrome uses this while converging its reserved band.
     MeasureContent,
 }
 
@@ -86,14 +94,25 @@ pub(crate) fn measured_display_row_height(
     bounds_policy: DisplayRowBoundsPolicy,
 ) -> f32 {
     let content_height = stable_pixel_ceil(rendered_display_row_content_height(rendered));
+    #[cfg(test)]
     let allocated_height = stable_pixel_ceil(
         fallback_height
             .max(rendered.row().height_px)
             .max(rendered.progress().height())
             .max(content_height),
     );
+    #[cfg(not(test))]
+    let _ = fallback_height;
     match bounds_policy {
+        #[cfg(test)]
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum => allocated_height,
+        DisplayRowBoundsPolicy::MeasureIntrinsic => stable_pixel_ceil(
+            rendered
+                .row()
+                .height_px
+                .max(rendered.progress().height())
+                .max(content_height),
+        ),
         DisplayRowBoundsPolicy::MeasureContent => content_height,
     }
     .max(1.0)

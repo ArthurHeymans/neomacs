@@ -1931,7 +1931,10 @@ impl LayoutEngine {
         let tab_bar_face =
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabBar);
         let tab_bar_ascent = frame_params.char_height * 0.8;
-        let metrics = DisplayRowFallbackMetrics::from_frame_defaults(frame_params, tab_bar_ascent);
+        let fallback_metrics =
+            DisplayRowFallbackMetrics::from_frame_defaults(frame_params, tab_bar_ascent);
+        let metrics = DisplayRowFaceRealizer::new(&mut self.font_metrics)
+            .row_metrics_for_face(&tab_bar_face, fallback_metrics);
         let mut face_ids = FrameFaceIdAllocator::new(self.frame_face_id_counter);
         let rendered_tab_bar = self.frame_output.render_frame_tab_bar_row(
             FrameTabBarDisplayRowRequest {

@@ -33,7 +33,23 @@ fn display_row_height_for_face_uses_realized_line_height_and_box() {
             &face,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 20.0, 12.0),
         ),
-        20.0
+        14.0
+    );
+}
+
+#[test]
+fn display_row_metrics_for_smaller_gui_face_do_not_inherit_default_descent() {
+    let mut font_metrics = Some(FontMetricsService::new());
+    let mut face = ResolvedFace::default();
+    face.font_family = "default".to_string();
+    face.font_size = 11.5;
+    let fallback = DisplayRowFallbackMetrics::from_default_face_extents(13.0, 32.0, 25.0);
+    let metrics =
+        DisplayRowFaceRealizer::new(&mut font_metrics).row_metrics_for_face(&face, fallback);
+
+    assert!(
+        metrics.row_height() < fallback.row_height(),
+        "smaller face metrics must not be padded with default descent: {metrics:?}"
     );
 }
 

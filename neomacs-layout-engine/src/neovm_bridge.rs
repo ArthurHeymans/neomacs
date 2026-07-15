@@ -689,8 +689,7 @@ fn chrome_face_pixel_height(face: &ResolvedFace, fallback_char_height: f32) -> f
     } else {
         0.0
     };
-    let minimum_row_height = fallback_char_height.ceil().max(1.0);
-    (line_height + box_pixels).max(minimum_row_height)
+    (line_height + box_pixels).max(1.0)
 }
 
 pub(crate) fn buffer_local_list_values<B: LayoutBufferView>(buffer: &B, name: &str) -> Vec<Value> {
