@@ -25,8 +25,10 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
     let ready = loads.begin(51);
     let failed = loads.begin(52);
 
-    let ready =
-        WorkerDecodeOutcome::Ready(ImageCache::decoded_image(ready, 1, 1, vec![0, 0, 0, 255]));
+    let ready = WorkerDecodeOutcome::Ready(ImageCache::decoded_image(
+        ready,
+        DecodedPixels::raster(1, 1, vec![0, 0, 0, 255]),
+    ));
     assert!(matches!(
         loads.take_current(ready),
         Some(WorkerDecodeOutcome::Ready(_))
@@ -137,13 +139,42 @@ fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
 
     let decoded = ImageCache::decode_data_with_metadata(data, 0, 20, (0, 0)).unwrap();
 
-    assert_eq!((decoded.width, decoded.height), (40, 20));
-    let bottom_left = ((decoded.height - 1) * decoded.width * 4) as usize;
+    assert_eq!((decoded.raster_width, decoded.raster_height), (40, 20));
+    let bottom_left = ((decoded.raster_height - 1) * decoded.raster_width * 4) as usize;
     assert_eq!(
         &decoded.data[bottom_left..bottom_left + 4],
         &[0xff, 0x00, 0x00, 0xff],
         "the natural-coordinate bottom band must be scaled into the constrained output"
     );
+}
+
+#[test]
+fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+        <text x="2" y="20">HiDPI</text>
+    </svg>"##;
+
+    let decoded = crate::svg::decode(data, 0, 24, 1.75).expect("SVG decode");
+
+    assert_eq!((decoded.layout_width, decoded.layout_height), (48, 24));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
+    assert_eq!(
+        decoded.rgba.len(),
+        decoded.raster_width as usize * decoded.raster_height as usize * 4
+    );
+}
+
+#[test]
+fn hidpi_svg_decode_metadata_stays_logical_while_texture_pixels_are_physical() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">
+        <text x="2" y="20">HiDPI</text>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata_at_scale(data, 0, 24, (0, 0), 1.75)
+        .expect("SVG decode");
+
+    assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
 }
 
 #[test]

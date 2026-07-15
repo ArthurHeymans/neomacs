@@ -10,8 +10,12 @@ use rsvg::{CairoRenderer, Length, LengthUnit, Loader, SvgHandle};
 use crate::image_cache::constrain_dimensions;
 
 pub(crate) struct DecodedSvg {
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+    /// Size consumed by redisplay in logical Emacs pixels.
+    pub(crate) layout_width: u32,
+    pub(crate) layout_height: u32,
+    /// Size of the uploaded texture in physical device pixels.
+    pub(crate) raster_width: u32,
+    pub(crate) raster_height: u32,
     pub(crate) rgba: Vec<u8>,
 }
 
@@ -24,18 +28,37 @@ pub(crate) fn query_dimensions(data: &[u8]) -> Option<(u32, u32)> {
     Some((width.ceil() as u32, height.ceil() as u32))
 }
 
-pub(crate) fn decode(data: &[u8], max_width: u32, max_height: u32) -> Option<DecodedSvg> {
+pub(crate) fn decode(
+    data: &[u8],
+    max_width: u32,
+    max_height: u32,
+    raster_scale: f32,
+) -> Option<DecodedSvg> {
     let handle = load(data)?;
     let renderer = CairoRenderer::new(&handle);
     let (natural_width, natural_height) = natural_dimensions(&renderer)?;
-    let (width, height) = constrain_dimensions(
+    let (layout_width, layout_height) = constrain_dimensions(
         natural_width.ceil() as u32,
         natural_height.ceil() as u32,
         max_width,
         max_height,
     );
+    let raster_scale = if raster_scale.is_finite() && raster_scale > 0.0 {
+        f64::from(raster_scale)
+    } else {
+        1.0
+    };
+    // Match GNU `scale_image_size`: ceil so fractional device scales never
+    // discard a partial SVG pixel.  Constrain once more to the GPU limit.
+    let (raster_width, raster_height) = constrain_dimensions(
+        (f64::from(layout_width) * raster_scale).ceil() as u32,
+        (f64::from(layout_height) * raster_scale).ceil() as u32,
+        0,
+        0,
+    );
 
-    let mut surface = ImageSurface::create(Format::ARgb32, width as i32, height as i32).ok()?;
+    let mut surface =
+        ImageSurface::create(Format::ARgb32, raster_width as i32, raster_height as i32).ok()?;
     let context = cairo::Context::new(&surface).ok()?;
     // Render in the document's measured coordinate space, then scale that
     // complete space into the constrained output.  A dimensionless SVG has
@@ -44,8 +67,8 @@ pub(crate) fn decode(data: &[u8], max_width: u32, max_height: u32) -> Option<Dec
     // CSS-pixel font sizes) instead of scaling them.  This is equivalent to
     // GNU Emacs's generated outer SVG with a natural-size viewBox.
     context.scale(
-        f64::from(width) / natural_width,
-        f64::from(height) / natural_height,
+        f64::from(raster_width) / natural_width,
+        f64::from(raster_height) / natural_height,
     );
     let viewport = cairo::Rectangle::new(0.0, 0.0, natural_width, natural_height);
     renderer.render_document(&context, &viewport).ok()?;
@@ -54,12 +77,14 @@ pub(crate) fn decode(data: &[u8], max_width: u32, max_height: u32) -> Option<Dec
     surface.flush();
     let stride = surface.stride() as usize;
     let pixels = surface.data().ok()?;
-    let rgba = cairo_argb32_to_rgba(&pixels, stride, width, height);
+    let rgba = cairo_argb32_to_rgba(&pixels, stride, raster_width, raster_height);
     drop(pixels);
 
     Some(DecodedSvg {
-        width,
-        height,
+        layout_width,
+        layout_height,
+        raster_width,
+        raster_height,
         rgba,
     })
 }

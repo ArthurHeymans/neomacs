@@ -16,9 +16,15 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.caches
-            .image
-            .load_file(path, max_width, max_height, fg_color, bg_color)
+        let raster_scale = self.scale_factor;
+        self.caches.image.load_file(
+            path,
+            max_width,
+            max_height,
+            fg_color,
+            bg_color,
+            raster_scale,
+        )
     }
 
     /// Load image from file path with a pre-allocated ID (for threaded mode)
@@ -31,9 +37,16 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches
-            .image
-            .load_file_with_id(id, path, max_width, max_height, fg_color, bg_color)
+        let raster_scale = self.scale_factor;
+        self.caches.image.load_file_with_id(
+            id,
+            path,
+            max_width,
+            max_height,
+            fg_color,
+            bg_color,
+            raster_scale,
+        )
     }
 
     /// Load image from data (async - returns immediately)
@@ -45,9 +58,15 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.caches
-            .image
-            .load_data(data, max_width, max_height, fg_color, bg_color)
+        let raster_scale = self.scale_factor;
+        self.caches.image.load_data(
+            data,
+            max_width,
+            max_height,
+            fg_color,
+            bg_color,
+            raster_scale,
+        )
     }
 
     /// Load image from data with pre-allocated ID (for threaded mode)
@@ -60,9 +79,16 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches
-            .image
-            .load_data_with_id(id, data, max_width, max_height, fg_color, bg_color)
+        let raster_scale = self.scale_factor;
+        self.caches.image.load_data_with_id(
+            id,
+            data,
+            max_width,
+            max_height,
+            fg_color,
+            bg_color,
+            raster_scale,
+        )
     }
 
     /// Load image from raw ARGB32 pixel data

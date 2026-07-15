@@ -81,6 +81,7 @@ pub struct CachedImage {
     pub texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     pub bind_group: wgpu::BindGroup,
+    /// Uploaded texture dimensions in physical device pixels.
     pub width: u32,
     pub height: u32,
     pub metadata: Option<ImageMetadata>,
@@ -94,10 +95,37 @@ pub struct CachedImage {
 /// Decoded image data waiting for GPU upload
 struct DecodedImage {
     load: ImageLoadToken,
-    width: u32,
-    height: u32,
+    raster_width: u32,
+    raster_height: u32,
     data: Vec<u8>, // RGBA
     metadata: ImageMetadata,
+}
+
+/// Decoded pixels keep layout and texture extents separate.  They are equal
+/// for ordinary raster formats; scalable formats may rasterize at the device
+/// scale while retaining GNU-compatible logical layout geometry.
+struct DecodedPixels {
+    layout_width: u32,
+    layout_height: u32,
+    raster_width: u32,
+    raster_height: u32,
+    rgba: Vec<u8>,
+}
+
+impl DecodedPixels {
+    fn raster(width: u32, height: u32, rgba: Vec<u8>) -> Self {
+        Self {
+            layout_width: width,
+            layout_height: height,
+            raster_width: width,
+            raster_height: height,
+            rgba,
+        }
+    }
+
+    fn from_raster_tuple((width, height, rgba): (u32, u32, Vec<u8>)) -> Self {
+        Self::raster(width, height, rgba)
+    }
 }
 
 enum WorkerDecodeOutcome {
@@ -175,6 +203,8 @@ pub struct ImageDimensions {
 /// Facts derived from the final decoded RGBA pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImageMetadata {
+    /// Redisplay dimensions in logical Emacs pixels.  These can differ from
+    /// the texture dimensions for a scalable image on a HiDPI display.
     pub width: u32,
     pub height: u32,
     /// GNU's four-corner background guess, encoded as 0x00RRGGBB.
@@ -223,6 +253,9 @@ struct DecodeRequest {
     source: ImageSource,
     max_width: u32,
     max_height: u32,
+    /// Physical device pixels per logical Emacs pixel.  Only scalable image
+    /// formats consume this; bitmap formats retain their native resolution.
+    raster_scale: f32,
     /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
     fg_color: u32,
     /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
@@ -354,12 +387,20 @@ impl ImageCache {
                     tracing::debug!("Thread {} decoding image {}", thread_id, request.load.id);
                     let fg_bg = (request.fg_color, request.bg_color);
                     let result = match request.source {
-                        ImageSource::File(path) => {
-                            Self::decode_file(&path, request.max_width, request.max_height, fg_bg)
-                        }
-                        ImageSource::Data(data) => {
-                            Self::decode_data(&data, request.max_width, request.max_height, fg_bg)
-                        }
+                        ImageSource::File(path) => Self::decode_file(
+                            &path,
+                            request.max_width,
+                            request.max_height,
+                            fg_bg,
+                            request.raster_scale,
+                        ),
+                        ImageSource::Data(data) => Self::decode_data(
+                            &data,
+                            request.max_width,
+                            request.max_height,
+                            fg_bg,
+                            request.raster_scale,
+                        ),
                         ImageSource::RawArgb32 {
                             data,
                             width,
@@ -372,7 +413,8 @@ impl ImageCache {
                             stride,
                             request.max_width,
                             request.max_height,
-                        ),
+                        )
+                        .map(DecodedPixels::from_raster_tuple),
                         ImageSource::RawRgb24 {
                             data,
                             width,
@@ -385,15 +427,14 @@ impl ImageCache {
                             stride,
                             request.max_width,
                             request.max_height,
-                        ),
+                        )
+                        .map(DecodedPixels::from_raster_tuple),
                     };
 
-                    if let Some((width, height, data)) = result {
+                    if let Some(pixels) = result {
                         let _ = tx.send(WorkerDecodeOutcome::Ready(Self::decoded_image(
                             request.load,
-                            width,
-                            height,
-                            data,
+                            pixels,
                         )));
                     } else {
                         let _ = tx.send(WorkerDecodeOutcome::Failed(request.load));
@@ -427,13 +468,14 @@ impl ImageCache {
         max_width: u32,
         max_height: u32,
         fg_bg: (u32, u32),
-    ) -> Option<(u32, u32, Vec<u8>)> {
+        raster_scale: f32,
+    ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
             return Self::process_image(img, max_width, max_height);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_file(Path::new(path), max_width, max_height) {
-            return Some(result);
+            return Some(DecodedPixels::from_raster_tuple(result));
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
@@ -441,11 +483,11 @@ impl ImageCache {
         if let Some(result) =
             crate::xbm::decode_xbm_file(Path::new(path), fg, bg, max_width, max_height)
         {
-            return Some(result);
+            return Some(DecodedPixels::from_raster_tuple(result));
         }
         // Fallback: try SVG via the shared librsvg backend.
         let data = std::fs::read(path).ok()?;
-        Self::decode_svg_data(&data, max_width, max_height)
+        Self::decode_svg_data(&data, max_width, max_height, raster_scale)
     }
 
     /// Decode image data with size constraints
@@ -454,22 +496,23 @@ impl ImageCache {
         max_width: u32,
         max_height: u32,
         fg_bg: (u32, u32),
-    ) -> Option<(u32, u32, Vec<u8>)> {
+        raster_scale: f32,
+    ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
             return Self::process_image(img, max_width, max_height);
         }
         // Fallback: try XPM
         if let Some(result) = crate::xpm::decode_xpm_data(data, max_width, max_height) {
-            return Some(result);
+            return Some(DecodedPixels::from_raster_tuple(result));
         }
         // Fallback: try XBM
         let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
         let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg, max_width, max_height) {
-            return Some(result);
+            return Some(DecodedPixels::from_raster_tuple(result));
         }
         // Fallback: try SVG via the shared librsvg backend.
-        Self::decode_svg_data(data, max_width, max_height)
+        Self::decode_svg_data(data, max_width, max_height, raster_scale)
     }
 
     #[cfg(test)]
@@ -479,32 +522,53 @@ impl ImageCache {
         max_height: u32,
         fg_bg: (u32, u32),
     ) -> Option<DecodedImage> {
-        let (width, height, data) = Self::decode_data(data, max_width, max_height, fg_bg)?;
+        Self::decode_data_with_metadata_at_scale(data, max_width, max_height, fg_bg, 1.0)
+    }
+
+    #[cfg(test)]
+    fn decode_data_with_metadata_at_scale(
+        data: &[u8],
+        max_width: u32,
+        max_height: u32,
+        fg_bg: (u32, u32),
+        raster_scale: f32,
+    ) -> Option<DecodedImage> {
+        let pixels = Self::decode_data(data, max_width, max_height, fg_bg, raster_scale)?;
         Some(Self::decoded_image(
             ImageLoadToken {
                 id: 0,
                 generation: 0,
             },
-            width,
-            height,
-            data,
+            pixels,
         ))
     }
 
-    fn decoded_image(load: ImageLoadToken, width: u32, height: u32, data: Vec<u8>) -> DecodedImage {
-        let metadata = Self::metadata_from_rgba(width, height, &data);
+    fn decoded_image(load: ImageLoadToken, pixels: DecodedPixels) -> DecodedImage {
+        let metadata = Self::metadata_from_rgba(
+            pixels.layout_width,
+            pixels.layout_height,
+            pixels.raster_width,
+            pixels.raster_height,
+            &pixels.rgba,
+        );
         DecodedImage {
             load,
-            width,
-            height,
-            data,
+            raster_width: pixels.raster_width,
+            raster_height: pixels.raster_height,
+            data: pixels.rgba,
             metadata,
         }
     }
 
-    fn metadata_from_rgba(width: u32, height: u32, rgba: &[u8]) -> ImageMetadata {
+    fn metadata_from_rgba(
+        layout_width: u32,
+        layout_height: u32,
+        raster_width: u32,
+        raster_height: u32,
+        rgba: &[u8],
+    ) -> ImageMetadata {
         let pixel = |x: u32, y: u32| {
-            let offset = ((y * width + x) * 4) as usize;
+            let offset = ((y * raster_width + x) * 4) as usize;
             [
                 rgba[offset],
                 rgba[offset + 1],
@@ -514,9 +578,9 @@ impl ImageCache {
         };
         let corners = [
             pixel(0, 0),
-            pixel(width - 1, 0),
-            pixel(width - 1, height - 1),
-            pixel(0, height - 1),
+            pixel(raster_width - 1, 0),
+            pixel(raster_width - 1, raster_height - 1),
+            pixel(0, raster_height - 1),
         ];
         let most_frequent = |values: [[u8; 4]; 4], key: fn([u8; 4]) -> u32| {
             let mut best = values[0];
@@ -538,8 +602,8 @@ impl ImageCache {
         });
         let mask = most_frequent(corners, |pixel| u32::from(pixel[3] == 0));
         ImageMetadata {
-            width,
-            height,
+            width: layout_width,
+            height: layout_height,
             background: (u32::from(background[0]) << 16)
                 | (u32::from(background[1]) << 8)
                 | u32::from(background[2]),
@@ -552,9 +616,16 @@ impl ImageCache {
         data: &[u8],
         max_width: u32,
         max_height: u32,
-    ) -> Option<(u32, u32, Vec<u8>)> {
-        let decoded = crate::svg::decode(data, max_width, max_height)?;
-        Some((decoded.width, decoded.height, decoded.rgba))
+        raster_scale: f32,
+    ) -> Option<DecodedPixels> {
+        let decoded = crate::svg::decode(data, max_width, max_height, raster_scale)?;
+        Some(DecodedPixels {
+            layout_width: decoded.layout_width,
+            layout_height: decoded.layout_height,
+            raster_width: decoded.raster_width,
+            raster_height: decoded.raster_height,
+            rgba: decoded.rgba,
+        })
     }
 
     /// Process decoded image: resize if needed, convert to RGBA
@@ -562,7 +633,7 @@ impl ImageCache {
         img: image::DynamicImage,
         max_width: u32,
         max_height: u32,
-    ) -> Option<(u32, u32, Vec<u8>)> {
+    ) -> Option<DecodedPixels> {
         let (mut width, mut height) = (img.width(), img.height());
 
         // Apply max constraints
@@ -599,7 +670,7 @@ impl ImageCache {
 
         // Convert to RGBA
         let rgba = img.to_rgba8();
-        Some((width, height, rgba.into_raw()))
+        Some(DecodedPixels::raster(width, height, rgba.into_raw()))
     }
 
     /// Convert ARGB32 raw pixel data to RGBA
@@ -798,9 +869,18 @@ impl ImageCache {
         max_height: u32,
         fg_color: u32,
         bg_color: u32,
+        raster_scale: f32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        self.load_file_with_id(id, path, max_width, max_height, fg_color, bg_color);
+        self.load_file_with_id(
+            id,
+            path,
+            max_width,
+            max_height,
+            fg_color,
+            bg_color,
+            raster_scale,
+        );
         id
     }
 
@@ -813,6 +893,7 @@ impl ImageCache {
         max_height: u32,
         fg_color: u32,
         bg_color: u32,
+        raster_scale: f32,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -834,6 +915,7 @@ impl ImageCache {
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
+            raster_scale,
             fg_color,
             bg_color,
         });
@@ -849,6 +931,7 @@ impl ImageCache {
         max_height: u32,
         fg_color: u32,
         bg_color: u32,
+        raster_scale: f32,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -871,6 +954,7 @@ impl ImageCache {
             source: ImageSource::File(path.to_string()),
             max_width,
             max_height,
+            raster_scale,
             fg_color,
             bg_color,
         });
@@ -890,6 +974,7 @@ impl ImageCache {
         max_height: u32,
         fg_color: u32,
         bg_color: u32,
+        raster_scale: f32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let load = self.begin_load(id);
@@ -913,6 +998,7 @@ impl ImageCache {
             source: ImageSource::Data(data.to_vec()),
             max_width,
             max_height,
+            raster_scale,
             fg_color,
             bg_color,
         });
@@ -957,6 +1043,7 @@ impl ImageCache {
             },
             max_width,
             max_height,
+            raster_scale: 1.0,
             fg_color: 0,
             bg_color: 0,
         });
@@ -1001,6 +1088,7 @@ impl ImageCache {
             },
             max_width,
             max_height,
+            raster_scale: 1.0,
             fg_color: 0,
             bg_color: 0,
         });
@@ -1031,6 +1119,7 @@ impl ImageCache {
             },
             max_width: 0,
             max_height: 0,
+            raster_scale: 1.0,
             fg_color: 0,
             bg_color: 0,
         });
@@ -1059,6 +1148,7 @@ impl ImageCache {
             },
             max_width: 0,
             max_height: 0,
+            raster_scale: 1.0,
             fg_color: 0,
             bg_color: 0,
         });
@@ -1171,8 +1261,8 @@ impl ImageCache {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Image Texture"),
             size: wgpu::Extent3d {
-                width: decoded.width,
-                height: decoded.height,
+                width: decoded.raster_width,
+                height: decoded.raster_height,
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -1193,12 +1283,12 @@ impl ImageCache {
             &decoded.data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(decoded.width * 4),
-                rows_per_image: Some(decoded.height),
+                bytes_per_row: Some(decoded.raster_width * 4),
+                rows_per_image: Some(decoded.raster_height),
             },
             wgpu::Extent3d {
-                width: decoded.width,
-                height: decoded.height,
+                width: decoded.raster_width,
+                height: decoded.raster_height,
                 depth_or_array_layers: 1,
             },
         );
@@ -1220,7 +1310,7 @@ impl ImageCache {
             ],
         });
 
-        let memory_size = (decoded.width * decoded.height * 4) as usize;
+        let memory_size = (decoded.raster_width * decoded.raster_height * 4) as usize;
         self.total_memory += memory_size;
 
         self.textures.insert(
@@ -1229,8 +1319,8 @@ impl ImageCache {
                 texture,
                 view,
                 bind_group,
-                width: decoded.width,
-                height: decoded.height,
+                width: decoded.raster_width,
+                height: decoded.raster_height,
                 metadata: Some(decoded.metadata),
                 memory_size,
                 last_access: Cell::new(self.next_access_stamp()),
@@ -1241,10 +1331,12 @@ impl ImageCache {
         self.pending_dimensions.remove(&decoded.load.id);
 
         tracing::debug!(
-            "Uploaded image {} ({}x{}, {}KB)",
+            "Uploaded image {} (layout {}x{}, raster {}x{}, {}KB)",
             decoded.load.id,
-            decoded.width,
-            decoded.height,
+            decoded.metadata.width,
+            decoded.metadata.height,
+            decoded.raster_width,
+            decoded.raster_height,
             memory_size / 1024
         );
     }
