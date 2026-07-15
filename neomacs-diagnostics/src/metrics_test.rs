@@ -45,7 +45,16 @@ fn default_snapshot_is_all_zero() {
 fn percentile_from_buckets_picks_the_right_bucket() {
     use crate::metrics::percentile_from_buckets;
     // bounds: <=1,<=2,<=4,<=8,<=16,<=33,<=66 (thousands us), then unbounded.
-    let bounds = [1_000u64, 2_000, 4_000, 8_000, 16_000, 33_000, 66_000, u64::MAX];
+    let bounds = [
+        1_000u64,
+        2_000,
+        4_000,
+        8_000,
+        16_000,
+        33_000,
+        66_000,
+        u64::MAX,
+    ];
     // 100 frames: 90 in <=2ms, 8 in <=8ms, 2 in the unbounded (>66ms) bucket.
     let buckets = [0u64, 90, 0, 8, 0, 0, 0, 2];
     assert_eq!(percentile_from_buckets(&buckets, &bounds, 0.50), 2_000); // median

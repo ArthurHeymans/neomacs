@@ -80,7 +80,9 @@ pub fn router(
         provider,
         profiler,
         capture_lock: Arc::new(tokio::sync::Mutex::new(())),
-        captures: Arc::new(std::sync::Mutex::new(crate::capture_store::CaptureStore::new(16))),
+        captures: Arc::new(std::sync::Mutex::new(
+            crate::capture_store::CaptureStore::new(16),
+        )),
         native_capture_lock: Arc::new(std::sync::Mutex::new(())),
     };
     Router::new()

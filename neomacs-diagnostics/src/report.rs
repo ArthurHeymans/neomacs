@@ -285,10 +285,6 @@ fn sort_edges(map: HashMap<&str, u64>) -> Vec<CallEdge> {
             samples,
         })
         .collect();
-    edges.sort_by(|a, b| {
-        b.samples
-            .cmp(&a.samples)
-            .then(a.function.cmp(&b.function))
-    });
+    edges.sort_by(|a, b| b.samples.cmp(&a.samples).then(a.function.cmp(&b.function)));
     edges
 }

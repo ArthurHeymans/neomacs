@@ -628,7 +628,10 @@ mod tests {
         assert!(ctx.diagnostics_cpu_profile_start(1_000_000));
         assert!(ctx.profiler_cpu_running());
         let folded = ctx.diagnostics_cpu_profile_stop_fold();
-        assert!(!folded.contains("stale-sym"), "stale sample leaked: {folded}");
+        assert!(
+            !folded.contains("stale-sym"),
+            "stale sample leaked: {folded}"
+        );
         // Stopping clears the log so the next capture starts clean.
         assert!(!ctx.profiler_cpu_running());
 

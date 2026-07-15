@@ -6206,10 +6206,7 @@ impl Context {
     /// Install the receiver for cross-thread [`EvalThreadTask`]s (e.g. from the
     /// diagnostics server). The sender side wakes the Lisp thread via
     /// [`Context::wait_notifier`]; queued tasks run at the next safe point.
-    pub fn init_eval_task_system(
-        &mut self,
-        rx: crossbeam_channel::Receiver<EvalThreadTask>,
-    ) {
+    pub fn init_eval_task_system(&mut self, rx: crossbeam_channel::Receiver<EvalThreadTask>) {
         self.eval_task_rx = Some(rx);
     }
 

@@ -135,7 +135,9 @@ async fn live_route_emits_event_stream() {
 async fn serve_on_listener_answers_metrics_over_tcp() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+        .await
+        .unwrap();
     let addr = listener.local_addr().unwrap();
     let app = router(fixed_provider(), None);
     tokio::spawn(async move {
@@ -171,7 +173,10 @@ async fn profile_folded_endpoint_captures_and_starts() {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.contains("a;b;c 10"), "body was {text}");
-    assert!(ctrl.started.load(Ordering::Relaxed), "start() was not called");
+    assert!(
+        ctrl.started.load(Ordering::Relaxed),
+        "start() was not called"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -258,7 +263,10 @@ async fn profile_pprof_endpoint_returns_protobuf() {
     assert_eq!(ct, "application/octet-stream");
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     assert!(!bytes.is_empty());
-    assert!(bytes.windows(3).any(|w| w == b"foo"), "function name missing");
+    assert!(
+        bytes.windows(3).any(|w| w == b"foo"),
+        "function name missing"
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -361,7 +369,11 @@ async fn captures_list_and_diff_flow() {
         .await
         .unwrap();
     assert_eq!(
-        cap1.headers().get("x-capture-id").unwrap().to_str().unwrap(),
+        cap1.headers()
+            .get("x-capture-id")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "1"
     );
     let cap2 = app
@@ -370,7 +382,11 @@ async fn captures_list_and_diff_flow() {
         .await
         .unwrap();
     assert_eq!(
-        cap2.headers().get("x-capture-id").unwrap().to_str().unwrap(),
+        cap2.headers()
+            .get("x-capture-id")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "2"
     );
 

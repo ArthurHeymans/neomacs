@@ -20968,8 +20968,7 @@ fn eval_task_drain_runs_queued_closures_in_order() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     let mut ctx = Context::new();
-    let (tx, rx) =
-        crossbeam_channel::unbounded::<crate::emacs_core::eval::EvalThreadTask>();
+    let (tx, rx) = crossbeam_channel::unbounded::<crate::emacs_core::eval::EvalThreadTask>();
     ctx.init_eval_task_system(rx);
 
     let counter = Arc::new(AtomicUsize::new(0));

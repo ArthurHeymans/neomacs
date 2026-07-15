@@ -56,6 +56,7 @@ pub mod fontset;
 pub mod format;
 pub mod forward;
 pub mod frame_vars;
+pub mod gc_stats;
 pub mod hashtab;
 pub(crate) mod hook_runtime;
 pub mod hscroll;
@@ -86,7 +87,6 @@ pub mod plist;
 pub(crate) mod position;
 pub(crate) mod prefix;
 pub mod print;
-pub mod gc_stats;
 pub mod process;
 pub(crate) mod profiler;
 #[cfg(test)]

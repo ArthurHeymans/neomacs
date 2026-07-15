@@ -45,8 +45,7 @@ fn pprof_string_table_has_empty_first_entry() {
 #[test]
 fn pprof_golden_for_go_validation() {
     if let Ok(path) = std::env::var("NEOMACS_PPROF_OUT") {
-        let folded =
-            "main;font_lock_fontify_region;re_search_forward 40\nmain;jit_lock_function 12\nmain;redisplay 8";
+        let folded = "main;font_lock_fontify_region;re_search_forward 40\nmain;jit_lock_function 12\nmain;redisplay 8";
         std::fs::write(path, folded_to_pprof(folded)).unwrap();
     }
 }
