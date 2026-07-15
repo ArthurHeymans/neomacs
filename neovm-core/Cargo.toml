@@ -87,6 +87,13 @@ windows-sys.workspace = true
 [features]
 default = ["jit"]
 sound = ["rodio"]
+# Opt-in per-char validator for the display-motion stop cache (indent.rs
+# DisplayStopCache): re-runs every DisplayStopProp probe on each fast-path char
+# and asserts the cached stop skipped nothing. OFF by default (like GNU's
+# MARKER_DEBUG) because it is O(scan) -- the exact per-char work the cache exists
+# to skip -- so it must not tax ordinary debug/test builds. Enable it in a
+# dedicated validation run.
+display-stop-validate = []
 # Tiered JIT execution subsystem (src/emacs_core/jit.rs +
 # bytecode/ELISP_VM_MODERNIZATION.md). DEFAULT-ON (see `default` above): the
 # baseline JIT ships enabled. Toggle it at runtime with `NEOVM_JIT=0` (no

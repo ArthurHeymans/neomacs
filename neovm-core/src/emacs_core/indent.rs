@@ -322,6 +322,60 @@ pub(crate) fn display_stop_recomputes_for_test() -> usize {
 /// coarse next-overlay-boundary (GNU `next_overlay_change`) and bounded by
 /// `DISPLAY_STOP_CHAR_CAP` and the accessible end. The result is strictly
 /// greater than `byte`, so the scan always makes progress before re-probing.
+/// The display-relevant properties `display_advance_at` probes per stop. This is
+/// the SINGLE source of truth binding together the three things that MUST agree:
+/// the STOP-branch probes, the watched keys `next_display_stop` scans for, and
+/// the fast-path validator. Adding a variant is a compiler-forced exhaustiveness
+/// error in `key()` and `probe()`, and `ALL` carries it into every consumer, so
+/// a new display-relevant probe cannot silently desync from the stop it computes
+/// (the footgun of three hand-synced lists this replaces).
+#[derive(Clone, Copy)]
+enum DisplayStopProp {
+    Invisible,
+    Display,
+    Composition,
+}
+
+impl DisplayStopProp {
+    const ALL: [DisplayStopProp; 3] = [Self::Invisible, Self::Display, Self::Composition];
+
+    /// The text-property name whose value-change bounds this property's run
+    /// (what `next_display_stop` watches).
+    fn key(self) -> &'static str {
+        match self {
+            Self::Invisible => "invisible",
+            Self::Display => "display",
+            Self::Composition => "composition",
+        }
+    }
+
+    /// Probe this property at `byte`, returning the coalesced run as
+    /// `(display_width, run_end_byte)` when it is present and its run ends
+    /// strictly after `byte` (run end clamped to `end`); None otherwise.
+    fn probe(
+        self,
+        ctx: &mut super::eval::Context,
+        buffer_id: crate::buffer::BufferId,
+        byte: usize,
+        column: usize,
+        end: usize,
+    ) -> Result<Option<(usize, usize)>, Flow> {
+        let hit =
+            match self {
+                Self::Invisible => {
+                    super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
+                        .filter(|&next_visible| next_visible > byte)
+                        .map(|next_visible| (0usize, next_visible))
+                }
+                Self::Display => display_run_at(ctx, buffer_id, byte, column)
+                    .filter(|&(_, run_end)| run_end > byte),
+                Self::Composition => composition_run_at(ctx, buffer_id, byte)
+                    .filter(|&(_, comp_end)| comp_end > byte),
+            };
+        Ok(hit.map(|(width, run_end)| (width, run_end.min(end))))
+    }
+}
+
 fn next_display_stop(
     ctx: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -333,11 +387,9 @@ fn next_display_stop(
     };
     let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(EmacsBytePos::new(byte));
     let cap_char = CharPos0::new(char_pos.get().saturating_add(DISPLAY_STOP_CHAR_CAP));
-    let watched = [
-        Value::symbol("invisible"),
-        Value::symbol("display"),
-        Value::symbol("composition"),
-    ];
+    // Watched keys derive from the SAME source as the probes (DisplayStopProp),
+    // so a new probe automatically becomes a watched key here.
+    let watched = DisplayStopProp::ALL.map(|prop| Value::symbol(prop.key()));
     let change_char = buf.next_watched_property_change_at_char_pos(char_pos, cap_char, &watched);
     let mut stop = buf.char_pos_to_emacs_byte_pos_clamped(change_char).get();
     if let Some(overlay_boundary) = buf
@@ -383,77 +435,42 @@ pub(crate) fn display_advance_at(
     if byte >= stop.recompute_at.get() {
         #[cfg(test)]
         DISPLAY_STOP_RECOMPUTES.with(|n| n.set(n.get().saturating_add(1)));
-        // STOP: probe the three display-relevant properties. On a hit, return the
-        // coalesced run and arm the cache to re-probe at its end (GNU sets
-        // it->stop_charpos to the run end so handle_stop refires there).
-        if let Some(next_visible) =
-            super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
-        {
-            if next_visible > byte {
-                stop.recompute_at.set(next_visible.min(end));
+        // STOP: probe each display-relevant property (DisplayStopProp) in order.
+        // On a hit, return the coalesced run and arm the cache to re-probe at its
+        // end (GNU sets it->stop_charpos to the run end so handle_stop refires).
+        for prop in DisplayStopProp::ALL {
+            if let Some((width, run_end)) = prop.probe(ctx, buffer_id, byte, column, end)? {
+                stop.recompute_at.set(run_end);
                 return Ok(Some(DisplayAdvance {
-                    next_byte: next_visible.min(end),
-                    width: 0,
+                    next_byte: run_end,
+                    width,
                     hard_newline: false,
                     unbreakable_wide: false,
                 }));
             }
         }
 
-        if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
-            if run_end_byte > byte {
-                stop.recompute_at.set(run_end_byte.min(end));
-                return Ok(Some(DisplayAdvance {
-                    next_byte: run_end_byte.min(end),
-                    width: disp_width,
-                    hard_newline: false,
-                    unbreakable_wide: false,
-                }));
-            }
-        }
-
-        if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
-            if comp_end > byte {
-                stop.recompute_at.set(comp_end.min(end));
-                return Ok(Some(DisplayAdvance {
-                    next_byte: comp_end.min(end),
-                    width: comp_width,
-                    hard_newline: false,
-                    unbreakable_wide: false,
-                }));
-            }
-        }
-
-        // No display-relevant property present here: cache the span over which
-        // none can appear so the following chars skip these probes entirely,
-        // then fall through to the ordinary per-char width branch.
+        // None present here: cache the span over which none can appear so the
+        // following chars skip these probes entirely, then fall through to the
+        // ordinary per-char width branch.
         stop.recompute_at
             .set(next_display_stop(ctx, buffer_id, byte, end));
     } else {
         // FAST PATH: below the cached stop, no watched property can be present,
-        // so skip the three probes. In debug builds re-run them and assert they
-        // agree -- the same stale-cache safety net SyntaxPropRange uses.
-        #[cfg(debug_assertions)]
+        // so skip the probes. The validator (opt-in via the `display-stop-validate`
+        // feature, mirroring GNU's MARKER_DEBUG) re-runs every probe and asserts
+        // none fire, catching a stale/over-far stop -- but it is OFF by default so
+        // ordinary debug/test builds do not pay the per-char probes the cache
+        // exists to skip. The DisplayStopProp enum already keeps the probe/key set
+        // compiler-consistent, which is the always-on guard.
+        #[cfg(feature = "display-stop-validate")]
         {
             let recompute_at = stop.recompute_at.get();
-            if let Some(next_visible) =
-                super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
-            {
+            for prop in DisplayStopProp::ALL {
                 debug_assert!(
-                    next_visible <= byte,
-                    "DisplayStopCache skipped an invisible run at byte {byte} < stop {recompute_at}"
-                );
-            }
-            if let Some((_, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
-                debug_assert!(
-                    run_end_byte <= byte,
-                    "DisplayStopCache skipped a display run at byte {byte} < stop {recompute_at}"
-                );
-            }
-            if let Some((_, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
-                debug_assert!(
-                    comp_end <= byte,
-                    "DisplayStopCache skipped a composition run at byte {byte} < stop {recompute_at}"
+                    prop.probe(ctx, buffer_id, byte, column, end)?.is_none(),
+                    "DisplayStopCache skipped a {} run at byte {byte} < stop {recompute_at}",
+                    prop.key(),
                 );
             }
         }
