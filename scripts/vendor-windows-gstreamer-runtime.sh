@@ -108,6 +108,14 @@ for dll in "${required_dlls[@]}"; do
   fi
 done
 
+for dll_family in cairo pango; do
+  if ! find "$gst_bin" -maxdepth 1 -type f -iname "*${dll_family}*.dll" -print -quit \
+    | grep -q .; then
+    echo "required ${dll_family} runtime DLL is missing from: $gst_bin" >&2
+    exit 1
+  fi
+done
+
 echo "vendoring GStreamer runtime from $gst_root"
 copy_runtime_dlls_to "$bin_dir"
 

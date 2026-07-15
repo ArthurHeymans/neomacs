@@ -443,7 +443,7 @@ impl ImageCache {
         {
             return Some(result);
         }
-        // Fallback: try SVG via resvg
+        // Fallback: try SVG via the shared librsvg backend.
         let data = std::fs::read(path).ok()?;
         Self::decode_svg_data(&data, max_width, max_height)
     }
@@ -468,7 +468,7 @@ impl ImageCache {
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg, max_width, max_height) {
             return Some(result);
         }
-        // Fallback: try SVG via resvg
+        // Fallback: try SVG via the shared librsvg backend.
         Self::decode_svg_data(data, max_width, max_height)
     }
 
