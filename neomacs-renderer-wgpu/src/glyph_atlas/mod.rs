@@ -28,17 +28,22 @@ use neomacs_layout_engine::fontconfig::{FontconfigSubpixelOrder, default_subpixe
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Angle, Format, Transform, Vector};
 
-/// Key for glyph cache lookup
+/// A per-glyph render *request*: everything the caller knows about one glyph to
+/// draw, including which `face_id` asked for it (used downstream for the
+/// default-font-metrics check and colour). This is NOT the atlas cache key --
+/// the atlas keys on [`GlyphIdentity`] (via [`GlyphKey::identity`]), which
+/// excludes `face_id`. See [`GlyphIdentity`] for why.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GlyphKey {
     /// Character code
     pub charcode: u32,
-    /// Face ID (determines font, style)
+    /// Face ID that requested this glyph. Carried for `key_uses_default_font_metrics`
+    /// and colour resolution; deliberately NOT part of the atlas identity.
     pub face_id: FaceId,
     /// Font size in pixels (for text-scale-increase support)
     /// Using u32 bits of f32 for hashing
     pub font_size_bits: u32,
-    /// Realized font identity.
+    /// Realized font identity -- the stable discriminator the atlas keys on.
     ///
     /// Renderer glyph caches live across redisplay frames, while frame face IDs
     /// can be reused for different realized fonts after face remapping changes.
@@ -51,13 +56,68 @@ pub struct GlyphKey {
     pub y_bin: SubpixelBin,
 }
 
-/// Key for composed (multi-codepoint) glyph cache lookup.
-/// Used for grapheme clusters like emoji ZWJ sequences, combining diacritics, etc.
+/// The atlas cache identity of a single glyph: exactly the inputs the rasterized
+/// mask depends on -- character, font size, realized font, and subpixel bin.
+///
+/// It deliberately EXCLUDES `face_id`. The mask is a coverage bitmap; the face's
+/// colour and decorations (underline/box/strike) are applied later at draw time
+/// (vertex colour / separate passes), never baked in. Frame `face_id`s are also
+/// remapped per redisplay -- the same visual face gets a different id across
+/// frames -- so keying on `face_id` re-rasterized the SAME glyph at the SAME font
+/// every frame (~65% miss rate, ~800 re-rasterizations + GPU uploads per frame
+/// during scroll). Keying on the stable `font_identity` collapses every face that
+/// shares a font+size onto one cached mask, matching GNU (whose font glyph cache
+/// is keyed by the font object + glyph code, not the Lisp face).
+///
+/// Deriving `Hash`/`Eq` here is the safety property: any new field added to the
+/// mask identity must be added to this struct, and the compiler then forces
+/// [`GlyphKey::identity`] to populate it -- there is no hand-written `Hash`/`Eq`
+/// to silently fall out of sync.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct GlyphIdentity {
+    pub charcode: u32,
+    pub font_size_bits: u32,
+    pub font_identity: u64,
+    pub x_bin: SubpixelBin,
+    pub y_bin: SubpixelBin,
+}
+
+impl GlyphKey {
+    /// The atlas cache identity for this request (drops `face_id`).
+    pub fn identity(&self) -> GlyphIdentity {
+        // Exhaustive destructure (no `..`): adding a field to GlyphKey fails to
+        // compile HERE until the author classifies it as identity (move it into
+        // GlyphIdentity below) or request-only (bind it to `_`, like face_id).
+        // This makes the mask-identity contract compiler-enforced in BOTH
+        // directions -- a field added where callers construct (GlyphKey) cannot
+        // be silently dropped from the cache key.
+        let GlyphKey {
+            charcode,
+            face_id: _,
+            font_size_bits,
+            font_identity,
+            x_bin,
+            y_bin,
+        } = self;
+        GlyphIdentity {
+            charcode: *charcode,
+            font_size_bits: *font_size_bits,
+            font_identity: *font_identity,
+            x_bin: *x_bin,
+            y_bin: *y_bin,
+        }
+    }
+}
+
+/// A render *request* for a composed (multi-codepoint) glyph -- grapheme
+/// clusters like emoji ZWJ sequences or combining diacritics. Like [`GlyphKey`]
+/// this is not the cache key; the atlas keys on [`ComposedGlyphIdentity`] (via
+/// [`ComposedGlyphKey::identity`]).
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ComposedGlyphKey {
     /// The full text of the composed grapheme cluster
     pub text: Box<str>,
-    /// Face ID (determines font, style)
+    /// Face ID that requested this glyph; not part of the atlas identity.
     pub face_id: FaceId,
     /// Font size in pixels (using u32 bits of f32 for hashing)
     pub font_size_bits: u32,
@@ -67,6 +127,41 @@ pub struct ComposedGlyphKey {
     pub x_bin: SubpixelBin,
     /// Subpixel Y bin (fractional physical-pixel offset baked into rasterization)
     pub y_bin: SubpixelBin,
+}
+
+/// The atlas cache identity of a composed glyph. Excludes `face_id` for the same
+/// reason as [`GlyphIdentity`]; derives `Hash`/`Eq` for the same safety property.
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ComposedGlyphIdentity {
+    pub text: Box<str>,
+    pub font_size_bits: u32,
+    pub font_identity: u64,
+    pub x_bin: SubpixelBin,
+    pub y_bin: SubpixelBin,
+}
+
+impl ComposedGlyphKey {
+    /// The atlas cache identity for this request (drops `face_id`).
+    pub fn identity(&self) -> ComposedGlyphIdentity {
+        // Exhaustive destructure -- see `GlyphKey::identity`: a new field on
+        // ComposedGlyphKey must be classified (into the identity, or bound to `_`)
+        // or this fails to compile.
+        let ComposedGlyphKey {
+            text,
+            face_id: _,
+            font_size_bits,
+            font_identity,
+            x_bin,
+            y_bin,
+        } = self;
+        ComposedGlyphIdentity {
+            text: text.clone(),
+            font_size_bits: *font_size_bits,
+            font_identity: *font_identity,
+            x_bin: *x_bin,
+            y_bin: *y_bin,
+        }
+    }
 }
 
 pub fn glyph_font_identity(face: Option<&Face>) -> u64 {
@@ -94,13 +189,13 @@ enum GlyphRenderMode {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CachedGlyphKey {
-    glyph: GlyphKey,
+    glyph: GlyphIdentity,
     mode: GlyphRenderMode,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct CachedComposedGlyphKey {
-    glyph: ComposedGlyphKey,
+    glyph: ComposedGlyphIdentity,
     mode: GlyphRenderMode,
 }
 
@@ -1786,7 +1881,7 @@ impl WgpuGlyphAtlas {
         subpixel: SubpixelRequest,
     ) -> Result<GlyphAtlasHandle, GlyphAtlasError> {
         let cache_key = CachedGlyphKey {
-            glyph: key.clone(),
+            glyph: key.identity(),
             mode: self.render_mode_from_request(subpixel),
         };
 
@@ -1895,7 +1990,7 @@ impl WgpuGlyphAtlas {
             y_bin,
         };
         let cache_key = CachedComposedGlyphKey {
-            glyph: key,
+            glyph: key.identity(),
             mode: self.render_mode_from_request(subpixel),
         };
 
