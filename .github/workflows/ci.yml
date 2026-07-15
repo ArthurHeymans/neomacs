@@ -9,20 +9,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fmt-check:
-    name: fmt and check (linux x86_64)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env: &linux_env
+  fmt:
+    name: cargo fmt (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env: &ci_env
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            label: linux-x86_64
+          - runner: macos-latest
+            label: macos-aarch64
+          - runner: windows-latest
+            label: windows-msvc-x86_64
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.1
+          components: rustfmt
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  check:
+    name: cargo check workspace (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            label: linux-x86_64
+          - runner: macos-latest
+            label: macos-aarch64
+          - runner: windows-latest
+            label: windows-msvc-x86_64
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      GSTREAMER_VERSION: 1.26.9
+    steps:
+      - *checkout
+
       - &install_linux_deps
-        name: Install system dependencies
+        name: Install Linux system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -36,6 +77,9 @@ jobs:
             libfontconfig1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
+            libcairo2-dev \
+            libglib2.0-dev \
+            libpango1.0-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev \
@@ -56,84 +100,18 @@ jobs:
             gnutls-bin \
             libgnutls28-dev
 
+      - name: Install macOS system dependencies
+        if: runner.os == 'macOS'
+        run: brew install pkg-config cairo pango gstreamer
+
       - &install_rust
         name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.96.1
-          components: rustfmt
-
-      - &cache_cargo
-        name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ci-linux-x86_64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - name: cargo fmt
-        run: cargo fmt --all --check
-
-      - name: cargo check workspace
-        run: cargo check --workspace
-
-  fmt-check-macos:
-    name: fmt and check (macos aarch64)
-    runs-on: macos-latest
-    timeout-minutes: 60
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-    steps:
-      - *checkout
-
-      - name: Install system dependencies
-        run: brew install pkg-config gstreamer
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.96.1
-          components: rustfmt
-          targets: aarch64-apple-darwin
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: ci-macos-aarch64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - name: cargo fmt
-        run: cargo fmt --all --check
-
-      - name: cargo check workspace
-        run: cargo check --workspace
-
-  fmt-check-windows:
-    name: fmt and check (windows msvc x86_64)
-    runs-on: windows-latest
-    timeout-minutes: 90
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-      GSTREAMER_VERSION: 1.26.9
-    steps:
-      - *checkout
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.96.1
-          components: rustfmt
-          targets: x86_64-pc-windows-msvc
-
-      - name: cargo fmt
-        run: cargo fmt --all --check
 
       - name: Restore GStreamer SDK cache
+        if: runner.os == 'Windows'
         id: cache-gstreamer
         uses: actions/cache/restore@v4
         with:
@@ -143,12 +121,12 @@ jobs:
           key: windows-gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}-v1
 
       - name: Install GStreamer SDK
-        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
+        if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
         shell: powershell
         run: ./scripts/setup-windows-gstreamer.ps1 -Install
 
       - name: Save GStreamer SDK cache
-        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
+        if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -157,22 +135,29 @@ jobs:
           key: ${{ steps.cache-gstreamer.outputs.cache-primary-key }}
 
       - name: Configure GStreamer SDK
+        if: runner.os == 'Windows'
         shell: powershell
         run: ./scripts/setup-windows-gstreamer.ps1
 
       - name: Cache cargo registry & target
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: ci-windows-msvc-x86_64
+          prefix-key: ci-check-${{ matrix.label }}
           cache-bin: false
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
       - name: Verify GStreamer pkg-config
+        if: runner.os == 'Windows'
         shell: bash
         run: source scripts/windows-gstreamer-env.sh --verify
 
-      - name: cargo check workspace
+      - name: cargo check workspace (Unix)
+        if: runner.os != 'Windows'
+        run: cargo check --workspace
+
+      - name: cargo check workspace (Windows)
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           source scripts/windows-gstreamer-env.sh
@@ -182,12 +167,19 @@ jobs:
     name: neovm-core test archive (linux x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env: *linux_env
+    env: *ci_env
     steps:
       - *checkout
       - *install_linux_deps
       - *install_rust
-      - *cache_cargo
+      - &cache_cargo
+        name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ci-linux-x86_64
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
 
       - &install_nextest
         name: Install cargo-nextest
@@ -211,7 +203,7 @@ jobs:
     needs: neovm-core-test-archive
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    env: *linux_env
+    env: *ci_env
     strategy:
       fail-fast: false
       matrix:
@@ -240,7 +232,7 @@ jobs:
     name: fresh release build (linux x86_64)
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    env: *linux_env
+    env: *ci_env
     steps:
       - *checkout
       - *install_linux_deps
@@ -274,7 +266,7 @@ jobs:
     needs: fresh-release-build
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    env: *linux_env
+    env: *ci_env
     steps:
       - *checkout
       - *install_linux_deps
@@ -295,123 +287,3 @@ jobs:
 
       - name: neovm-oracle-tests
         run: cargo nextest run -p neovm-oracle-tests --no-fail-fast
-
-  check-unix:
-    if: github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-latest
-            label: linux-x86_64
-            cache-key: linux-check-x86_64
-            install-deps: |
-              sudo apt-get update
-              sudo apt-get install -y --no-install-recommends \
-                libfontconfig1-dev pkg-config
-          - runner: ubuntu-24.04-arm
-            label: linux-aarch64
-            cache-key: linux-check-aarch64
-            install-deps: |
-              sudo apt-get update
-              sudo apt-get install -y --no-install-recommends \
-                libfontconfig1-dev pkg-config
-          - runner: macos-latest
-            label: macos-aarch64
-            cache-key: macos-check-aarch64
-            install-deps: brew install pkg-config fontconfig
-    name: cargo check (${{ matrix.label }})
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
-    env:
-      CARGO_TERM_COLOR: always
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install system dependencies
-        run: ${{ matrix.install-deps }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ${{ matrix.cache-key }}
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - name: cargo check
-        run: cargo check --no-default-features -p neomacs -p neovm-core
-
-  check-windows-msvc:
-    if: github.event_name == 'workflow_dispatch'
-    name: cargo check (windows-msvc-x86_64)
-    runs-on: windows-latest
-    timeout-minutes: 30
-    env:
-      CARGO_TERM_COLOR: always
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: windows-msvc-x86_64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - name: cargo check
-        run: cargo check --no-default-features -p neomacs -p neovm-core
-
-  check-windows-gnu:
-    if: false  # Disabled: MSVC is the preferred Windows toolchain for distribution
-    name: cargo check (windows-gnu-x86_64)
-    runs-on: windows-latest
-    timeout-minutes: 30
-    env:
-      CARGO_TERM_COLOR: always
-      RUSTUP_TOOLCHAIN: 1.96.1-x86_64-pc-windows-gnu
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Install Rust toolchain (1.96.1-gnu)
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.96.1-x86_64-pc-windows-gnu
-
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        id: msys2
-        with:
-          msystem: MINGW64
-          update: false
-          cache: true
-          install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-pkg-config
-
-      - name: Add MinGW to PATH
-        shell: powershell
-        run: |
-          $msys2 = "${{ steps.msys2.outputs.msys2-location }}"
-          Add-Content -Path $env:GITHUB_PATH -Value "$msys2\mingw64\bin"
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: windows-gnu-x86_64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - name: cargo check
-        run: cargo check --no-default-features -p neomacs -p neovm-core --target x86_64-pc-windows-gnu
