@@ -317,7 +317,7 @@ jobs:
       - name: Install and configure libfaketime
         run: |
           sudo apt-get install -y --no-install-recommends libfaketime
-          libfaketime_so="$(dpkg -L libfaketime | rg '/libfaketime\.so\.1$' | head -n 1)"
+          libfaketime_so="$(dpkg -L libfaketime | grep -E '/libfaketime\.so\.1$' | head -n 1)"
           test -n "$libfaketime_so"
           echo "NEOVM_LIBFAKETIME_SO=$libfaketime_so" >> "$GITHUB_ENV"
 
