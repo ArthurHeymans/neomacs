@@ -322,7 +322,21 @@ std::thread_local! {
     /// around it (nested dispatch replaces and restores, so this always
     /// names the innermost leaf). Read only by the contained-panic healing
     /// points; `None` outside any native extent.
-    static CURRENT_LEAF_BASES: std::cell::Cell<Option<JitLeafBases>> =
+    ///
+    /// A POINTER into `invoke_native`'s stack frame, not the value: the
+    /// snapshot is ~100 bytes, and value-swapping it through the Cell twice
+    /// per native call was 42% of a recursion benchmark's CPU once the spec
+    /// fast path made per-call costs the bottleneck. SAFETY (pointee
+    /// liveness): the pointer is published immediately before the native
+    /// entry call and restored to the outer value immediately after, so it
+    /// only ever names a frame that is live for that whole window; the only
+    /// readers (contain_jit_shim_panic, heal_shim_panic_residue_before_match)
+    /// run inside shims during that window, on the same single Lisp thread.
+    /// Shim panics are contained INSIDE the shim (the leaf exits via its
+    /// STATUS_SIGNAL path and `invoke_native` continues), and a re-raised
+    /// panic aborts at the extern "C" boundary — no path unwinds through
+    /// `invoke_native` leaving a stale pointer published.
+    static CURRENT_LEAF_BASES: std::cell::Cell<Option<std::ptr::NonNull<JitLeafBases>>> =
         const { std::cell::Cell::new(None) };
 
     /// Scratch-GC-root depth a contained panic left dead pushes above (the
@@ -402,7 +416,10 @@ fn contain_jit_shim_panic(
     // Arm the root sweep for the leaf exit: the panicked extent's skipped
     // pops all sit at or above the innermost leaf's entry depth. (No bases
     // means no native extent — direct-call tests; nothing to sweep.)
-    if let Some(bases) = CURRENT_LEAF_BASES.with(|b| b.get()) {
+    if let Some(bases_ptr) = CURRENT_LEAF_BASES.with(|b| b.get()) {
+        // SAFETY: published for the dynamic extent of the innermost native
+        // call, whose `invoke_native` frame owns the pointee (thread_local doc).
+        let bases = unsafe { *bases_ptr.as_ptr() };
         PENDING_ROOT_SWEEP_FLOOR.with(|f| {
             let floor = f.get().map_or(bases.roots(), |cur| cur.min(bases.roots()));
             f.set(Some(floor));
@@ -428,9 +445,13 @@ fn contain_jit_shim_panic(
 /// dispatch block's live roots are on top (see the floor doc).
 #[cold]
 fn heal_shim_panic_residue_before_match(ctx: &mut Context, ours: usize) {
-    let Some(bases) = CURRENT_LEAF_BASES.with(|b| b.get()) else {
+    let Some(bases_ptr) = CURRENT_LEAF_BASES.with(|b| b.get()) else {
         return;
     };
+    // SAFETY: published for the dynamic extent of the innermost native call,
+    // whose `invoke_native` frame owns the pointee (thread_local doc); the
+    // match shim runs inside that extent.
+    let bases = unsafe { *bases_ptr.as_ptr() };
     ctx.restore_jit_shim_boundary(&bases.snap, bases.snap.condition_len() + ours);
 }
 
@@ -2929,7 +2950,11 @@ impl CompiledLeaf {
                 snap: unsafe { (*(vmctx as *const Context)).module_boundary_snapshot() },
             })
         };
-        let outer_bases = CURRENT_LEAF_BASES.with(|b| b.replace(bases));
+        // Publish a POINTER to the frame-resident bases (see the thread_local
+        // doc): `bases` stays alive in this frame across the whole native
+        // call, and the Cell is restored below before it dies.
+        let bases_ptr = bases.as_ref().map(std::ptr::NonNull::from);
+        let outer_bases = CURRENT_LEAF_BASES.with(|b| b.replace(bases_ptr));
         // R1c-sidecar: the unified 4-param entry ABI. AOT code reads its
         // per-thread bases from `sidecar`; JIT code declares the param but never
         // reads it (its bases are baked `iconst`s), so `null` is safe for JIT.
@@ -3640,6 +3665,55 @@ fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
         }
     }
     false
+}
+
+/// True if `v` PROVABLY holds the tagged bits of symbol `sym` at this point:
+/// an `iconst` of exactly those bits (the JIT bake of a symbol constant, see
+/// the `Op::Constant` lowering) or a load of the symbol's slot from the
+/// per-leaf reloc vector (the AOT shape — same emission, reloc'd). This is
+/// the SSA soundness gate for `Op::Call` speculation: `find_spec_sites`'
+/// abstract stack tracking SELECTS the sites, but the spec shim call the
+/// lowering emits IGNORES the runtime callee slot in favor of the baked
+/// symbol — so the lowering only takes the spec path when this independent
+/// proof holds, and any divergence in the tracking degrades to the generic
+/// call instead of a wrong-callee mis-speculation. Copies made by
+/// `Dup`/`StackRef`/`StackSet` reuse the same SSA value, so straight-line
+/// propagation keeps the proof; values that crossed a block boundary are
+/// variables (not an iconst/load result) and correctly fail it.
+fn callee_is_symbol_const(
+    fb: &FunctionBuilder,
+    v: ClifValue,
+    sym: u32,
+    reloc_base: Option<ClifValue>,
+    reloc_index: &std::collections::HashMap<usize, u32>,
+) -> bool {
+    use cranelift_codegen::ir::immediates::Offset32;
+    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    let expected_bits = Value::from_sym_id(crate::emacs_core::intern::SymId(sym)).bits();
+    let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) else {
+        return false;
+    };
+    match fb.func.dfg.insts[inst] {
+        InstructionData::UnaryImm {
+            opcode: Opcode::Iconst,
+            imm,
+        } => imm.bits() == expected_bits as i64,
+        InstructionData::Load {
+            opcode: Opcode::Load,
+            arg,
+            offset,
+            ..
+        } => {
+            let Some(base) = reloc_base else {
+                return false;
+            };
+            let Some(&idx) = reloc_index.get(&expected_bits) else {
+                return false;
+            };
+            arg == base && offset == Offset32::new((idx * 8) as i32)
+        }
+        _ => false,
+    }
 }
 
 /// True if `v` is provably a fixnum at this point — a fixnum constant
@@ -6123,6 +6197,24 @@ fn lower_simple_op(
             // whose compile-time binding was a bytecode object or a fixed-arity
             // builtin subr (Apply never speculates).
             let spec = spec.filter(|_| matches!(op, Op::Call(_)));
+            // SSA soundness gate: emit the spec shim ONLY when the callee
+            // slot's value is provably the site's symbol constant (iconst /
+            // reloc-load of its tagged bits). find_spec_sites' abstract stack
+            // tracking selected this site; if the lowering cannot re-prove it
+            // here, the site silently degrades to the generic call below —
+            // never a wrong-callee speculation.
+            let spec = spec.filter(|&(sym, ..)| {
+                let proven =
+                    callee_is_symbol_const(fb, stack[args_at - 1], sym, reloc_base, reloc_index);
+                if !proven {
+                    tracing::debug!(
+                        target: "neovm_jit",
+                        sym,
+                        "spec site dropped: callee slot not provably the tracked symbol"
+                    );
+                }
+                proven
+            });
             // Pred/EqIncl sites pass their 1–2 args in REGISTERS on the direct
             // path (no spill; their fallback block spills for itself). Every
             // other shape spills the args into the call buffer for its shim.
@@ -7208,51 +7300,136 @@ fn find_spec_sites(
 ) -> HashMap<usize, SpecSite> {
     let mut sites = HashMap::new();
     let mut next_slot = 0usize;
-    'outer: for i in 0..ops.len() {
-        let Op::Constant(cidx) = &ops[i] else {
-            continue;
-        };
-        let Some(sym_val) = constants.get(*cidx as usize) else {
-            continue;
-        };
-        let Some(sym_id) = sym_val.as_symbol_id() else {
-            continue;
-        };
-        let mut pushes = 0usize;
-        let mut j = i + 1;
-        let call_idx = loop {
-            if j >= ops.len() || leaders.binary_search(&j).is_ok() {
-                continue 'outer;
+    // Block-local abstract operand stack: a SUFFIX of the real stack where a
+    // tracked slot is `Some(const-idx)` iff it provably holds that SYMBOL
+    // constant (pushed by `Op::Constant` in this block, copied only through
+    // the stack-shuffling ops modeled below). An `Op::Call(n)` whose callee
+    // slot (n below the top) carries a tag becomes a speculation site — this
+    // generalizes the old scan, which required every argument between the
+    // callee push and the call to be a TRIVIAL push and therefore rejected
+    // any call with a computed argument (e.g. a self-recursive
+    // `(fib (- n 1))`, whose `Op::Sub` disqualified the site and pinned every
+    // recursive call to the generic shim).
+    //
+    // Soundness split: this pass SELECTS sites; the `Op::Call` lowering only
+    // emits the spec shim after independently PROVING (SSA inspection,
+    // `callee_is_symbol_const`) that the callee slot's value is the site's
+    // symbol constant — so a divergence between this model and the lowering
+    // degrades to the generic call, never a wrong-callee speculation.
+    //
+    // Suffix discipline: cleared at every block leader (unknown entry stack)
+    // and on any unmodeled op; pops past the suffix bottom just empty it (the
+    // values below were already unknown) and later pushes re-grow it, so
+    // top-relative reads inside the suffix stay exact.
+    let mut tags: Vec<Option<u16>> = Vec::new();
+    for i in 0..ops.len() {
+        if leaders.binary_search(&i).is_ok() {
+            tags.clear();
+        }
+        match &ops[i] {
+            Op::Constant(cidx) => {
+                let tag = constants
+                    .get(*cidx as usize)
+                    .and_then(|v| v.as_symbol_id())
+                    .map(|_| *cidx);
+                tags.push(tag);
             }
-            match ops[j] {
-                Op::Constant(_) | Op::Nil | Op::True | Op::Dup | Op::StackRef(_) => {
-                    pushes += 1;
-                    j += 1;
+            Op::Nil | Op::True => tags.push(None),
+            Op::Dup => {
+                let t = tags.last().copied().flatten();
+                tags.push(t);
+            }
+            Op::StackRef(n) => {
+                let n = *n as usize;
+                let t = if tags.len() > n {
+                    tags[tags.len() - 1 - n]
+                } else {
+                    None
+                };
+                tags.push(t);
+            }
+            Op::StackSet(n) => {
+                // Interpreter semantics: the top value moves into the slot `n`
+                // below it, then the top is dropped (n == 0 is a plain pop).
+                let n = *n as usize;
+                let t = tags.pop().flatten();
+                if n > 0 && tags.len() >= n {
+                    let d = tags.len() - n;
+                    tags[d] = t;
                 }
-                Op::Call(n) if n as usize == pushes => break j,
-                _ => continue 'outer,
             }
-        };
-        let Some(binding) = obarray.symbol_function_id(sym_id) else {
-            continue;
-        };
-        let kind = if binding.get_bytecode_data().is_some() {
-            SpecCalleeKind::Bytecode
-        } else if let Some(kind) = subr_spec_kind(binding, sym_id, pushes) {
-            kind
-        } else {
-            continue;
-        };
-        sites.insert(
-            call_idx,
-            SpecSite {
-                sym: sym_id.0,
-                expected_bits: binding.bits() as u64,
-                slot: next_slot,
-                kind,
+            Op::DiscardN(raw) => {
+                let preserve_tos = (raw & 0x80) != 0;
+                let n = (raw & 0x7F) as usize;
+                if preserve_tos && n > 0 {
+                    // The top survives, landing n slots lower.
+                    let t = tags.pop().flatten();
+                    for _ in 0..n.min(tags.len()) {
+                        tags.pop();
+                    }
+                    tags.push(t);
+                } else {
+                    for _ in 0..n.min(tags.len()) {
+                        tags.pop();
+                    }
+                }
+            }
+            op @ (Op::Call(n) | Op::Apply(n)) => {
+                let nargs = *n as usize;
+                // Site check BEFORE applying the call's stack effect: the
+                // callee sits nargs below the top (Apply never speculates).
+                if matches!(op, Op::Call(_))
+                    && tags.len() > nargs
+                    && let Some(cidx) = tags[tags.len() - 1 - nargs]
+                    && let Some(sym_val) = constants.get(cidx as usize)
+                    && let Some(sym_id) = sym_val.as_symbol_id()
+                    && let Some(binding) = obarray.symbol_function_id(sym_id)
+                {
+                    let kind = if binding.get_bytecode_data().is_some() {
+                        Some(SpecCalleeKind::Bytecode)
+                    } else {
+                        subr_spec_kind(binding, sym_id, nargs)
+                    };
+                    if let Some(kind) = kind {
+                        sites.insert(
+                            i,
+                            SpecSite {
+                                sym: sym_id.0,
+                                expected_bits: binding.bits() as u64,
+                                slot: next_slot,
+                                kind,
+                            },
+                        );
+                        next_slot += 1;
+                    }
+                }
+                // [func a1 .. aN] -> [result]
+                for _ in 0..(nargs + 1).min(tags.len()) {
+                    tags.pop();
+                }
+                tags.push(None);
+            }
+            other => match simple_effect(other) {
+                Ok((needs, delta)) => {
+                    // For every op reaching this arm, `needs` IS the consumed
+                    // operand count and `needs + delta` the produced count.
+                    // The ops where that identity does NOT hold — the
+                    // stack-shuffling Dup/StackRef/StackSet/DiscardN (reads
+                    // without consuming / writes in place) — are all handled
+                    // explicitly above, as are Constant/Nil/True/Call/Apply.
+                    let consumed = needs;
+                    let produced = (needs as i64 + delta).max(0) as usize;
+                    for _ in 0..consumed.min(tags.len()) {
+                        tags.pop();
+                    }
+                    for _ in 0..produced {
+                        tags.push(None);
+                    }
+                }
+                // Control flow / anything unmodeled: forget everything.
+                Err(_) => tags.clear(),
             },
-        );
-        next_slot += 1;
+        }
     }
     // R2: CallBuiltinSym intrinsic sites (self-contained per-op, classified by
     // NAME — obarray-free). Runs for BOTH JIT (here) and AOT baseline emit (via
@@ -11201,6 +11378,99 @@ mod tests {
                 "excluded name {name:?} (1-arg) must never classify"
             );
         }
+    }
+
+    #[test]
+    fn spec_sites_track_callee_through_computed_arguments() {
+        // The abstract-stack widening: an Op::Call whose ARGUMENTS are computed
+        // expressions still speculates, as long as the CALLEE slot provably
+        // holds the constant symbol. The old trivial-push scan rejected any
+        // intervening arithmetic — pinning fib-style self-recursion
+        // (callee (- x 1)) to the generic shim forever.
+        let (ev, sym_val) = harness_with_inc_callee("spec-computed-arg-callee");
+        let consts = [sym_val, Value::make_int(1)];
+        // (callee (- arg0 1)): Constant(sym); StackRef; Constant(1); Sub; Call(1)
+        let ops = [
+            Op::Constant(0),
+            Op::StackRef(0),
+            Op::Constant(1),
+            Op::Sub,
+            Op::Call(1),
+            Op::Return,
+        ];
+        let sites = find_spec_sites(&ops, &consts, &[0], &ev.obarray);
+        assert_eq!(
+            sites.get(&4).map(|s| s.kind),
+            Some(SpecCalleeKind::Bytecode),
+            "computed-argument call must speculate on its constant callee"
+        );
+    }
+
+    #[test]
+    fn spec_sites_track_both_calls_of_a_nested_call_argument() {
+        // (callee (callee 5)): the inner call is an argument of the outer one;
+        // BOTH callee slots hold the tracked constant, so both sites speculate
+        // (the inner call's result correctly untags the arg slot, not the
+        // outer callee's slot).
+        let (ev, sym_val) = harness_with_inc_callee("spec-nested-call-callee");
+        let consts = [sym_val, Value::make_int(5)];
+        let ops = [
+            Op::Constant(0),
+            Op::Constant(0),
+            Op::Constant(1),
+            Op::Call(1),
+            Op::Call(1),
+            Op::Return,
+        ];
+        let sites = find_spec_sites(&ops, &consts, &[0], &ev.obarray);
+        assert_eq!(
+            sites.get(&3).map(|s| s.kind),
+            Some(SpecCalleeKind::Bytecode),
+            "inner call speculates"
+        );
+        assert_eq!(
+            sites.get(&4).map(|s| s.kind),
+            Some(SpecCalleeKind::Bytecode),
+            "outer call speculates across the nested call"
+        );
+    }
+
+    #[test]
+    fn spec_sites_reset_at_block_leaders() {
+        // A block leader between the callee push and the call means the entry
+        // stack is unknown — the tracker must forget the constant (values
+        // reaching the call could come from another predecessor).
+        let (ev, sym_val) = harness_with_inc_callee("spec-leader-reset-callee");
+        let consts = [sym_val, Value::make_int(5)];
+        let ops = [Op::Constant(0), Op::Constant(1), Op::Call(1), Op::Return];
+        let sites = find_spec_sites(&ops, &consts, &[0, 2], &ev.obarray);
+        assert!(
+            !sites.contains_key(&2),
+            "a leader between push and call must clear the tracking"
+        );
+    }
+
+    #[test]
+    fn spec_sites_respect_stackset_clobbering_the_callee_slot() {
+        // StackSet overwrites the tracked callee slot with a computed value:
+        // speculating here would call the WRONG function. The tracker must
+        // model the in-place write.
+        let (ev, sym_val) = harness_with_inc_callee("spec-stackset-clobber-callee");
+        let consts = [sym_val, Value::make_int(5)];
+        // [sym 5 nil] -> StackSet(2) moves nil into the callee slot -> [nil 5]
+        let ops = [
+            Op::Constant(0),
+            Op::Constant(1),
+            Op::Nil,
+            Op::StackSet(2),
+            Op::Call(1),
+            Op::Return,
+        ];
+        let sites = find_spec_sites(&ops, &consts, &[0], &ev.obarray);
+        assert!(
+            !sites.contains_key(&4),
+            "a clobbered callee slot must not speculate"
+        );
     }
 
     #[test]
