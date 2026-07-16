@@ -5274,8 +5274,6 @@ evaluate the variable `compilation-shell-minor-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{compilation-shell-minor-mode-map}
-
 (fn &optional ARG)" t)
 (autoload 'compilation-minor-mode "compile"
 "Toggle Compilation minor mode.
@@ -5297,8 +5295,6 @@ evaluate the variable `compilation-minor-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{compilation-minor-mode-map}
 
 (fn &optional ARG)" t)
 (autoload 'compilation-next-error-function "compile"
@@ -13929,8 +13925,6 @@ evaluate the variable `flymake-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{flymake-mode-map}
 
 (fn &optional ARG)" t)
 (autoload 'flymake-mode-on "flymake"
@@ -23017,12 +23011,26 @@ Optional COLS, ROWS set the terminal size.
 "Pop a buffer showing the shader showcase; killing it frees the surfaces." t)
 (autoload 'neomacs-shaders-crt "neomacs-shaders"
 "Apply the CRT frame shader to the whole editor." t)
+(autoload 'neomacs-shaders-crt-curvature "neomacs-shaders"
+"Set the CRT frame shader's barrel-distortion AMOUNT live.
+0.0 is flat, 0.10 is the default, 0.3 is heavy.  Updates the
+`curvature' uniform on the installed frame shader without
+recompiling; signals an error if no frame shader is installed
+(run `neomacs-shaders-crt' first).
+
+(fn AMOUNT)" t)
 (autoload 'neomacs-shaders-glow "neomacs-shaders"
 "Apply the bloom frame shader to the whole editor." t)
 (autoload 'neomacs-shaders-matrix "neomacs-shaders"
 "Apply the digital-rain frame shader to the whole editor." t)
 (autoload 'neomacs-shaders-off "neomacs-shaders"
 "Remove the frame shader." t)
+(autoload 'neomacs-shaders-ghostty-starfield "neomacs-shaders"
+"Apply the Ghostty starfield shader over the whole editor." t)
+(autoload 'neomacs-shaders-ghostty-gradient "neomacs-shaders"
+"Apply the Ghostty animated-gradient shader over the whole editor." t)
+(autoload 'neomacs-shaders-ghostty-crt "neomacs-shaders"
+"Apply the Ghostty (Lottes) CRT shader over the whole editor." t)
 (register-definition-prefixes "neomacs-shaders" '("neomacs-shaders--"))
 
 
@@ -23887,6 +23895,11 @@ step during initialization." t)
 ;;; Generated autoloads from org/ob-tangle.el
 
 (register-definition-prefixes "ob-tangle" '("org-babel-"))
+
+
+;;; Generated autoloads from ob-wgsl.el
+
+(register-definition-prefixes "ob-wgsl" '("ob-wgsl-" "org-babel-"))
 
 
 ;;; Generated autoloads from org/oc.el
@@ -28212,8 +28225,6 @@ evaluate the variable `rectangle-mark-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{rectangle-mark-mode-map}
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "rect" '("apply-on-rectangle" "clear-rectangle-line" "delete-" "extract-rectangle-" "killed-rectangle" "ope" "rectangle-" "spaces-string" "string-rectangle-"))
