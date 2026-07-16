@@ -736,7 +736,7 @@ impl BufferText {
             let mut last = None;
             let _ =
                 self.for_each_emacs_byte_range_chunk::<()>(EmacsByteRange::new(lo, hi), |chunk| {
-                    if let Some(off) = chunk.iter().rposition(|&b| b == b'\n') {
+                    if let Some(off) = memchr::memrchr(b'\n', chunk) {
                         last = Some(base.add_len(EmacsByteLen::new(off)));
                     }
                     base = base.add_len(EmacsByteLen::new(chunk.len()));
@@ -770,7 +770,7 @@ impl BufferText {
         let mut count = 0usize;
         let _ =
             self.for_each_emacs_byte_range_chunk::<()>(EmacsByteRange::new(from, limit), |chunk| {
-                count += chunk.iter().filter(|&&b| b == b'\n').count();
+                count += memchr::memchr_iter(b'\n', chunk).count();
                 Ok::<(), ()>(())
             });
         count
