@@ -199,7 +199,7 @@ jobs:
           retention-days: 1
 
   neovm-core-tests:
-    name: neovm-core tests shard ${{ matrix.partition }}/10 (linux x86_64)
+    name: neovm-core tests shard ${{ matrix.partition }}/20 (linux x86_64)
     needs: neovm-core-test-archive
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -207,7 +207,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
     steps:
       - *checkout
       - *install_linux_deps
@@ -225,7 +225,7 @@ jobs:
           cargo nextest run \
             --archive-file neovm-core-nextest.tar.zst \
             --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition slice:${{ matrix.partition }}/10 \
+            --partition slice:${{ matrix.partition }}/20 \
             --no-fail-fast
 
   neovm-oracle-test-assets:
