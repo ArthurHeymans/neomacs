@@ -158,3 +158,23 @@ offscreen pass and runtime WGSL compilation.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
 - TTY backend ignores surfaces (like image/video/xwidget).
+- Media windows forfeit the scroll/edit incremental fast paths (full rebuild
+  instead — see below); cursor-only replay carries media and stays fast.
+
+## Two traps hit while wiring this (checklist for the next media kind)
+
+1. **Three duplicated single-spec head lists** must all learn the new head or
+   the display property is silently misclassified as a *list of specs* and
+   goes inert (space reserved by nothing renders):
+   `SINGLE_DISPLAY_SPEC_HEADS` (`display_spec.rs`),
+   `display_spec_head_starts_list` and `display_single_spec_replacing_p`
+   (`neovm-core xdisp.rs`). Symptom: the end-to-end layout test emits no
+   glyph while the parse unit test passes.
+2. **Media must survive incremental replays.** Media items live beside the
+   rows in `FrameDisplayState` (not inside them, unlike GNU's in-matrix media
+   glyphs), and the frame state is rebuilt from scratch each frame. Fast-path
+   replays reinstall retained rows + faces; `RetainedWindowMedia` now carries
+   the window's media the same way (re-installed verbatim on cursor-only
+   replay; scroll/edit escalate to a full rebuild for media windows until
+   media coordinate shifting lands). Without this, a surface went blank one
+   redisplay after creation. Long-term fix: attach media to rows (GNU model).
