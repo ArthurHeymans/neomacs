@@ -69,6 +69,8 @@ pub struct WgpuRenderer {
     pub(super) height: u32,
     /// Display scale factor (physical pixels / logical pixels)
     pub(super) scale_factor: f32,
+    /// User full-frame post shader (doc/display-engine/SHADER_SURFACES.md).
+    pub(super) frame_post: Option<crate::frame_post::FramePost>,
 
     // All visual effect configurations
     pub effects: crate::effect_config::EffectsConfig,
@@ -959,6 +961,7 @@ impl WgpuRenderer {
                 surface: shader_surface_cache,
             },
             arenas: VertexArenas::new(),
+            frame_post: None,
             width,
             height,
             scale_factor,

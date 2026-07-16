@@ -334,9 +334,68 @@ impl WgpuRenderer {
     }
 
     /// Whether any animated shader surface was composited recently — drives
-    /// `DemandReason::ShaderSurface` pacing.
+    /// `DemandReason::ShaderSurface` pacing. A frame post shader is always
+    /// animated while installed.
     pub fn has_active_shader_surfaces(&self) -> bool {
-        self.caches.surface.has_active_surfaces()
+        self.caches.surface.has_active_surfaces() || self.frame_post.is_some()
+    }
+
+    // =========== Frame post shader (doc/display-engine/SHADER_SURFACES.md) ===========
+
+    /// Install (or replace) the full-frame post shader from an
+    /// already-composed WGSL module (the host validates + composes on the
+    /// Lisp thread).
+    pub fn set_frame_post(&mut self, composed_source: &str) -> Result<(), String> {
+        let post = crate::frame_post::FramePost::new(
+            &self.device,
+            self.surface_format,
+            composed_source,
+        )?;
+        self.frame_post = Some(post);
+        tracing::info!("frame post shader installed");
+        Ok(())
+    }
+
+    /// Remove the full-frame post shader.
+    pub fn clear_frame_post(&mut self) {
+        if self.frame_post.take().is_some() {
+            tracing::info!("frame post shader removed");
+        }
+    }
+
+    /// Whether a frame post shader is installed.
+    pub fn has_frame_post(&self) -> bool {
+        self.frame_post.is_some()
+    }
+
+    /// Run the post pass: shade `src_view` (the rendered frame) into
+    /// `dst_view`. `mouse` is the pointer in logical px (y-down, window
+    /// coords); converted here to the physical y-up contract.
+    pub fn frame_post_to_view(
+        &mut self,
+        src_view: &wgpu::TextureView,
+        dst_view: &wgpu::TextureView,
+        width_px: u32,
+        height_px: u32,
+        mouse: (f32, f32),
+    ) {
+        let scale = self.scale_factor;
+        let mouse_px = (
+            (mouse.0 * scale).clamp(0.0, width_px as f32),
+            (height_px as f32 - mouse.1 * scale).clamp(0.0, height_px as f32),
+        );
+        if let Some(post) = self.frame_post.as_mut() {
+            post.run(
+                &self.device,
+                &self.queue,
+                src_view,
+                dst_view,
+                width_px,
+                height_px,
+                scale,
+                mouse_px,
+            );
+        }
     }
 
     /// Render floating videos from the scene.

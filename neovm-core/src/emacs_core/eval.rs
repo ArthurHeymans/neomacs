@@ -1724,6 +1724,11 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+    /// Install (Some WGSL, validated synchronously) or remove (None) the
+    /// full-frame post shader.
+    fn set_frame_shader(&self, _source: Option<String>) -> Result<(), String> {
+        Err("frame shaders are unsupported by this display host".to_owned())
+    }
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {
         Ok(())
     }

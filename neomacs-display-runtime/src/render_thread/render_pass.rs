@@ -458,7 +458,10 @@ impl RenderApp {
         // cursor. The frame's stored cursor geometry is no longer mutated here,
         // so the materialized frame stays a pure function of the layout snapshot.
 
+        // A frame post shader needs the scene in an offscreen texture to
+        // sample as iChannel0, so it forces the offscreen path.
         let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
+            || renderer.has_frame_post()
             || frame_for_decision.effect_hints.iter().any(|hint| {
                 matches!(
                     hint,
@@ -584,12 +587,24 @@ impl RenderApp {
                 super::frame_stats::count(&super::frame_stats::RETAINED_STATIC_BUILDS);
             }
             if let Some(rs) = render.compositor.retained_static.as_ref() {
-                renderer.blit_texture_to_view(
-                    &rs.bind_group,
-                    &surface_view,
-                    native.width,
-                    native.height,
-                );
+                if renderer.has_frame_post() {
+                    // Post-process the retained scene instead of blitting it.
+                    let src = rs.view.clone();
+                    renderer.frame_post_to_view(
+                        &src,
+                        &surface_view,
+                        native.width,
+                        native.height,
+                        mouse_pos,
+                    );
+                } else {
+                    renderer.blit_texture_to_view(
+                        &rs.bind_group,
+                        &surface_view,
+                        native.width,
+                        native.height,
+                    );
+                }
             }
             renderer.render_cursor_only(
                 &surface_view,
@@ -700,12 +715,42 @@ impl RenderApp {
             }
 
             if let Some(current_bg) = current_bg {
-                renderer.blit_texture_to_view(
-                    &current_bg,
-                    &surface_view,
-                    native.width,
-                    native.height,
-                );
+                if renderer.has_frame_post() {
+                    // Post-process the rendered scene instead of blitting it.
+                    // Later stages (transitions, overlays, cursor) draw over
+                    // the shaded frame unprocessed (v1 scope).
+                    let src_view = if render.compositor.transitions.current_is_a {
+                        render
+                            .compositor
+                            .transitions
+                            .offscreen_a
+                            .as_ref()
+                            .map(|(_, view, _)| view.clone())
+                    } else {
+                        render
+                            .compositor
+                            .transitions
+                            .offscreen_b
+                            .as_ref()
+                            .map(|(_, view, _)| view.clone())
+                    };
+                    if let Some(src_view) = src_view {
+                        renderer.frame_post_to_view(
+                            &src_view,
+                            &surface_view,
+                            native.width,
+                            native.height,
+                            render.mouse_pos,
+                        );
+                    }
+                } else {
+                    renderer.blit_texture_to_view(
+                        &current_bg,
+                        &surface_view,
+                        native.width,
+                        native.height,
+                    );
+                }
             }
             render_frame_transitions(
                 renderer,

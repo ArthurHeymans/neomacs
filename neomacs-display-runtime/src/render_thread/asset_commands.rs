@@ -474,6 +474,18 @@ impl RenderApp {
                     renderer.free_surface(id);
                 }
             }
+            AssetCommand::FrameShaderSet { composed } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    match composed {
+                        Some(source) => {
+                            if let Err(err) = renderer.set_frame_post(&source) {
+                                tracing::warn!("frame shader install failed: {err}");
+                            }
+                        }
+                        None => renderer.clear_frame_post(),
+                    }
+                }
+            }
         }
     }
 }

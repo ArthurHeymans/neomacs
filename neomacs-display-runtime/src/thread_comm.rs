@@ -496,6 +496,11 @@ pub enum AssetCommand {
     SurfaceFree {
         id: u32,
     },
+    /// Install (Some, already composed+validated WGSL) or remove (None) the
+    /// full-frame post shader
+    FrameShaderSet {
+        composed: Option<String>,
+    },
     /// Create video player
     VideoCreate {
         id: u32,

@@ -1836,6 +1836,20 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             "failed to queue surface destroy",
         )
     }
+
+    fn set_frame_shader(&self, source: Option<String>) -> Result<(), String> {
+        let composed = match source {
+            // Validate + compose on the Lisp thread so compile errors signal
+            // synchronously; the renderer receives the finished module. No
+            // custom uniforms in v1 — iTime/iResolution/iMouse only.
+            Some(source) => Some(validate_surface_wgsl(&source, &[])?),
+            None => None,
+        };
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::FrameShaderSet { composed }),
+            "failed to queue frame shader update",
+        )
+    }
 }
 
 fn frame_host_title(eval: &mut Context, frame_id: FrameId) -> LispString {

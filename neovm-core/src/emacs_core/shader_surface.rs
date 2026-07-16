@@ -245,3 +245,30 @@ pub(crate) fn builtin_neomacs_surface_available_p(
 ) -> EvalResult {
     Ok(Value::bool_val(eval.display_host.is_some()))
 }
+
+/// (neomacs-frame-shader SOURCE)
+///
+/// Install a full-frame post shader: SOURCE is WGSL defining `mainImage`,
+/// applied over the whole rendered frame (the frame is `iChannel0`; note the
+/// frame texture is top-left origin while fragCoord is y-up, so the pixel
+/// under fragCoord is at uv `(fragCoord.x, iResolution.y - fragCoord.y) /
+/// iResolution.xy`). nil removes the shader. Signals on WGSL compile errors.
+pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    let source = if args[0].is_nil() {
+        None
+    } else {
+        Some(
+            args[0]
+                .as_lisp_string()
+                .and_then(|s| s.as_utf8_str().map(str::to_owned))
+                .ok_or_else(|| {
+                    surface_error("neomacs-frame-shader: SOURCE must be a string or nil")
+                })?,
+        )
+    };
+    let host = eval.display_host.as_ref().ok_or_else(|| {
+        surface_error("neomacs-frame-shader: no GUI display host in this session")
+    })?;
+    host.set_frame_shader(source).map_err(surface_error)?;
+    Ok(Value::NIL)
+}
