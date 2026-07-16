@@ -872,3 +872,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "display_spec_surface_test.rs"]
+mod surface_tests;
