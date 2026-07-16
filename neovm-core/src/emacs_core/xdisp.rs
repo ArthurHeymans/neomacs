@@ -128,20 +128,23 @@ pub(crate) struct RegionTextMetrics {
 }
 
 fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
-    let mut bytes = Vec::new();
-    buf.copy_emacs_byte_range_to(
-        EmacsByteRange::new(
-            EmacsBytePos::ZERO,
-            end_byte.min(buf.point_max_emacs_byte_pos()),
-        ),
-        &mut bytes,
-    );
-    let line = bytes.iter().filter(|&&b| b == b'\n').count() + 1;
-    let tail = match bytes.iter().rposition(|&b| b == b'\n') {
-        Some(idx) => &bytes[idx + 1..],
-        None => &bytes[..],
-    };
-    let col = emacs_char_count(tail, buf.get_multibyte());
+    let end = end_byte.min(buf.point_max_emacs_byte_pos());
+    // Line number = newlines in [0, end) + 1. Count them by scanning the gap
+    // buffer in place (SIMD-friendly, no copy) instead of materializing the
+    // whole prefix into a Vec -- the mode line re-derives this on every
+    // redisplay, so the old O(point) allocation + memcpy dominated redisplay
+    // deep in a large buffer.
+    let line = buf.count_newlines_emacs_byte(EmacsBytePos::ZERO, end) + 1;
+    // Column only needs the current line's prefix: find its start with a
+    // backward newline scan (O(column) via memrchr, not O(point)) and count
+    // chars over just that span.
+    let bol = buf
+        .prev_newline_emacs_byte(end, EmacsBytePos::ZERO)
+        .map(|nl| nl.add_len(crate::buffer::EmacsByteLen::new(1)))
+        .unwrap_or(EmacsBytePos::ZERO);
+    let mut tail = Vec::new();
+    buf.copy_emacs_byte_range_to(EmacsByteRange::new(bol, end), &mut tail);
+    let col = emacs_char_count(&tail, buf.get_multibyte());
     LineColumn { line, column: col }
 }
 

@@ -924,6 +924,27 @@ fn test_format_mode_line_column_c_and_big_c_specs_match_gnu() {
     assert_eq!(rendered, Value::string("3|4"));
 }
 
+#[test]
+fn test_format_mode_line_line_and_column_at_deep_position() {
+    // Exercises the zero-copy line/column derivation (prefix_line_and_column):
+    // point several lines in, so the newline count is > 1 and the column span
+    // starts after an interior newline.
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.create_buffer("line-col-deep");
+    eval.buffers.set_current(buffer_id);
+    {
+        let buffer = eval.buffers.get_mut(buffer_id).expect("buffer");
+        buffer.insert("l1\nl2\nl3\nabcXdef");
+        // point after "l1\nl2\nl3\nabc" -> line 4 (three preceding newlines),
+        // column 3 (0-indexed) on that line.
+        buffer.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new("l1\nl2\nl3\nabc".len()));
+    }
+    let rendered =
+        builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%l|%c")]).expect("specs");
+    assert_eq!(rendered, Value::string("4|3"));
+}
+
 fn format_mode_line_position_backend_trace(kind: BufferTextBackendKind) -> String {
     let mut eval = interactive_context();
     convert_current_buffer_text_backend(&mut eval, kind);
