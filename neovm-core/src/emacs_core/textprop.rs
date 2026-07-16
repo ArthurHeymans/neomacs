@@ -854,8 +854,9 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
     let Some(buf) = buffers.get(buf_id) else {
         return Ok(());
     };
+    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
     let inhibit = buf
-        .get_buffer_local("inhibit-read-only")
+        .get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         .unwrap_or_else(|| {
             obarray
                 .symbol_value("inhibit-read-only")
@@ -953,8 +954,9 @@ pub(crate) fn verify_text_read_only_for_insert_in_state(
     let Some(buf) = buffers.get(buf_id) else {
         return Ok(());
     };
+    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
     let inhibit = buf
-        .get_buffer_local("inhibit-read-only")
+        .get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         .unwrap_or_else(|| {
             obarray
                 .symbol_value("inhibit-read-only")

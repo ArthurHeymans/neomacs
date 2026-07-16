@@ -251,9 +251,13 @@ typed_subr! {
     pub(crate) fn builtin_boundp_1(eval, symbol: SymId) -> EvalResult {
         let obarray = eval.obarray();
         let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
+        // `boundp` runs constantly (font-lock/redisplay); a global (non-Localized)
+        // symbol is never in any local_var_alist, so skip the per-buffer scan.
+        let localized = obarray.is_localized(resolved);
         // specbind writes directly to obarray, so no dynamic stack lookup needed.
         if let Some(buf) = eval.buffers.current_buffer() {
-            if let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved) {
+            if let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(resolved, localized)
+            {
                 return Ok(Value::bool_val(binding.as_value().is_some()));
             }
         }

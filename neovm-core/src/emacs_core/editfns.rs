@@ -103,7 +103,8 @@ pub(crate) fn buffer_read_only_active_in_state(
     dynamic: &[OrderedRuntimeBindingMap],
     buf: &Buffer,
 ) -> bool {
-    if let Some(value) = buf.get_buffer_local("inhibit-read-only")
+    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
+    if let Some(value) = buf.get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         && value.is_truthy()
     {
         return false;

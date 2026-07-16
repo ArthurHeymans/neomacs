@@ -1147,8 +1147,9 @@ fn mode_line_symbol_value_in_state(
     buffers: &crate::buffer::BufferManager,
     name: &str,
 ) -> Option<Value> {
+    let sym = crate::emacs_core::intern::intern(name);
     if let Some(buf) = buffers.current_buffer()
-        && let Some(value) = buf.get_buffer_local(name)
+        && let Some(value) = buf.get_buffer_local_by_sym_id_gated(sym, obarray.is_localized(sym))
     {
         return Some(value);
     }

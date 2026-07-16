@@ -1421,7 +1421,8 @@ fn dynamic_buffer_or_global_symbol_value_in_state(
     buf: &crate::buffer::Buffer,
     name: &str,
 ) -> Option<Value> {
-    if let Some(v) = buf.get_buffer_local(name) {
+    let sym = crate::emacs_core::intern::intern(name);
+    if let Some(v) = buf.get_buffer_local_by_sym_id_gated(sym, obarray.is_localized(sym)) {
         return Some(v);
     }
     obarray.symbol_value(name).cloned()
