@@ -184,7 +184,7 @@ fn test_expect_register() {
 #[test]
 fn test_builtin_copy_and_insert() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -209,7 +209,7 @@ fn test_builtin_copy_and_insert() {
 #[test]
 fn test_builtin_number_and_increment() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -235,7 +235,7 @@ fn test_builtin_number_and_increment() {
 #[test]
 fn test_builtin_increment_empty_register() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -251,7 +251,7 @@ fn test_builtin_increment_empty_register() {
 #[test]
 fn test_builtin_set_and_get_register() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -278,7 +278,7 @@ fn test_builtin_set_and_get_register() {
 #[test]
 fn test_builtin_view_register() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -310,7 +310,7 @@ fn test_builtin_view_register() {
 #[test]
 fn test_builtin_point_to_register_stores_marker() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let current_buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -334,7 +334,7 @@ fn test_builtin_point_to_register_stores_marker() {
 #[test]
 fn test_builtin_point_to_register_stores_lisp_char_position() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     {
@@ -358,7 +358,7 @@ fn test_builtin_point_to_register_stores_lisp_char_position() {
 #[test]
 fn test_builtin_register_to_string() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -375,7 +375,7 @@ fn test_builtin_register_to_string() {
 #[test]
 fn rectangle_and_file_registers_preserve_raw_unibyte_strings() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     eval.registers.set(
@@ -409,7 +409,7 @@ fn rectangle_and_file_registers_preserve_raw_unibyte_strings() {
 #[test]
 fn test_wrong_arg_count() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -425,7 +425,7 @@ fn test_wrong_arg_count() {
 #[test]
 fn register_text_preserves_raw_unibyte_payload() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xFF]));

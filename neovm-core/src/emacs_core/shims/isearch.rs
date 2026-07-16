@@ -1,3 +1,9 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/isearch.el (+ replace.el)`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! zero references from non-test code. Goal: confirm dead in a full suite run, then delete.
+//!
 //! Interactive search and query-replace.
 //!
 //! Implements:
@@ -11,10 +17,10 @@
 use crate::emacs_core::error::LispCondition;
 use std::collections::VecDeque;
 
-use super::error::{EvalResult, Flow, signal};
-use super::regex::MatchGroup;
-use super::value::{Value, ValueKind};
 use crate::buffer::{Buffer, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1};
+use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::regex::MatchGroup;
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -118,8 +124,8 @@ fn expect_integer_or_marker(
 ) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
-        _ if super::marker::is_marker(val) => {
-            super::marker::marker_position_as_int_with_buffers(buffers, val)
+        _ if crate::emacs_core::marker::is_marker(val) => {
+            crate::emacs_core::marker::marker_position_as_int_with_buffers(buffers, val)
         }
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
@@ -255,13 +261,16 @@ fn lisp_pattern_has_uppercase(pattern: &crate::heap_types::LispString) -> bool {
 /// `builtins/misc_eval.rs` (audit finding #3 in
 /// `drafts/regex-search-audit.md`).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
+fn dynamic_or_global_symbol_value(
+    eval: &crate::emacs_core::eval::Context,
+    name: &str,
+) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
+fn buffer_read_only_active(eval: &crate::emacs_core::eval::Context, buf: &Buffer) -> bool {
     if buf.get_read_only() {
         return true;
     }
@@ -277,7 +286,7 @@ fn buffer_read_only_active(eval: &super::eval::Context, buf: &Buffer) -> bool {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn case_fold_for_pattern(
-    eval: &super::eval::Context,
+    eval: &crate::emacs_core::eval::Context,
     pattern: &crate::heap_types::LispString,
 ) -> bool {
     let case_fold_search_enabled = dynamic_or_global_symbol_value(eval, "case-fold-search")
@@ -299,21 +308,21 @@ fn case_fold_for_pattern(
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn case_replace_enabled(eval: &super::eval::Context) -> bool {
+fn case_replace_enabled(eval: &crate::emacs_core::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "case-replace")
         .map(|value| !value.is_nil())
         .unwrap_or(true)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn replace_lax_whitespace_enabled(eval: &super::eval::Context) -> bool {
+fn replace_lax_whitespace_enabled(eval: &crate::emacs_core::eval::Context) -> bool {
     dynamic_or_global_symbol_value(eval, "replace-lax-whitespace")
         .map(|value| !value.is_nil())
         .unwrap_or(false)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn resolve_search_whitespace_regexp(eval: &super::eval::Context) -> Option<LispString> {
+fn resolve_search_whitespace_regexp(eval: &crate::emacs_core::eval::Context) -> Option<LispString> {
     // Issue #131: return the whitespace regexp as a byte-faithful LispString. The
     // default `[ \t\n\r]+` is ASCII, but a user-set `search-whitespace-regexp`
     // may carry eight-bit/PUA bytes, so keep the real bytes (no storage form).
@@ -388,10 +397,10 @@ fn string_matches_regexp(
     // pattern, no storage round-trip.
     let mut match_data = None;
     let text = lisp_string_from_buffer_bytes(line.to_vec(), multibyte);
-    super::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
+    crate::emacs_core::regex::string_match_full_with_case_fold_source_lisp_pattern_posix(
         pattern,
         &text,
-        super::regex::SearchedString::Owned(text.clone()),
+        crate::emacs_core::regex::SearchedString::Owned(text.clone()),
         0,
         case_fold,
         false,
@@ -403,7 +412,7 @@ fn string_matches_regexp(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_line_operation_byte_range(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     current_id: crate::buffer::BufferId,
     range: EmacsByteRange,
 ) -> Result<(), Flow> {
@@ -432,18 +441,21 @@ fn delete_line_operation_byte_range(
         range.end().get(),
     )?;
 
-    let change =
-        super::editfns::text_change_for_deletion_in_manager(&eval.buffers, current_id, range)?;
-    super::editfns::signal_before_text_change(eval, change)?;
+    let change = crate::emacs_core::editfns::text_change_for_deletion_in_manager(
+        &eval.buffers,
+        current_id,
+        range,
+    )?;
+    crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
-    super::editfns::signal_after_text_change(eval, change)
+    crate::emacs_core::editfns::signal_after_text_change(eval, change)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn delete_line_operation_ranges(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     current_id: crate::buffer::BufferId,
     delete_ranges: Vec<EmacsByteRange>,
 ) -> Result<usize, Flow> {
@@ -471,8 +483,10 @@ fn count_string_regexp_matches(
     pattern: &LispString,
     case_fold: bool,
 ) -> Result<i64, Flow> {
-    let iterated = super::regex::iterate_string_matches_with_case_fold(pattern, text, 0, case_fold)
-        .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
+    let iterated = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
+        pattern, text, 0, case_fold,
+    )
+    .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
     Ok(iterated
         .matches
         .into_iter()
@@ -873,7 +887,7 @@ impl IsearchManager {
         let needle = state.search_string.as_bytes();
 
         if state.regexp {
-            if let Ok(iterated) = super::regex::iterate_string_matches_with_case_fold(
+            if let Ok(iterated) = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
                 &state.search_string,
                 region,
                 0,
@@ -1360,7 +1374,10 @@ impl QueryReplaceManager {
             // Issue #131: preserve the matched text's case over TO's real Emacs
             // bytes, instead of round-tripping through a storage String.
             let matched_ls = LispString::from_utf8(matched);
-            super::casefiddle::apply_replace_match_case_lisp(&state.to_string, &matched_ls)
+            crate::emacs_core::casefiddle::apply_replace_match_case_lisp(
+                &state.to_string,
+                &matched_ls,
+            )
         } else {
             state.to_string.clone()
         }
@@ -1512,7 +1529,7 @@ fn find_match(
         let pattern_ls = crate::heap_types::LispString::from_emacs_bytes(pattern.to_vec());
         if forward {
             let start = from.min(text_len);
-            let iterated = super::regex::iterate_string_matches_with_case_fold(
+            let iterated = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
                 &pattern_ls,
                 text,
                 start,
@@ -1525,7 +1542,7 @@ fn find_match(
                 .find_map(|groups| groups.first().and_then(|group| *group))
         } else {
             let end = from.min(text_len);
-            let iterated = super::regex::iterate_string_matches_with_case_fold(
+            let iterated = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
                 &pattern_ls,
                 &text[..end],
                 0,
@@ -1607,7 +1624,7 @@ fn is_delimited_word_char(ch: char) -> bool {
 /// - Otherwise return `replacement` unmodified.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn preserve_case(replacement: &str, matched: &str) -> String {
-    super::casefiddle::apply_replace_match_case(replacement, matched)
+    crate::emacs_core::casefiddle::apply_replace_match_case(replacement, matched)
 }
 
 // ---------------------------------------------------------------------------
@@ -1646,7 +1663,7 @@ fn is_delimited_match_bytes(text: &[u8], start: usize, end: usize) -> bool {
 fn preserve_case_emacs_bytes(replacement: &[u8], matched: &[u8], multibyte: bool) -> Vec<u8> {
     let rep = lisp_string_from_buffer_bytes(replacement.to_vec(), multibyte);
     let mat = lisp_string_from_buffer_bytes(matched.to_vec(), multibyte);
-    super::casefiddle::apply_replace_match_case_lisp(&rep, &mat)
+    crate::emacs_core::casefiddle::apply_replace_match_case_lisp(&rep, &mat)
         .as_bytes()
         .to_vec()
 }
@@ -1713,7 +1730,7 @@ fn expand_emacs_replacement_bytes(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_string_eval_impl(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
     query_style_point: bool,
 ) -> EvalResult {
@@ -1814,14 +1831,15 @@ fn replace_string_eval_impl(
             .current_buffer_id()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
-        let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
-            &eval.buffers,
-            current_id,
-            range,
-            &out_text,
-        )?;
+        let change =
+            crate::emacs_core::editfns::text_change_for_lisp_string_replacement_in_manager(
+                &eval.buffers,
+                current_id,
+                range,
+                &out_text,
+            )?;
         let new_len = change.new_extent().emacs_bytes();
-        super::editfns::signal_before_text_change(eval, change)?;
+        crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
         let _ = eval
             .buffers
             .delete_buffer_measured_region(current_id, change.old_range());
@@ -1831,7 +1849,7 @@ fn replace_string_eval_impl(
         let _ = eval
             .buffers
             .insert_lisp_string_into_buffer(current_id, &out_text);
-        super::editfns::signal_after_text_change(eval, change)?;
+        crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
         if backward {
             if let Some(&(_, first_len)) = units.first() {
                 let _ = eval.buffers.goto_buffer_emacs_byte_pos(
@@ -1881,9 +1899,13 @@ fn replace_string_eval_impl(
         // LispString for the byte-native match engine.
         let pattern = build_lax_whitespace_pattern(from_ls.as_bytes(), whitespace_regex.as_bytes());
         let pattern_ls = LispString::from_emacs_bytes(pattern);
-        let iterated =
-            super::regex::iterate_string_matches_with_case_fold(&pattern_ls, source, 0, case_fold)
-                .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
+        let iterated = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
+            &pattern_ls,
+            source,
+            0,
+            case_fold,
+        )
+        .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
         let mut last = 0usize;
         for groups in iterated.matches {
             let Some(group) = groups.first().and_then(|group| *group) else {
@@ -1950,14 +1972,14 @@ fn replace_string_eval_impl(
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
-    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+    let change = crate::emacs_core::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
         range,
         &out_text,
     )?;
     let new_len = change.new_extent().emacs_bytes();
-    super::editfns::signal_before_text_change(eval, change)?;
+    crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
@@ -1967,7 +1989,7 @@ fn replace_string_eval_impl(
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
-    super::editfns::signal_after_text_change(eval, change)?;
+    crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
             let _ = eval
@@ -2001,7 +2023,7 @@ fn replace_string_eval_impl(
 /// evaluator-backed non-interactive replace subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_string(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     replace_string_eval_impl(eval, args, false)
@@ -2009,7 +2031,7 @@ pub(crate) fn builtin_replace_string(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn replace_regexp_eval_impl(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
     query_style_point: bool,
 ) -> EvalResult {
@@ -2075,9 +2097,10 @@ fn replace_regexp_eval_impl(
 
     let case_fold = case_fold_for_pattern(eval, from_ls);
     let preserve_match_case = case_fold && case_replace_enabled(eval);
-    let iterated =
-        super::regex::iterate_string_matches_with_case_fold(from_ls, source, 0, case_fold)
-            .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
+    let iterated = crate::emacs_core::regex::iterate_string_matches_with_case_fold(
+        from_ls, source, 0, case_fold,
+    )
+    .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))?;
 
     let mut out: Vec<u8> = Vec::with_capacity(source.len());
     let mut last = 0usize;
@@ -2157,14 +2180,14 @@ fn replace_regexp_eval_impl(
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let out_text = lisp_string_from_buffer_bytes(out, source_multibyte);
-    let change = super::editfns::text_change_for_lisp_string_replacement_in_manager(
+    let change = crate::emacs_core::editfns::text_change_for_lisp_string_replacement_in_manager(
         &eval.buffers,
         current_id,
         range,
         &out_text,
     )?;
     let new_len = change.new_extent().emacs_bytes();
-    super::editfns::signal_before_text_change(eval, change)?;
+    crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
     let _ = eval
         .buffers
         .delete_buffer_measured_region(current_id, change.old_range());
@@ -2174,7 +2197,7 @@ fn replace_regexp_eval_impl(
     let _ = eval
         .buffers
         .insert_lisp_string_into_buffer(current_id, &out_text);
-    super::editfns::signal_after_text_change(eval, change)?;
+    crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
     if backward {
         if let Some(pos) = backward_point {
             let _ = eval
@@ -2208,7 +2231,7 @@ fn replace_regexp_eval_impl(
 /// evaluator-backed non-interactive regexp replacement subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_replace_regexp(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     replace_regexp_eval_impl(eval, args, false)
@@ -2217,7 +2240,10 @@ pub(crate) fn builtin_replace_regexp(
 /// `(keep-lines REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed non-interactive line filtering subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_keep_lines(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_max_args("keep-lines", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
 
@@ -2304,7 +2330,10 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
 /// `(flush-lines REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed non-interactive line filtering subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_flush_lines(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_max_args("flush-lines", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
 
@@ -2385,7 +2414,10 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
 /// `(how-many REGEXP &optional RSTART REND INTERACTIVE)` —
 /// evaluator-backed regexp match counting subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_how_many(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_max_args("how-many", &args, 1, 4)?;
     let regexp_ls = expect_sequence_string(&args[0])?;
 
@@ -2416,7 +2448,7 @@ pub(crate) fn builtin_how_many(eval: &mut super::eval::Context, args: Vec<Value>
 /// evaluator-backed regexp match counting subset.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_count_matches(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_max_args("count-matches", &args, 1, 4)?;

@@ -1,3 +1,9 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/rect.el`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! two remaining references. Goal: retire the callers onto the loaded rect.el, then delete.
+//!
 //! Rectangle operation builtins for the Elisp interpreter.
 //!
 //! Implements rectangle manipulation commands:
@@ -12,11 +18,11 @@
 //! oracle corpora.
 
 #[cfg(test)]
-use super::error::EvalResult;
-use super::error::{Flow, signal};
-use super::value::*;
+use crate::emacs_core::error::EvalResult;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{Flow, signal};
 use crate::emacs_core::value::ValueKind;
+use crate::emacs_core::value::*;
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------
@@ -89,7 +95,10 @@ fn expect_string(value: &Value) -> Result<LispString, Flow> {
 /// `builtins/misc_eval.rs` (audit finding #3 in
 /// `drafts/regex-search-audit.md`).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Option<Value> {
+fn dynamic_or_global_symbol_value(
+    eval: &crate::emacs_core::eval::Context,
+    name: &str,
+) -> Option<Value> {
     let id = crate::emacs_core::intern::intern(name);
     eval.eval_symbol_by_id(id).ok()
 }
@@ -119,12 +128,12 @@ impl Default for RectangleState {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn empty_lisp_string(multibyte: bool) -> LispString {
-    super::builtins::lisp_string_from_buffer_bytes(Vec::new(), multibyte)
+    crate::emacs_core::builtins::lisp_string_from_buffer_bytes(Vec::new(), multibyte)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn space_lisp_string(width: usize, multibyte: bool) -> LispString {
-    super::builtins::lisp_string_from_buffer_bytes(vec![b' '; width], multibyte)
+    crate::emacs_core::builtins::lisp_string_from_buffer_bytes(vec![b' '; width], multibyte)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -173,7 +182,7 @@ fn join_lisp_string_lines(lines: &[LispString], multibyte: bool) -> LispString {
         }
         out.extend_from_slice(line.as_bytes());
     }
-    super::builtins::lisp_string_from_buffer_bytes(out, multibyte)
+    crate::emacs_core::builtins::lisp_string_from_buffer_bytes(out, multibyte)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,14 +1,20 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/emacs-lisp/cl-lib.el (+ cl-seq.el, seq.el)`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! zero references from non-test code. Goal: confirm dead in a full suite run, then delete.
+//!
 //! CL-lib, seq.el, and JSON built-in functions.
 //!
 //! Provides Common Lisp compatibility functions, sequence operations,
 //! and JSON parsing/serialization for the Elisp interpreter.
 
-use super::error::{EvalResult, Flow, signal};
-#[cfg(test)]
-use super::intern::intern_uninterned;
-use super::intern::{intern, resolve_sym};
-use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{EvalResult, Flow, signal};
+#[cfg(test)]
+use crate::emacs_core::intern::intern_uninterned;
+use crate::emacs_core::intern::{intern, resolve_sym};
+use crate::emacs_core::value::*;
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
@@ -86,7 +92,7 @@ fn lisp_string_elements(value: &Value) -> Vec<Value> {
     let string = value
         .as_lisp_string()
         .expect("ValueKind::String must carry LispString payload");
-    super::builtins::lisp_string_char_codes(string)
+    crate::emacs_core::builtins::lisp_string_char_codes(string)
         .into_iter()
         .map(|cp| Value::fixnum(cp as i64))
         .collect()
@@ -296,7 +302,7 @@ pub(crate) fn builtin_cl_minusp(args: Vec<Value>) -> EvalResult {
 /// `(cl-member ITEM LIST)` -- CL alias for `member`.
 #[cfg(test)]
 pub(crate) fn builtin_cl_member(args: Vec<Value>) -> EvalResult {
-    super::builtins::builtin_member(args)
+    crate::emacs_core::builtins::builtin_member(args)
 }
 
 /// `(cl-coerce OBJECT TYPE)` -- coerce a sequence to TYPE.
@@ -312,7 +318,7 @@ pub(crate) fn builtin_cl_adjoin(args: Vec<Value>) -> EvalResult {
     expect_args("cl-adjoin", &args, 2)?;
     let item = args[0];
     let list = args[1];
-    let found = super::builtins::builtin_member(vec![item, list])?;
+    let found = crate::emacs_core::builtins::builtin_member(vec![item, list])?;
     if found.is_truthy() {
         Ok(list)
     } else {
@@ -323,7 +329,7 @@ pub(crate) fn builtin_cl_adjoin(args: Vec<Value>) -> EvalResult {
 /// `(cl-remove ITEM LIST)` -- CL alias for `remove`.
 #[cfg(test)]
 pub(crate) fn builtin_cl_remove(args: Vec<Value>) -> EvalResult {
-    super::builtins_extra::remove_list_equal(args)
+    crate::emacs_core::builtins_extra::remove_list_equal(args)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -405,7 +411,7 @@ fn seq_collect_concat_arg(arg: &Value) -> Result<Vec<Value>, Flow> {
             "error",
             vec![Value::string(format!(
                 "Cannot convert {} into a sequence",
-                super::print::print_value(arg)
+                crate::emacs_core::print::print_value(arg)
             ))],
         )),
     }
@@ -618,7 +624,7 @@ pub(crate) fn builtin_seq_subseq(args: Vec<Value>) -> EvalResult {
             "error",
             vec![Value::string(format!(
                 "Unsupported sequence: {}",
-                super::print::print_value(&args[0])
+                crate::emacs_core::print::print_value(&args[0])
             ))],
         )),
     }
@@ -635,7 +641,7 @@ pub(crate) fn builtin_seq_concatenate(args: Vec<Value>) -> EvalResult {
                 "error",
                 vec![Value::string(format!(
                     "Not a sequence type name: {}",
-                    super::print::print_value(&args[0])
+                    crate::emacs_core::print::print_value(&args[0])
                 ))],
             ));
         }
@@ -661,7 +667,7 @@ pub(crate) fn builtin_seq_concatenate(args: Vec<Value>) -> EvalResult {
             let mut bytes = Vec::new();
             let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
             for value in &combined {
-                let code = super::builtins::expect_character_code(value)? as u32;
+                let code = crate::emacs_core::builtins::expect_character_code(value)? as u32;
                 let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
                 bytes.extend_from_slice(&buf[..len]);
             }
@@ -752,7 +758,7 @@ pub(crate) fn builtin_seq_max(args: Vec<Value>) -> EvalResult {
 /// `(seq-position SEQ ELT &optional TESTFN)` — return first matching index.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_seq_position(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("seq-position", &args, 2)?;
@@ -798,7 +804,10 @@ pub(crate) fn builtin_seq_position(
 
 /// `(cl-position ITEM SEQ &optional TESTFN)` -- CL argument order wrapper.
 #[cfg(test)]
-pub(crate) fn builtin_cl_position(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_cl_position(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("cl-position", &args, 2)?;
     expect_max_args("cl-position", &args, 3)?;
 
@@ -814,14 +823,20 @@ pub(crate) fn builtin_cl_position(eval: &mut super::eval::Context, args: Vec<Val
 
 /// `(cl-notany PREDICATE SEQ)` -- true when no element satisfies PREDICATE.
 #[cfg(test)]
-pub(crate) fn builtin_cl_notany(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_cl_notany(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     let found = builtin_seq_some(eval, args)?;
     Ok(Value::bool_val(found.is_nil()))
 }
 
 /// `(cl-notevery PREDICATE SEQ)` -- true when not all elements satisfy PREDICATE.
 #[cfg(test)]
-pub(crate) fn builtin_cl_notevery(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_cl_notevery(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     let every = builtin_seq_every_p(eval, args)?;
     Ok(Value::bool_val(!every.is_truthy()))
 }
@@ -874,7 +889,10 @@ pub(crate) fn builtin_cl_find(args: Vec<Value>) -> EvalResult {
 
 /// `(cl-find-if PREDICATE SEQ)` -- return first element satisfying PREDICATE.
 #[cfg(test)]
-pub(crate) fn builtin_cl_find_if(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_cl_find_if(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("cl-find-if", &args, 2)?;
     let pred = args[0];
     let elements = seq_position_elements(&args[1])?;
@@ -994,23 +1012,26 @@ pub(crate) fn builtin_cl_substitute(args: Vec<Value>) -> EvalResult {
 
 /// `(cl-sort SEQ PREDICATE)` -- CL alias for `sort`.
 #[cfg(test)]
-pub(crate) fn builtin_cl_sort(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    super::builtins::builtin_sort(eval, args)
+pub(crate) fn builtin_cl_sort(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    crate::emacs_core::builtins::builtin_sort(eval, args)
 }
 
 /// `(cl-stable-sort SEQ PREDICATE)` -- CL alias for stable `sort`.
 #[cfg(test)]
 pub(crate) fn builtin_cl_stable_sort(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    super::builtins::builtin_sort(eval, args)
+    crate::emacs_core::builtins::builtin_sort(eval, args)
 }
 
 /// `(cl-remove-if PREDICATE SEQ)` -- remove elements satisfying PREDICATE.
 #[cfg(test)]
 pub(crate) fn builtin_cl_remove_if(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("cl-remove-if", &args, 2)?;
@@ -1038,7 +1059,7 @@ pub(crate) fn builtin_cl_remove_if(
 /// `(cl-remove-if-not PREDICATE SEQ)` -- keep elements satisfying PREDICATE.
 #[cfg(test)]
 pub(crate) fn builtin_cl_remove_if_not(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("cl-remove-if-not", &args, 2)?;
@@ -1086,7 +1107,10 @@ impl ClMapResultType {
 
 /// `(cl-map RESULT-TYPE FUNCTION SEQ...)` -- CL map with explicit result type.
 #[cfg(test)]
-pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_cl_map(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("cl-map", &args, 3)?;
     let result_type = args[0];
     let func = args[1];
@@ -1118,7 +1142,7 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
             let mut bytes = Vec::new();
             let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
             for item in items {
-                let code = super::builtins::expect_character_code(&item)? as u32;
+                let code = crate::emacs_core::builtins::expect_character_code(&item)? as u32;
                 let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
                 bytes.extend_from_slice(&buf[..len]);
             }
@@ -1130,7 +1154,7 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
             "error",
             vec![Value::string(format!(
                 "Unsupported cl-map result type: {}",
-                super::print::print_value(&result_type)
+                crate::emacs_core::print::print_value(&result_type)
             ))],
         )),
     }
@@ -1138,7 +1162,10 @@ pub(crate) fn builtin_cl_map(eval: &mut super::eval::Context, args: Vec<Value>) 
 
 /// `(seq-mapn FN &rest SEQS)` — map over multiple sequences.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_seq_mapn(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_min_args("seq-mapn", &args, 2)?;
     let func = args[0];
     let seqs: Vec<Vec<Value>> = args[1..].iter().map(collect_sequence).collect();
@@ -1169,7 +1196,10 @@ pub(crate) fn builtin_seq_mapn(eval: &mut super::eval::Context, args: Vec<Value>
 
 /// `(seq-count PRED SEQ)` — count elements matching predicate.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_count(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_seq_count(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("seq-count", &args, 2)?;
     let pred = args[0];
     let elems = collect_sequence(&args[1]);
@@ -1194,7 +1224,10 @@ pub(crate) fn builtin_seq_count(eval: &mut super::eval::Context, args: Vec<Value
 
 /// `(seq-reduce FN SEQ INITIAL)` — reduce with initial value.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_reduce(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_seq_reduce(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("seq-reduce", &args, 3)?;
     let func = args[0];
     let elems = collect_sequence(&args[1]);
@@ -1218,7 +1251,10 @@ pub(crate) fn builtin_seq_reduce(eval: &mut super::eval::Context, args: Vec<Valu
 
 /// `(seq-some PRED SEQ)` — some element matches predicate.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_some(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_seq_some(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("seq-some", &args, 2)?;
     let pred = args[0];
     let elems = collect_sequence(&args[1]);
@@ -1242,7 +1278,10 @@ pub(crate) fn builtin_seq_some(eval: &mut super::eval::Context, args: Vec<Value>
 
 /// `(seq-every-p PRED SEQ)` — all elements match predicate.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_seq_every_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_seq_every_p(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("seq-every-p", &args, 2)?;
     let pred = args[0];
     let elems = collect_sequence(&args[1]);

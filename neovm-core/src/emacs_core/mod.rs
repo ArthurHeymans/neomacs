@@ -9,11 +9,14 @@
 //! - 100+ built-in functions: arithmetic, comparisons, type predicates, list ops, string ops,
 //!   vector ops, hash tables, higher-order functions, conversion, property lists
 
-pub mod abbrev;
 pub mod advice;
 pub mod alloc;
+// Quarantined Rust reimplementations of GNU *Lisp* files (population D,
+// docs/design/neovm-core-layout.md). Re-exported under their old names so
+// existing `emacs_core::<name>` paths keep working until deletion.
+pub mod shims;
+pub use shims::{abbrev, bookmark, cl_lib, isearch, rect, register};
 pub mod autoload;
-pub mod bookmark;
 pub mod buffer;
 pub mod buffer_vars;
 pub mod builtins;
@@ -27,7 +30,6 @@ pub mod ccl;
 pub mod character;
 pub mod charset;
 pub mod chartable;
-pub mod cl_lib;
 pub mod coding;
 pub mod comp;
 #[cfg(test)]
@@ -65,7 +67,6 @@ pub mod image_catalog;
 pub mod indent;
 pub mod interactive;
 pub mod intern;
-pub mod isearch;
 pub mod jit;
 pub mod json;
 pub mod kbd;
@@ -93,10 +94,8 @@ pub(crate) mod profiler;
 #[cfg(test)]
 mod quit_regression_test;
 pub mod reader;
-pub mod rect;
 pub mod regex;
 pub mod regex_emacs;
-pub mod register;
 pub(crate) mod runtime_identity;
 #[cfg(test)]
 mod runtime_string_guard_test;

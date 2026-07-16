@@ -2,9 +2,9 @@
 fn migrated_string_subsystems_do_not_call_generic_runtime_string_adapter_directly() {
     let forbidden = concat!("lisp_string", "_to_runtime_string(");
     for (path, source) in [
-        ("abbrev.rs", include_str!("abbrev.rs")),
+        ("abbrev.rs", include_str!("shims/abbrev.rs")),
         ("autoload.rs", include_str!("autoload.rs")),
-        ("bookmark.rs", include_str!("bookmark.rs")),
+        ("bookmark.rs", include_str!("shims/bookmark.rs")),
         ("builtins/buffers.rs", include_str!("builtins/buffers.rs")),
         (
             "builtins/misc_eval.rs",
@@ -34,7 +34,7 @@ fn migrated_string_subsystems_do_not_call_generic_runtime_string_adapter_directl
         ("format.rs", include_str!("format.rs")),
         ("eval.rs", include_str!("eval.rs")),
         ("interactive.rs", include_str!("interactive.rs")),
-        ("isearch.rs", include_str!("isearch.rs")),
+        ("isearch.rs", include_str!("shims/isearch.rs")),
         ("keyboard/pure.rs", include_str!("keyboard/pure.rs")),
         ("kmacro.rs", include_str!("kmacro.rs")),
         ("load.rs", include_str!("load.rs")),
@@ -66,7 +66,7 @@ fn semantic_string_subsystems_do_not_reintroduce_utf8_unwraps() {
     let forbidden = concat!("as_str", "().unwrap(");
     for (path, source) in [
         ("builtins/symbols.rs", include_str!("builtins/symbols.rs")),
-        ("cl_lib.rs", include_str!("cl_lib.rs")),
+        ("cl_lib.rs", include_str!("shims/cl_lib.rs")),
         ("search.rs", include_str!("search.rs")),
     ] {
         assert!(

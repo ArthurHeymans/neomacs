@@ -504,7 +504,7 @@ fn delete_extract_rectangle_line_loaded_state_matches_gnu() {
 #[test]
 fn raw_context_does_not_prebind_replace_rectangle_alias() {
     crate::test_utils::init_test_tracing();
-    let eval = super::super::eval::Context::new();
+    let eval = crate::emacs_core::eval::Context::new();
     assert!(
         eval.obarray.symbol_function("replace-rectangle").is_none(),
         "replace-rectangle should come from GNU rect.el/loaddefs, not Context::new"

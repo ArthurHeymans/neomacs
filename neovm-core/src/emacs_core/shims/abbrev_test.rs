@@ -237,7 +237,7 @@ fn test_apply_case() {
 #[test]
 fn test_make_abbrev_table_and_predicate() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -265,7 +265,7 @@ fn test_make_abbrev_table_and_predicate() {
 #[test]
 fn test_define_abbrev_and_lookup() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -322,7 +322,7 @@ fn abbrev_system_setting_matches_gnu_force_domain() {
 #[test]
 fn define_abbrev_system_force_matches_gnu_overwrite_and_storage() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let table = builtin_make_abbrev_table(&mut eval, vec![]).unwrap();
@@ -392,7 +392,7 @@ fn define_abbrev_system_force_matches_gnu_overwrite_and_storage() {
 #[test]
 fn test_clear_abbrev_table() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -429,7 +429,7 @@ fn test_clear_abbrev_table() {
 #[test]
 fn test_abbrev_get_put() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -447,7 +447,7 @@ fn test_abbrev_get_put() {
 #[test]
 fn test_define_abbrev_table_and_lookup() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 
@@ -463,7 +463,7 @@ fn test_define_abbrev_table_and_lookup() {
 #[test]
 fn test_insert_abbrev_table_description_writes_buffer_text() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     builtin_define_abbrev_table(&mut eval, vec![Value::symbol("test-table"), Value::NIL]).unwrap();
@@ -501,7 +501,7 @@ fn test_insert_abbrev_table_description_writes_buffer_text() {
 #[test]
 fn test_abbrev_tables_do_not_share_symbol_cells() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let table_a = builtin_make_abbrev_table(&mut eval, vec![]).unwrap();
@@ -527,7 +527,7 @@ fn test_abbrev_tables_do_not_share_symbol_cells() {
 #[test]
 fn test_define_abbrev_preserves_raw_unibyte_expansion() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let table = builtin_make_abbrev_table(&mut eval, vec![]).unwrap();
@@ -544,7 +544,7 @@ fn test_define_abbrev_preserves_raw_unibyte_expansion() {
 #[test]
 fn test_abbrev_table_properties_are_table_local() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
     let table_a = builtin_make_abbrev_table(
@@ -565,7 +565,7 @@ fn test_abbrev_table_properties_are_table_local() {
 #[test]
 fn test_wrong_arg_count() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
+    use crate::emacs_core::eval::Context;
 
     let mut eval = Context::new();
 

@@ -1,3 +1,9 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/abbrev.el`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! define-abbrev/abbrev-table builtins are dead (#[allow(dead_code)], never registered); only AbbrevManager state is wired into eval/pdump. Goal: load abbrev.el, delete the builtins, keep only the storage the loader needs.
+//!
 //! Abbreviation system -- text abbreviation expansion.
 //!
 //! Implements GNU Emacs-compatible obarray-based abbrev tables:
@@ -15,10 +21,10 @@
 use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
-use super::error::{EvalResult, Flow, signal};
-use super::intern::{SymId, intern, intern_uninterned, resolve_sym};
-use super::value::{Value, ValueKind, list_to_vec};
 use crate::buffer::{EmacsBytePos, TextExtent};
+use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::intern::{SymId, intern, intern_uninterned, resolve_sym};
+use crate::emacs_core::value::{Value, ValueKind, list_to_vec};
 use crate::heap_types::LispString;
 use strum::EnumString;
 
@@ -288,7 +294,7 @@ impl AbbrevManager {
 }
 
 fn runtime_string_to_abbrev_string(text: &str) -> LispString {
-    super::builtins::plain_str_to_lisp_string(text, true)
+    crate::emacs_core::builtins::plain_str_to_lisp_string(text, true)
 }
 
 fn abbrev_table_sym(text: &str) -> SymId {
@@ -300,7 +306,7 @@ fn abbrev_table_sym_from_lisp(text: &LispString) -> SymId {
     // LispString instead of routing through a lossy/storage Rust string, so the
     // abbrev-table key stays byte-faithful (no eight-bit collision). For ASCII
     // and pure-Unicode names this yields the same SymId as the `&str` path.
-    super::intern::intern_lisp_string(text)
+    crate::emacs_core::intern::intern_lisp_string(text)
 }
 
 fn abbrev_string_to_runtime(text: &LispString) -> String {
@@ -397,28 +403,29 @@ fn obarray_insert_symbol(vec_val: Value, sym: Value) {
     let Some(name) = sym.as_symbol_name() else {
         return;
     };
-    let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
+    let vec_len = crate::emacs_core::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
     if vec_len == 0 {
         return;
     }
     let bucket_idx = obarray_hash(name, vec_len);
-    let bucket =
-        super::builtins::symbols::obarray_bucket(vec_val, bucket_idx).unwrap_or(Value::NIL);
+    let bucket = crate::emacs_core::builtins::symbols::obarray_bucket(vec_val, bucket_idx)
+        .unwrap_or(Value::NIL);
     let new_bucket = Value::cons(sym, bucket);
-    let _ = super::builtins::symbols::set_obarray_bucket(vec_val, bucket_idx, new_bucket);
-    super::builtins::symbols::note_obarray_symbol_added(vec_val);
+    let _ =
+        crate::emacs_core::builtins::symbols::set_obarray_bucket(vec_val, bucket_idx, new_bucket);
+    crate::emacs_core::builtins::symbols::note_obarray_symbol_added(vec_val);
 }
 
 /// Intern a symbol into a custom obarray (vector). Returns the symbol Value.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_intern(vec_val: Value, name: &str) -> Value {
-    let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
+    let vec_len = crate::emacs_core::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
     if vec_len == 0 {
         return Value::symbol(intern_uninterned(name));
     }
     let bucket_idx = obarray_hash(name, vec_len);
-    let bucket =
-        super::builtins::symbols::obarray_bucket(vec_val, bucket_idx).unwrap_or(Value::NIL);
+    let bucket = crate::emacs_core::builtins::symbols::obarray_bucket(vec_val, bucket_idx)
+        .unwrap_or(Value::NIL);
 
     // Check if already interned
     if let Some(sym) = obarray_bucket_find(bucket, name) {
@@ -434,13 +441,13 @@ fn obarray_intern(vec_val: Value, name: &str) -> Value {
 /// Look up a symbol in a custom obarray (vector) without interning.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_lookup(vec_val: Value, name: &str) -> Option<Value> {
-    let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
+    let vec_len = crate::emacs_core::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
     if vec_len == 0 {
         return None;
     }
     let bucket_idx = obarray_hash(name, vec_len);
-    let bucket =
-        super::builtins::symbols::obarray_bucket(vec_val, bucket_idx).unwrap_or(Value::NIL);
+    let bucket = crate::emacs_core::builtins::symbols::obarray_bucket(vec_val, bucket_idx)
+        .unwrap_or(Value::NIL);
     obarray_bucket_find(bucket, name)
 }
 
@@ -452,11 +459,11 @@ fn table_header_symbol(vec_val: Value) -> Option<Value> {
 /// Check if a Value is an abbrev table (obarray with a header symbol carrying
 /// a numeric `:abbrev-table-modiff` property).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn is_abbrev_table(eval: &super::eval::Context, value: &Value) -> bool {
-    if super::builtins::symbols::check_obarray_value(*value).is_err() {
+fn is_abbrev_table(eval: &crate::emacs_core::eval::Context, value: &Value) -> bool {
+    if crate::emacs_core::builtins::symbols::check_obarray_value(*value).is_err() {
         return false;
     }
-    if super::builtins::symbols::obarray_len(*value).unwrap_or(0) == 0 {
+    if crate::emacs_core::builtins::symbols::obarray_len(*value).unwrap_or(0) == 0 {
         return false;
     }
     table_header_symbol(*value)
@@ -471,7 +478,8 @@ fn is_abbrev_table(eval: &super::eval::Context, value: &Value) -> bool {
 /// Collect all symbols from an obarray into a Vec.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn obarray_all_symbols(vec_val: Value) -> Vec<Value> {
-    let all_slots = super::builtins::symbols::obarray_buckets(vec_val).unwrap_or_default();
+    let all_slots =
+        crate::emacs_core::builtins::symbols::obarray_buckets(vec_val).unwrap_or_default();
     let mut symbols = Vec::new();
     for slot in &all_slots {
         let mut current = *slot;
@@ -537,7 +545,10 @@ fn expect_string(value: &Value) -> Result<String, Flow> {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_abbrev_table(eval: &super::eval::Context, value: &Value) -> Result<Value, Flow> {
+fn expect_abbrev_table(
+    eval: &crate::emacs_core::eval::Context,
+    value: &Value,
+) -> Result<Value, Flow> {
     if is_abbrev_table(eval, value) {
         Ok(*value)
     } else {
@@ -557,7 +568,7 @@ fn expect_abbrev_table(eval: &super::eval::Context, value: &Value) -> Result<Val
 /// Create a new empty abbrev table (obarray with a "0" symbol).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_abbrev_table(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     let table = Value::obarray(ABBREV_TABLE_DEFAULT_SIZE);
@@ -599,7 +610,7 @@ pub(crate) fn builtin_make_abbrev_table(
 /// `abbrev-table` property).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_table_p(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("abbrev-table-p", &args, 1)?;
@@ -612,7 +623,7 @@ pub(crate) fn builtin_abbrev_table_p(
 /// NAME is a string. EXPANSION is a string or nil.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_define_abbrev(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("define-abbrev", &args, 3)?;
@@ -709,7 +720,7 @@ pub(crate) fn builtin_define_abbrev(
 /// Look up ABBREV in TABLE (or the local/global abbrev tables).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_symbol(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("abbrev-symbol", &args, 1)?;
@@ -745,7 +756,7 @@ pub(crate) fn builtin_abbrev_symbol(
 /// Look up the expansion of ABBREV without expanding it.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_expansion(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("abbrev-expansion", &args, 1)?;
@@ -794,15 +805,18 @@ pub(crate) fn builtin_abbrev_expansion(
 /// In GNU Emacs, system abbrevs are kept but with empty expansion.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_clear_abbrev_table(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("clear-abbrev-table", &args, 1)?;
     let vec_val = expect_abbrev_table(eval, &args[0])?;
     let header = table_header_symbol(vec_val)
         .unwrap_or_else(|| Value::symbol(intern_uninterned(ABBREV_TABLE_HEADER_NAME)));
-    let vec_len = super::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
-    let _ = super::builtins::symbols::replace_obarray_buckets(vec_val, vec![Value::NIL; vec_len]);
+    let vec_len = crate::emacs_core::builtins::symbols::obarray_len(vec_val).unwrap_or(0);
+    let _ = crate::emacs_core::builtins::symbols::replace_obarray_buckets(
+        vec_val,
+        vec![Value::NIL; vec_len],
+    );
     let _ = vec_val.with_obarray_mut(|obj| obj.count = 0);
     obarray_insert_symbol(vec_val, header);
     if let Some(header_id) = symbol_id(header) {
@@ -819,7 +833,7 @@ pub(crate) fn builtin_clear_abbrev_table(
 /// Get property PROP from the header symbol of TABLE.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_abbrev_table_get(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("abbrev-table-get", &args, 2)?;
@@ -834,14 +848,18 @@ pub(crate) fn builtin_abbrev_table_get(
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn get_table_property(eval: &super::eval::Context, vec_val: Value, prop: &str) -> Option<Value> {
+fn get_table_property(
+    eval: &crate::emacs_core::eval::Context,
+    vec_val: Value,
+    prop: &str,
+) -> Option<Value> {
     table_header_symbol(vec_val)
         .and_then(symbol_id)
         .and_then(|id| eval.obarray().get_property_id(id, intern(prop)))
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn increment_table_modiff(eval: &mut super::eval::Context, vec_val: Value) {
+fn increment_table_modiff(eval: &mut crate::emacs_core::eval::Context, vec_val: Value) {
     let next = match get_table_property(eval, vec_val, ":abbrev-table-modiff") {
         Some(v) if v.is_fixnum() => v.as_fixnum().unwrap() + 1,
         _ => 1,
@@ -857,7 +875,7 @@ fn increment_table_modiff(eval: &mut super::eval::Context, vec_val: Value) {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn find_abbrev_symbol_in_table(
-    eval: &super::eval::Context,
+    eval: &crate::emacs_core::eval::Context,
     abbrev: &str,
     vec_val: Value,
 ) -> Option<Value> {
@@ -907,7 +925,7 @@ fn find_abbrev_symbol_in_table(
 /// and adds NAME to `abbrev-table-name-list`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_define_abbrev_table(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("define-abbrev-table", &args, 2)?;
@@ -1027,7 +1045,7 @@ pub(crate) fn builtin_define_abbrev_table(
 /// NeoVM stub: returns nil in batch/non-interactive use.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_expand_abbrev(
-    _eval: &mut super::eval::Context,
+    _eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("expand-abbrev", &args, 0)?;
@@ -1040,7 +1058,7 @@ pub(crate) fn builtin_expand_abbrev(
 /// This is a simplified version that inserts into the current buffer.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_abbrev_table_description(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("insert-abbrev-table-description", &args, 1)?;
@@ -1068,15 +1086,16 @@ pub(crate) fn builtin_insert_abbrev_table_description(
                 .get(current_id)
                 .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
                 .unwrap_or((EmacsBytePos::ZERO, true));
-            let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-                &eval.buffers,
-                current_id,
-                insert_pos,
-                TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
-            )?;
-            super::editfns::signal_before_text_change(eval, change)?;
+            let change =
+                crate::emacs_core::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+                    &eval.buffers,
+                    current_id,
+                    insert_pos,
+                    TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+                )?;
+            crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
             let _ = eval.buffers.insert_into_buffer(current_id, &text);
-            super::editfns::signal_after_text_change(eval, change)?;
+            crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
         }
         return Ok(Value::NIL);
     }
@@ -1143,15 +1162,15 @@ pub(crate) fn builtin_insert_abbrev_table_description(
             .get(current_id)
             .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
             .unwrap_or((EmacsBytePos::ZERO, true));
-        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+        let change = crate::emacs_core::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
             &eval.buffers,
             current_id,
             insert_pos,
             TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
         )?;
-        super::editfns::signal_before_text_change(eval, change)?;
+        crate::emacs_core::editfns::signal_before_text_change(eval, change)?;
         let _ = eval.buffers.insert_into_buffer(current_id, &text);
-        super::editfns::signal_after_text_change(eval, change)?;
+        crate::emacs_core::editfns::signal_after_text_change(eval, change)?;
     }
     Ok(Value::NIL)
 }

@@ -1,3 +1,9 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/bookmark.el`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! builtin_bookmark_* fns are dead (never registered); only BookmarkManager state is wired into eval/pdump. Goal: load bookmark.el (demand-loaded in GNU), delete the parallel store.
+//!
 //! Bookmark system -- persistent named positions.
 //!
 //! Provides Emacs-compatible bookmark functionality:
@@ -18,9 +24,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::error::{EvalResult, Flow, signal};
-use super::value::{Value, ValueKind};
 use crate::buffer::LispCharPos1;
+use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::heap_types::LispString;
 #[cfg(test)]
 use strum::{EnumString, IntoStaticStr};
@@ -85,7 +91,7 @@ impl BookmarkRecordKey {
 
 #[cfg(test)]
 fn bookmark_record_prop(record: &Value, key: BookmarkRecordKey) -> Option<Option<Value>> {
-    let items = super::value::list_to_vec(record)?;
+    let items = crate::emacs_core::value::list_to_vec(record)?;
     for item in items {
         if item.is_cons() && BookmarkRecordKey::from_lisp_value(&item.cons_car()) == Some(key) {
             return Some(Some(item.cons_cdr()));
@@ -292,7 +298,7 @@ impl BookmarkManager {
 }
 
 fn runtime_string_to_bookmark_string(text: &str) -> LispString {
-    super::builtins::plain_str_to_lisp_string(text, true)
+    crate::emacs_core::builtins::plain_str_to_lisp_string(text, true)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -399,7 +405,7 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 /// This implementation mirrors that behavior.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_set(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("bookmark-set", &args, 1)?;
@@ -452,7 +458,7 @@ pub(crate) fn builtin_bookmark_set(
 /// or signals an error if the bookmark does not exist.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_jump(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
@@ -510,7 +516,7 @@ pub(crate) fn builtin_bookmark_jump(
 /// (bookmark-delete NAME &optional BATCH) -> nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_delete(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
@@ -538,7 +544,7 @@ pub(crate) fn builtin_bookmark_delete(
 /// (bookmark-rename OLD NEW) -> nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_rename(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() || args.len() > 2 {
@@ -630,7 +636,7 @@ pub(crate) fn builtin_bookmark_rename(
 /// (bookmark-all-names) -> list of bookmark names (sorted)
 #[cfg(test)]
 pub(crate) fn builtin_bookmark_all_names(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("bookmark-all-names", &args, 0)?;
@@ -648,7 +654,7 @@ pub(crate) fn builtin_bookmark_all_names(
 /// BOOKMARK may be a bookmark name or a bookmark record alist.
 #[cfg(test)]
 pub(crate) fn builtin_bookmark_get_filename(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("bookmark-get-filename", &args, 1)?;
@@ -672,7 +678,7 @@ pub(crate) fn builtin_bookmark_get_filename(
 /// BOOKMARK may be a bookmark name or a bookmark record alist.
 #[cfg(test)]
 pub(crate) fn builtin_bookmark_get_position(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("bookmark-get-position", &args, 1)?;
@@ -695,7 +701,7 @@ pub(crate) fn builtin_bookmark_get_position(
 /// BOOKMARK may be a bookmark name or a bookmark record alist.
 #[cfg(test)]
 pub(crate) fn builtin_bookmark_get_annotation(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("bookmark-get-annotation", &args, 1)?;
@@ -719,7 +725,7 @@ pub(crate) fn builtin_bookmark_get_annotation(
 /// BOOKMARK is a bookmark name.  If missing, returns nil.
 #[cfg(test)]
 pub(crate) fn builtin_bookmark_set_annotation(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("bookmark-set-annotation", &args, 2)?;
@@ -752,7 +758,7 @@ fn default_bookmark_file() -> LispString {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
+fn active_bookmark_default_file(eval: &crate::emacs_core::eval::Context) -> LispString {
     if let Some(v) = eval.obarray.symbol_value("bookmark-default-file") {
         if let Some(ls) = v.as_lisp_string() {
             return ls.clone();
@@ -762,7 +768,7 @@ fn active_bookmark_default_file(eval: &super::eval::Context) -> LispString {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn bookmark_timestamp_file(eval: &super::eval::Context) -> Option<LispString> {
+fn bookmark_timestamp_file(eval: &crate::emacs_core::eval::Context) -> Option<LispString> {
     let value = eval.obarray.symbol_value("bookmark-bookmarks-timestamp")?;
     if !value.is_cons() {
         return None;
@@ -786,7 +792,7 @@ fn bookmark_save_stamp(path: &LispString) -> Value {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn set_bookmark_timestamp(eval: &mut super::eval::Context, file: &LispString) {
+fn set_bookmark_timestamp(eval: &mut crate::emacs_core::eval::Context, file: &LispString) {
     eval.obarray
         .set_symbol_value("bookmark-bookmarks-timestamp", bookmark_save_stamp(file));
 }
@@ -794,7 +800,7 @@ fn set_bookmark_timestamp(eval: &mut super::eval::Context, file: &LispString) {
 /// (bookmark-save &optional PARG FILE BATCH) -> nil or save-stamp list
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_save(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.len() > 3 {
@@ -826,7 +832,7 @@ pub(crate) fn builtin_bookmark_save(
     let configured_default = active_bookmark_default_file(eval);
     if bookmark_timestamp_file(eval).is_none()
         && eval.bookmarks.all_names().is_empty()
-        && super::fileio::lisp_file_name_to_path_buf(&configured_default).is_file()
+        && crate::emacs_core::fileio::lisp_file_name_to_path_buf(&configured_default).is_file()
     {
         let _ = builtin_bookmark_load(
             eval,
@@ -854,7 +860,7 @@ pub(crate) fn builtin_bookmark_save(
     };
 
     let data = eval.bookmarks.save_to_string();
-    let os_path = super::fileio::lisp_file_name_to_path_buf(&path);
+    let os_path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(&path);
     if let Some(parent) = os_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -877,7 +883,7 @@ pub(crate) fn builtin_bookmark_save(
 /// (bookmark-load FILE &optional OVERWRITE NO-MSG BATCH) -> message string or nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_bookmark_load(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() || args.len() > 4 {
@@ -904,17 +910,18 @@ pub(crate) fn builtin_bookmark_load(
     };
     let file_display = crate::emacs_core::emacs_char::to_utf8_lossy(file.as_bytes());
 
-    let data = match fs::read_to_string(super::fileio::lisp_file_name_to_path_buf(&file)) {
-        Ok(data) => data,
-        Err(_) => {
-            return Err(signal(
-                LispCondition::UserError,
-                vec![Value::string(format!(
-                    "Cannot read bookmark file {file_display}"
-                ))],
-            ));
-        }
-    };
+    let data =
+        match fs::read_to_string(crate::emacs_core::fileio::lisp_file_name_to_path_buf(&file)) {
+            Ok(data) => data,
+            Err(_) => {
+                return Err(signal(
+                    LispCondition::UserError,
+                    vec![Value::string(format!(
+                        "Cannot read bookmark file {file_display}"
+                    ))],
+                ));
+            }
+        };
 
     eval.bookmarks.load_from_string(&data);
 

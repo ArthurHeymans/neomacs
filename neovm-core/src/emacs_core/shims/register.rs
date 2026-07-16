@@ -1,3 +1,9 @@
+//! QUARANTINED LISP SHIM — shadows GNU `lisp/register.el`.
+//!
+//! Population D (docs/design/neovm-core-layout.md): GNU implements this in
+//! Lisp; the parity rule is to load the real .el, never reimplement. Status:
+//! register storage referenced from eval/pdump. Goal: load register.el, delete the Rust logic, keep only needed storage.
+//!
 //! Register system -- quick storage and retrieval of text, positions, etc.
 //!
 //! Provides Emacs-compatible register functionality:
@@ -13,9 +19,9 @@
 use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
-use super::error::{EvalResult, Flow, signal};
-use super::intern::resolve_sym;
-use super::value::{Value, ValueKind};
+use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::intern::resolve_sym;
+use crate::emacs_core::value::{Value, ValueKind};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::header::VecLikeType;
@@ -73,7 +79,7 @@ fn join_rectangle_lines_faithfully(lines: &[LispString]) -> EvalResult {
         }
         args.push(Value::heap_string(line.clone()));
     }
-    super::builtins::builtin_concat_slice(&args)
+    crate::emacs_core::builtins::builtin_concat_slice(&args)
 }
 
 // ---------------------------------------------------------------------------
@@ -144,8 +150,9 @@ impl RegisterManager {
     /// If the register is empty or not text, it becomes a Text register
     /// containing just the new text.
     pub fn append_text(&mut self, register: char, text: &str, prepend: bool) {
-        let make_text =
-            |multibyte: bool| super::builtins::plain_str_to_lisp_string(text, multibyte);
+        let make_text = |multibyte: bool| {
+            crate::emacs_core::builtins::plain_str_to_lisp_string(text, multibyte)
+        };
         match self.registers.get_mut(&register) {
             Some(RegisterContent::Text(existing)) => {
                 let new = make_text(existing.is_multibyte() || !text.is_ascii());
@@ -262,12 +269,13 @@ fn expect_int(value: &Value) -> Result<i64, Flow> {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_register(value: &Value) -> Result<char, Flow> {
     match value.kind() {
-        ValueKind::Fixnum(c) => super::builtins::character_code_to_rust_char(c).ok_or_else(|| {
-            signal(
-                "error",
-                vec![Value::string("Invalid character code"), *value],
-            )
-        }),
+        ValueKind::Fixnum(c) => crate::emacs_core::builtins::character_code_to_rust_char(c)
+            .ok_or_else(|| {
+                signal(
+                    "error",
+                    vec![Value::string("Invalid character code"), *value],
+                )
+            }),
         ValueKind::String => {
             let string = value.as_lisp_string().expect("string");
             if string.schars() != 1 {
@@ -281,7 +289,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
             } else {
                 string.as_bytes()[0] as u32
             };
-            super::builtins::character_code_to_rust_char(code as i64).ok_or_else(|| {
+            crate::emacs_core::builtins::character_code_to_rust_char(code as i64).ok_or_else(|| {
                 signal(
                     "error",
                     vec![Value::string("Invalid character code"), *value],
@@ -307,7 +315,7 @@ fn expect_register(value: &Value) -> Result<char, Flow> {
 /// Simplified: (copy-to-register REGISTER TEXT) -> nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_copy_to_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("copy-to-register", &args, 2)?;
@@ -325,7 +333,7 @@ pub(crate) fn builtin_copy_to_register(
 /// or does not hold text.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_insert_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("insert-register", &args, 1)?;
@@ -360,7 +368,7 @@ pub(crate) fn builtin_insert_register(
 /// Store the current buffer name and point in the register.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_point_to_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("point-to-register", &args, 1)?;
@@ -370,10 +378,13 @@ pub(crate) fn builtin_point_to_register(
         .current_buffer()
         .map(|buffer| (buffer.id, buffer.point_lisp_char_pos()))
     {
-        Some((buffer_id, point)) => {
-            super::marker::make_registered_buffer_marker(&mut eval.buffers, buffer_id, point, false)
-        }
-        None => super::marker::make_marker_value(None, None, false),
+        Some((buffer_id, point)) => crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut eval.buffers,
+            buffer_id,
+            point,
+            false,
+        ),
+        None => crate::emacs_core::marker::make_marker_value(None, None, false),
     };
     eval.registers.set(reg, RegisterContent::Marker(marker));
     Ok(Value::NIL)
@@ -382,7 +393,7 @@ pub(crate) fn builtin_point_to_register(
 /// (number-to-register NUMBER REGISTER) -> nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_number_to_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("number-to-register", &args, 2)?;
@@ -399,7 +410,7 @@ pub(crate) fn builtin_number_to_register(
 /// Otherwise signal an error.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_increment_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("increment-register", &args, 2)?;
@@ -436,14 +447,14 @@ pub(crate) fn builtin_increment_register(
 /// Return a human-readable description of the register's contents.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_view_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("view-register", &args, 1)?;
     let reg = expect_register(&args[0])?;
     match eval.registers.get(reg) {
         Some(RegisterContent::Text(s)) => {
-            let rendered = super::emacs_char::to_utf8_lossy(s.as_bytes());
+            let rendered = crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes());
             // Truncate by characters, not bytes: register text is arbitrary and can
             // contain multi-byte UTF-8, so `&rendered[..60]` would panic when byte
             // 60 lands inside a char ("not a char boundary").
@@ -461,15 +472,18 @@ pub(crate) fn builtin_view_register(
         ))),
         Some(RegisterContent::Marker(marker)) => {
             let (buffer_id, _, _) =
-                super::marker::marker_logical_fields(marker).expect("register marker");
+                crate::emacs_core::marker::marker_logical_fields(marker).expect("register marker");
             let buffer_desc = buffer_id
                 .and_then(|id| eval.buffers.get(id))
                 .map(|buffer| buffer.name_runtime_string_owned())
                 .unwrap_or_else(|| "no buffer".to_string());
-            let point = super::marker::marker_position_as_int_with_buffers(&eval.buffers, marker)
-                .ok()
-                .map(|pos| pos.to_string())
-                .unwrap_or_else(|| "nowhere".to_string());
+            let point = crate::emacs_core::marker::marker_position_as_int_with_buffers(
+                &eval.buffers,
+                marker,
+            )
+            .ok()
+            .map(|pos| pos.to_string())
+            .unwrap_or_else(|| "nowhere".to_string());
             Ok(Value::string(format!(
                 "Register {} contains a marker: buffer={} point={}",
                 reg, buffer_desc, point
@@ -487,7 +501,7 @@ pub(crate) fn builtin_view_register(
         Some(RegisterContent::File(f)) => Ok(Value::string(format!(
             "Register {} contains file: {}",
             reg,
-            super::emacs_char::to_utf8_lossy(f.as_bytes())
+            crate::emacs_core::emacs_char::to_utf8_lossy(f.as_bytes())
         ))),
         Some(RegisterContent::KbdMacro(keys)) => Ok(Value::string(format!(
             "Register {} contains a keyboard macro ({} keys)",
@@ -504,7 +518,7 @@ pub(crate) fn builtin_view_register(
 /// Text -> string, Number -> integer, Marker -> marker, otherwise nil.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_get_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("get-register", &args, 1)?;
@@ -529,7 +543,7 @@ pub(crate) fn builtin_get_register(
 /// Return textual content from REGISTER when available.
 #[cfg(test)]
 pub(crate) fn builtin_register_to_string(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("register-to-string", &args, 1)?;
@@ -547,7 +561,7 @@ pub(crate) fn builtin_register_to_string(
 /// integers become Number, otherwise stored as FrameConfig (opaque).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_register(
-    eval: &mut super::eval::Context,
+    eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-register", &args, 2)?;
