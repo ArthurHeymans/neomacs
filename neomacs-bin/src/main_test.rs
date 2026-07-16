@@ -4394,3 +4394,73 @@ fn frame_snapshot_subr_end_to_end_json_and_text() {
         "face runs with colors:\n{faces_text:.400}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// strip_action_args: the raw source bootstrap's loadup surface must carry
+// mode flags only — action args (--eval/-l/--file/positional files) execute
+// during loadup's internal (eval top-level t) pass AND again in the real
+// session from the command loop, doubling every user action on imageless
+// builds. Regression tests for that filter.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn strip_action_args_drops_eval_and_load_actions_keeps_mode_flags() {
+    let argv: Vec<String> = [
+        "neomacs",
+        "--batch",
+        "-Q",
+        "--eval",
+        "(princ \"A\")",
+        "-l",
+        "file.el",
+        "--load",
+        "other.el",
+        "--funcall",
+        "fn",
+        "--kill",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let filtered = super::strip_action_args(&argv);
+    assert_eq!(filtered, vec!["neomacs", "--batch", "-Q"]);
+}
+
+#[test]
+fn strip_action_args_handles_inline_value_and_positional_files() {
+    let argv: Vec<String> = [
+        "neomacs",
+        "-nw",
+        "--eval=(setq x 1)",
+        "notes.org",
+        "--file=doc.txt",
+        "-Q",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let filtered = super::strip_action_args(&argv);
+    assert_eq!(filtered, vec!["neomacs", "-nw", "-Q"]);
+}
+
+#[test]
+fn strip_action_args_drops_everything_after_double_dash() {
+    let argv: Vec<String> = ["neomacs", "--batch", "--", "afile", "--eval", "x"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let filtered = super::strip_action_args(&argv);
+    assert_eq!(filtered, vec!["neomacs", "--batch"]);
+}
+
+#[test]
+fn strip_action_args_keeps_mode_flag_operands() {
+    // -chdir takes an operand per GNU standard_args (nargs=1) and is a mode
+    // flag, not an action: the operand must survive with it.
+    let argv: Vec<String> = ["neomacs", "-chdir", "/tmp", "--batch", "--eval", "(x)"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let filtered = super::strip_action_args(&argv);
+    assert_eq!(filtered, vec!["neomacs", "-chdir", "/tmp", "--batch"]);
+}

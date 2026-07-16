@@ -2050,11 +2050,104 @@ fn raw_source_bootstrap_evaluator(startup: &StartupOptions) -> Context {
     .expect("raw bootstrap should succeed")
 }
 
+/// Drop the ACTION arguments (`--eval`, `-l`/`--load`, `--file`, `-f`,
+/// `--insert`, `--kill`, positional file names, everything after `--`) from
+/// an argv, keeping only mode flags. The raw source bootstrap runs loadup.el,
+/// whose GNU-verbatim tail is `(eval top-level t)` — a full
+/// `normal-top-level`/`command-line-1` pass over `command-line-args`. That
+/// pass is bootstrap initialization, not the user's session: the real session
+/// runs afterwards from the outer command loop (GNU keyboard.c command_loop →
+/// top_level_1), after `configure_gnu_startup_state` re-arms
+/// `command-line-processed`/`command-line-args-left`. Forwarding the user's
+/// action args into the loadup pass executed every `--eval`/`-l`/file action
+/// TWICE on imageless (source-bootstrap) builds. GNU never has this problem
+/// because temacs's loadup argv contains no user actions.
+fn strip_action_args(args: &[String]) -> Vec<String> {
+    // Action options per startup.el `command-line-1` (plus their GNU short
+    // aliases): each entry is (name-without-leading-dashes, takes-operand).
+    const ACTION_OPTS: &[(&str, bool)] = &[
+        ("l", true),
+        ("load", true),
+        ("scriptload", true),
+        ("f", true),
+        ("funcall", true),
+        ("eval", true),
+        ("execute", true),
+        ("find-file", true),
+        ("visit", true),
+        ("file", true),
+        ("insert", true),
+        ("kill", false),
+    ];
+    let lookup_action = |flag: &str| -> Option<bool> {
+        let name = flag.trim_start_matches('-');
+        ACTION_OPTS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, takes)| *takes)
+    };
+    let mut out = Vec::with_capacity(args.len());
+    if let Some(argv0) = args.first() {
+        out.push(argv0.clone());
+    }
+    let mut i = 1;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == "--" {
+            // Everything after `--` is positional file actions.
+            break;
+        }
+        if arg.starts_with('-') {
+            // `--opt=value` form: the operand travels with the flag.
+            let (flag, has_inline_value) = match arg.split_once('=') {
+                Some((flag, _)) => (flag, true),
+                None => (arg.as_str(), false),
+            };
+            if let Some(takes_operand) = lookup_action(flag) {
+                i += 1;
+                if takes_operand && !has_inline_value {
+                    i += 1; // skip the operand too
+                }
+                continue;
+            }
+            // Mode flag (known or unknown): keep it, plus its operand when
+            // the GNU standard_args table says it takes one.
+            out.push(arg.clone());
+            i += 1;
+            if !has_inline_value
+                && let Some(spec) = args::STANDARD_ARGS.iter().find(|spec| {
+                    spec.name == flag || spec.longname.is_some_and(|long| long == flag)
+                })
+                && spec.nargs > 0
+            {
+                for _ in 0..spec.nargs {
+                    if i < args.len() {
+                        out.push(args[i].clone());
+                        i += 1;
+                    }
+                }
+            }
+            continue;
+        }
+        // Positional argument = a file to visit (an action). Drop it.
+        i += 1;
+    }
+    out
+}
+
 fn raw_loadup_command_line(
     startup: &StartupOptions,
     dump_mode: Option<LoadupDumpMode>,
 ) -> Vec<String> {
-    let mut args = startup.forwarded_args.clone();
+    // For the bootstrap-for-use surface (no dump), loadup's internal
+    // top-level pass must not execute the user's session actions — see
+    // strip_action_args. Dump flows keep the full argv: loadup.el's dump
+    // branch runs (and exits) before its `(eval top-level t)` tail.
+    let mut args = if dump_mode.is_none() {
+        strip_action_args(&startup.forwarded_args)
+    } else {
+        startup.forwarded_args.clone()
+    };
     if args.is_empty() {
         args.push(RuntimeMode::Raw.binary_name().to_string());
     }
