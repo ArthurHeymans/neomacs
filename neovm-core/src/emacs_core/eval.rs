@@ -13253,6 +13253,55 @@ impl Context {
         }
     }
 
+    /// [`Context::execute_bytecode_call`] for arguments that already live on
+    /// the GC-traced `bc_buf` at `[args_start, args_start + nargs)` — the
+    /// VM's hot bytecode→bytecode path. The interpreter tier runs directly
+    /// from the stack span (no `LispArgVec`); the compiled tier materializes
+    /// one owned copy for `try_run_compiled` (native code may hold `args_ptr`
+    /// across `bc_buf` reallocations, so it must not point into the Vec),
+    /// which is amortized by the native run it precedes.
+    pub(crate) fn execute_bytecode_call_from_stack(
+        &mut self,
+        bc_data: &super::bytecode::ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        func_value: Value,
+    ) -> EvalResult {
+        #[cfg(feature = "jit")]
+        {
+            use crate::emacs_core::jit::Plan;
+            match bc_data.runtime.dispatch() {
+                Plan::Interpret => {
+                    let mut vm = super::bytecode::Vm::from_context(self);
+                    vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
+                }
+                Plan::Compiled => {
+                    let args = LispArgVec::from_slice(&self.bc_buf[args_start..args_start + nargs]);
+                    let saved_roots = save_scratch_gc_roots();
+                    push_scratch_gc_root(func_value);
+                    let ctx_ptr = self as *mut Context;
+                    let native = crate::emacs_core::jit::try_run_compiled(
+                        ctx_ptr, bc_data, func_value, &args,
+                    );
+                    restore_scratch_gc_roots(saved_roots);
+                    match native {
+                        Ok(Some(bits)) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
+                        Ok(None) => {
+                            let mut vm = super::bytecode::Vm::from_context(self);
+                            vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
+                        }
+                        Err(flow) => Err(flow),
+                    }
+                }
+            }
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            let mut vm = super::bytecode::Vm::from_context(self);
+            vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
+        }
+    }
+
     pub(crate) fn funcall_general_untraced(
         &mut self,
         function: Value,

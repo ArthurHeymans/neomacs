@@ -828,6 +828,12 @@ impl<'a> Vm<'a> {
 
     /// Execute a bytecode function, passing through the original function
     /// value for use in `wrong-number-of-arguments` error reporting.
+    ///
+    /// Owned-args wrapper over [`Vm::execute_from_stack_args`]: pushes the
+    /// args onto the GC-traced `bc_buf` tail (rooting them for the whole
+    /// call) and truncates back on every exit, preserving the JIT call
+    /// shim's push/truncate symmetry. The hot bytecode→bytecode path skips
+    /// this wrapper entirely — its args already live on `bc_buf`.
     pub(crate) fn execute_with_func_value(
         &mut self,
         func: &ByteCodeFunction,
@@ -835,26 +841,44 @@ impl<'a> Vm<'a> {
         func_value: Value,
     ) -> EvalResult {
         let args = args.into();
+        let args_start = self.ctx.bc_buf.len();
+        self.ctx.bc_buf.extend_from_slice(&args);
+        let result = self.execute_from_stack_args(func, args_start, args.len(), func_value);
+        self.ctx.bc_buf.truncate(args_start);
+        result
+    }
 
-        // Root the executing function across nested calls that can GC. A heap
-        // func_value is the frame-held function object (GNU fp->fun,
-        // bytecode.c setup_frame): run_frame's own BcFrame { base, fun } push
-        // — visited by trace_roots — is the sole root, transitively marking
-        // the constants vector (the GC traces ByteCodeObj.data.constants, and
-        // post-publish bytecode is immutable). Every caller derives `func` by
-        // dereferencing this same ByteCode object, so no separate per-call
-        // root scope is needed at all.
-        //
-        // WINDOW INVARIANT (load-bearing): nothing between this function's
-        // entry and run_frame's bc_frames.push may allocate a Lisp object or
-        // hit a GC safe point — today that window is only the LispArgVec
-        // move, the stacker probe (native mmap, not Lisp alloc), and
-        // run_frame's two len reads. The debug assertion below enforces it.
-        //
-        // Only the direct/manual path (func_value == NIL/non-heap, e.g.
-        // `execute()`) holds nothing else alive, so it keeps a vm-root scope
-        // rooting each constant individually (trace_roots skips non-heap
-        // BcFrame.fun).
+    /// Execute a bytecode function whose arguments live on `bc_buf` at
+    /// `[args_start, args_start + nargs)` — the hot entry for
+    /// bytecode→bytecode calls (the caller's `Op::Call` already left the
+    /// args there; no `LispArgVec`, no per-arg rooting).
+    ///
+    /// Root the executing function across nested calls that can GC. A heap
+    /// func_value is the frame-held function object (GNU fp->fun,
+    /// bytecode.c setup_frame): run_frame's own BcFrame { base, fun } push
+    /// — visited by trace_roots — is the sole root, transitively marking
+    /// the constants vector (the GC traces ByteCodeObj.data.constants, and
+    /// post-publish bytecode is immutable). Every caller derives `func` by
+    /// dereferencing this same ByteCode object, so no separate per-call
+    /// root scope is needed at all.
+    ///
+    /// WINDOW INVARIANT (load-bearing): nothing between this function's
+    /// entry and run_frame's bc_frames.push may allocate a Lisp object or
+    /// hit a GC safe point — today that window is only the stacker probe
+    /// (native mmap, not Lisp alloc) and run_frame's two len reads. The
+    /// debug assertion below enforces it.
+    ///
+    /// Only the direct/manual path (func_value == NIL/non-heap, e.g.
+    /// `execute()`) holds nothing else alive, so it keeps a vm-root scope
+    /// rooting each constant individually (trace_roots skips non-heap
+    /// BcFrame.fun).
+    pub(crate) fn execute_from_stack_args(
+        &mut self,
+        func: &ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        func_value: Value,
+    ) -> EvalResult {
         #[cfg(debug_assertions)]
         let gc_cycles_at_entry = crate::emacs_core::gc_stats::snapshot().collections;
         let result = self.maybe_grow_vm_stack(|vm| {
@@ -863,16 +887,16 @@ impl<'a> Vm<'a> {
                 debug_assert_eq!(
                     crate::emacs_core::gc_stats::snapshot().collections,
                     gc_cycles_at_entry,
-                    "GC ran between execute_with_func_value entry and run_frame \
+                    "GC ran between execute_from_stack_args entry and run_frame \
                      — the BcFrame.fun rooting window invariant is broken"
                 );
-                vm.run_frame(func, args, func_value)
+                vm.run_frame(func, args_start, nargs, func_value)
             } else {
                 vm.with_dynamic_vm_roots(|vm| {
                     for value in func.constants.iter().copied() {
                         vm.push_dynamic_vm_root(value);
                     }
-                    vm.run_frame(func, args, func_value)
+                    vm.run_frame(func, args_start, nargs, func_value)
                 })
             }
         });
@@ -952,14 +976,29 @@ impl<'a> Vm<'a> {
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
+    /// Run a bytecode frame whose arguments live on the GC-traced `bc_buf`
+    /// at `[args_start, args_start + nargs)` — the GNU `exec_byte_code`
+    /// argument model. The caller's slots are never aliased or mutated: the
+    /// frame starts at `bc_buf.len()` and the args are copied ONCE into
+    /// fresh callee slots (GNU setup_frame's `PUSH (*args++)` loop,
+    /// bytecode.c:542-549), so a zero-copy backtrace span over the caller's
+    /// slots (`BacktraceArgs::EvaluatedBcStack`) stays valid and unmutated
+    /// for the whole call — exactly GNU's `record_in_backtrace` pointer into
+    /// the intact caller stack. Every exit truncates back to the frame base,
+    /// leaving the caller's args for the CALLER to pop.
     fn run_frame(
         &mut self,
         func: &ByteCodeFunction,
-        args: LispArgVec,
+        args_start: usize,
+        nargs: usize,
         func_value: Value,
     ) -> EvalResult {
         let condition_stack_base = self.ctx.condition_stack_len();
         let frame_base = self.ctx.bc_buf.len();
+        debug_assert!(
+            args_start + nargs <= frame_base,
+            "caller args must live at or below the new frame base"
+        );
         self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
             base: frame_base,
             fun: func_value,
@@ -969,10 +1008,6 @@ impl<'a> Vm<'a> {
         let specpdl_base = self.ctx.specpdl.len();
         let mut bind_stack = BindStack::new();
 
-        // Unified calling convention: push args onto the stack.
-        // Both NeoVM-compiled and GNU-compiled bytecode use StackRef(n)
-        // for parameter access.
-        let nargs = args.len();
         let n_required = func.params.required.len();
         let n_optional = func.params.optional.len();
         let has_rest = func.params.rest.is_some();
@@ -1031,48 +1066,56 @@ impl<'a> Vm<'a> {
         if params_on_stack {
             // Lexical bytecode follows GNU bytecode.c: exec_byte_code receives
             // the encoded arg template and pushes incoming arguments into the
-            // bytecode frame before executing the first instruction.
-            for i in 0..nonrest {
-                if self.ctx.bc_buf.len() >= frame_limit {
-                    self.ctx.bc_buf.truncate(frame_base);
-                    self.ctx.bc_frames.pop();
-                    return Err(invalid_bytecode_flow());
-                }
-                if i < nargs {
-                    let v = args[i];
-                    if v.is_string() {
-                        let ptr = v.as_string_ptr().unwrap();
-                        let hdr =
-                            unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
-                        if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
-                            panic!(
-                                "RUN_FRAME ARG BUG: arg[{}] = {:#x} (ptr {:?}, kind={:?}) is corrupt string. \
-                                 nargs={}, func has {} required, {} optional, rest={}",
-                                i,
-                                v.0,
-                                ptr,
-                                hdr.kind,
-                                nargs,
-                                func.params.required.len(),
-                                func.params.optional.len(),
-                                func.params.rest.is_some(),
-                            );
-                        }
+            // bytecode frame before executing the first instruction. The seed
+            // slots (nonrest params + optional rest list) must fit the frame:
+            // the same bound the old per-push checks enforced, folded into one
+            // comparison (the error path truncates any partial seed anyway).
+            let seed_slots = nonrest + usize::from(has_rest);
+            if frame_base + seed_slots > frame_limit {
+                self.ctx.bc_buf.truncate(frame_base);
+                self.ctx.bc_frames.pop();
+                return Err(invalid_bytecode_flow());
+            }
+            let copied = nargs.min(nonrest);
+            for i in 0..copied {
+                let v = self.ctx.bc_buf[args_start + i];
+                if v.is_string() {
+                    let ptr = v.as_string_ptr().unwrap();
+                    let hdr =
+                        unsafe { &(*(ptr as *const crate::tagged::header::StringObj)).header };
+                    if !matches!(hdr.kind, crate::tagged::header::HeapObjectKind::String) {
+                        panic!(
+                            "RUN_FRAME ARG BUG: arg[{}] = {:#x} (ptr {:?}, kind={:?}) is corrupt string. \
+                             nargs={}, func has {} required, {} optional, rest={}",
+                            i,
+                            v.0,
+                            ptr,
+                            hdr.kind,
+                            nargs,
+                            func.params.required.len(),
+                            func.params.optional.len(),
+                            func.params.rest.is_some(),
+                        );
                     }
-                    self.ctx.bc_buf.push(v);
-                } else {
-                    self.ctx.bc_buf.push(Value::NIL);
                 }
+            }
+            // The one arg copy of the call protocol (GNU setup_frame's PUSH
+            // loop): caller slots -> fresh callee slots, then nil-pad the
+            // missing optionals.
+            self.ctx
+                .bc_buf
+                .extend_from_within(args_start..args_start + copied);
+            for _ in copied..nonrest {
+                self.ctx.bc_buf.push(Value::NIL);
             }
 
             if has_rest {
-                if self.ctx.bc_buf.len() >= frame_limit {
-                    self.ctx.bc_buf.truncate(frame_base);
-                    self.ctx.bc_frames.pop();
-                    return Err(invalid_bytecode_flow());
-                }
+                // The rest args are read from the GC-traced caller slots,
+                // which stay live through the cons allocations.
                 let rest_list = if nargs > nonrest {
-                    Value::list_from_slice(&args[nonrest..])
+                    Value::list_from_slice(
+                        &self.ctx.bc_buf[args_start + nonrest..args_start + nargs],
+                    )
                 } else {
                     Value::NIL
                 };
@@ -1134,11 +1177,13 @@ impl<'a> Vm<'a> {
             // that varref opcodes inside the body can find it via the
             // obarray.  GNU eval.c:funcall_lambda then calls exec_byte_code
             // with zero bytecode arguments, so dynamic params must not occupy
-            // bytecode stack slots.
+            // bytecode stack slots. The caller's arg span stays live on
+            // bc_buf through every specbind (variable watchers can run
+            // arbitrary Lisp that captures backtraces reading it).
             let mut arg_idx = 0;
             for param in &func.params.required {
                 let val = if arg_idx < nargs {
-                    args[arg_idx]
+                    self.ctx.bc_buf[args_start + arg_idx]
                 } else {
                     Value::NIL
                 };
@@ -1152,7 +1197,7 @@ impl<'a> Vm<'a> {
             }
             for param in &func.params.optional {
                 let val = if arg_idx < nargs {
-                    args[arg_idx]
+                    self.ctx.bc_buf[args_start + arg_idx]
                 } else {
                     Value::NIL
                 };
@@ -1166,7 +1211,9 @@ impl<'a> Vm<'a> {
             }
             if let Some(rest_name) = func.params.rest {
                 let rest_list = if arg_idx < nargs {
-                    Value::list_from_slice(&args[arg_idx..])
+                    Value::list_from_slice(
+                        &self.ctx.bc_buf[args_start + arg_idx..args_start + nargs],
+                    )
                 } else {
                     Value::NIL
                 };
@@ -3896,13 +3943,11 @@ impl<'a> Vm<'a> {
         let result = self.with_bytecode_call_depth(|vm| {
             match vm.try_call_builtin_subr_from_stack_args(func_val, args_start, nargs) {
                 Some(result) => result,
-                None => {
-                    let args: LispArgVec = vm.ctx.bc_buf[args_start..args_start + nargs]
-                        .iter()
-                        .copied()
-                        .collect();
-                    vm.call_function(func_val, args)
-                }
+                // The shim already staged the args on bc_buf at args_start:
+                // take the zero-copy stack call protocol (backtrace span +
+                // one run_frame copy), same as the interpreter's Op::Call.
+                // The direct-builtin probe above already ran, so skip it.
+                None => vm.call_function_from_stack_args(func_val, args_start, nargs, false),
             }
         })?;
         if let (Some((called_name, alias_target)), Some(writeback_args)) =
@@ -4128,15 +4173,68 @@ impl<'a> Vm<'a> {
         {
             return result;
         }
-        let args = LispArgVec::from_slice(&self.ctx.bc_buf[args_start..args_start + nargs]);
-        self.ctx.push_backtrace_frame(func_val, &args);
-        let result = self.call_function_untraced_owned(func_val, args);
+        // Zero-copy call protocol (GNU Bcall): the args stay in the caller's
+        // bc_buf slots for the whole call — the backtrace entry records the
+        // span (GNU record_in_backtrace stores a pointer into the same
+        // slots), run_frame copies them ONCE into fresh callee slots (GNU
+        // setup_frame's PUSH loop), and the caller pops them only after the
+        // call returns. No LispArgVec, no per-arg rooting: bc_buf is
+        // GC-traced.
+        self.ctx
+            .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+        let result = self.call_function_untraced_from_stack(func_val, args_start, nargs);
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         // GNU Bcall/Breturn exit: pop this call's own backtrace entry with a
         // single-entry pop (specpdl_ptr-- shape); imbalanced/debug-on-exit
         // cases fall back to the general unwinder inside.
         self.ctx
             .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+    }
+
+    /// Stack-args twin of [`Vm::call_function_untraced_owned`]: dispatch a
+    /// callee whose args live on `bc_buf` at `[args_start, args_start +
+    /// nargs)`. Bytecode callees run straight from the span through the
+    /// tier-up seam; everything else (subrs, lambdas, aliases) materializes
+    /// one `LispArgVec` and takes the generic owned path — those calls
+    /// either already went through `try_call_builtin_subr_from_stack_args`
+    /// or are cold.
+    fn call_function_untraced_from_stack(
+        &mut self,
+        func_val: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
+        match func_val.kind() {
+            ValueKind::Veclike(VecLikeType::ByteCode) => {
+                let bc_data = func_val.get_bytecode_data().unwrap();
+                self.ctx
+                    .execute_bytecode_call_from_stack(bc_data, args_start, nargs, func_val)
+            }
+            // Symbol-with-bytecode-cell fast path: same resolution discipline
+            // as the owned twin (cell re-read live every call; compiler
+            // overrides bail to generic).
+            ValueKind::Symbol(sym_id) if !self.ctx.compiler_function_overrides_active() => {
+                match self.ctx.obarray.symbol_function_id(sym_id) {
+                    Some(cell)
+                        if matches!(cell.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
+                    {
+                        let bc_data = cell.get_bytecode_data().unwrap();
+                        self.ctx
+                            .execute_bytecode_call_from_stack(bc_data, args_start, nargs, cell)
+                    }
+                    _ => {
+                        let args = LispArgVec::from_slice(
+                            &self.ctx.bc_buf[args_start..args_start + nargs],
+                        );
+                        self.ctx.funcall_general_untraced(func_val, args)
+                    }
+                }
+            }
+            _ => {
+                let args = LispArgVec::from_slice(&self.ctx.bc_buf[args_start..args_start + nargs]);
+                self.ctx.funcall_general_untraced(func_val, args)
+            }
+        }
     }
 
     fn call_function_untraced_owned(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
