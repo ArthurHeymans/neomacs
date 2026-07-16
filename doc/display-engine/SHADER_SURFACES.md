@@ -218,8 +218,10 @@ offscreen pass and runtime WGSL compilation.
   `kill-buffer-hook` (and `neomacs-surface-create-and-insert` attaches
   automatically); the declarative memo is FIFO-capped at 64 entries with
   `SurfaceFree` on eviction; surface bytes are registered in `MediaBudget`
-  (render thread, `asset_commands.rs`) on create and removed on free. Still
-  not tied to GC, and nothing drives budget eviction yet.
+  (render thread, `asset_commands.rs`) on create and removed on free, and an
+  over-budget create evicts *recreatable* (declarative-spec) surfaces — the
+  same re-resolve-on-next-walk safety argument as the memo cap. Still not
+  tied to GC.
 
 ## Staging
 
@@ -242,11 +244,16 @@ offscreen pass and runtime WGSL compilation.
   `neomacs-surface-create-and-insert`) still lives until exit. The
   declarative memo no longer leaks (FIFO cap 64, GPU objects freed on
   eviction, evicted-but-visible specs re-resolve on the next walk).
-- `MediaBudget` is accounting-only: the render thread registers shader
-  surfaces (logical w*h*4 at create, removed at free) but no eviction
-  driver consumes `get_eviction_candidates`, image/video/webkit caches
-  never register at all, and shader bytes are really physical
-  (scale-factor squared) — full parity is future work.
+- `MediaBudget` covers shader surfaces only: the render thread registers
+  them (logical w*h*4 at create, removed at free) and an eviction driver
+  now runs on over-budget creates, freeing least-recently-created
+  *recreatable* surfaces — declarative specs only; imperative ids held
+  bare by Lisp are never evicted (`recreatable` flag on
+  `AssetCommand::SurfaceCreate`; `NEOMACS_MEDIA_BUDGET_MB` overrides the
+  256MB limit for testing). Image/video/webkit caches still never
+  register, entries are not touched on draw (LRU decays to creation
+  order), and shader bytes are really physical (scale-factor squared) —
+  full parity is future work.
 - DPI captured at create; no rescale on monitor change.
 - `iMouse` is hover-only: zw (click/drag state) not yet routed.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and

@@ -487,6 +487,13 @@ pub enum AssetCommand {
         width: u32,
         height: u32,
         animate: bool,
+        /// Whether the media-budget eviction driver may free this surface
+        /// under memory pressure. Only the declarative display-spec resolver
+        /// sends true: it re-runs on every redisplay walk of a visible spec
+        /// and recreates the surface, so eviction is invisible. Imperative
+        /// `neomacs-surface-create` ids are held bare by Lisp — evicting one
+        /// would blank it permanently — so that path sends false.
+        recreatable: bool,
     },
     /// Update one named uniform on a shader surface
     SurfaceSetUniform {

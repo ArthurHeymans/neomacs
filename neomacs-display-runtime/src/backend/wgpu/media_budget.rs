@@ -4,12 +4,16 @@
 //! and shader surfaces. Each cache reports its usage; eviction is coordinated
 //! centrally.
 //!
-//! Wiring status: the render thread (`RenderApp`) owns the instance and so
+//! Wiring status: the render thread (`RenderApp`) owns the instance
+//! (`NEOMACS_MEDIA_BUDGET_MB` overrides the default limit at init) and so
 //! far registers **shader surfaces only** (create/free choke point in
-//! `render_thread/asset_commands.rs`). The image/video/webkit caches do not
-//! report their usage yet, and no eviction driver consumes
-//! [`MediaBudget::get_eviction_candidates`] — the budget is accounting-only
-//! until that parity work lands.
+//! `render_thread/asset_commands.rs`). That choke point also runs the
+//! eviction driver: an over-budget SurfaceCreate consumes
+//! [`MediaBudget::get_eviction_candidates`] and frees *recreatable*
+//! (declarative-spec) surfaces until back under the limit. The
+//! image/video/webkit caches do not report their usage yet, and nothing
+//! calls [`MediaBudget::touch`] on draw (LRU decays to creation order) —
+//! that parity work is outstanding.
 
 use std::collections::BTreeMap;
 
@@ -24,7 +28,9 @@ pub enum MediaType {
     WebKit,
     /// Shader surfaces (evicted last: imperative ids handed to Lisp cannot
     /// be recreated by the renderer; declarative specs re-resolve on the
-    /// next redisplay walk, but the budget cannot tell the two apart)
+    /// next redisplay walk. The budget itself cannot tell the two apart —
+    /// `RenderApp::surface_recreatable` carries that bit per id and the
+    /// eviction driver only frees the recreatable ones)
     Surface,
 }
 
@@ -52,11 +58,11 @@ pub struct MediaBudget {
 impl MediaBudget {
     /// Create with default 256MB budget
     pub fn new() -> Self {
-        Self::with_limit(256 * 1024 * 1024)
+        Self::with_max_bytes(256 * 1024 * 1024)
     }
 
     /// Create with custom memory limit
-    pub fn with_limit(max_memory: usize) -> Self {
+    pub fn with_max_bytes(max_memory: usize) -> Self {
         Self {
             max_memory,
             current_memory: 0,

@@ -1804,6 +1804,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                         width: request.width,
                         height: request.height,
                         animate: request.animate,
+                        // Safe to evict under media-budget pressure: the
+                        // declarative resolver re-runs on every redisplay
+                        // walk of a visible spec, so an evicted-but-visible
+                        // surface is recreated on the next walk (same
+                        // argument as the memo's own FIFO eviction below) —
+                        // the user sees at most a one-frame re-resolve, never
+                        // a permanently blank quad.
+                        recreatable: true,
                     }),
                     "failed to queue declarative surface create",
                 )?;
@@ -1909,6 +1917,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 width: request.width,
                 height: request.height,
                 animate: request.animate,
+                // Never evict imperative surfaces: Lisp holds the bare id
+                // (`neomacs-surface-create`) and nothing would ever recreate
+                // the texture — eviction would blank it permanently.
+                recreatable: false,
             }),
             "failed to queue surface create",
         )?;

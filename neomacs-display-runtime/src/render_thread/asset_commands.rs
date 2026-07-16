@@ -444,6 +444,7 @@ impl RenderApp {
                 width,
                 height,
                 animate,
+                recreatable,
             } => {
                 if let Some(ref mut renderer) = self.renderer {
                     let result = match &source {
@@ -464,13 +465,60 @@ impl RenderApp {
                             // Account the surface's texture against the shared
                             // media budget. Logical w*h*4: shader surfaces
                             // actually allocate at physical resolution (scale
-                            // factor squared larger) — refine alongside the
-                            // eviction driver, which does not exist yet.
+                            // factor squared larger) — refine alongside
+                            // touch-on-draw LRU.
                             self.media_budget.register(
                                 MediaType::Surface,
                                 id,
                                 (width as usize) * (height as usize) * 4,
                             );
+                            self.surface_recreatable.insert(id, recreatable);
+
+                            // Eviction driver. The new surface is already
+                            // registered above, so the overshoot is fully in
+                            // `current_memory` and the honest argument is
+                            // new_size = 0: get_eviction_candidates(n) walks
+                            // entries in (MediaType, last_access, id) order —
+                            // Image < Video < WebKit < Surface, LRU-first
+                            // within a type — and returns the prefix whose
+                            // byte sum covers (current + n) - max. Only
+                            // recreatable shader surfaces may actually be
+                            // freed (the declarative resolver recreates them
+                            // on the next redisplay walk; everything else in
+                            // the list is skipped), so evict the first
+                            // eligible candidate and re-query until under
+                            // budget or out of victims. Never evict the
+                            // surface just created.
+                            while self.media_budget.is_over_budget() {
+                                let victim = self
+                                    .media_budget
+                                    .get_eviction_candidates(0)
+                                    .into_iter()
+                                    .find(|&(kind, victim_id)| {
+                                        kind == MediaType::Surface
+                                            && victim_id != id
+                                            && self
+                                                .surface_recreatable
+                                                .get(&victim_id)
+                                                .copied()
+                                                .unwrap_or(false)
+                                    });
+                                let Some((_, victim_id)) = victim else {
+                                    tracing::debug!(
+                                        "media budget over limit ({}/{} bytes) with no \
+                                         recreatable shader surface to evict",
+                                        self.media_budget.current_usage(),
+                                        self.media_budget.max_limit()
+                                    );
+                                    break;
+                                };
+                                renderer.free_surface(victim_id);
+                                self.media_budget.unregister(MediaType::Surface, victim_id);
+                                self.surface_recreatable.remove(&victim_id);
+                                tracing::info!(
+                                    "evicting shader surface {victim_id} (over media budget)"
+                                );
+                            }
                         }
                         Err(err) => {
                             tracing::warn!("shader surface {id} create failed: {err}");
@@ -487,6 +535,7 @@ impl RenderApp {
             }
             AssetCommand::SurfaceFree { id } => {
                 self.media_budget.unregister(MediaType::Surface, id);
+                self.surface_recreatable.remove(&id);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.free_surface(id);
                 }
