@@ -264,6 +264,11 @@ pub enum VecLikeType {
     Macro = 36,
     ByteCode = 37,
     Timer = 38,
+    /// GC-managed shader-surface handle (NeoMacs-only; no GNU counterpart).
+    /// Wraps a host-allocated surface id from `neomacs-surface-create`; the
+    /// sweep queues the id for a best-effort
+    /// `DisplayHost::destroy_shader_surface` when the handle dies.
+    SurfaceHandle = 39,
 }
 
 impl VecLikeType {
@@ -293,7 +298,7 @@ impl VecLikeType {
             Self::CharTable => GnuPvecType::CharTable,
             Self::SubCharTable => GnuPvecType::SubCharTable,
             Self::Record => GnuPvecType::Record,
-            Self::Macro | Self::ByteCode | Self::Timer => return None,
+            Self::Macro | Self::ByteCode | Self::Timer | Self::SurfaceHandle => return None,
         })
     }
 
@@ -929,6 +934,20 @@ pub struct FrameObj {
 pub struct TimerObj {
     pub header: VecLikeHeader,
     pub id: u64,
+}
+
+/// Heap-allocated shader-surface handle (wraps a host surface id).
+///
+/// NeoMacs-only pseudovector returned by `neomacs-surface-create`. Unlike
+/// xwidgets (kept alive by `internal_xwidget_list`), surface handles are NOT
+/// registry-rooted: when Lisp drops the last reference, the GC sweep pushes
+/// `surface_id` onto the heap's pending-destroy list, which the evaluator
+/// drains after the collection completes by queuing
+/// `DisplayHost::destroy_shader_surface` (best-effort). No Lisp children.
+#[repr(C)]
+pub struct SurfaceObj {
+    pub header: VecLikeHeader,
+    pub surface_id: u32,
 }
 
 /// Heap-allocated xwidget model object.

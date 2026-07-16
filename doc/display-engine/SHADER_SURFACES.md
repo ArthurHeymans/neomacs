@@ -70,7 +70,7 @@ surface id exactly like `(video :file …)` (`DisplayHost::request_surface`,
 |---|---|---|
 | WGSL errors | synchronous Lisp `error` | logged once, spec renders nothing |
 | `set-uniform` | yes (same id, no recompile) | no — new uniform values = new spec = new surface |
-| lifecycle | explicit `destroy` (or buffer-tied via `neomacs-surface-attach`) | memoized FIFO-capped at 64 entries; eviction frees the GPU objects, and an evicted-but-visible spec re-resolves on the next redisplay walk |
+| lifecycle | GC-managed handle (a dropped handle frees the surface at the next GC); explicit `destroy` frees now; buffer-tied via `neomacs-surface-attach` | memoized FIFO-capped at 64 entries; eviction frees the GPU objects, and an evicted-but-visible spec re-resolves on the next redisplay walk |
 | use for | playgrounds, interactive uniforms | fire-and-forget decorations, modes, dashboards |
 
 ## Shader contract
@@ -221,16 +221,24 @@ offscreen pass and runtime WGSL compilation.
   Terminal. Device-loss recovery is future work; documented, capped by:
 - Dimension clamp 1..=4096 (matches `ImageCache::MAX_TEXTURE_SIZE`), uniform
   slots capped at 8, texture at physical (scale-factor) resolution.
-- Lifecycle: ids are host-allocated (`next_host_surface_id`); explicit
-  `neomacs-surface-destroy` frees the GPU objects (RAII drop).
-  `neomacs-surface-attach` ties an id to a buffer's lifetime via a local
-  `kill-buffer-hook` (and `neomacs-surface-create-and-insert` attaches
-  automatically); the declarative memo is FIFO-capped at 64 entries with
-  `SurfaceFree` on eviction; surface bytes are registered in `MediaBudget`
-  (render thread, `asset_commands.rs`) on create and removed on free, and an
-  over-budget create evicts *recreatable* (declarative-spec) surfaces — the
-  same re-resolve-on-next-walk safety argument as the memo cap. Still not
-  tied to GC.
+- Lifecycle: ids are host-allocated (`next_host_surface_id`), and
+  `neomacs-surface-create` wraps the id in a **GC-managed handle** (a
+  `SurfaceObj` pseudovector, like GNU's xwidget — but deliberately not
+  registry-rooted): when Lisp drops the last reference, the sweep queues the
+  id and the evaluator's post-collection drain issues a best-effort
+  `destroy_shader_surface`, so an un-destroyed surface is reclaimed at the
+  next GC instead of leaking until exit. Explicit `neomacs-surface-destroy`
+  still frees the GPU objects immediately (the handle's later GC re-destroy
+  of the missing id is a render-thread no-op — harmless). Consumers
+  (`set-uniform`, `destroy`, `:channel0`, the `(surface :id …)` spec) accept
+  the handle or a plain integer id. `neomacs-surface-attach` ties an id to a
+  buffer's lifetime via a local `kill-buffer-hook` (and
+  `neomacs-surface-create-and-insert` attaches automatically); the
+  declarative memo is FIFO-capped at 64 entries with `SurfaceFree` on
+  eviction; surface bytes are registered in `MediaBudget` (render thread,
+  `asset_commands.rs`) on create and removed on free, and an over-budget
+  create evicts *recreatable* (declarative-spec) surfaces — the same
+  re-resolve-on-next-walk safety argument as the memo cap.
 
 ## Staging
 
@@ -249,16 +257,16 @@ offscreen pass and runtime WGSL compilation.
 
 ## Known gaps (prototype)
 
-- No GC integration: a bare `neomacs-surface-create` id that is neither
-  destroyed nor attached (`neomacs-surface-attach`, automatic in
-  `neomacs-surface-create-and-insert`) still lives until exit. The
-  declarative memo no longer leaks (FIFO cap 64, GPU objects freed on
-  eviction, evicted-but-visible specs re-resolve on the next walk).
+- ~~No GC integration~~ FIXED: `neomacs-surface-create` returns a GC-managed
+  handle; a dropped handle's GPU objects are destroyed at the next garbage
+  collection (see Lifecycle above). The declarative memo no longer leaks
+  either (FIFO cap 64, GPU objects freed on eviction, evicted-but-visible
+  specs re-resolve on the next walk).
 - `MediaBudget` covers shader surfaces only: the render thread registers
   them (logical w*h*4 at create, removed at free) and an eviction driver
   now runs on over-budget creates, freeing least-recently-created
-  *recreatable* surfaces — declarative specs only; imperative ids held
-  bare by Lisp are never evicted (`recreatable` flag on
+  *recreatable* surfaces — declarative specs only; imperative handles held
+  by Lisp are never evicted (`recreatable` flag on
   `AssetCommand::SurfaceCreate`; `NEOMACS_MEDIA_BUDGET_MB` overrides the
   256MB limit for testing). Image/video/webkit caches still never
   register, entries are not touched on draw (LRU decays to creation

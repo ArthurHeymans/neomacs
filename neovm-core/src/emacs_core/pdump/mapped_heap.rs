@@ -1098,6 +1098,7 @@ mod tests {
             VecLikeType::Subr,
             VecLikeType::Xwidget,
             VecLikeType::XwidgetView,
+            VecLikeType::SurfaceHandle,
             VecLikeType::Bignum,
             VecLikeType::SymbolWithPos,
             VecLikeType::Finalizer,

@@ -28,7 +28,9 @@
 ;;   (neomacs-surface-create :width W :height H
 ;;                           :shader WGSL &optional :uniforms ALIST :animate BOOL)
 ;;   (neomacs-surface-create :width W :height H :pixels RGBA-UNIBYTE-STRING)
-;;     => surface id (integer); signals on WGSL compile errors.
+;;     => surface handle (opaque, GC-managed); signals on WGSL compile
+;;        errors.  Dropping the handle frees the GPU objects at the next
+;;        garbage collection; `neomacs-surface-destroy' frees them now.
 ;;
 ;; Declarative form (no create call, like image/video specs — the spec
 ;; content is memoized into a surface; WGSL errors are logged, not signaled):

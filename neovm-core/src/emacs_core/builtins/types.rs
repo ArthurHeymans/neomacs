@@ -360,6 +360,8 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Terminal) => "terminal",
         ValueKind::Veclike(VecLikeType::Xwidget) => "xwidget",
         ValueKind::Veclike(VecLikeType::XwidgetView) => "xwidget-view",
+        // NeoMacs-only GC-managed shader-surface handle.
+        ValueKind::Veclike(VecLikeType::SurfaceHandle) => "neomacs-surface",
         // GNU `Fcl_type_of` reports bignums as `bignum`.
         ValueKind::Veclike(VecLikeType::Bignum) => "bignum",
         // GNU `Fcl_type_of` reports symbol-with-pos as `symbol-with-pos`.

@@ -33,7 +33,8 @@ use crate::tagged::gc::{
 use crate::tagged::header::{
     BufferObj, ByteCodeObj, CHAR_TABLE_TOP_SLOTS, CharTableObj, ConsCell, FrameObj, HashTableObj,
     LambdaObj, LispValueSlice, MacroObj, MarkerObj, ObarrayObj, OverlayObj, ProcessObj, RecordObj,
-    StringObj, SubCharTableObj, TimerObj, VectorObj, WindowObj, XwidgetObj, XwidgetViewObj,
+    StringObj, SubCharTableObj, SurfaceObj, TimerObj, VectorObj, WindowObj, XwidgetObj,
+    XwidgetViewObj,
 };
 use crate::tagged::mutate;
 use crate::tagged::value::{TAG_BITS, TAG_MASK, TaggedValue};
@@ -1653,6 +1654,15 @@ impl TaggedValue {
         with_tagged_heap(|h| h.alloc_xwidget_view(model, window))
     }
 
+    /// Allocate a GC-managed shader-surface handle wrapping a host surface
+    /// id (`neomacs-surface-create`). When the handle becomes unreachable,
+    /// the GC sweep queues the id for a best-effort
+    /// `DisplayHost::destroy_shader_surface`, so a handle Lisp drops without
+    /// an explicit `neomacs-surface-destroy` still frees its GPU objects.
+    pub fn make_surface_handle(surface_id: u32) -> Self {
+        with_tagged_heap(|h| h.alloc_surface_handle(surface_id))
+    }
+
     /// Allocate an opaque SQLite database or statement object.
     pub(crate) fn make_sqlite(is_statement: bool, id: i64) -> Self {
         with_tagged_heap(|h| h.alloc_sqlite(is_statement, id))
@@ -1730,6 +1740,12 @@ impl TaggedValue {
     #[inline]
     pub fn is_xwidget_view(self) -> bool {
         self.veclike_type() == Some(VecLikeType::XwidgetView)
+    }
+
+    /// Check if this is a GC-managed shader-surface handle.
+    #[inline]
+    pub fn is_surface_handle(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::SurfaceHandle)
     }
 
     // -- Data accessors for heap types --
@@ -1943,6 +1959,16 @@ impl TaggedValue {
         if self.is_process() {
             let ptr = self.as_veclike_ptr().unwrap() as *const ProcessObj;
             Some(unsafe { (*ptr).id })
+        } else {
+            None
+        }
+    }
+
+    /// Get the host surface id from a shader-surface handle value.
+    pub fn as_surface_handle(self) -> Option<u32> {
+        if self.is_surface_handle() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const SurfaceObj;
+            Some(unsafe { (*ptr).surface_id })
         } else {
             None
         }

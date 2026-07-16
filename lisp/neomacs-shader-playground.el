@@ -315,7 +315,7 @@ popping the error buffer."
                          (and uniforms (list :uniforms uniforms)))))
           (neomacs-shader-playground--show id width height)
           (neomacs-shader-playground--hide-errors)
-          (message "Shader compiled (surface %d)" id)
+          (message "Shader compiled (surface %s)" id)
           t)
       (error
        (if quiet

@@ -412,9 +412,18 @@ pub(crate) fn parse_display_webkit_layout(
     })
 }
 
-/// Parse a `(surface :id N [:width W] [:height H])` spec. `:id` is required;
-/// missing dimensions fall back to a small visible square so a typo'd spec
-/// shows up instead of vanishing.
+/// Extract a host surface id from a display-spec value: a GC-managed surface
+/// handle (`neomacs-surface-create`'s return value) or a plain non-negative
+/// integer id (backward compatibility).
+fn parse_surface_id_value(value: Value) -> Option<u32> {
+    value
+        .as_surface_handle()
+        .or_else(|| value.as_int().filter(|id| *id >= 0).map(|id| id as u32))
+}
+
+/// Parse a `(surface :id HANDLE-OR-N [:width W] [:height H])` spec. `:id` is
+/// required; missing dimensions fall back to a small visible square so a
+/// typo'd spec shows up instead of vanishing.
 pub(crate) fn parse_display_surface_layout(prop_val: &Value) -> Option<DisplaySurfaceLayout> {
     let items = list_to_vec(prop_val)?;
     if items.first()?.as_symbol_name() != Some(DisplaySpecHead::Surface.into()) {
@@ -430,7 +439,7 @@ pub(crate) fn parse_display_surface_layout(prop_val: &Value) -> Option<DisplaySu
         let value = items[i + 1];
         match DisplayMediaKey::from_lisp_value(items[i]) {
             Some(DisplayMediaKey::Id) => {
-                surface_id = value.as_int().filter(|id| *id >= 0).map(|id| id as u32);
+                surface_id = parse_surface_id_value(value);
             }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {

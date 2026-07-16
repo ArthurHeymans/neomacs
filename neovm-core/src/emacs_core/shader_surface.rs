@@ -1,9 +1,13 @@
 //! Elisp builtins for shader surfaces (`doc/display-engine/SHADER_SURFACES.md`).
 //!
 //! `neomacs-surface-create` allocates a compositor-rendered GPU texture from
-//! user WGSL (or raw RGBA8 pixels) and returns an integer surface id; the id
-//! is shown inline via a `(surface :id N :width W :height H)` display
-//! property. NeoMacs extension — gate uses on `(featurep 'neomacs-surface)`.
+//! user WGSL (or raw RGBA8 pixels) and returns a GC-managed surface handle;
+//! the handle is shown inline via a `(surface :id HANDLE :width W :height H)`
+//! display property. Dropping the handle without `neomacs-surface-destroy`
+//! frees the GPU objects at the next garbage collection (the sweep queues the
+//! id, the evaluator drains it — see `TaggedHeap::pending_surface_destroys`).
+//! Consumers also accept a plain integer id for backward compatibility.
+//! NeoMacs extension — gate uses on `(featurep 'neomacs-surface)`.
 
 use super::error::{EvalResult, signal};
 use super::eval::{
@@ -34,6 +38,18 @@ fn number_to_f32(value: Value) -> Option<f32> {
     } else {
         value.as_float().map(|float| float as f32)
     }
+}
+
+/// Extract a host surface id from a GC-managed surface handle
+/// (`neomacs-surface-create`'s return value) or a plain non-negative fixnum
+/// (backward compatibility, and the declarative `:channel0` form).
+pub(crate) fn surface_id_from_value(value: Value) -> Option<u32> {
+    value.as_surface_handle().or_else(|| {
+        value
+            .as_int()
+            .filter(|id| *id >= 0 && *id <= u32::MAX as i64)
+            .map(|id| id as u32)
+    })
 }
 
 fn dimension(value: Option<Value>, key: &str) -> Result<u32, super::error::Flow> {
@@ -113,8 +129,8 @@ fn resolve_channel_value(
     eval: &mut Context,
     value: Value,
 ) -> Result<(SurfaceChannelKind, u32), super::error::Flow> {
-    if let Some(id) = value.as_int().filter(|id| *id >= 0) {
-        return Ok((SurfaceChannelKind::Surface, id as u32));
+    if let Some(id) = surface_id_from_value(value) {
+        return Ok((SurfaceChannelKind::Surface, id));
     }
     let head = value
         .is_cons()
@@ -197,8 +213,10 @@ fn resolve_channel_value(
 ///
 /// Keys: `:shader WGSL-STRING` or `:pixels UNIBYTE-STRING` (exactly one),
 /// `:width N`, `:height N` (required), `:uniforms ALIST`, `:animate BOOL`
-/// (default t for shader surfaces). Returns the integer surface id, or
-/// signals an error — including WGSL compile errors with naga diagnostics.
+/// (default t for shader surfaces). Returns a GC-managed surface handle —
+/// when Lisp drops the handle, the next garbage collection frees the GPU
+/// objects, so an un-destroyed surface no longer leaks until exit. Signals
+/// an error otherwise — including WGSL compile errors with naga diagnostics.
 pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     if args.len() % 2 != 0 {
         return Err(surface_error(
@@ -296,38 +314,42 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
     let id = host
         .create_shader_surface(request)
         .map_err(surface_error)?;
-    Ok(Value::fixnum(id as i64))
+    Ok(Value::make_surface_handle(id))
 }
 
 /// (neomacs-surface-set-uniform ID NAME VALUE)
 ///
-/// NAME is the symbol/string used in `:uniforms` at create time; VALUE is a
-/// number or a vector of 1..=4 numbers. Cheap: writes a uniform slot, no
-/// shader recompile.
+/// ID is a surface handle from `neomacs-surface-create` (or a plain integer
+/// id). NAME is the symbol/string used in `:uniforms` at create time; VALUE
+/// is a number or a vector of 1..=4 numbers. Cheap: writes a uniform slot,
+/// no shader recompile.
 pub(crate) fn builtin_neomacs_surface_set_uniform(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let id = args[0]
-        .as_int()
-        .filter(|id| *id >= 0)
-        .ok_or_else(|| surface_error("neomacs-surface-set-uniform: ID must be a surface id"))?;
+    let id = surface_id_from_value(args[0]).ok_or_else(|| {
+        surface_error("neomacs-surface-set-uniform: ID must be a surface handle or id")
+    })?;
     let entry = parse_uniform_entry(Value::cons(args[1], args[2]))?;
     if let Some(host) = eval.display_host.as_ref() {
-        host.set_shader_surface_uniform(id as u32, &entry.name, entry.value)
+        host.set_shader_surface_uniform(id, &entry.name, entry.value)
             .map_err(surface_error)?;
     }
     Ok(Value::NIL)
 }
 
-/// (neomacs-surface-destroy ID) — free the surface's GPU objects.
+/// (neomacs-surface-destroy ID) — free the surface's GPU objects now.
+///
+/// ID is a surface handle or a plain integer id. Optional with handles — GC
+/// frees a dropped handle's surface anyway — but immediate for hot swaps
+/// (e.g. the shader playground). If the handle is later swept by GC, the
+/// second free of the already-missing id is a render-thread no-op.
 pub(crate) fn builtin_neomacs_surface_destroy(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    let id = args[0]
-        .as_int()
-        .filter(|id| *id >= 0)
-        .ok_or_else(|| surface_error("neomacs-surface-destroy: ID must be a surface id"))?;
+    let id = surface_id_from_value(args[0]).ok_or_else(|| {
+        surface_error("neomacs-surface-destroy: ID must be a surface handle or id")
+    })?;
     if let Some(host) = eval.display_host.as_ref() {
-        host.destroy_shader_surface(id as u32).map_err(surface_error)?;
+        host.destroy_shader_surface(id).map_err(surface_error)?;
     }
     Ok(Value::NIL)
 }

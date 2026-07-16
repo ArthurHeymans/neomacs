@@ -949,6 +949,7 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
                 VecLikeType::Terminal => "terminal",
                 VecLikeType::Xwidget => "xwidget",
                 VecLikeType::XwidgetView => "xwidget-view",
+                VecLikeType::SurfaceHandle => "neomacs-surface",
                 VecLikeType::Subr => "primitive-function",
                 VecLikeType::Bignum => "bignum",
                 VecLikeType::SymbolWithPos => "symbol-with-pos",

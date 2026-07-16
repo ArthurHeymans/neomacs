@@ -271,6 +271,12 @@ impl DumpEncoder {
             | ValueKind::Veclike(VecLikeType::XwidgetView) => {
                 panic!("pdump: xwidget objects are not portable")
             }
+            ValueKind::Veclike(VecLikeType::SurfaceHandle) => {
+                // Surface handles wrap live GPU objects owned by the host
+                // process's render thread; they can never appear in a
+                // portable dump image.
+                panic!("pdump: shader-surface handles are not portable")
+            }
             ValueKind::Veclike(VecLikeType::Bignum) => {
                 DumpValue::Bignum(v.as_bignum().unwrap().to_string())
             }
@@ -2536,6 +2542,12 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
         }
         ValueKind::Veclike(VecLikeType::Xwidget) | ValueKind::Veclike(VecLikeType::XwidgetView) => {
             panic!("pdump: xwidget objects are not portable")
+        }
+        // Explicit (not the `Free` fallback): a surface handle wraps live GPU
+        // objects owned by the host render thread and must never be silently
+        // dumped as `Free`.
+        ValueKind::Veclike(VecLikeType::SurfaceHandle) => {
+            panic!("pdump: shader-surface handles are not portable")
         }
         // Explicit (not the `Free` fallback) so a live finalizer can never be
         // silently dropped from an image. `dump-emacs-portable` pre-scans the

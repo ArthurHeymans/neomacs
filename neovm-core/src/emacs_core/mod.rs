@@ -137,6 +137,8 @@ pub mod xdisp;
 pub mod xfaces;
 pub mod xml;
 pub mod shader_surface;
+#[cfg(test)]
+mod shader_surface_test;
 pub mod xwidget;
 #[cfg(test)]
 mod xwidget_test;

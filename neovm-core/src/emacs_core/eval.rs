@@ -7906,6 +7906,11 @@ impl Context {
         self.gc_count += 1;
         self.update_gc_runtime_stats(start.elapsed());
         self.sync_gc_threshold_from_runtime_settings();
+        // Destroy the GPU objects of shader-surface handles this cycle swept.
+        // Every completed collection funnels through this block (explicit
+        // `garbage-collect` and the safe-point paths above), so this is the
+        // single drain point for `TaggedHeap::pending_surface_destroys`.
+        self.drain_pending_surface_destroys();
         // GNU `garbage_collect` runs the doomed finalizers before
         // `post-gc-hook`.
         self.run_doomed_finalizers();
@@ -8279,6 +8284,30 @@ impl Context {
             }
         });
         restore_scratch_gc_roots(saved_roots);
+    }
+
+    /// Destroy the GPU objects of every shader-surface handle the
+    /// just-finished cycle swept (`SurfaceObj` — see
+    /// `TaggedHeap::pending_surface_destroys`). Best-effort: errors are
+    /// ignored, and without a display host the batch is simply dropped (the
+    /// ids were host-allocated, so no host means no GPU objects to free — the
+    /// host was torn down). A handle already freed by an explicit
+    /// `neomacs-surface-destroy` re-queues its id here when the dead handle
+    /// is later swept; the render-thread free of a missing id is a no-op, so
+    /// the double destroy is harmless.
+    fn drain_pending_surface_destroys(&mut self) {
+        let ids = self.tagged_heap.take_pending_surface_destroys();
+        if ids.is_empty() {
+            return;
+        }
+        let Some(host) = self.display_host.as_ref() else {
+            return;
+        };
+        for id in ids {
+            if let Err(err) = host.destroy_shader_surface(id) {
+                tracing::debug!("gc surface destroy {id} failed: {err}");
+            }
+        }
     }
 
     /// GC safe point used at evaluator boundaries.

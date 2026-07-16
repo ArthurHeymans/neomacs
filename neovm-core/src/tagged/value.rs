@@ -910,6 +910,7 @@ impl TaggedValue {
                 VecLikeType::CharTable => "char-table",
                 VecLikeType::SubCharTable => "sub-char-table",
                 VecLikeType::Obarray => "obarray",
+                VecLikeType::SurfaceHandle => "neomacs-surface",
             },
             ValueKind::Unbound => "unbound",
             ValueKind::Unknown => "unknown",

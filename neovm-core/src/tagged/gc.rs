@@ -2753,6 +2753,14 @@ pub struct TaggedHeap {
     /// finalizer run) stays live. Drained by the evaluator's cycle-completed
     /// block, which calls each with zero args, errors ignored.
     doomed_finalizer_functions: Vec<TaggedValue>,
+    /// Host surface ids of `SurfaceObj` handles the sweep reclaimed, waiting
+    /// for a best-effort `DisplayHost::destroy_shader_surface`. The sweep
+    /// (`free_gc_object`) only records the id — it has no display-host access
+    /// — and the evaluator's cycle-completed block drains the batch
+    /// (`take_pending_surface_destroys`). Plain data (u32), so entries never
+    /// need marking; a double destroy is harmless (the render-thread free of
+    /// a missing id is a no-op).
+    pending_surface_destroys: Vec<u32>,
 
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
@@ -3104,6 +3112,7 @@ impl TaggedHeap {
             permanent_weak_hash_tables_set: rustc_hash::FxHashSet::default(),
             finalizer_registry: Vec::new(),
             doomed_finalizer_functions: Vec::new(),
+            pending_surface_destroys: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
             float_arena: ObjectArena::new(),
             string_arena: ObjectArena::new(),
@@ -3771,6 +3780,7 @@ impl TaggedHeap {
                         VecLikeType::Terminal => size_of::<TerminalObj>(),
                         VecLikeType::Xwidget => size_of::<XwidgetObj>(),
                         VecLikeType::XwidgetView => size_of::<XwidgetViewObj>(),
+                        VecLikeType::SurfaceHandle => size_of::<SurfaceObj>(),
                         VecLikeType::Subr => size_of::<SubrObj>(),
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
@@ -4255,6 +4265,31 @@ impl TaggedHeap {
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<XwidgetObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a GC-managed shader-surface handle.
+    ///
+    /// Deliberately NOT registry-rooted (contrast `alloc_finalizer` /
+    /// xwidgets' `internal_xwidget_list`): the handle dies when Lisp drops
+    /// it, and `free_gc_object` then queues `surface_id` on
+    /// `pending_surface_destroys` for the evaluator's post-collection drain.
+    pub fn alloc_surface_handle(&mut self, surface_id: u32) -> TaggedValue {
+        let obj = Box::new(SurfaceObj {
+            header: VecLikeHeader::new(VecLikeType::SurfaceHandle),
+            surface_id,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<SurfaceObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Take the surface ids of handles the sweep reclaimed since the last
+    /// drain. The evaluator's cycle-completed block queues a best-effort
+    /// `DisplayHost::destroy_shader_surface` for each.
+    pub fn take_pending_surface_destroys(&mut self) -> Vec<u32> {
+        std::mem::take(&mut self.pending_surface_destroys)
     }
 
     /// Allocate an xwidget view object.
@@ -5740,8 +5775,8 @@ impl TaggedHeap {
                     out.extend([o.model, o.window]);
                 }
                 // Buffer/Window/Frame/Timer/Process/Terminal/Marker/Subr/
-                // Bignum/Sqlite/UserPtr have no Value children to trace
-                // (mirrors trace_veclike).
+                // Bignum/Sqlite/UserPtr/SurfaceHandle have no Value children
+                // to trace (mirrors trace_veclike).
                 VecLikeType::Buffer
                 | VecLikeType::Window
                 | VecLikeType::Frame
@@ -5752,7 +5787,8 @@ impl TaggedHeap {
                 | VecLikeType::Subr
                 | VecLikeType::Bignum
                 | VecLikeType::Sqlite
-                | VecLikeType::UserPtr => {}
+                | VecLikeType::UserPtr
+                | VecLikeType::SurfaceHandle => {}
             }
         }
         out
@@ -7631,7 +7667,8 @@ impl TaggedHeap {
             | VecLikeType::Subr
             | VecLikeType::Bignum
             | VecLikeType::Sqlite
-            | VecLikeType::UserPtr => {
+            | VecLikeType::UserPtr
+            | VecLikeType::SurfaceHandle => {
                 // These have no Value children to trace.
                 //
                 // Bignums own a `malachite::Integer`, which manages
@@ -7640,6 +7677,8 @@ impl TaggedHeap {
                 //
                 // UserPtr has only a raw C pointer and finalizer, no
                 // Lisp children.
+                //
+                // SurfaceHandle holds only a plain u32 surface id.
             }
         }
     }
@@ -7883,6 +7922,16 @@ impl TaggedHeap {
                     VecLikeType::XwidgetView => unsafe {
                         drop(Box::from_raw(ptr as *mut XwidgetViewObj))
                     },
+                    VecLikeType::SurfaceHandle => {
+                        // A dead handle means Lisp dropped its last reference
+                        // to the GPU surface: queue the id so the evaluator's
+                        // post-collection drain can destroy the host objects.
+                        // The sweep has no display-host access, so record only.
+                        let obj = ptr as *mut SurfaceObj;
+                        let surface_id = unsafe { (*obj).surface_id };
+                        self.pending_surface_destroys.push(surface_id);
+                        unsafe { drop(Box::from_raw(obj)) };
+                    }
                     VecLikeType::Subr => unsafe { drop(Box::from_raw(ptr as *mut SubrObj)) },
                     VecLikeType::Bignum => unsafe {
                         // Box::drop runs malachite::Integer::drop, which
@@ -8415,7 +8464,7 @@ pub(crate) mod alloc_probe {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-    const N_KINDS: usize = 29;
+    const N_KINDS: usize = 30;
     const N_BUCKETS: usize = 11;
 
     /// Dense kind index: String, Float, then every `VecLikeType` variant.
@@ -8449,6 +8498,7 @@ pub(crate) mod alloc_probe {
         "Macro",
         "ByteCode",
         "Timer",
+        "SurfaceHandle",
     ];
     /// Histogram bucket upper bounds (bytes).
     pub(crate) const BUCKET_LABELS: [&str; N_BUCKETS] = [
@@ -8496,6 +8546,7 @@ pub(crate) mod alloc_probe {
                     VecLikeType::Macro => 24,
                     VecLikeType::ByteCode => 25,
                     VecLikeType::Timer => 26,
+                    VecLikeType::SurfaceHandle => 27,
                 }
             }
         }
@@ -8613,6 +8664,7 @@ pub(crate) mod alloc_probe {
             25 => size_of::<super::MacroObj>(),
             26 => size_of::<super::ByteCodeObj>(),
             27 => size_of::<super::TimerObj>(),
+            28 => size_of::<super::SurfaceObj>(),
             _ => 0,
         }
     }

@@ -26,6 +26,49 @@ fn parse_surface_layout_full_spec() {
 }
 
 #[test]
+fn parse_surface_layout_accepts_gc_managed_handle() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let layout = parse_display_surface_layout(&Value::list(vec![
+        Value::symbol("surface"),
+        Value::symbol(":id"),
+        Value::make_surface_handle(42),
+        Value::symbol(":width"),
+        Value::fixnum(320),
+        Value::symbol(":height"),
+        Value::fixnum(120),
+    ]))
+    .expect("surface layout from handle");
+    assert_eq!(
+        layout,
+        DisplaySurfaceLayout {
+            surface_id: 42,
+            width: 320.0,
+            height: 120.0,
+        }
+    );
+}
+
+#[test]
+fn parse_surface_source_layout_accepts_handle_channel0() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let layout = parse_display_surface_source_layout(
+        &Value::list(vec![
+            Value::symbol("surface"),
+            Value::symbol(":shader"),
+            Value::string(
+                "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }",
+            ),
+            Value::symbol(":channel0"),
+            Value::make_surface_handle(7),
+        ]),
+        640.0,
+        480.0,
+    )
+    .expect("declarative surface layout with handle channel0");
+    assert_eq!(layout.request.channel0, Some(7));
+}
+
+#[test]
 fn parse_surface_layout_requires_id() {
     let _eval = neovm_core::emacs_core::Context::new();
     assert!(
