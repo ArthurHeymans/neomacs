@@ -647,38 +647,41 @@ impl<'a> Vm<'a> {
         result
     }
 
-    #[inline]
-    fn maybe_grow_vm_stack<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        let depth = self.ctx.depth;
-        if depth < VM_STACK_GROWTH_PROBE_START_DEPTH
-            || !depth.is_multiple_of(VM_STACK_GROWTH_PROBE_INTERVAL)
-        {
-            return f(self);
-        }
-        stacker::maybe_grow(VM_STACK_RED_ZONE, VM_STACK_SEGMENT, || f(self))
-    }
-
     fn with_bytecode_call_depth<T>(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, Flow>,
     ) -> Result<T, Flow> {
         self.ctx.depth += 1;
         if self.ctx.depth > self.ctx.max_depth {
-            if self.ctx.max_depth < 100 {
-                self.ctx.max_depth = 100;
-            }
-            if self.ctx.depth > self.ctx.max_depth {
+            // Cold: the floor-raise + error construction stay out of the hot
+            // prologue's codegen; the common shallow call pays one compare.
+            if let Err(flow) = self.bytecode_depth_exceeded() {
                 self.ctx.depth -= 1;
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
-                ));
+                return Err(flow);
             }
         }
 
         let result = f(self);
         self.ctx.depth -= 1;
         result
+    }
+
+    /// Cold arm of [`Vm::with_bytecode_call_depth`]: GNU raises the effective
+    /// floor to 100 before signaling, so a pathologically small
+    /// max-lisp-eval-depth still leaves room to run the error handler.
+    #[cold]
+    #[inline(never)]
+    fn bytecode_depth_exceeded(&mut self) -> Result<(), Flow> {
+        if self.ctx.max_depth < 100 {
+            self.ctx.max_depth = 100;
+        }
+        if self.ctx.depth > self.ctx.max_depth {
+            return Err(signal(
+                "error",
+                vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
+            ));
+        }
+        Ok(())
     }
 
     #[inline(always)]
@@ -879,28 +882,65 @@ impl<'a> Vm<'a> {
         nargs: usize,
         func_value: Value,
     ) -> EvalResult {
+        // Flattened native-stack probe: the common shallow call pays two
+        // integer compares straight through to the body — no FnOnce
+        // combinator whose two consumption sites (fast path + the stacker
+        // closure) forced a memory-materialized closure environment on
+        // every call. Only every 16th depth level from 16 up takes the cold
+        // stacker path (INTERVAL is a power of two — the is_multiple_of
+        // folds to a mask).
+        let depth = self.ctx.depth;
+        if depth >= VM_STACK_GROWTH_PROBE_START_DEPTH
+            && depth.is_multiple_of(VM_STACK_GROWTH_PROBE_INTERVAL)
+        {
+            return self.execute_from_stack_args_grown(func, args_start, nargs, func_value);
+        }
+        self.execute_from_stack_args_body(func, args_start, nargs, func_value)
+    }
+
+    /// Cold stacker arm of [`Vm::execute_from_stack_args`]: grow the native
+    /// stack segment if the red zone is near, then run the body inside it.
+    #[cold]
+    #[inline(never)]
+    fn execute_from_stack_args_grown(
+        &mut self,
+        func: &ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        func_value: Value,
+    ) -> EvalResult {
+        stacker::maybe_grow(VM_STACK_RED_ZONE, VM_STACK_SEGMENT, || {
+            self.execute_from_stack_args_body(func, args_start, nargs, func_value)
+        })
+    }
+
+    #[inline]
+    fn execute_from_stack_args_body(
+        &mut self,
+        func: &ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        func_value: Value,
+    ) -> EvalResult {
         #[cfg(debug_assertions)]
         let gc_cycles_at_entry = crate::emacs_core::gc_stats::snapshot().collections;
-        let result = self.maybe_grow_vm_stack(|vm| {
-            if func_value.is_heap_object() {
-                #[cfg(debug_assertions)]
-                debug_assert_eq!(
-                    crate::emacs_core::gc_stats::snapshot().collections,
-                    gc_cycles_at_entry,
-                    "GC ran between execute_from_stack_args entry and run_frame \
-                     — the BcFrame.fun rooting window invariant is broken"
-                );
+        if func_value.is_heap_object() {
+            #[cfg(debug_assertions)]
+            debug_assert_eq!(
+                crate::emacs_core::gc_stats::snapshot().collections,
+                gc_cycles_at_entry,
+                "GC ran between execute_from_stack_args entry and run_frame \
+                 — the BcFrame.fun rooting window invariant is broken"
+            );
+            self.run_frame(func, args_start, nargs, func_value)
+        } else {
+            self.with_dynamic_vm_roots(|vm| {
+                for value in func.constants.iter().copied() {
+                    vm.push_dynamic_vm_root(value);
+                }
                 vm.run_frame(func, args_start, nargs, func_value)
-            } else {
-                vm.with_dynamic_vm_roots(|vm| {
-                    for value in func.constants.iter().copied() {
-                        vm.push_dynamic_vm_root(value);
-                    }
-                    vm.run_frame(func, args_start, nargs, func_value)
-                })
-            }
-        });
-        result
+            })
+        }
     }
 
     /// Resume a bytecode frame MID-FUNCTION after a precise JIT deopt: a
@@ -1731,25 +1771,50 @@ impl<'a> Vm<'a> {
                         } else {
                             Value::NIL
                         };
-                        let mut args: Vec<Value> = stk!()[args_start..].to_vec();
-                        // Spread last argument
-                        if let Some(last) = args.pop() {
-                            let spread = list_to_vec(&last).unwrap_or_default();
-                            args.extend(spread);
-                        }
-                        let writeback_names = if args.first().is_some_and(|value| value.is_string())
-                        {
-                            self.writeback_mutating_callable_names(&func_val)
-                        } else {
-                            None
-                        };
-                        let writeback_args = writeback_names.as_ref().map(|_| args.clone());
-                        let result = vm_try!(self.with_frame_call_roots(
-                            func,
-                            func_val,
-                            args,
-                            |vm, args| vm.call_function(func_val, args),
-                        ));
+                        // Spread the trailing list IN PLACE on the GC-traced
+                        // bc_buf: the explicit args a1..a(n-1) already sit
+                        // contiguously at [args_start, args_start + n - 1);
+                        // replace the list's slot with its elements (GNU
+                        // Fapply builds the same contiguous spread, then
+                        // funcall reads it — eval.c). list_to_vec keeps the
+                        // existing dotted/circular semantics (errors -> empty
+                        // spread) and its Floyd cycle detection. Checked Vec
+                        // ops only: the extension deliberately lives above
+                        // this frame's declared max-stack region, which
+                        // nothing inspects before the call returns (handler
+                        // watermarks below it truncate through it correctly
+                        // on a nonlocal exit).
+                        let last = stk!()[args_start + n - 1];
+                        let spread = list_to_vec(&last).unwrap_or_default();
+                        self.ctx.bc_buf.truncate(args_start + n - 1);
+                        self.ctx.bc_buf.reserve(spread.len());
+                        self.ctx.bc_buf.extend_from_slice(&spread);
+                        let total = n - 1 + spread.len();
+                        // Writeback gate tests the first POST-spread argument
+                        // (for (apply f '("str" ...)) the string comes from
+                        // the spread).
+                        let writeback_names =
+                            if total > 0 && self.ctx.bc_buf[args_start].is_string() {
+                                self.writeback_mutating_callable_names(&func_val)
+                            } else {
+                                None
+                            };
+                        let writeback_args: Option<LispArgVec> =
+                            writeback_names.as_ref().map(|_| {
+                                self.ctx.bc_buf[args_start..args_start + total]
+                                    .iter()
+                                    .copied()
+                                    .collect()
+                            });
+                        // Same call protocol as before (traced call_function:
+                        // backtrace push + generic dispatch, no depth guard,
+                        // no direct-builtin fast path), in its stack-args
+                        // flavor — the spread args stay rooted on bc_buf for
+                        // the whole call; func_val stays rooted in its own
+                        // caller slot below args_start.
+                        let result = vm_try!(
+                            self.call_function_from_stack_args(func_val, args_start, total, false,)
+                        );
                         if let (Some((called_name, alias_target)), Some(writeback_args)) =
                             (writeback_names.as_ref(), writeback_args.as_ref())
                         {
