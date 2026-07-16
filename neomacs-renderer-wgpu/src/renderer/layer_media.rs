@@ -511,7 +511,9 @@ impl WgpuRenderer {
 
     /// Draw inline shader surfaces (image pipeline, alpha blended). Also
     /// stamps each composited surface as recently drawn so its animation
-    /// demand and iTime clock stay live only while visible.
+    /// demand and iTime clock stay live only while visible, and routes the
+    /// pointer's hover position into the `iMouse` uniform of the surface
+    /// under it.
     pub(super) fn draw_inline_surfaces(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
         let mut quads = Vec::new();
@@ -593,6 +595,19 @@ impl WgpuRenderer {
 
                 if self.caches.surface.get(surface_id.get()).is_some() {
                     self.caches.surface.mark_drawn(surface_id.get());
+                    // Hover-only iMouse: while the pointer is inside the
+                    // glyph rect (logical px), stream its normalized position
+                    // into the surface's uniforms (picked up by the next
+                    // offscreen pass). Outside the rect nothing is written,
+                    // so iMouse persists at the last hover position.
+                    let (mx, my) = ctx.params.mouse_pos;
+                    if mx >= *x && mx < *x + *width && my >= *y && my < *y + *height {
+                        self.caches.surface.set_mouse_uv(
+                            surface_id.get(),
+                            (mx - *x) / *width,
+                            (my - *y) / *height,
+                        );
+                    }
                     quads.push(MediaQuad {
                         id: surface_id.get(),
                         vertices: textured_quad_vertices_uv(

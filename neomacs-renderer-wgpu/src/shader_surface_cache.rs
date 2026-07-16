@@ -43,6 +43,11 @@ pub struct CachedShaderSurface {
     /// name -> (slot, components) for `set_uniform` by Lisp name.
     uniform_slots: HashMap<String, (usize, u8)>,
     custom: [[f32; 4]; SURFACE_USER_UNIFORM_SLOTS],
+    /// `iMouse` uniform: xy = last hover position in physical pixels
+    /// (Shadertoy convention: origin bottom-left, y-up), zw reserved for
+    /// click state. Updated by `set_mouse_uv` while the pointer is over the
+    /// composited quad; persists when it leaves.
+    mouse: [f32; 4],
     elapsed: f32,
     frame_index: u32,
     animate: bool,
@@ -290,6 +295,7 @@ impl ShaderSurfaceCache {
                 channel0,
                 uniform_slots,
                 custom,
+                mouse: [0.0; 4],
                 elapsed: 0.0,
                 frame_index: 0,
                 animate,
@@ -367,6 +373,7 @@ impl ShaderSurfaceCache {
                 channel0: None,
                 uniform_slots: HashMap::new(),
                 custom: [[0.0; 4]; SURFACE_USER_UNIFORM_SLOTS],
+                mouse: [0.0; 4],
                 elapsed: 0.0,
                 frame_index: 0,
                 animate: false,
@@ -398,6 +405,30 @@ impl ShaderSurfaceCache {
                 uniform_accessor_name(name)
             ),
         }
+    }
+
+    /// Route a hover position into `iMouse.xy`. `u`/`v` are the pointer's
+    /// normalized position inside the composited quad (top-left origin, as
+    /// drawn); they map to physical pixels in Shadertoy's bottom-left y-up
+    /// convention. zw stay 0 (reserved for click state). Sub-half-pixel moves
+    /// neither rewrite nor dirty, so a static surface re-renders on real
+    /// hover movement, not every frame the pointer rests on it.
+    pub fn set_mouse_uv(&mut self, id: u32, u: f32, v: f32) {
+        let Some(surface) = self.surfaces.get_mut(&id) else {
+            return;
+        };
+        if surface.pipeline.is_none() {
+            // Pixel-upload surfaces have no uniforms to route.
+            return;
+        }
+        let x = u * surface.width_px as f32;
+        let y = (1.0 - v) * surface.height_px as f32;
+        if (x - surface.mouse[0]).abs() <= 0.5 && (y - surface.mouse[1]).abs() <= 0.5 {
+            return;
+        }
+        surface.mouse[0] = x;
+        surface.mouse[1] = y;
+        surface.dirty = true;
     }
 
     pub fn free(&mut self, id: u32) {
@@ -461,7 +492,8 @@ impl ShaderSurfaceCache {
             uniforms[0] = surface.width_px as f32;
             uniforms[1] = surface.height_px as f32;
             uniforms[2] = surface.scale;
-            // uniforms[3] reserved; [4..8] = iMouse (zeros, stage 3).
+            // uniforms[3] reserved.
+            uniforms[4..8].copy_from_slice(&surface.mouse);
             uniforms[8] = surface.elapsed;
             uniforms[9] = dt;
             uniforms[10] = surface.frame_index as f32;

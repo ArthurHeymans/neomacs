@@ -66,6 +66,9 @@ pub fn compose_surface_wgsl(user_source: &str, uniforms: &[(String, u8)]) -> Str
         "// ---- neomacs shader-surface prelude (generated) ----\n\
          struct NeoUniforms {\n\
          \x20   iResolution: vec4<f32>,\n\
+         \x20   // xy: hover position in physical px (origin bottom-left, y-up);\n\
+         \x20   // persists at the last hover position when the pointer leaves.\n\
+         \x20   // zw: reserved for click state, currently 0.\n\
          \x20   iMouse: vec4<f32>,\n\
          \x20   iTime: f32,\n\
          \x20   iTimeDelta: f32,\n\

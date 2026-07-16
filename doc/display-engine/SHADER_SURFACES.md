@@ -89,7 +89,10 @@ The renderer prepends a generated prelude and compiles the concatenation
   - `u.iTime: f32` — seconds since creation, advancing **only while the
     surface is actually rendered** (pauses offscreen — free battery win)
   - `u.iTimeDelta: f32`, `u.iFrame: f32`
-  - `u.iMouse: vec4<f32>` — reserved, zeros in stage 2
+  - `u.iMouse: vec4<f32>` — xy = hover position in *physical* pixels
+    (origin bottom-left, y-up, matching `fragCoord`) while the pointer is
+    over the surface; persists at the last hover position when the pointer
+    leaves. zw reserved for click state, currently 0.
   - 8 user `vec4<f32>` slots
 - One accessor function per user uniform, generated from the `:uniforms`
   alist: `(speed . 2.0)` ⇒ `fn u_speed() -> f32`, `(tint . [r g b])` ⇒
@@ -170,8 +173,9 @@ offscreen pass and runtime WGSL compilation.
 2. **DONE (this change)** — animated WGSL fragment surfaces: prelude,
    compositor clock, named uniforms, sync errors, visibility-scoped demand.
 3. **PARTIALLY DONE** — `:channel0` surface-to-surface inputs landed (pixel
-   sources + multipass chains). Remaining: image/video/webkit ids as channel
-   sources (cross-cache binding), `iMouse` routing, GLSL-in via naga
+   sources + multipass chains); hover-only `iMouse` routing landed.
+   Remaining: image/video/webkit ids as channel
+   sources (cross-cache binding), click-state `iMouse.zw`, GLSL-in via naga
    (imports the Ghostty/Shadertoy shader corpus), full-frame post pass
    (librashader runs on wgpu — RetroArch preset ecosystem nearly free).
 4. Optional 3D mesh API — raymarching already covers most demand inside
@@ -181,7 +185,7 @@ offscreen pass and runtime WGSL compilation.
 
 - No GC integration; leaked surfaces live until `destroy` or exit.
 - DPI captured at create; no rescale on monitor change.
-- `iMouse` always zero; no input routing.
+- `iMouse` is hover-only: zw (click/drag state) not yet routed.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
 - TTY backend ignores surfaces (like image/video/xwidget).
