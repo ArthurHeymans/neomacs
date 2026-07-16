@@ -144,9 +144,13 @@ pub(crate) struct DisplaySurfaceLayout {
 /// Parsed declarative `(surface :shader WGSL [:uniforms ALIST] [:animate B]
 /// [:width W] [:height H])` display spec: no Lisp-side id — the resolver
 /// memoizes the request content into a host surface id, like `(video :file …)`.
+/// `channel0_value` carries the raw `:channel0` value (surface id integer, or
+/// an image/video spec); the resolver interprets it — resolution needs the
+/// display host, which the parser deliberately does not see.
 #[derive(Clone, Debug)]
 pub(crate) struct DisplaySurfaceSourceLayout {
     pub(crate) request: SurfaceResolveRequest,
+    pub(crate) channel0_value: Option<Value>,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -537,7 +541,7 @@ pub(crate) fn parse_display_surface_source_layout(
                 animate = parse_boolish(value);
             }
             Some(DisplayMediaKey::Channel0) => {
-                channel0 = value.as_int().filter(|id| *id >= 0).map(|id| id as u32);
+                channel0 = (!value.is_nil()).then_some(value);
             }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
@@ -562,8 +566,9 @@ pub(crate) fn parse_display_surface_source_layout(
             width: width.round().max(1.0) as u32,
             height: height.round().max(1.0) as u32,
             animate,
-            channel0,
+            channel0: None,
         },
+        channel0_value: channel0,
         width,
         height,
     })

@@ -43,6 +43,7 @@ use neomacs_display_runtime::render_thread::{
     build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::shader_surface::{
+    SurfaceChannelSource as RendererChannelSource,
     SurfaceShaderLanguage as RendererShaderLanguage, SurfaceUniformInit, validate_surface_glsl,
     validate_surface_wgsl,
 };
@@ -64,7 +65,7 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
     ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
-    ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
+    ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, SurfaceChannelKind,
     SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
     WebKitResolveSource,
 };
@@ -960,6 +961,16 @@ fn renderer_shader_language(language: ShaderSurfaceLanguage) -> RendererShaderLa
     }
 }
 
+fn renderer_channel_source(
+    channel: Option<(SurfaceChannelKind, u32)>,
+) -> Option<RendererChannelSource> {
+    channel.map(|(kind, id)| match kind {
+        SurfaceChannelKind::Surface => RendererChannelSource::Surface(id),
+        SurfaceChannelKind::Image => RendererChannelSource::Image(id),
+        SurfaceChannelKind::Video => RendererChannelSource::Video(id),
+    })
+}
+
 /// Validate + compose a user surface shader in either dialect on the Lisp
 /// thread (errors become Lisp signals); returns the composed module source.
 fn validate_surface_shader(
@@ -1788,7 +1799,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                             language: renderer_shader_language(request.language),
                             source: request.source.clone(),
                             uniforms,
-                            channel0: request.channel0,
+                            channel0: renderer_channel_source(request.channel0),
                         },
                         width: request.width,
                         height: request.height,
@@ -1885,7 +1896,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                     language: renderer_shader_language(language),
                     source,
                     uniforms,
-                    channel0,
+                    channel0: renderer_channel_source(channel0),
                 }
             }
             ShaderSurfaceContent::Pixels { data } => SurfaceSource::Pixels { data },

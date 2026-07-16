@@ -97,11 +97,21 @@ The renderer prepends a generated prelude and compiles the concatenation
 - One accessor function per user uniform, generated from the `:uniforms`
   alist: `(speed . 2.0)` ⇒ `fn u_speed() -> f32`, `(tint . [r g b])` ⇒
   `fn u_tint() -> vec3<f32>`. Order of declaration = slot order.
-- `iChannel0: texture_2d<f32>` + `iChannel0Sampler: sampler` (bindings 1–2):
-  another surface bound via `:channel0 ID` (imperative or declarative) —
-  pixel surfaces for image processing, shader surfaces for multipass chains
-  (a chain sees the source's *previous* frame, Shadertoy buffer semantics).
-  Unbound channels sample transparent black; self-reference is rejected.
+- `iChannel0: texture_2d<f32>` + `iChannel0Sampler: sampler` (bindings 1–2),
+  bound via `:channel0` (imperative or declarative) accepting:
+  - a **surface id** — pixel surfaces for image processing, shader surfaces
+    for multipass chains (a chain sees the source's *previous* frame,
+    Shadertoy buffer semantics); self-reference is rejected;
+  - an **`(image …)` spec** — resolved through the async image catalog
+    (samples black until decoded, then picks up automatically);
+  - a **`(video …)` spec** — the video's current frame, zero extra copies
+    (the texture is the same one playback uses, DMA-BUF zero-copy included);
+    `:autoplay` defaults to t in channel position (a never-playing channel
+    samples black forever). Consumers that should follow the video need
+    `:animate t`.
+  Channels resolve per pass, so late creation / decode completion /
+  per-frame video uploads are picked up. Unbound or missing channels sample
+  transparent black.
 - A fullscreen-triangle `@vertex` entry and an `@fragment` entry that calls
   `mainImage` with **Shadertoy fragCoord convention** (y-up, origin
   bottom-left): `mainImage(vec2(pos.x, u.iResolution.y - pos.y))`.

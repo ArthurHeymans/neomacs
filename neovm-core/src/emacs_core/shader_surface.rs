@@ -8,8 +8,9 @@
 use super::error::{EvalResult, signal};
 use super::eval::{
     Context, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
-    ShaderSurfaceUniformInit,
+    ShaderSurfaceUniformInit, SurfaceChannelKind, VideoResolveRequest, VideoResolveSource,
 };
+use super::image::{image_resolve_request_from_spec, image_scale_environment_for_frame};
 use super::value::{Value, list_to_vec};
 
 fn surface_error(message: impl Into<String>) -> super::error::Flow {
@@ -102,6 +103,96 @@ fn parse_uniform_entry(entry: Value) -> Result<ShaderSurfaceUniformInit, super::
     })
 }
 
+/// Resolve a `:channel0` value into `(kind, cache id)`: a surface id
+/// (integer), an `(image :file/:data …)` spec resolved through the async
+/// image catalog, or a `(video :file/:uri …)` spec resolved through the
+/// video host (memoized like the declarative display path). Channel-only
+/// videos default `:autoplay` to t — a never-playing channel would sample
+/// black forever.
+fn resolve_channel_value(
+    eval: &mut Context,
+    value: Value,
+) -> Result<(SurfaceChannelKind, u32), super::error::Flow> {
+    if let Some(id) = value.as_int().filter(|id| *id >= 0) {
+        return Ok((SurfaceChannelKind::Surface, id as u32));
+    }
+    let head = value
+        .is_cons()
+        .then(|| value.cons_car())
+        .and_then(|car| car.as_symbol_name().map(str::to_owned));
+    match head.as_deref() {
+        Some("image") => {
+            let environment =
+                image_scale_environment_for_frame(eval, None).unwrap_or_default();
+            let request = image_resolve_request_from_spec(&value, environment)
+                .ok_or_else(|| {
+                    surface_error("neomacs-surface-create: invalid image spec in :channel0")
+                })?;
+            let catalog = eval
+                .display_host
+                .as_ref()
+                .and_then(|host| host.image_catalog())
+                .ok_or_else(|| {
+                    surface_error("neomacs-surface-create: no image catalog for :channel0")
+                })?;
+            let image_id = catalog.lookup(request).placement().image_id();
+            Ok((SurfaceChannelKind::Image, image_id))
+        }
+        Some("video") => {
+            let items = list_to_vec(&value).ok_or_else(|| {
+                surface_error("neomacs-surface-create: invalid video spec in :channel0")
+            })?;
+            let mut source = None;
+            let mut autoplay = true;
+            let mut loop_count = -1i32;
+            let mut i = 1usize;
+            while i + 1 < items.len() {
+                let entry = items[i + 1];
+                match items[i].as_symbol_name() {
+                    Some(":file") => {
+                        source = entry.as_lisp_string().cloned().map(VideoResolveSource::File);
+                    }
+                    Some(":uri") => {
+                        source = entry.as_lisp_string().cloned().map(VideoResolveSource::Uri);
+                    }
+                    Some(":autoplay") => autoplay = !entry.is_nil(),
+                    Some(":loop") => {
+                        loop_count = if entry.is_nil() {
+                            0
+                        } else {
+                            entry.as_int().map(|n| n as i32).unwrap_or(-1)
+                        };
+                    }
+                    _ => {}
+                }
+                i += 2;
+            }
+            let request = VideoResolveRequest {
+                source: source.ok_or_else(|| {
+                    surface_error(
+                        "neomacs-surface-create: :channel0 video spec needs :file or :uri",
+                    )
+                })?,
+                loop_count,
+                autoplay,
+            };
+            let host = eval.display_host.as_ref().ok_or_else(|| {
+                surface_error("neomacs-surface-create: no display host for :channel0")
+            })?;
+            let resolved = host
+                .request_video(request)
+                .map_err(surface_error)?
+                .ok_or_else(|| {
+                    surface_error("neomacs-surface-create: video :channel0 unavailable")
+                })?;
+            Ok((SurfaceChannelKind::Video, resolved.video_id))
+        }
+        _ => Err(surface_error(
+            "neomacs-surface-create: :channel0 must be a surface id, (image …), or (video …)",
+        )),
+    }
+}
+
 /// (neomacs-surface-create &rest PLIST)
 ///
 /// Keys: `:shader WGSL-STRING` or `:pixels UNIBYTE-STRING` (exactly one),
@@ -152,17 +243,7 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
                 }
             }
             let channel0 = match plist_get(&args, ":channel0").filter(|value| !value.is_nil()) {
-                Some(value) => Some(
-                    value
-                        .as_int()
-                        .filter(|id| *id >= 0)
-                        .map(|id| id as u32)
-                        .ok_or_else(|| {
-                            surface_error(
-                                "neomacs-surface-create: :channel0 must be a surface id",
-                            )
-                        })?,
-                ),
+                Some(value) => Some(resolve_channel_value(eval, value)?),
                 None => None,
             };
             ShaderSurfaceContent::Shader {

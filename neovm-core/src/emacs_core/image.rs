@@ -358,7 +358,7 @@ fn parse_image_dimension(value: Value) -> Option<u32> {
     }
 }
 
-fn image_resolve_request_from_spec(
+pub(crate) fn image_resolve_request_from_spec(
     spec: &Value,
     environment: ImageScaleEnvironment,
 ) -> Option<ImageResolveRequest> {
@@ -416,7 +416,7 @@ fn image_resolve_request_from_spec(
     })
 }
 
-fn image_scale_environment_for_frame(
+pub(crate) fn image_scale_environment_for_frame(
     eval: &Context,
     frame_arg: Option<&Value>,
 ) -> Option<ImageScaleEnvironment> {

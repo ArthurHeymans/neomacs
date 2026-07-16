@@ -16,8 +16,9 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::shader_surface::{
-    SURFACE_UNIFORM_BYTES, SURFACE_USER_UNIFORM_SLOTS, SurfaceShaderLanguage, SurfaceUniformInit,
-    compose_surface_glsl, compose_surface_wgsl, uniform_accessor_name,
+    SURFACE_UNIFORM_BYTES, SURFACE_USER_UNIFORM_SLOTS, SurfaceChannelSource,
+    SurfaceShaderLanguage, SurfaceUniformInit, compose_surface_glsl, compose_surface_wgsl,
+    uniform_accessor_name,
 };
 
 /// Build the render pipeline for a composed surface shader in either dialect.
@@ -117,9 +118,9 @@ pub struct CachedShaderSurface {
     /// User render pipeline; `None` for pixel-upload surfaces.
     pipeline: Option<wgpu::RenderPipeline>,
     uniform_buffer: Option<wgpu::Buffer>,
-    /// Another surface sampled as `iChannel0` (resolved per pass so late
-    /// creation/re-upload of the source is picked up automatically).
-    channel0: Option<u32>,
+    /// Media sampled as `iChannel0` (resolved per pass so late creation,
+    /// decode completion, and per-frame video uploads are picked up).
+    channel0: Option<SurfaceChannelSource>,
     /// name -> (slot, components) for `set_uniform` by Lisp name.
     uniform_slots: HashMap<String, (usize, u8)>,
     custom: [[f32; 4]; SURFACE_USER_UNIFORM_SLOTS],
@@ -289,7 +290,7 @@ impl ShaderSurfaceCache {
         height: u32,
         scale: f32,
         animate: bool,
-        channel0: Option<u32>,
+        channel0: Option<SurfaceChannelSource>,
     ) -> Result<(), String> {
         let (width_px, height_px) = Self::clamp_size(width, height, scale);
         let names: Vec<(String, u8)> = uniforms
@@ -324,7 +325,7 @@ impl ShaderSurfaceCache {
         // Sampling the texture a pass renders into is a wgpu validation error;
         // treat self-reference as unbound (transparent black).
         let channel0 = match channel0 {
-            Some(channel) if channel == id => {
+            Some(SurfaceChannelSource::Surface(channel)) if channel == id => {
                 tracing::warn!("shader surface {id}: :channel0 cannot reference itself; ignored");
                 None
             }
@@ -508,16 +509,41 @@ impl ShaderSurfaceCache {
             .any(|s| s.pipeline.is_some() && (s.dirty || (s.animate && s.is_active(now))))
     }
 
+    /// Cache ids of every image/video channel referenced by a shader surface
+    /// (surface-to-surface channels resolve internally). The caller resolves
+    /// these against the image/video caches and passes the views into
+    /// [`Self::render_pending`].
+    pub fn external_channel_sources(&self) -> Vec<SurfaceChannelSource> {
+        let mut sources: Vec<SurfaceChannelSource> = self
+            .surfaces
+            .values()
+            .filter_map(|surface| surface.channel0)
+            .filter(|source| !matches!(source, SurfaceChannelSource::Surface(_)))
+            .collect();
+        sources.sort_unstable();
+        sources.dedup();
+        sources
+    }
+
     /// Render every surface that needs a new frame (dirty, or animated and
     /// recently composited). One encoder for all passes, submitted before the
     /// main frame pass samples the textures. Returns how many passes ran.
+    ///
+    /// `external` maps image/video channel sources (from
+    /// [`Self::external_channel_sources`]) to their current texture views;
+    /// missing entries sample the transparent-black fallback.
     ///
     /// Two phases: advance clocks + write uniform buffers while collecting the
     /// render list (with each target's `iChannel0` view resolved — possibly
     /// another entry in the map, hence the split), then encode the passes. A
     /// chain A→B may therefore see B's previous frame (Shadertoy multipass
     /// buffers have the same one-frame semantics).
-    pub fn render_pending(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> usize {
+    pub fn render_pending(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        external: &std::collections::HashMap<SurfaceChannelSource, wgpu::TextureView>,
+    ) -> usize {
         let now = Instant::now();
         let dt = self
             .last_tick
@@ -570,8 +596,13 @@ impl ShaderSurfaceCache {
                 .surfaces
                 .get(id)
                 .and_then(|surface| surface.channel0)
-                .and_then(|channel| self.surfaces.get(&channel))
-                .map(|source| source.view.clone())
+                .and_then(|channel| match channel {
+                    SurfaceChannelSource::Surface(source_id) => self
+                        .surfaces
+                        .get(&source_id)
+                        .map(|source| source.view.clone()),
+                    external_source => external.get(&external_source).cloned(),
+                })
                 .unwrap_or_else(|| self.fallback_channel_view.clone());
             let Some(surface) = self.surfaces.get(id) else {
                 continue;

@@ -34,6 +34,16 @@ pub const SURFACE_USER_UNIFORM_SLOTS: usize = 8;
 /// iFrame, pad) + 8 custom vec4 slots.
 pub const SURFACE_UNIFORM_BYTES: u64 = (4 + 4 + 4 + 4 * SURFACE_USER_UNIFORM_SLOTS as u64) * 4;
 
+/// What `iChannel0` samples: another shader surface's texture, a decoded
+/// image, or a (playing) video's current frame. Resolved per pass so late
+/// creation / decode completion / per-frame video uploads are picked up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum SurfaceChannelSource {
+    Surface(u32),
+    Image(u32),
+    Video(u32),
+}
+
 /// Initial value for one user uniform: Lisp `(name . value)` pairs arrive as
 /// a name, up to four components, and the component count (1..=4) that picks
 /// the accessor's WGSL type (f32/vec2/vec3/vec4).

@@ -110,6 +110,21 @@
     (neomacs-surface-create-and-insert
      :width 320 :height 140 :animate t
      :glsl neomacs-shaders--shadertoy-glsl)
+    (let ((splash (expand-file-name "etc/images/splash.png" source-directory)))
+      (when (file-exists-p splash)
+        (insert "\n\nAn image sampled through a shader (:channel0 (image ...)):\n\n  ")
+        (neomacs-surface-create-and-insert
+         :width 320 :height 200 :animate t
+         :channel0 (list 'image :type 'png :file splash)
+         :shader "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
+    var uv = fragCoord / u.iResolution.xy;
+    uv.y = 1.0 - uv.y;
+    uv.x += 0.04 * sin(u.iTime * 1.5 + uv.y * 9.0);
+    var col = textureSample(iChannel0, iChannel0Sampler, uv).rgb;
+    let wave = 0.5 + 0.5 * sin(u.iTime + uv.x * 6.2832);
+    col = mix(col, vec3<f32>(col.g, col.b, col.r), wave * 0.6);
+    return vec4<f32>(col, 1.0);
+}")))
     (insert "\n\nFrame effects: M-x neomacs-shaders-crt / -glow / -matrix / -off\n")
     (goto-char (point-min))
     (pop-to-buffer (current-buffer))))

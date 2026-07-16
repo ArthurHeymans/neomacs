@@ -20,8 +20,8 @@ use crate::display_source::{
     DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_spec::{
-    parse_display_image_layout, parse_display_surface_source_layout, parse_display_video_layout,
-    parse_display_webkit_layout,
+    DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
+    parse_display_video_layout, parse_display_webkit_layout,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -31,7 +31,8 @@ use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
-use neovm_core::emacs_core::eval::DisplayHost;
+use neovm_core::emacs_core::eval::{DisplayHost, SurfaceChannelKind};
+use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use std::collections::HashMap;
 
@@ -830,15 +831,26 @@ fn resolve_webkit_display_property(
 /// Declarative `(surface :shader …)` spec: resolve through the display host,
 /// which memoizes request content into a surface id (the video pattern). The
 /// `:id` form never reaches here (classify resolves it directly).
+///
+/// `:channel0` accepts a surface id, an `(image …)` spec (resolved through
+/// the nonblocking image catalog), or a `(video …)` spec (resolved through
+/// the video host, `:autoplay` defaulting to t — a never-playing channel
+/// samples black forever). The resolved `(kind, id)` becomes part of the
+/// memo key.
 fn resolve_surface_display_property(
     display_prop: &Value,
     params: DisplayMediaResolveParams<'_>,
 ) -> Option<DisplayMediaReplacement> {
-    let spec = parse_display_surface_source_layout(
+    let mut spec = parse_display_surface_source_layout(
         display_prop,
         DisplayRowCharWidthPolicy::new(params.fallback_metrics.char_width()).fallback() * 40.0,
         params.fallback_metrics.row_height() * 4.0,
     )?;
+    if let Some(channel_value) = spec.channel0_value {
+        // A named-but-unresolvable channel keeps the surface unresolved
+        // (blank) rather than silently rendering with a black channel.
+        spec.request.channel0 = Some(resolve_surface_channel(&channel_value, params)?);
+    }
     let resolved = params
         .display_host
         .request_surface(spec.request.clone())
@@ -849,6 +861,41 @@ fn resolve_surface_display_property(
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),
     }))
+}
+
+fn resolve_surface_channel(
+    value: &Value,
+    params: DisplayMediaResolveParams<'_>,
+) -> Option<(SurfaceChannelKind, u32)> {
+    if let Some(id) = value.as_int().filter(|id| *id >= 0) {
+        return Some((SurfaceChannelKind::Surface, id as u32));
+    }
+    if DisplaySpecHead::Image.is_head_of(value) {
+        let spec = parse_display_image_layout(value, params.default_fg, params.default_bg)?;
+        let request = spec.into_resolve_request(params.image_scale_environment);
+        let lookup = params.display_host.image_catalog()?.lookup(request);
+        return Some((SurfaceChannelKind::Image, lookup.placement().image_id()));
+    }
+    if DisplaySpecHead::Video.is_head_of(value) {
+        let mut spec = parse_display_video_layout(value, 1.0, 1.0)?;
+        // Channel-only videos should play by default; an explicit
+        // `:autoplay nil` in the spec still wins (parse honored it).
+        if !value
+            .is_cons()
+            .then(|| list_to_vec(value))
+            .flatten()
+            .is_some_and(|items| {
+                items
+                    .iter()
+                    .any(|item| item.as_symbol_name() == Some(":autoplay"))
+            })
+        {
+            spec.request.autoplay = true;
+        }
+        let resolved = params.display_host.request_video(spec.request).ok().flatten()?;
+        return Some((SurfaceChannelKind::Video, resolved.video_id));
+    }
+    None
 }
 
 fn display_media_id(id: u32) -> i32 {

@@ -340,7 +340,7 @@ pub enum SurfaceSource {
         language: neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage,
         source: String,
         uniforms: Vec<neomacs_renderer_wgpu::SurfaceUniformInit>,
-        channel0: Option<u32>,
+        channel0: Option<neomacs_renderer_wgpu::shader_surface::SurfaceChannelSource>,
     },
     /// Raw RGBA8 pixels, row-major, tightly packed.
     Pixels { data: Vec<u8> },

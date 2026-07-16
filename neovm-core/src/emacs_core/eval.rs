@@ -1525,6 +1525,16 @@ pub enum ShaderSurfaceLanguage {
     Glsl,
 }
 
+/// Which media cache an `iChannel0` binding samples from
+/// (`doc/display-engine/SHADER_SURFACES.md`): another shader surface, a
+/// decoded image, or a (playing) video's current frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SurfaceChannelKind {
+    Surface,
+    Image,
+    Video,
+}
+
 /// Content of a shader surface: user shader source rendered by the
 /// compositor, or raw RGBA8 pixels uploaded once.
 #[derive(Clone, Debug, PartialEq)]
@@ -1533,8 +1543,8 @@ pub enum ShaderSurfaceContent {
         language: ShaderSurfaceLanguage,
         source: String,
         uniforms: Vec<ShaderSurfaceUniformInit>,
-        /// Another surface sampled as `iChannel0` in the shader.
-        channel0: Option<u32>,
+        /// Media sampled as `iChannel0` in the shader.
+        channel0: Option<(SurfaceChannelKind, u32)>,
     },
     Pixels {
         data: Vec<u8>,
@@ -1563,8 +1573,9 @@ pub struct SurfaceResolveRequest {
     pub width: u32,
     pub height: u32,
     pub animate: bool,
-    /// Another surface sampled as `iChannel0`.
-    pub channel0: Option<u32>,
+    /// Media sampled as `iChannel0` (resolved to a cache id before memoizing,
+    /// so the memo key distinguishes different sources).
+    pub channel0: Option<(SurfaceChannelKind, u32)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

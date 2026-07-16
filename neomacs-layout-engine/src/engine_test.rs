@@ -41,7 +41,7 @@ use neovm_core::buffer::{
 };
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
-    SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
+    SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
 };
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
@@ -9304,6 +9304,97 @@ fn layout_frame_rust_emits_inline_surface_glyphs_for_declarative_shader_specs() 
         request.uniforms,
         vec![("speed".to_owned(), [2.0f32.to_bits(), 0, 0, 0], 1u8)]
     );
+}
+
+/// `:channel0` in a declarative spec resolves image and video sources through
+/// the display host into `(kind, cache id)` on the memoized request.
+#[test]
+fn declarative_surface_channel0_resolves_image_and_video_sources() {
+    let mut eval = Context::new();
+    let surface_requests = Arc::new(Mutex::new(Vec::new()));
+    let video_requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        video_requests: Arc::clone(&video_requests),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::clone(&surface_requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let shader = "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { \
+                  return textureSample(iChannel0, iChannel0Sampler, \
+                  fragCoord / u.iResolution.xy); }";
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aVbIc");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
+        // V: video channel; I: image channel.
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("surface"),
+                Value::keyword("shader"),
+                Value::string(shader),
+                Value::keyword("channel0"),
+                Value::list(vec![
+                    Value::symbol("video"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/neomacs-channel.mp4"),
+                ]),
+                Value::keyword("width"),
+                Value::fixnum(60),
+                Value::keyword("height"),
+                Value::fixnum(40),
+            ]),
+        );
+        buf.put_text_property(
+            3,
+            4,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("surface"),
+                Value::keyword("shader"),
+                Value::string(shader),
+                Value::keyword("channel0"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("png"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/neomacs-channel.png"),
+                ]),
+                Value::keyword("width"),
+                Value::fixnum(60),
+                Value::keyword("height"),
+                Value::fixnum(40),
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-surface-channels", 320, 120, buf_id);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let requests = surface_requests.lock().expect("surface requests lock");
+    let channels: Vec<_> = requests.iter().filter_map(|r| r.channel0).collect();
+    assert!(
+        channels.contains(&(SurfaceChannelKind::Video, 88)),
+        "video channel resolved through the host (got {channels:?})"
+    );
+    assert!(
+        channels.contains(&(SurfaceChannelKind::Image, 77)),
+        "image channel resolved through the catalog (got {channels:?})"
+    );
+    // The video channel spec defaulted :autoplay to t.
+    let video_requests = video_requests.lock().expect("video requests lock");
+    assert!(video_requests.iter().any(|r| r.autoplay));
 }
 
 #[test]

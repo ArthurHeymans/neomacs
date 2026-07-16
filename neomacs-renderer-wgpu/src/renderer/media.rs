@@ -283,7 +283,7 @@ impl WgpuRenderer {
         width: u32,
         height: u32,
         animate: bool,
-        channel0: Option<u32>,
+        channel0: Option<crate::shader_surface::SurfaceChannelSource>,
     ) -> Result<(), String> {
         let layout = self.caches.image.bind_group_layout();
         let sampler = self.caches.image.sampler();
@@ -330,9 +330,34 @@ impl WgpuRenderer {
     }
 
     /// Render pending shader-surface passes (call each frame before the main
-    /// pass samples the surface textures).
+    /// pass samples the surface textures). Image/video channels resolve here,
+    /// where every cache is visible; missing/not-ready sources fall back to
+    /// transparent black inside the surface cache.
     pub fn process_shader_surfaces(&mut self) {
-        self.caches.surface.render_pending(&self.device, &self.queue);
+        use crate::shader_surface::SurfaceChannelSource;
+        let mut external = std::collections::HashMap::new();
+        for source in self.caches.surface.external_channel_sources() {
+            let view = match source {
+                SurfaceChannelSource::Surface(_) => None,
+                SurfaceChannelSource::Image(id) => {
+                    self.caches.image.get(id).map(|cached| cached.view.clone())
+                }
+                #[cfg(feature = "video")]
+                SurfaceChannelSource::Video(id) => self
+                    .caches
+                    .video
+                    .get(id)
+                    .and_then(|cached| cached.texture_view.clone()),
+                #[cfg(not(feature = "video"))]
+                SurfaceChannelSource::Video(_) => None,
+            };
+            if let Some(view) = view {
+                external.insert(source, view);
+            }
+        }
+        self.caches
+            .surface
+            .render_pending(&self.device, &self.queue, &external);
     }
 
     /// Whether any animated shader surface was composited recently — drives
