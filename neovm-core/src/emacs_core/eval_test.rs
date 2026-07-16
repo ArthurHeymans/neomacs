@@ -7090,6 +7090,46 @@ fn setq_follows_variable_alias_resolution() {
 }
 
 #[test]
+fn setq_resolves_variable_aliases_only_after_exact_lexical_lookup() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one_lexical(
+        "(progn
+           (defvaralias 'vm-setq-lex-alias 'vm-setq-lex-base)
+           (internal-make-var-non-special 'vm-setq-lex-alias)
+           (internal-make-var-non-special 'vm-setq-lex-base)
+           (defvar vm-setq-lex-events nil)
+           (defalias 'vm-setq-lex-watch
+             (function
+               (lambda (&rest args)
+                 (setq vm-setq-lex-events
+                       (cons args vm-setq-lex-events)))))
+           (add-variable-watcher 'vm-setq-lex-base 'vm-setq-lex-watch)
+           (list
+             (progn
+               (setq vm-setq-lex-base 'global
+                     vm-setq-lex-events nil)
+               (let ((vm-setq-lex-alias 'lex))
+                 (setq vm-setq-lex-alias 'new)
+                 (list vm-setq-lex-alias
+                       (symbol-value 'vm-setq-lex-base)
+                       vm-setq-lex-events)))
+             (progn
+               (setq vm-setq-lex-base 'global
+                     vm-setq-lex-events nil)
+               (let ((vm-setq-lex-base 'lex))
+                 (setq vm-setq-lex-alias 'new)
+                 (list vm-setq-lex-alias
+                       vm-setq-lex-base
+                       (symbol-value 'vm-setq-lex-base)
+                       vm-setq-lex-events)))))",
+    );
+    assert_eq!(
+        result,
+        "OK ((new global nil) (new lex new ((vm-setq-lex-base new set nil))))"
+    );
+}
+
+#[test]
 fn special_form_aliases_dispatch_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(

@@ -10174,13 +10174,6 @@ impl Context {
         let resolved = super::builtins::resolve_variable_alias_id(self, sym_id)?;
         let resolved_is_canonical = is_canonical_id(resolved);
 
-        // Also check the lexenv for the resolved alias (rare but possible).
-        if resolved != sym_id && self.lexical_binding() {
-            if let Some(value) = self.lexenv_lookup_cached_in(self.lexenv, resolved) {
-                return Ok(value);
-            }
-        }
-
         if resolved != sym_id && is_keyword_id(resolved) {
             return Ok(Value::from_kw_id(resolved));
         }
@@ -11102,20 +11095,6 @@ impl Context {
                 ));
             };
             let value = self.eval_sub(value_form)?;
-            let resolved_id = super::builtins::resolve_variable_alias_id(self, sym_id)?;
-            if self.obarray.is_constant_id(resolved_id)
-                && !self.has_local_binding_by_id(sym_id)
-                && (resolved_id == sym_id || !self.has_local_binding_by_id(resolved_id))
-            {
-                if let Some(result) = super::builtins::constant_set_outcome_in_obarray(
-                    self.obarray(),
-                    resolved_id,
-                    value_from_symbol_id(sym_id),
-                    value,
-                ) {
-                    return result;
-                }
-            }
             // Debug probe for multibyte assignments to default-directory.
             // Kept at debug level so it doesn't pollute normal error
             // output (Doom always fires this with pure-ASCII paths that
@@ -11132,7 +11111,7 @@ impl Context {
                         .unwrap_or_default(),
                 );
             }
-            self.assign_with_watchers_by_id(resolved_id, value, "set")?;
+            self.assign_setq_by_id(sym_id, value)?;
             last = value;
         }
         if !cursor.is_nil() {
@@ -16212,6 +16191,22 @@ impl Context {
         let _ = self.assign_by_id_with_locus(sym_id, value);
     }
 
+    /// Mutate the lexical cell for the exact source symbol, if one exists.
+    ///
+    /// GNU `eval_sub`/`Fsetq` performs this EQ-based lookup before entering
+    /// `Fset`, where variable aliases, watchers, and runtime storage apply.
+    /// Keeping that boundary explicit prevents a `defvaralias` target from
+    /// stealing reads or writes from a lexical binding of the alias itself.
+    fn try_assign_lexical_binding_by_id(&mut self, sym_id: SymId, value: Value) -> bool {
+        if self.lexical_binding()
+            && let Some(cell_id) = self.lexenv_assq_cached_in(self.lexenv, sym_id)
+        {
+            lexenv_set(cell_id, value);
+            return true;
+        }
+        false
+    }
+
     pub(crate) fn assign_by_id_with_locus(
         &mut self,
         sym_id: SymId,
@@ -16220,11 +16215,8 @@ impl Context {
         // GNU `setq` follows the same rule as `eval_sub`: if a lexical binding
         // cell exists, mutate it directly. Declared-special affects whether
         // that cell was created, not whether assignment should reuse it.
-        if self.lexical_binding() {
-            if let Some(cell_id) = self.lexenv_assq_cached_in(self.lexenv, sym_id) {
-                lexenv_set(cell_id, value);
-                return None;
-            }
+        if self.try_assign_lexical_binding_by_id(sym_id, value) {
+            return None;
         }
 
         let locus = set_runtime_binding(
@@ -16240,6 +16232,44 @@ impl Context {
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
         self.mark_redisplay_dirty_if_display_var(sym_id);
         locus
+    }
+
+    /// Implement GNU `setq`'s two-stage assignment protocol.
+    ///
+    /// Stage 1 mutates an exact lexical binding directly. Stage 2, reached
+    /// only when no such binding exists, delegates to the runtime variable
+    /// model: resolve aliases, enforce constants, notify watchers, and write
+    /// the global/buffer-local/forwarded storage.
+    pub(crate) fn assign_setq_by_id(&mut self, sym_id: SymId, value: Value) -> EvalResult {
+        if self.try_assign_lexical_binding_by_id(sym_id, value) {
+            return Ok(value);
+        }
+
+        let resolved_id = super::builtins::resolve_variable_alias_id(self, sym_id)?;
+        if self.obarray.is_constant_id(resolved_id)
+            && !self.has_local_binding_by_id(sym_id)
+            && (resolved_id == sym_id || !self.has_local_binding_by_id(resolved_id))
+        {
+            if let Some(result) = super::builtins::constant_set_outcome_in_obarray(
+                self.obarray(),
+                resolved_id,
+                value_from_symbol_id(sym_id),
+                value,
+            ) {
+                return result;
+            }
+        }
+
+        let where_value = self.variable_watcher_where_for_set_by_id(resolved_id);
+        self.run_variable_watchers_by_id_with_where(
+            resolved_id,
+            &value,
+            &Value::NIL,
+            "set",
+            &where_value,
+        )?;
+        self.set_runtime_binding_by_id(resolved_id, value);
+        Ok(value)
     }
 
     pub(crate) fn assign(&mut self, name: &str, value: Value) {
@@ -16279,6 +16309,11 @@ impl Context {
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
     }
 
+    /// Return whether an exact lexical or dynamic binding is active.
+    ///
+    /// The dynamic case matters for GNU-compatible lambda parameters named
+    /// `nil` or `t`: their specpdl binding is assignable even though the
+    /// corresponding global symbol is constant.
     fn has_local_binding_by_id(&self, sym_id: SymId) -> bool {
         self.lexenv_assq_cached_in(self.lexenv, sym_id).is_some()
             || self
@@ -16446,34 +16481,6 @@ impl Context {
             operation,
             where_value,
         )
-    }
-
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn assign_with_watchers(
-        &mut self,
-        name: &str,
-        value: Value,
-        operation: &str,
-    ) -> EvalResult {
-        self.assign_with_watchers_by_id(intern(name), value, operation)
-    }
-
-    pub(crate) fn assign_with_watchers_by_id(
-        &mut self,
-        sym_id: SymId,
-        value: Value,
-        operation: &str,
-    ) -> EvalResult {
-        let where_value = self.variable_watcher_where_for_set_by_id(sym_id);
-        self.run_variable_watchers_by_id_with_where(
-            sym_id,
-            &value,
-            &Value::NIL,
-            operation,
-            &where_value,
-        )?;
-        self.assign_by_id_with_locus(sym_id, value);
-        Ok(value)
     }
 
     pub(crate) fn variable_watcher_where_for_set_by_id(&self, sym_id: SymId) -> Value {
