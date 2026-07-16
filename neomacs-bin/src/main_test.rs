@@ -677,6 +677,8 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::realize_gui_frame(
@@ -752,6 +754,8 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::realize_gui_frame(
@@ -808,6 +812,8 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::destroy_gui_frame(&mut host, FrameId(0x100000002))
@@ -855,6 +861,8 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     let entry = PopupMenuEntry {
@@ -918,6 +926,8 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -1016,6 +1026,8 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
@@ -1089,6 +1101,8 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
@@ -1150,6 +1164,8 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
@@ -1234,6 +1250,8 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         image_catalog: test_image_catalog(&cmd_tx, Arc::clone(&image_metadata)),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0xde, 0xad]),
@@ -1303,6 +1321,8 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::File(LispString::from_utf8("/tmp/demo.mp4")),
@@ -1355,6 +1375,8 @@ fn primary_display_host_request_video_preserves_uri_source() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::Uri(LispString::from_utf8("https://example.com/video.mp4")),
@@ -1403,6 +1425,8 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let request = WebKitResolveRequest {
         source: WebKitResolveSource::Uri(LispString::from_utf8("https://example.com")),
@@ -1458,6 +1482,8 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::create_webkit_xwidget(&host, 42, 400, 300)
@@ -1529,6 +1555,8 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
@@ -1594,6 +1622,8 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     let started = Instant::now();
@@ -1658,6 +1688,8 @@ fn primary_window_display_host_forwards_cursor_blink_to_renderer() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::set_cursor_blink(&mut host, false, 250)
@@ -1718,6 +1750,8 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     };
 
     neovm_core::emacs_core::DisplayHost::set_clipboard_text(&mut host, Some("copied"))
@@ -1779,6 +1813,8 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
@@ -1825,6 +1861,8 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         ),
         resolved_videos: Mutex::new(std::collections::HashMap::new()),
         resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
     }));
     let expected_system_name: String = hostname::get()
         .expect("OS hostname")
