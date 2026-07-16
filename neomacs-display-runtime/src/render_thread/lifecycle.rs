@@ -371,6 +371,7 @@ impl RenderApp {
         // top-level window (matching the legacy request targeting).
         let webkit_active = self.has_webkit_needing_redraw();
         let videos_active = self.has_playing_videos();
+        let surfaces_active = self.has_active_shader_surfaces();
         // Stage 3 tracer bullet: the cursor color cycle is explicit infinite
         // compositor-only demand, not a render-time latch.
         let cursor_cycle_enabled = self.effects.cursor_color_cycle.enabled;
@@ -448,6 +449,7 @@ impl RenderApp {
             for (active, reason) in [
                 (webkit_active, DemandReason::WebKit),
                 (videos_active, DemandReason::Video),
+                (surfaces_active, DemandReason::ShaderSurface),
             ] {
                 if active {
                     let media_action = self.frame_coordinator.submit_demand(

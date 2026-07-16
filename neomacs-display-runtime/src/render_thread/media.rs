@@ -343,6 +343,22 @@ impl RenderApp {
         false
     }
 
+    /// Render pending shader-surface passes (call each frame before the main
+    /// pass samples the surface textures).
+    pub(super) fn process_shader_surfaces(&mut self) {
+        if let Some(ref mut renderer) = self.renderer {
+            renderer.process_shader_surfaces();
+        }
+    }
+
+    /// Check if any animated shader surface was composited recently (needs
+    /// continuous rendering while visible).
+    pub(super) fn has_active_shader_surfaces(&self) -> bool {
+        self.renderer
+            .as_ref()
+            .is_some_and(|r| r.has_active_shader_surfaces())
+    }
+
     /// Check if any WebKit view needs redraw
     #[cfg(feature = "wpe-webkit")]
     pub(super) fn has_webkit_needing_redraw(&self) -> bool {

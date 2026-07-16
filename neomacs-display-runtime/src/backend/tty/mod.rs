@@ -583,6 +583,7 @@ fn rasterize_frame_glyphs(frame: &FrameGlyphBuffer, grid: &mut TtyGrid, _bg_colo
             FrameGlyph::Image { .. }
             | FrameGlyph::Video { .. }
             | FrameGlyph::Xwidget { .. }
+            | FrameGlyph::Surface { .. }
             | FrameGlyph::FringeBitmap { .. }
             | FrameGlyph::ScrollBar { .. } => {}
 
@@ -605,6 +606,7 @@ fn glyph_pixel_width(glyph: &FrameGlyph) -> f32 {
         FrameGlyph::Image { width, .. } => *width,
         FrameGlyph::Video { width, .. } => *width,
         FrameGlyph::Xwidget { width, .. } => *width,
+        FrameGlyph::Surface { width, .. } => *width,
         FrameGlyph::FringeBitmap { width, .. } => *width,
         FrameGlyph::Background { bounds, .. } => bounds.width,
         FrameGlyph::Border { width, .. } => *width,

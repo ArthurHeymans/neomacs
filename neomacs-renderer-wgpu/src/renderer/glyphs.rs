@@ -1439,6 +1439,7 @@ impl WgpuRenderer {
             }
             #[cfg(feature = "wpe-webkit")]
             self.draw_inline_webkit_views(&mut ctx);
+            self.draw_inline_surfaces(&mut ctx);
 
             // === Step 8: front cursors, borders, scroll bars ===
             self.draw_cursor_layer(&mut ctx, &chrome);

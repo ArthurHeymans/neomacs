@@ -3937,6 +3937,7 @@ dependencies = [
  "image",
  "libc",
  "librsvg",
+ "naga",
  "neomacs-display-protocol",
  "neomacs-layout-engine",
  "pollster",

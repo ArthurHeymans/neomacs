@@ -1752,6 +1752,53 @@ impl WgpuRenderer {
                 }
             }
 
+            // --- Draw inline shader surfaces (inherit the image pipeline) ---
+            {
+                let mut surface_quads = Vec::new();
+                for glyph in &frame.glyphs {
+                    if let FrameGlyph::Surface {
+                        surface_id,
+                        x,
+                        y,
+                        width,
+                        height,
+                        ..
+                    } = glyph
+                        && self.caches.surface.get(surface_id.get()).is_some()
+                    {
+                        self.caches.surface.mark_drawn(surface_id.get());
+                        surface_quads.push(MediaQuad {
+                            id: surface_id.get(),
+                            vertices: super::layer_media::textured_quad_vertices(
+                                *x + offset_x,
+                                *y + offset_y,
+                                *width,
+                                *height,
+                                0.0,
+                                1.0,
+                            ),
+                        });
+                    }
+                }
+                let surface_vertices: Vec<GlyphVertex> = surface_quads
+                    .iter()
+                    .flat_map(|quad| quad.vertices.iter().copied())
+                    .collect();
+                if let Some(upload) =
+                    self.arenas
+                        .image
+                        .upload(&self.device, &self.queue, &surface_vertices)
+                {
+                    pass.set_vertex_buffer(0, upload.buffer_slice());
+                    for (i, quad) in surface_quads.iter().enumerate() {
+                        if let Some(cached) = self.caches.surface.get(quad.id) {
+                            pass.set_bind_group(1, &cached.composite_bind_group, &[]);
+                            pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
+                        }
+                    }
+                }
+            }
+
             // --- Draw inline webkit views ---
             #[cfg(feature = "wpe-webkit")]
             {

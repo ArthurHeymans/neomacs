@@ -474,6 +474,9 @@ impl WgpuRenderer {
         #[cfg(feature = "wpe-webkit")]
         let webkit_cache = WgpuWebKitCache::new(&device);
 
+        // Create shader-surface cache
+        let shader_surface_cache = crate::shader_surface_cache::ShaderSurfaceCache::new(&device);
+
         // Load image shader
         let image_shader_source = include_str!("../shaders/image.wgsl");
         let image_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -953,6 +956,7 @@ impl WgpuRenderer {
                 video: video_cache,
                 #[cfg(feature = "wpe-webkit")]
                 webkit: webkit_cache,
+                surface: shader_surface_cache,
             },
             arenas: VertexArenas::new(),
             width,

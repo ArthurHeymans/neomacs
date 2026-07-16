@@ -140,6 +140,9 @@ pub(crate) enum DemandReason {
     Transition,
     Video,
     WebKit,
+    /// Animated shader surfaces visible in a composited frame
+    /// (doc/display-engine/SHADER_SURFACES.md).
+    ShaderSurface,
     Terminal,
     Expose,
     DebugCapture,

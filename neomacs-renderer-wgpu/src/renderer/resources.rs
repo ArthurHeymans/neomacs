@@ -2,6 +2,7 @@
 //! stencil clip targets, texture/media caches, and per-frame vertex arenas.
 
 use super::super::image_cache::ImageCache;
+use super::super::shader_surface_cache::ShaderSurfaceCache;
 #[cfg(feature = "video")]
 use super::super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
@@ -43,6 +44,7 @@ pub(crate) struct RenderCaches {
     pub(crate) video: VideoCache,
     #[cfg(feature = "wpe-webkit")]
     pub(crate) webkit: WgpuWebKitCache,
+    pub(crate) surface: ShaderSurfaceCache,
 }
 
 /// Per-frame reusable vertex upload arenas.

@@ -267,6 +267,75 @@ impl WgpuRenderer {
         self.caches.video.get(id)
     }
 
+    // =========== Shader surfaces (doc/display-engine/SHADER_SURFACES.md) ===========
+
+    /// Create a shader surface from user WGSL. The composite bind group uses
+    /// the image cache's layout/sampler so the inline-media phase can draw it
+    /// with the shared image pipeline. Texture is allocated at physical
+    /// resolution (logical size x current scale factor).
+    pub fn create_shader_surface(
+        &mut self,
+        id: u32,
+        user_source: &str,
+        uniforms: &[crate::shader_surface::SurfaceUniformInit],
+        width: u32,
+        height: u32,
+        animate: bool,
+    ) -> Result<(), String> {
+        let layout = self.caches.image.bind_group_layout();
+        let sampler = self.caches.image.sampler();
+        self.caches.surface.create_shader(
+            &self.device,
+            layout,
+            sampler,
+            self.surface_format,
+            id,
+            user_source,
+            uniforms,
+            width,
+            height,
+            self.scale_factor,
+            animate,
+        )
+    }
+
+    /// Create a static surface from raw RGBA8 pixel data.
+    pub fn create_pixel_surface(
+        &mut self,
+        id: u32,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<(), String> {
+        let layout = self.caches.image.bind_group_layout();
+        let sampler = self.caches.image.sampler();
+        self.caches
+            .surface
+            .create_pixels(&self.device, &self.queue, layout, sampler, id, data, width, height)
+    }
+
+    /// Update one named uniform on a shader surface.
+    pub fn set_surface_uniform(&mut self, id: u32, name: &str, value: [f32; 4]) {
+        self.caches.surface.set_uniform(id, name, value);
+    }
+
+    /// Free a shader surface's GPU objects.
+    pub fn free_surface(&mut self, id: u32) {
+        self.caches.surface.free(id);
+    }
+
+    /// Render pending shader-surface passes (call each frame before the main
+    /// pass samples the surface textures).
+    pub fn process_shader_surfaces(&mut self) {
+        self.caches.surface.render_pending(&self.device, &self.queue);
+    }
+
+    /// Whether any animated shader surface was composited recently — drives
+    /// `DemandReason::ShaderSurface` pacing.
+    pub fn has_active_shader_surfaces(&self) -> bool {
+        self.caches.surface.has_active_surfaces()
+    }
+
     /// Render floating videos from the scene.
     ///
     /// This renders video frames at fixed screen positions (not inline with text).

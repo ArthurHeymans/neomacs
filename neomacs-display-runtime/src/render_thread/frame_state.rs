@@ -16,6 +16,7 @@ impl RenderApp {
 
         self.process_webkit_frames();
         self.process_video_frames();
+        self.process_shader_surfaces();
         self.process_pending_images();
         self.refresh_faces_from_frames();
         self.apply_primary_fallback_visual_cursor_animations();
@@ -208,6 +209,13 @@ impl RenderApp {
                     ..
                 }
                 | FrameGlyph::Xwidget {
+                    x,
+                    y,
+                    row_role,
+                    slot_id,
+                    ..
+                }
+                | FrameGlyph::Surface {
                     x,
                     y,
                     row_role,

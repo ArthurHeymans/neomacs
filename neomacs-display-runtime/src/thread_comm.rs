@@ -327,6 +327,21 @@ impl MediaSource {
     }
 }
 
+/// Content source for a shader surface
+/// (`doc/display-engine/SHADER_SURFACES.md`).
+#[derive(Debug)]
+pub enum SurfaceSource {
+    /// User WGSL defining `fn mainImage(fragCoord: vec2<f32>) -> vec4<f32>`;
+    /// the render thread composes it with the generated prelude. `uniforms`
+    /// carries the named user uniforms in slot order with initial values.
+    Wgsl {
+        source: String,
+        uniforms: Vec<neomacs_renderer_wgpu::SurfaceUniformInit>,
+    },
+    /// Raw RGBA8 pixels, row-major, tightly packed.
+    Pixels { data: Vec<u8> },
+}
+
 /// Asset and embedded-content commands.
 #[derive(Debug)]
 pub enum AssetCommand {
@@ -459,6 +474,24 @@ pub enum AssetCommand {
     /// Remove floating WebKit overlay
     WebKitRemoveFloating {
         frame: FrameRef,
+        id: u32,
+    },
+    /// Create a shader surface (doc/display-engine/SHADER_SURFACES.md)
+    SurfaceCreate {
+        id: u32,
+        source: SurfaceSource,
+        width: u32,
+        height: u32,
+        animate: bool,
+    },
+    /// Update one named uniform on a shader surface
+    SurfaceSetUniform {
+        id: u32,
+        name: String,
+        value: [f32; 4],
+    },
+    /// Free a shader surface
+    SurfaceFree {
         id: u32,
     },
     /// Create video player

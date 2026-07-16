@@ -437,6 +437,38 @@ impl RenderApp {
                     renderer.video_stop(id);
                 }
             }
+            AssetCommand::SurfaceCreate {
+                id,
+                source,
+                width,
+                height,
+                animate,
+            } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    let result = match &source {
+                        crate::thread_comm::SurfaceSource::Wgsl { source, uniforms } => renderer
+                            .create_shader_surface(id, source, uniforms, width, height, animate),
+                        crate::thread_comm::SurfaceSource::Pixels { data } => {
+                            renderer.create_pixel_surface(id, data, width, height)
+                        }
+                    };
+                    if let Err(err) = result {
+                        tracing::warn!("shader surface {id} create failed: {err}");
+                    }
+                } else {
+                    tracing::warn!("Renderer not initialized, cannot create surface {id}");
+                }
+            }
+            AssetCommand::SurfaceSetUniform { id, name, value } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.set_surface_uniform(id, &name, value);
+                }
+            }
+            AssetCommand::SurfaceFree { id } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.free_surface(id);
+                }
+            }
         }
     }
 }

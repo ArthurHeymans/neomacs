@@ -19,6 +19,7 @@ swash.workspace = true
 fontdb.workspace = true
 wgpu.workspace = true
 wgpu-hal.workspace = true
+naga.workspace = true
 tracing.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true

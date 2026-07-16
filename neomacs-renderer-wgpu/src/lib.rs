@@ -10,6 +10,8 @@ pub mod glyph_atlas;
 pub mod image_cache;
 pub mod overlay_state;
 pub mod renderer;
+pub mod shader_surface;
+pub mod shader_surface_cache;
 mod svg;
 pub mod vertex;
 pub mod xbm;
@@ -41,6 +43,10 @@ pub use image_cache::{
     CachedImage, ImageCache, ImageDecodeOutcome, ImageDimensions, ImageMetadata, ImageState,
 };
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
+pub use shader_surface::{
+    SURFACE_USER_UNIFORM_SLOTS, SurfaceUniformInit, compose_surface_wgsl, validate_surface_wgsl,
+};
+pub use shader_surface_cache::{MAX_SURFACE_SIZE, ShaderSurfaceCache};
 pub use renderer::{
     FrameRowDamage, RendererFrameEffects, RowDamageInfo, RowReuseStats, WgpuRenderer,
     WindowRowDamage,

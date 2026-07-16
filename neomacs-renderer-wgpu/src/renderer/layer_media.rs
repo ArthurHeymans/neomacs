@@ -508,4 +508,131 @@ impl WgpuRenderer {
             }
         }
     }
+
+    /// Draw inline shader surfaces (image pipeline, alpha blended). Also
+    /// stamps each composited surface as recently drawn so its animation
+    /// demand and iTime clock stay live only while visible.
+    pub(super) fn draw_inline_surfaces(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
+        let frame_glyphs = ctx.params.frame_glyphs;
+        let mut quads = Vec::new();
+        for glyph in &frame_glyphs.glyphs {
+            if let FrameGlyph::Surface {
+                surface_id,
+                x,
+                y,
+                width,
+                height,
+                clip_rect,
+                ..
+            } = glyph
+            {
+                let (draw_x, draw_y, clipped_width, clipped_height, u0, u1, v0, v1) =
+                    if let Some(clip) = clip_rect {
+                        let mut x0 = *x;
+                        let mut y0 = *y;
+                        let mut w0 = *width;
+                        let mut h0 = *height;
+                        let mut u0 = 0.0_f32;
+                        let mut u1 = 1.0_f32;
+                        let mut v0 = 0.0_f32;
+                        let mut v1 = 1.0_f32;
+                        let left = clip.x;
+                        let right = clip.x + clip.width;
+                        let top = clip.y;
+                        let bottom = clip.y + clip.height;
+                        if x0 < left {
+                            let cut = left - x0;
+                            if cut >= w0 {
+                                continue;
+                            }
+                            x0 = left;
+                            w0 -= cut;
+                            if *width > 0.0 {
+                                u0 += cut / *width;
+                            }
+                        }
+                        if x0 + w0 > right {
+                            let cut = (x0 + w0) - right;
+                            if cut >= w0 {
+                                continue;
+                            }
+                            w0 -= cut;
+                            if *width > 0.0 {
+                                u1 -= cut / *width;
+                            }
+                        }
+                        if y0 < top {
+                            let cut = top - y0;
+                            if cut >= h0 {
+                                continue;
+                            }
+                            y0 = top;
+                            h0 -= cut;
+                            if *height > 0.0 {
+                                v0 += cut / *height;
+                            }
+                        }
+                        if y0 + h0 > bottom {
+                            let cut = (y0 + h0) - bottom;
+                            if cut >= h0 {
+                                continue;
+                            }
+                            h0 -= cut;
+                            if *height > 0.0 {
+                                v1 -= cut / *height;
+                            }
+                        }
+                        (x0, y0, w0, h0, u0, u1, v0, v1)
+                    } else {
+                        (*x, *y, *width, *height, 0.0, 1.0, 0.0, 1.0)
+                    };
+
+                if clipped_width <= 0.0 || clipped_height <= 0.0 {
+                    continue;
+                }
+
+                if self.caches.surface.get(surface_id.get()).is_some() {
+                    self.caches.surface.mark_drawn(surface_id.get());
+                    quads.push(MediaQuad {
+                        id: surface_id.get(),
+                        vertices: textured_quad_vertices_uv(
+                            draw_x,
+                            draw_y,
+                            clipped_width,
+                            clipped_height,
+                            u0,
+                            u1,
+                            v0,
+                            v1,
+                        ),
+                    });
+                } else {
+                    tracing::warn!("shader surface {} not found in cache", surface_id);
+                }
+            }
+        }
+
+        let all_vertices: Vec<GlyphVertex> = quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        let Some(upload) = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &all_vertices)
+        else {
+            return;
+        };
+
+        let render_pass = &mut ctx.pass;
+        render_pass.set_pipeline(&self.pipelines.image);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, upload.buffer_slice());
+        for (i, quad) in quads.iter().enumerate() {
+            if let Some(cached) = self.caches.surface.get(quad.id) {
+                render_pass.set_bind_group(1, &cached.composite_bind_group, &[]);
+                render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
+            }
+        }
+    }
 }
