@@ -3,8 +3,8 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
-    DisplayImageItem, DisplayItem, DisplayMediaReplacement, DisplayVideoItem, DisplayXwidgetItem,
-    RenderFaceRef,
+    DisplayImageItem, DisplayItem, DisplayMediaReplacement, DisplaySurfaceItem, DisplayVideoItem,
+    DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
@@ -20,7 +20,8 @@ use crate::display_source::{
     DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_spec::{
-    parse_display_image_layout, parse_display_video_layout, parse_display_webkit_layout,
+    parse_display_image_layout, parse_display_surface_source_layout, parse_display_video_layout,
+    parse_display_webkit_layout,
 };
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
@@ -749,6 +750,7 @@ pub(crate) fn resolve_display_media_property(
     resolve_image_display_property(display_prop, params)
         .or_else(|| resolve_video_display_property(display_prop, params))
         .or_else(|| resolve_webkit_display_property(display_prop, params))
+        .or_else(|| resolve_surface_display_property(display_prop, params))
 }
 
 fn resolve_image_display_property(
@@ -820,6 +822,30 @@ fn resolve_webkit_display_property(
         .flatten()?;
     Some(DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
         xwidget_id: display_media_id(resolved.webkit_id),
+        width: spec.width.max(1.0),
+        height: spec.height.max(1.0),
+    }))
+}
+
+/// Declarative `(surface :shader …)` spec: resolve through the display host,
+/// which memoizes request content into a surface id (the video pattern). The
+/// `:id` form never reaches here (classify resolves it directly).
+fn resolve_surface_display_property(
+    display_prop: &Value,
+    params: DisplayMediaResolveParams<'_>,
+) -> Option<DisplayMediaReplacement> {
+    let spec = parse_display_surface_source_layout(
+        display_prop,
+        DisplayRowCharWidthPolicy::new(params.fallback_metrics.char_width()).fallback() * 40.0,
+        params.fallback_metrics.row_height() * 4.0,
+    )?;
+    let resolved = params
+        .display_host
+        .request_surface(spec.request.clone())
+        .ok()
+        .flatten()?;
+    Some(DisplayMediaReplacement::surface(DisplaySurfaceItem {
+        surface_id: display_media_id(resolved.surface_id),
         width: spec.width.max(1.0),
         height: spec.height.max(1.0),
     }))

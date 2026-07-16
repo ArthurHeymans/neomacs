@@ -52,6 +52,96 @@ fn parse_surface_layout_defaults_missing_dimensions() {
 }
 
 #[test]
+fn parse_surface_source_layout_full_spec() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let layout = parse_display_surface_source_layout(
+        &Value::list(vec![
+            Value::symbol("surface"),
+            Value::symbol(":shader"),
+            Value::string("fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(1.0); }"),
+            Value::symbol(":uniforms"),
+            Value::list(vec![
+                Value::cons(Value::symbol("speed"), Value::make_float(2.0)),
+                Value::cons(
+                    Value::symbol("tint"),
+                    Value::vector(vec![
+                        Value::make_float(1.0),
+                        Value::make_float(0.5),
+                        Value::make_float(0.25),
+                    ]),
+                ),
+            ]),
+            Value::symbol(":animate"),
+            Value::NIL,
+            Value::symbol(":width"),
+            Value::fixnum(200),
+            Value::symbol(":height"),
+            Value::fixnum(80),
+        ]),
+        640.0,
+        480.0,
+    )
+    .expect("declarative surface layout");
+    assert!(layout.request.source.contains("mainImage"));
+    assert!(!layout.request.animate);
+    assert_eq!(layout.request.width, 200);
+    assert_eq!(layout.request.height, 80);
+    assert_eq!(layout.width, 200.0);
+    assert_eq!(layout.height, 80.0);
+    assert_eq!(
+        layout.request.uniforms,
+        vec![
+            ("speed".to_owned(), [2.0f32.to_bits(), 0, 0, 0], 1u8),
+            (
+                "tint".to_owned(),
+                [
+                    1.0f32.to_bits(),
+                    0.5f32.to_bits(),
+                    0.25f32.to_bits(),
+                    0u32
+                ],
+                3u8
+            ),
+        ]
+    );
+}
+
+#[test]
+fn parse_surface_source_layout_defaults_animate_and_dimensions() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    let layout = parse_display_surface_source_layout(
+        &Value::list(vec![
+            Value::symbol("surface"),
+            Value::symbol(":shader"),
+            Value::string("fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }"),
+        ]),
+        640.0,
+        480.0,
+    )
+    .expect("declarative surface layout");
+    assert!(layout.request.animate);
+    assert_eq!(layout.width, 640.0);
+    assert_eq!(layout.height, 480.0);
+}
+
+#[test]
+fn parse_surface_source_layout_requires_shader() {
+    let _eval = neovm_core::emacs_core::Context::new();
+    assert!(
+        parse_display_surface_source_layout(
+            &Value::list(vec![
+                Value::symbol("surface"),
+                Value::symbol(":id"),
+                Value::fixnum(3),
+            ]),
+            640.0,
+            480.0,
+        )
+        .is_none()
+    );
+}
+
+#[test]
 fn parse_surface_layout_rejects_other_heads() {
     let _eval = neovm_core::emacs_core::Context::new();
     assert!(

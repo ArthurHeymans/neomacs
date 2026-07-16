@@ -7,7 +7,8 @@
 
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{
-    VideoResolveRequest, VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+    SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::image_catalog::{
@@ -46,6 +47,9 @@ enum DisplayMediaKey {
     Autoplay,
     Xwidget,
     Id,
+    Shader,
+    Uniforms,
+    Animate,
 }
 
 impl DisplayMediaKey {
@@ -131,6 +135,16 @@ pub(crate) struct DisplayXwidgetLayout {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplaySurfaceLayout {
     pub(crate) surface_id: u32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+/// Parsed declarative `(surface :shader WGSL [:uniforms ALIST] [:animate B]
+/// [:width W] [:height H])` display spec: no Lisp-side id — the resolver
+/// memoizes the request content into a host surface id, like `(video :file …)`.
+#[derive(Clone, Debug)]
+pub(crate) struct DisplaySurfaceSourceLayout {
+    pub(crate) request: SurfaceResolveRequest,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -431,6 +445,111 @@ pub(crate) fn parse_display_surface_layout(prop_val: &Value) -> Option<DisplaySu
         surface_id: surface_id?,
         width: width.max(1.0),
         height: height.max(1.0),
+    })
+}
+
+/// Parse a `(name . VALUE)` uniform alist entry into `(name, f32 bits, count)`.
+/// VALUE is a number or a vector of 1..=4 numbers. Lenient (redisplay path):
+/// malformed entries yield `None` and are skipped by the caller.
+fn parse_surface_uniform_entry(entry: Value) -> Option<(String, [u32; 4], u8)> {
+    if !entry.is_cons() {
+        return None;
+    }
+    let name_value = entry.cons_car();
+    let name = name_value.as_symbol_name().map(str::to_owned).or_else(|| {
+        name_value
+            .as_lisp_string()
+            .and_then(|s| s.as_utf8_str().map(str::to_owned))
+    })?;
+    let value = entry.cons_cdr();
+    let number = |v: Value| -> Option<f32> {
+        match v.kind() {
+            ValueKind::Fixnum(_) => v.as_int().map(|n| n as f32),
+            ValueKind::Float => v.as_float().map(|f| f as f32),
+            _ => None,
+        }
+    };
+    let mut bits = [0u32; 4];
+    let count;
+    if let Some(scalar) = number(value) {
+        bits[0] = scalar.to_bits();
+        count = 1u8;
+    } else if let Some(elements) = value.as_vector_data() {
+        let elements = elements.as_slice();
+        if elements.is_empty() || elements.len() > 4 {
+            return None;
+        }
+        for (slot, element) in elements.iter().enumerate() {
+            bits[slot] = number(*element)?.to_bits();
+        }
+        count = elements.len() as u8;
+    } else {
+        return None;
+    }
+    Some((name, bits, count))
+}
+
+/// Parse a declarative `(surface :shader WGSL …)` spec. Returns `None` when
+/// the head is not `surface`, `:shader` is missing (the `:id` form is parsed
+/// by [`parse_display_surface_layout`]), or the source is not a string.
+pub(crate) fn parse_display_surface_source_layout(
+    prop_val: &Value,
+    fallback_width: f32,
+    fallback_height: f32,
+) -> Option<DisplaySurfaceSourceLayout> {
+    let items = list_to_vec(prop_val)?;
+    if items.first()?.as_symbol_name() != Some(DisplaySpecHead::Surface.into()) {
+        return None;
+    }
+
+    let mut source = None;
+    let mut uniforms = Vec::new();
+    let mut width = fallback_width.max(1.0);
+    let mut height = fallback_height.max(1.0);
+    let mut animate = true;
+
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        let value = items[i + 1];
+        match DisplayMediaKey::from_lisp_value(items[i]) {
+            Some(DisplayMediaKey::Shader) => {
+                source = value
+                    .as_lisp_string()
+                    .and_then(|s| s.as_utf8_str().map(str::to_owned));
+            }
+            Some(DisplayMediaKey::Uniforms) => {
+                if let Some(entries) = list_to_vec(&value) {
+                    uniforms.extend(entries.into_iter().filter_map(parse_surface_uniform_entry));
+                }
+            }
+            Some(DisplayMediaKey::Animate) => {
+                animate = parse_boolish(value);
+            }
+            Some(DisplayMediaKey::Width) => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    width = parsed.max(1) as f32;
+                }
+            }
+            Some(DisplayMediaKey::Height) => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    height = parsed.max(1) as f32;
+                }
+            }
+            _ => {}
+        }
+        i += 2;
+    }
+
+    Some(DisplaySurfaceSourceLayout {
+        request: SurfaceResolveRequest {
+            source: source?,
+            uniforms,
+            width: width.round().max(1.0) as u32,
+            height: height.round().max(1.0) as u32,
+            animate,
+        },
+        width,
+        height,
     })
 }
 

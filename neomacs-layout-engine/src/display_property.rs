@@ -58,17 +58,20 @@ pub(crate) enum DisplayMediaReplacementProperty {
     Video,
     Xwidget(DisplayMediaReplacement),
     Webkit,
-    /// Shader surface: like Xwidget, the spec is self-contained (the id was
-    /// allocated by `neomacs-surface-create`), so layout resolves it without
-    /// a display-host round-trip.
+    /// Shader surface by id: like Xwidget, the spec is self-contained (the id
+    /// was allocated by `neomacs-surface-create`), so layout resolves it
+    /// without a display-host round-trip.
     Surface(DisplayMediaReplacement),
+    /// Declarative shader surface (`:shader` source, no id): resolved through
+    /// the display host like Video, memoized by spec content.
+    SurfaceSource,
 }
 
 impl DisplayMediaReplacementProperty {
     pub(crate) fn direct_replacement(&self) -> Option<DisplayMediaReplacement> {
         match self {
             Self::Xwidget(media) | Self::Surface(media) => Some(*media),
-            Self::Image | Self::Video | Self::Webkit => None,
+            Self::Image | Self::Video | Self::Webkit | Self::SurfaceSource => None,
         }
     }
 
@@ -84,6 +87,9 @@ impl DisplayMediaReplacementProperty {
             ) | (
                 Self::Webkit,
                 crate::display_item::DisplayMediaReplacementKind::Xwidget { .. }
+            ) | (
+                Self::SurfaceSource,
+                crate::display_item::DisplayMediaReplacementKind::Surface { .. }
             )
         )
     }
@@ -95,7 +101,7 @@ impl DisplayMediaReplacementProperty {
     pub(crate) fn media_fallback_placeholder(&self) -> Option<&'static str> {
         match self {
             Self::Image => Some("[img]"),
-            Self::Video | Self::Webkit => Some("     "),
+            Self::Video | Self::Webkit | Self::SurfaceSource => Some("     "),
             Self::Xwidget(_) | Self::Surface(_) => None,
         }
     }
@@ -196,15 +202,21 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
             DisplayMediaReplacementProperty::Webkit,
         ))
     } else if DisplaySpecHead::Surface.is_head_of(&value) {
-        parse_display_surface_layout(&value).map(|layout| {
-            DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Surface(
-                DisplayMediaReplacement::surface(DisplaySurfaceItem {
-                    surface_id: layout.surface_id.min(i32::MAX as u32) as i32,
-                    width: layout.width,
-                    height: layout.height,
-                }),
-            ))
-        })
+        // `:id` form resolves directly; the declarative `:shader` form is a
+        // marker resolved through the display host (like Video).
+        parse_display_surface_layout(&value)
+            .map(|layout| {
+                DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Surface(
+                    DisplayMediaReplacement::surface(DisplaySurfaceItem {
+                        surface_id: layout.surface_id.min(i32::MAX as u32) as i32,
+                        width: layout.width,
+                        height: layout.height,
+                    }),
+                ))
+            })
+            .or(Some(DisplayReplacementProperty::Media(
+                DisplayMediaReplacementProperty::SurfaceSource,
+            )))
     } else if is_display_fringe_spec(&value) {
         parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
     } else {

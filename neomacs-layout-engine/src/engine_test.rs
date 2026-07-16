@@ -40,8 +40,8 @@ use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
 use neovm_core::emacs_core::eval::{
-    DisplayHost, GuiFrameHostRequest, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
-    WebKitResolveRequest,
+    DisplayHost, GuiFrameHostRequest, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
+    SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
 };
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, PendingImage, ReadyImage,
@@ -1467,6 +1467,7 @@ struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
     video_requests: Arc<Mutex<Vec<VideoResolveRequest>>>,
     webkit_requests: Arc<Mutex<Vec<WebKitResolveRequest>>>,
+    surface_requests: Arc<Mutex<Vec<SurfaceResolveRequest>>>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -1506,6 +1507,17 @@ impl DisplayHost for RecordingImageDisplayHost {
             .expect("webkit requests lock")
             .push(request);
         Ok(Some(ResolvedWebKit { webkit_id: 99 }))
+    }
+
+    fn request_surface(
+        &self,
+        request: SurfaceResolveRequest,
+    ) -> Result<Option<ResolvedSurface>, String> {
+        self.surface_requests
+            .lock()
+            .expect("surface requests lock")
+            .push(request);
+        Ok(Some(ResolvedSurface { surface_id: 4343 }))
     }
 }
 
@@ -2351,6 +2363,7 @@ enum GlyphKindTrace {
     Composite(String),
     Stretch(u16),
     Image(i32),
+    Surface(i32),
     Glyphless(char),
 }
 
@@ -2383,6 +2396,7 @@ impl GlyphTrace {
             GlyphType::Composite { text } => GlyphKindTrace::Composite(text.to_string()),
             GlyphType::Stretch { width_cols } => GlyphKindTrace::Stretch(*width_cols),
             GlyphType::Image { image_id, .. } => GlyphKindTrace::Image(*image_id),
+            GlyphType::Surface { surface_id, .. } => GlyphKindTrace::Surface(*surface_id),
             GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(*video_id),
             GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(*xwidget_id),
             GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
@@ -5450,7 +5464,9 @@ fn glyph_trace_text(glyph: &GlyphTrace) -> String {
         GlyphKindTrace::Char(ch) => ch.to_string(),
         GlyphKindTrace::Composite(text) => text.clone(),
         GlyphKindTrace::Stretch(width) => " ".repeat(usize::from(*width)),
-        GlyphKindTrace::Image(_) | GlyphKindTrace::Glyphless(_) => String::new(),
+        GlyphKindTrace::Image(_) | GlyphKindTrace::Surface(_) | GlyphKindTrace::Glyphless(_) => {
+            String::new()
+        }
     }
 }
 
@@ -5685,6 +5701,7 @@ fn inactive_echo_area_grows_to_contain_tall_display_image() {
         requests: Arc::clone(&requests),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let root = eval
         .buffer_manager()
@@ -8766,6 +8783,7 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         requests: Arc::clone(&requests),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -8911,6 +8929,7 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         requests: Arc::new(Mutex::new(Vec::new())),
         video_requests: Arc::clone(&video_requests),
         webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -8992,6 +9011,7 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         requests: Arc::new(Mutex::new(Vec::new())),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::clone(&webkit_requests),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -9065,6 +9085,7 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         requests: Arc::new(Mutex::new(Vec::new())),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::clone(&webkit_requests),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -9171,13 +9192,118 @@ fn layout_frame_rust_emits_inline_surface_glyphs_for_display_surface_specs() {
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let surface = state.surfaces.first().expect("inline surface glyph");
-    assert_eq!(surface.surface_id.get(), 4242);
-    assert_eq!(surface.width, 80.0);
-    assert_eq!(surface.height, 45.0);
+    let presentation = state.materialize();
+    let (surface_id, width, height, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Surface {
+                surface_id,
+                width,
+                height,
+                slot_id,
+                ..
+            } => Some((*surface_id, *width, *height, *slot_id)),
+            _ => None,
+        })
+        .expect("inline surface glyph");
+    assert_eq!(surface_id.get(), 4242);
+    assert_eq!(width, 80.0);
+    assert_eq!(height, 45.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
-    let slot_id = surface.slot_id.expect("surface slot id");
+    let slot_id = slot_id.expect("surface slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);
+}
+
+/// Declarative form: `(surface :shader …)` with no Lisp-side id resolves
+/// through the display host (memoized by spec content, the video pattern).
+#[test]
+fn layout_frame_rust_emits_inline_surface_glyphs_for_declarative_shader_specs() {
+    let mut eval = Context::new();
+    let surface_requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::new(Mutex::new(Vec::new())),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::clone(&surface_requests),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aDb");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("surface"),
+                Value::keyword("shader"),
+                Value::string(
+                    "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { \
+                     return vec4<f32>(1.0); }",
+                ),
+                Value::keyword("uniforms"),
+                Value::list(vec![Value::cons(
+                    Value::symbol("speed"),
+                    Value::make_float(2.0),
+                )]),
+                Value::keyword("width"),
+                Value::fixnum(80),
+                Value::keyword("height"),
+                Value::fixnum(45),
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-declarative-surface", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let presentation = state.materialize();
+    let (surface_id, width, height, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Surface {
+                surface_id,
+                width,
+                height,
+                slot_id,
+                ..
+            } => Some((*surface_id, *width, *height, *slot_id)),
+            _ => None,
+        })
+        .expect("inline surface glyph");
+    assert_eq!(surface_id.get(), 4343);
+    assert_eq!(width, 80.0);
+    assert_eq!(height, 45.0);
+    let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
+    let slot_id = slot_id.expect("surface slot id");
+    assert_eq!(i64::from(slot_id.col), replacement.col);
+
+    let requests = surface_requests.lock().expect("surface requests lock");
+    assert!(!requests.is_empty());
+    let request = &requests[0];
+    assert!(request.source.contains("mainImage"));
+    assert_eq!(request.width, 80);
+    assert_eq!(request.height, 45);
+    assert!(request.animate);
+    assert_eq!(
+        request.uniforms,
+        vec![("speed".to_owned(), [2.0f32.to_bits(), 0, 0, 0], 1u8)]
+    );
 }
 
 #[test]
@@ -15627,6 +15753,7 @@ fn layout_frame_rust_installs_frame_tab_bar_image_media() {
         requests: Arc::clone(&requests),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()
@@ -15721,6 +15848,7 @@ fn layout_frame_rust_shrinks_frame_tab_bar_from_stale_reserved_height() {
         requests: Arc::clone(&requests),
         video_requests: Arc::new(Mutex::new(Vec::new())),
         webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
     }));
     let buf_id = eval
         .buffer_manager()

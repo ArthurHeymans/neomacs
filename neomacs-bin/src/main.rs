@@ -60,9 +60,9 @@ use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
-    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedVideo, ResolvedWebKit,
-    ShaderSurfaceContent, ShaderSurfaceCreateRequest, VideoResolveRequest, VideoResolveSource,
-    WebKitResolveRequest, WebKitResolveSource,
+    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
+    ShaderSurfaceContent, ShaderSurfaceCreateRequest, SurfaceResolveRequest, VideoResolveRequest,
+    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -861,6 +861,7 @@ struct PrimaryWindowDisplayHost {
     image_catalog: AsyncImageCatalog,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
+    resolved_surfaces: Mutex<HashMap<SurfaceResolveRequest, Option<ResolvedSurface>>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1660,6 +1661,75 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         }
         Ok(Some(resolved))
+    }
+
+    fn request_surface(
+        &self,
+        request: SurfaceResolveRequest,
+    ) -> Result<Option<ResolvedSurface>, String> {
+        {
+            let cache = match self.resolved_surfaces.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Some(resolved) = cache.get(&request) {
+                return Ok(resolved.clone());
+            }
+        }
+
+        let uniforms: Vec<SurfaceUniformInit> = request
+            .uniforms
+            .iter()
+            .map(|(name, bits, components)| SurfaceUniformInit {
+                name: name.clone(),
+                value: [
+                    f32::from_bits(bits[0]),
+                    f32::from_bits(bits[1]),
+                    f32::from_bits(bits[2]),
+                    f32::from_bits(bits[3]),
+                ],
+                components: *components,
+            })
+            .collect();
+        // Redisplay cannot signal: a WGSL failure logs once and memoizes as
+        // unresolved (the spec renders nothing, like a broken image).
+        let names: Vec<(String, u8)> = uniforms
+            .iter()
+            .map(|u| (u.name.clone(), u.components))
+            .collect();
+        let resolved = match validate_surface_wgsl(&request.source, &names) {
+            Ok(_) => {
+                let surface_id = next_host_surface_id();
+                self.send_render_command(
+                    RenderCommand::Asset(AssetCommand::SurfaceCreate {
+                        id: surface_id,
+                        source: SurfaceSource::Wgsl {
+                            source: request.source.clone(),
+                            uniforms,
+                        },
+                        width: request.width,
+                        height: request.height,
+                        animate: request.animate,
+                    }),
+                    "failed to queue declarative surface create",
+                )?;
+                Some(ResolvedSurface { surface_id })
+            }
+            Err(err) => {
+                tracing::warn!("declarative surface spec rejected: {err}");
+                None
+            }
+        };
+
+        match self.resolved_surfaces.lock() {
+            Ok(mut cache) => {
+                cache.insert(request, resolved.clone());
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().insert(request, resolved.clone());
+            }
+        }
+        Ok(resolved)
     }
 
     fn create_webkit_xwidget(&self, id: u32, width: u32, height: u32) -> Result<(), String> {
@@ -2526,6 +2596,7 @@ fn run_gui_evaluator_worker(
         ),
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
+        resolved_surfaces: Mutex::new(HashMap::new()),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

@@ -30,6 +30,14 @@
 ;;   (neomacs-surface-create :width W :height H :pixels RGBA-UNIBYTE-STRING)
 ;;     => surface id (integer); signals on WGSL compile errors.
 ;;
+;; Declarative form (no create call, like image/video specs — the spec
+;; content is memoized into a surface; WGSL errors are logged, not signaled):
+;;
+;;   (insert (propertize " " 'display
+;;            '(surface :shader "fn mainImage(...) ..."
+;;                      :uniforms ((speed . 2.0))
+;;                      :width 320 :height 120)))
+;;
 ;; The shader defines `fn mainImage(fragCoord: vec2<f32>) -> vec4<f32>' and
 ;; reads Shadertoy-style uniforms `u.iTime', `u.iResolution', plus one
 ;; generated accessor per :uniforms entry ((speed . 2.0) => `u_speed()').
@@ -94,6 +102,12 @@ Returns the surface id."
     (neomacs-surface-create-and-insert
      :width 96 :height 96
      :pixels (neomacs-surface--demo-checkerboard 96 12))
+    (insert "\n\nDeclarative display spec (no create call, spec is the identity):\n\n  ")
+    (insert (propertize " " 'display
+                        (list 'surface
+                              :shader neomacs-surface--demo-shader
+                              :uniforms '((speed . 4.0))
+                              :width 200 :height 80)))
     (insert "\n")
     (goto-char (point-min))
     (pop-to-buffer (current-buffer))))

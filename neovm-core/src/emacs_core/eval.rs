@@ -1538,6 +1538,26 @@ pub struct ShaderSurfaceCreateRequest {
     pub animate: bool,
 }
 
+/// Declarative shader-surface resolution: a `(surface :shader …)` display
+/// spec resolved during redisplay, memoized by content like
+/// [`VideoResolveRequest`] (the spec IS the identity; no Lisp-side id).
+/// Uniform values are carried as `f32::to_bits` so the request derives
+/// `Hash`/`Eq` for the host memo.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SurfaceResolveRequest {
+    pub source: String,
+    /// `(name, value bits, component count)` in slot order.
+    pub uniforms: Vec<(String, [u32; 4], u8)>,
+    pub width: u32,
+    pub height: u32,
+    pub animate: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedSurface {
+    pub surface_id: u32,
+}
+
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
@@ -1657,6 +1677,17 @@ pub trait DisplayHost {
         &self,
         _request: WebKitResolveRequest,
     ) -> Result<Option<ResolvedWebKit>, String> {
+        Ok(None)
+    }
+    /// Nonblocking declarative shader-surface resolution used by redisplay
+    /// for `(surface :shader …)` display specs. Memoized by request content;
+    /// a WGSL validation failure logs and returns `Ok(None)` (redisplay can
+    /// not signal), unlike `create_shader_surface` which reports errors to
+    /// Lisp synchronously.
+    fn request_surface(
+        &self,
+        _request: SurfaceResolveRequest,
+    ) -> Result<Option<ResolvedSurface>, String> {
         Ok(None)
     }
     fn create_webkit_xwidget(&self, _id: u32, _width: u32, _height: u32) -> Result<(), String> {

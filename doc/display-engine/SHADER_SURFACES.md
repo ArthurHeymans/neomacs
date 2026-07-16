@@ -52,6 +52,27 @@ Bad WGSL signals a Lisp `error` **synchronously from
 playground loop (edit WGSL buffer, `C-c C-c`, see error or live surface) works
 with ordinary `condition-case`.
 
+### Declarative form (spec-is-the-identity, like image/video)
+
+```elisp
+(insert (propertize " " 'display
+  '(surface :shader "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> { ... }"
+            :uniforms ((speed . 2.0))
+            :animate t
+            :width 320 :height 120)))
+```
+
+No create call, no id: the resolver memoizes the spec content into a host
+surface id exactly like `(video :file …)` (`DisplayHost::request_surface`,
+`resolved_surfaces` memo in `main.rs`). Trade-offs versus the imperative API:
+
+| | imperative (`:id`) | declarative (`:shader`) |
+|---|---|---|
+| WGSL errors | synchronous Lisp `error` | logged once, spec renders nothing |
+| `set-uniform` | yes (same id, no recompile) | no — new uniform values = new spec = new surface |
+| lifecycle | explicit `destroy` | memoized process-wide (like video/webkit resolves) |
+| use for | playgrounds, interactive uniforms | fire-and-forget decorations, modes, dashboards |
+
 ## Shader contract
 
 User source defines:
