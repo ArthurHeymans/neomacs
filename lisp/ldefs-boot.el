@@ -5274,8 +5274,6 @@ evaluate the variable `compilation-shell-minor-mode'.
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
 
-\\{compilation-shell-minor-mode-map}
-
 (fn &optional ARG)" t)
 (autoload 'compilation-minor-mode "compile"
 "Toggle Compilation minor mode.
@@ -5297,8 +5295,6 @@ evaluate the variable `compilation-minor-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{compilation-minor-mode-map}
 
 (fn &optional ARG)" t)
 (autoload 'compilation-next-error-function "compile"
@@ -13929,8 +13925,6 @@ evaluate the variable `flymake-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{flymake-mode-map}
 
 (fn &optional ARG)" t)
 (autoload 'flymake-mode-on "flymake"
@@ -23004,6 +22998,11 @@ Optional COLS, ROWS set the terminal size.
 (register-definition-prefixes "neomacs-image" '("neomacs-image-"))
 
 
+;;; Generated autoloads from neomacs-surface.el
+
+(register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
+
+
 ;;; Generated autoloads from neomacs-video.el
 
 (register-definition-prefixes "neomacs-video" '("neomacs-video-"))
@@ -28185,8 +28184,6 @@ evaluate the variable `rectangle-mark-mode'.
 
 The mode's hook is called both when the mode is enabled and when it is
 disabled.
-
-\\{rectangle-mark-mode-map}
 
 (fn &optional ARG)" t)
 (register-definition-prefixes "rect" '("apply-on-rectangle" "clear-rectangle-line" "delete-" "extract-rectangle-" "killed-rectangle" "ope" "rectangle-" "spaces-string" "string-rectangle-"))
