@@ -191,8 +191,15 @@ fn current_textprop_variable_value(
     buffers: &BufferManager,
     name: &str,
 ) -> Option<Value> {
+    // Text-property control vars (char-property-alias-alist, default-text-
+    // properties, inhibit-*, ...) are almost always plain globals. A global
+    // (non-Localized) symbol can never be in a buffer's local_var_alist, so
+    // skip the per-buffer scan for it -- this runs during redisplay and was
+    // ~3% of the layout profile. See `Obarray::is_localized`.
+    let sym_id = crate::emacs_core::intern::intern(name);
+    let localized = obarray.is_localized(sym_id);
     if let Some(buf) = buffers.current_buffer()
-        && let Some(binding) = buf.get_buffer_local_binding(name)
+        && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(sym_id, localized)
     {
         return binding.as_value();
     }
