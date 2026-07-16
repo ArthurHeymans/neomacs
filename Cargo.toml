@@ -138,10 +138,12 @@ itoa = "1.0"
 
 # GPU / windowing
 winit = "0.30"
-wgpu = "29"
+# "glsl" gates ShaderSource::Glsl, which the render thread needs to compile
+# composed Shadertoy-dialect surface shaders (shader_surface.rs).
+wgpu = { version = "29", features = ["glsl"] }
 wgpu-hal = { version = "29", features = ["vulkan"] }
-# Shader-surface WGSL validation on the Lisp thread (same version wgpu embeds)
-naga = { version = "29", features = ["wgsl-in"] }
+# Shader-surface WGSL/GLSL validation on the Lisp thread (same version wgpu embeds)
+naga = { version = "29", features = ["wgsl-in", "glsl-in"] }
 raw-window-handle = "0.6"
 ash = "0.38"
 pollster = "0.4"
