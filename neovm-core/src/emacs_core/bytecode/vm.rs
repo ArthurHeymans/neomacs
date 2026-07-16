@@ -4141,11 +4141,15 @@ impl<'a> Vm<'a> {
 
     fn call_function_untraced_owned(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
         let result = match func_val.kind() {
-            // Fast path: stay in VM for bytecoded calls.
-            // Matches GNU Emacs's CLOSUREP → goto setup_frame in bytecode.c.
+            // Fast path: bytecoded calls dispatch through the shared JIT
+            // tier-up seam (Context::execute_bytecode_call) — matching GNU's
+            // CLOSUREP → goto setup_frame shape when the plan says interpret,
+            // and running native code once the callee is hot. Routing the
+            // VM's own call path through the seam is what lets functions
+            // called ONLY from compiled code tier up at all.
             ValueKind::Veclike(VecLikeType::ByteCode) => {
                 let bc_data = func_val.get_bytecode_data().unwrap();
-                self.execute_with_func_value(bc_data, args, func_val)
+                self.ctx.execute_bytecode_call(bc_data, args, func_val)
             }
             // A symbol whose live function cell is *directly* a byte-compiled
             // function: resolve the cell once and dispatch straight to the
@@ -4158,7 +4162,7 @@ impl<'a> Vm<'a> {
             // cells and fall through to the full generic dispatch unchanged. The
             // cell is re-read live every call so redefinition is honored; the
             // compiler-override guard mirrors direct_subr_call_target. Both this
-            // and funcall_general converge on execute_with_func_value, so behavior
+            // and funcall_general converge on execute_bytecode_call, so behavior
             // is identical minus the redundant resolution.
             ValueKind::Symbol(sym_id) if !self.ctx.compiler_function_overrides_active() => {
                 match self.ctx.obarray.symbol_function_id(sym_id) {
@@ -4166,7 +4170,7 @@ impl<'a> Vm<'a> {
                         if matches!(cell.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
                     {
                         let bc_data = cell.get_bytecode_data().unwrap();
-                        self.execute_with_func_value(bc_data, args, cell)
+                        self.ctx.execute_bytecode_call(bc_data, args, cell)
                     }
                     _ => self.ctx.funcall_general_untraced(func_val, args),
                 }

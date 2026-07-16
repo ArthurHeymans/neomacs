@@ -13210,6 +13210,70 @@ impl Context {
         self.unbind_to_with_result(bt_count, result)
     }
 
+    /// Execute a bytecode function through the JIT tier-up seam. This is THE
+    /// dispatch point for every bytecode call: `funcall_general_untraced`
+    /// (interpreter / funcall / apply) AND the VM's own bytecode→bytecode
+    /// fast paths (`Vm::call_function_untraced_owned`) route here, so a
+    /// function called only from compiled code accumulates heat and tiers up
+    /// exactly like one called through funcall/eval. (Previously only the
+    /// funcall path consulted the plan, so in fully byte-compiled code —
+    /// where calls flow through the VM's Op::Call — the JIT never engaged
+    /// at all.)
+    ///
+    /// The `match` over the dispatch plan is intentionally exhaustive: once
+    /// a compiled tier exists it MUST be handled here, enforced by the
+    /// compiler. Behind the `jit` feature; the default build is unchanged.
+    pub(crate) fn execute_bytecode_call(
+        &mut self,
+        bc_data: &super::bytecode::ByteCodeFunction,
+        args: LispArgVec,
+        func_value: Value,
+    ) -> EvalResult {
+        #[cfg(feature = "jit")]
+        {
+            use crate::emacs_core::jit::Plan;
+            match bc_data.runtime.dispatch() {
+                Plan::Interpret => {
+                    let mut vm = super::bytecode::Vm::from_context(self);
+                    vm.execute_with_func_value(bc_data, args, func_value)
+                }
+                Plan::Compiled => {
+                    // Run native code when the body is compilable and the
+                    // call is valid (arity is checked inside
+                    // try_run_compiled). Ok(None) — non-compilable body, a
+                    // deopt (sound to rerun: guards never follow a call),
+                    // or an arity mismatch — falls back to the Tier-0
+                    // interpreter; Err propagates a Flow raised by a
+                    // runtime call inside native code.
+                    //
+                    // Root the executing function for the duration: native
+                    // code references its constants by raw bits, and a
+                    // runtime call inside (Call/cons) may trigger GC.
+                    let saved_roots = save_scratch_gc_roots();
+                    push_scratch_gc_root(func_value);
+                    let ctx_ptr = self as *mut Context;
+                    let native = crate::emacs_core::jit::try_run_compiled(
+                        ctx_ptr, bc_data, func_value, &args,
+                    );
+                    restore_scratch_gc_roots(saved_roots);
+                    match native {
+                        Ok(Some(bits)) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
+                        Ok(None) => {
+                            let mut vm = super::bytecode::Vm::from_context(self);
+                            vm.execute_with_func_value(bc_data, args, func_value)
+                        }
+                        Err(flow) => Err(flow),
+                    }
+                }
+            }
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            let mut vm = super::bytecode::Vm::from_context(self);
+            vm.execute_with_func_value(bc_data, args, func_value)
+        }
+    }
+
     pub(crate) fn funcall_general_untraced(
         &mut self,
         function: Value,
@@ -13225,55 +13289,7 @@ impl Context {
                 // cloning per call dominated debug-build batch-byte-compile
                 // runtime.
                 let bc_data = function.get_bytecode_data().unwrap();
-                // Tier-up dispatch seam (JIT Phase 0). The `match` over the
-                // dispatch plan is intentionally exhaustive: once a compiled
-                // tier exists it MUST be handled here, enforced by the compiler.
-                // Behind the `jit` feature; the default build is unchanged.
-                #[cfg(feature = "jit")]
-                {
-                    use crate::emacs_core::jit::Plan;
-                    match bc_data.runtime.dispatch() {
-                        Plan::Interpret => {
-                            let mut vm = super::bytecode::Vm::from_context(self);
-                            vm.execute_with_func_value(bc_data, args, function)
-                        }
-                        Plan::Compiled => {
-                            // Run native code when the body is compilable and the
-                            // call is valid (arity is checked inside
-                            // try_run_compiled). Ok(None) — non-compilable body, a
-                            // deopt (sound to rerun: guards never follow a call),
-                            // or an arity mismatch — falls back to the Tier-0
-                            // interpreter; Err propagates a Flow raised by a
-                            // runtime call inside native code.
-                            //
-                            // Root the executing function for the duration: native
-                            // code references its constants by raw bits, and a
-                            // runtime call inside (Call/cons) may trigger GC.
-                            let saved_roots = save_scratch_gc_roots();
-                            push_scratch_gc_root(function);
-                            let ctx_ptr = self as *mut Context;
-                            let native = crate::emacs_core::jit::try_run_compiled(
-                                ctx_ptr, bc_data, function, &args,
-                            );
-                            restore_scratch_gc_roots(saved_roots);
-                            match native {
-                                Ok(Some(bits)) => {
-                                    Ok(crate::emacs_core::value::Value::from_bits(bits))
-                                }
-                                Ok(None) => {
-                                    let mut vm = super::bytecode::Vm::from_context(self);
-                                    vm.execute_with_func_value(bc_data, args, function)
-                                }
-                                Err(flow) => Err(flow),
-                            }
-                        }
-                    }
-                }
-                #[cfg(not(feature = "jit"))]
-                {
-                    let mut vm = super::bytecode::Vm::from_context(self);
-                    vm.execute_with_func_value(bc_data, args, function)
-                }
+                self.execute_bytecode_call(bc_data, args, function)
             }
             ValueKind::Veclike(VecLikeType::Lambda) => self.apply_lambda(function, args),
             ValueKind::Veclike(VecLikeType::Macro) => self.apply_lambda(function, args),
