@@ -15725,7 +15725,7 @@ impl Context {
         );
     }
 
-    fn defsubr_with_entry(
+    pub(crate) fn defsubr_with_entry(
         &mut self,
         name: &str,
         func: crate::tagged::header::SubrFn,

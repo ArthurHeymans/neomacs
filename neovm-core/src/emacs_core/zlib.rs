@@ -11,7 +11,7 @@ use super::editfns::{
     buffer_read_only_active_in_state, signal_after_text_change, signal_before_text_change,
     text_change_for_lisp_string_replacement_in_manager,
 };
-use super::error::{EvalResult, signal};
+use super::error::signal;
 use super::fns::{
     read_buffer_region_bytes_in_manager, replace_buffer_region_lisp_string_in_manager,
 };
@@ -19,110 +19,108 @@ use super::value::*;
 use crate::heap_types::LispString;
 use flate2::{Decompress, FlushDecompress, Status};
 
-/// (zlib-available-p)
-/// Return t if zlib decompression is available.
-pub(crate) fn builtin_zlib_available_p(args: Vec<Value>) -> EvalResult {
-    super::builtins::expect_args("zlib-available-p", &args, 0)?;
+use crate::emacs_core::defun::defun;
+
+// (zlib-available-p)
+// Return t if zlib decompression is available.
+defun!(ZLIB_AVAILABLE_P: "zlib-available-p",
+fn zlib_available_p(_ctx: &mut Context) -> EvalResult {
     Ok(Value::T)
+});
+
+// (zlib-decompress-region START END &optional ALLOW-PARTIAL)
+//
+// Decompress gzip- or zlib-compressed region, replacing text in-place.
+// Must be called in a unibyte buffer.
+// Returns t on success, the number of unconsumed bytes on partial success
+// (when ALLOW-PARTIAL is non-nil), or nil on failure.
+defun!(ZLIB_DECOMPRESS_REGION: "zlib-decompress-region", min = 2,
+fn zlib_decompress_region(ctx: &mut Context, start: Value, end: Value, allow_partial: Value) -> EvalResult {
+let allow_partial = allow_partial.is_truthy();
+
+let Some(buf) = ctx.buffers.current_buffer() else {
+    return Ok(Value::NIL);
+};
+
+let region = super::position::LispRegionArgs::from_values(&ctx.buffers, start, end)?;
+
+// GNU `Fzlib_decompress_region` calls `validate_region` before the
+// unibyte-buffer check.
+let byte_range = region.accessible_byte_range(buf)?;
+
+// Check unibyte — GNU signals error in multibyte buffers.
+if buf.get_multibyte() {
+    return Err(signal(
+        "error",
+        vec![Value::string(
+            "This function can be called only in unibyte buffers",
+        )],
+    ));
 }
 
-/// (zlib-decompress-region START END &optional ALLOW-PARTIAL)
-///
-/// Decompress gzip- or zlib-compressed region, replacing text in-place.
-/// Must be called in a unibyte buffer.
-/// Returns t on success, the number of unconsumed bytes on partial success
-/// (when ALLOW-PARTIAL is non-nil), or nil on failure.
-pub(crate) fn builtin_zlib_decompress_region(
-    ctx: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    super::builtins::expect_min_args("zlib-decompress-region", &args, 2)?;
-    super::builtins::expect_max_args("zlib-decompress-region", &args, 3)?;
-    let allow_partial = args.get(2).is_some_and(|v| v.is_truthy());
+// Check read-only.
+if buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
+    return Err(signal(
+        LispCondition::BufferReadOnly,
+        vec![Value::make_buffer(buf.id)],
+    ));
+}
 
-    let Some(buf) = ctx.buffers.current_buffer() else {
-        return Ok(Value::NIL);
-    };
+let from_byte = byte_range.start().get();
+let to_byte = byte_range.end().get();
 
-    let region = super::position::LispRegionArgs::from_values(&ctx.buffers, args[0], args[1])?;
+let buffer_id = buf.id;
+let compressed = read_buffer_region_bytes_in_manager(&ctx.buffers, buffer_id, byte_range)?;
 
-    // GNU `Fzlib_decompress_region` calls `validate_region` before the
-    // unibyte-buffer check.
-    let byte_range = region.accessible_byte_range(buf)?;
+// Try gzip first (most common for Emacs .gz files), then fall back to zlib.
+// GNU uses inflateInit2 with MAX_WBITS + 32 which auto-detects format.
+let decompressed = decompress_auto(&compressed, allow_partial);
 
-    // Check unibyte — GNU signals error in multibyte buffers.
-    if buf.get_multibyte() {
-        return Err(signal(
-            "error",
-            vec![Value::string(
-                "This function can be called only in unibyte buffers",
-            )],
-        ));
+match decompressed {
+    Some((data, remaining)) if remaining == 0 => {
+        let replacement = LispString::from_emacs_bytes(data);
+        let change = text_change_for_lisp_string_replacement_in_manager(
+            &ctx.buffers,
+            buffer_id,
+            byte_range,
+            &replacement,
+        )?;
+        signal_before_text_change(ctx, change)?;
+        replace_buffer_region_lisp_string_in_manager(
+            &mut ctx.buffers,
+            buffer_id,
+            change.old_range(),
+            &replacement,
+        )?;
+        signal_after_text_change(ctx, change)?;
+        Ok(Value::T)
     }
-
-    // Check read-only.
-    if buffer_read_only_active_in_state(&ctx.obarray, &[], buf) {
-        return Err(signal(
-            LispCondition::BufferReadOnly,
-            vec![Value::make_buffer(buf.id)],
-        ));
+    Some((data, remaining)) if allow_partial => {
+        let replacement = LispString::from_emacs_bytes(data);
+        let change = text_change_for_lisp_string_replacement_in_manager(
+            &ctx.buffers,
+            buffer_id,
+            byte_range,
+            &replacement,
+        )?;
+        signal_before_text_change(ctx, change)?;
+        replace_buffer_region_lisp_string_in_manager(
+            &mut ctx.buffers,
+            buffer_id,
+            change.old_range(),
+            &replacement,
+        )?;
+        signal_after_text_change(ctx, change)?;
+        Ok(Value::fixnum(remaining as i64))
     }
-
-    let from_byte = byte_range.start().get();
-    let to_byte = byte_range.end().get();
-
-    let buffer_id = buf.id;
-    let compressed = read_buffer_region_bytes_in_manager(&ctx.buffers, buffer_id, byte_range)?;
-
-    // Try gzip first (most common for Emacs .gz files), then fall back to zlib.
-    // GNU uses inflateInit2 with MAX_WBITS + 32 which auto-detects format.
-    let decompressed = decompress_auto(&compressed, allow_partial);
-
-    match decompressed {
-        Some((data, remaining)) if remaining == 0 => {
-            let replacement = LispString::from_emacs_bytes(data);
-            let change = text_change_for_lisp_string_replacement_in_manager(
-                &ctx.buffers,
-                buffer_id,
-                byte_range,
-                &replacement,
-            )?;
-            signal_before_text_change(ctx, change)?;
-            replace_buffer_region_lisp_string_in_manager(
-                &mut ctx.buffers,
-                buffer_id,
-                change.old_range(),
-                &replacement,
-            )?;
-            signal_after_text_change(ctx, change)?;
-            Ok(Value::T)
-        }
-        Some((data, remaining)) if allow_partial => {
-            let replacement = LispString::from_emacs_bytes(data);
-            let change = text_change_for_lisp_string_replacement_in_manager(
-                &ctx.buffers,
-                buffer_id,
-                byte_range,
-                &replacement,
-            )?;
-            signal_before_text_change(ctx, change)?;
-            replace_buffer_region_lisp_string_in_manager(
-                &mut ctx.buffers,
-                buffer_id,
-                change.old_range(),
-                &replacement,
-            )?;
-            signal_after_text_change(ctx, change)?;
-            Ok(Value::fixnum(remaining as i64))
-        }
-        Some(_) => unreachable!("non-partial successful decompression handled above"),
-        None if allow_partial => Ok(Value::fixnum((to_byte - from_byte) as i64)),
-        None => {
-            // Failure without allow-partial — leave region unchanged, return nil.
-            Ok(Value::NIL)
-        }
+    Some(_) => unreachable!("non-partial successful decompression handled above"),
+    None if allow_partial => Ok(Value::fixnum((to_byte - from_byte) as i64)),
+    None => {
+        // Failure without allow-partial — leave region unchanged, return nil.
+        Ok(Value::NIL)
     }
 }
+});
 
 /// Auto-detect compression format and decompress.
 /// Tries gzip first (most common in Emacs), then raw zlib.
@@ -192,16 +190,6 @@ fn decompress_zlib(compressed: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 /// Register this module's subrs. GNU: `syms_of_decompress` in `src/decompress.c`.
 /// Extracted verbatim from the former flat `builtins::init_builtins`.
 pub(crate) fn syms_of_decompress(ctx: &mut crate::emacs_core::eval::Context) {
-    ctx.defsubr(
-        "zlib-available-p",
-        |_ctx, args| super::zlib::builtin_zlib_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "zlib-decompress-region",
-        |ctx, args| super::zlib::builtin_zlib_decompress_region(ctx, args),
-        2,
-        Some(3),
-    );
+    ctx.defsubr_decl(&ZLIB_AVAILABLE_P);
+    ctx.defsubr_decl(&ZLIB_DECOMPRESS_REGION);
 }

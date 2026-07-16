@@ -432,12 +432,20 @@ fn libxml_parse_html_region_routes_head_elements_and_transitions_to_body() {
 #[test]
 fn zlib_available_p_returns_true() {
     crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    // zlib-available-p is a typed A0 subr since the defun! conversion, so
+    // arity is enforced by the dispatcher, not inside the body — assert the
+    // elisp-visible surface through dispatch, matching GNU's Fzlib_available_p.
     assert_eq!(
-        crate::emacs_core::zlib::builtin_zlib_available_p(vec![]).unwrap(),
+        eval.dispatch_subr("zlib-available-p", vec![])
+            .expect("registered subr")
+            .unwrap(),
         Value::T
     );
-    let zlib_arity =
-        crate::emacs_core::zlib::builtin_zlib_available_p(vec![Value::fixnum(1)]).unwrap_err();
+    let zlib_arity = eval
+        .dispatch_subr("zlib-available-p", vec![Value::fixnum(1)])
+        .expect("registered subr")
+        .unwrap_err();
     match zlib_arity {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-number-of-arguments");

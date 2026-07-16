@@ -39,6 +39,7 @@ pub mod custom;
 pub mod data;
 pub mod dbus;
 pub mod debug;
+pub(crate) mod defun;
 pub mod dired;
 pub mod display;
 pub mod dispnew;
