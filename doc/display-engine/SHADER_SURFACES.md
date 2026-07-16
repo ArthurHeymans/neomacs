@@ -94,6 +94,11 @@ The renderer prepends a generated prelude and compiles the concatenation
 - One accessor function per user uniform, generated from the `:uniforms`
   alist: `(speed . 2.0)` ⇒ `fn u_speed() -> f32`, `(tint . [r g b])` ⇒
   `fn u_tint() -> vec3<f32>`. Order of declaration = slot order.
+- `iChannel0: texture_2d<f32>` + `iChannel0Sampler: sampler` (bindings 1–2):
+  another surface bound via `:channel0 ID` (imperative or declarative) —
+  pixel surfaces for image processing, shader surfaces for multipass chains
+  (a chain sees the source's *previous* frame, Shadertoy buffer semantics).
+  Unbound channels sample transparent black; self-reference is rejected.
 - A fullscreen-triangle `@vertex` entry and an `@fragment` entry that calls
   `mainImage` with **Shadertoy fragCoord convention** (y-up, origin
   bottom-left): `mainImage(vec2(pos.x, u.iResolution.y - pos.y))`.
@@ -164,10 +169,11 @@ offscreen pass and runtime WGSL compilation.
 1. **DONE (this change)** — static pixels from Lisp (`:pixels`).
 2. **DONE (this change)** — animated WGSL fragment surfaces: prelude,
    compositor clock, named uniforms, sync errors, visibility-scoped demand.
-3. Texture inputs (`:channel0` = image/video/webkit id sampled by the
-   shader; mpv `//!BIND`-style), `iMouse` routing, GLSL-in via naga (imports
-   the Ghostty/Shadertoy shader corpus), full-frame post pass (librashader
-   runs on wgpu — RetroArch preset ecosystem nearly free).
+3. **PARTIALLY DONE** — `:channel0` surface-to-surface inputs landed (pixel
+   sources + multipass chains). Remaining: image/video/webkit ids as channel
+   sources (cross-cache binding), `iMouse` routing, GLSL-in via naga
+   (imports the Ghostty/Shadertoy shader corpus), full-frame post pass
+   (librashader runs on wgpu — RetroArch preset ecosystem nearly free).
 4. Optional 3D mesh API — raymarching already covers most demand inside
    `mainImage`; revisit only with real users.
 
