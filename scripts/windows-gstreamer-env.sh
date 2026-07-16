@@ -25,9 +25,9 @@ export PKG_CONFIG_PATH="$(cygpath -w "$gst_root_posix/lib/pkgconfig")"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
 
 if [[ "${1:-}" == "--verify" ]]; then
-  # The GStreamer Windows SDK ships the PangoFT2 runtime DLL but not a
-  # pangoft2.pc file. librsvg treats PangoFT2 as optional on Windows, while
-  # release packaging verifies the runtime DLL separately.
+  # librsvg links Pango and PangoCairo.  GStreamer's MSVC build implements
+  # PangoCairo with the native Pangowin32 backend; release packaging validates
+  # those runtime DLLs separately.
   find "$gst_root_posix" \( \
     -name 'glib-2.0.pc' -o \
     -name 'gstreamer-1.0.pc' -o \

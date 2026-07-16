@@ -1,6 +1,62 @@
 use super::*;
 use flate2::{Compression, write::GzEncoder};
 
+#[test]
+#[cfg(unix)]
+fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf();
+    let fixture = tempdir();
+    let gst_root = fixture.join("gstreamer");
+    let gst_bin = gst_root.join("bin");
+    let package_root = fixture.join("package");
+    fs::create_dir_all(&gst_bin).unwrap();
+    fs::create_dir_all(&package_root).unwrap();
+
+    // This is the Pango runtime shape shipped by GStreamer 1.26.9's official
+    // Windows MSVC runtime MSI.  Windows uses the native Pangowin32 backend;
+    // the package intentionally does not contain the Unix PangoFT2 backend.
+    let runtime_dlls = [
+        "glib-2.0-0.dll",
+        "gobject-2.0-0.dll",
+        "gstreamer-1.0-0.dll",
+        "gstvideo-1.0-0.dll",
+        "cairo-2.dll",
+        "pango-1.0-0.dll",
+        "pangocairo-1.0-0.dll",
+        "pangowin32-1.0-0.dll",
+    ];
+    for dll in runtime_dlls {
+        fs::write(gst_bin.join(dll), b"fixture").unwrap();
+    }
+
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/vendor-windows-gstreamer-runtime.sh"))
+        .arg("--package-root")
+        .arg(&package_root)
+        .arg("--bin-dir")
+        .arg(&package_root)
+        .env("GSTREAMER_ROOT_X86_64", &gst_root)
+        .output()
+        .expect("run Windows GStreamer runtime packager");
+
+    assert!(
+        output.status.success(),
+        "official Windows Pango runtime shape must be packageable; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for dll in runtime_dlls {
+        assert!(
+            package_root.join(dll).is_file(),
+            "packager must copy {dll} beside neomacs.exe"
+        );
+    }
+
+    fs::remove_dir_all(fixture).unwrap();
+}
+
 fn parse_options(args: &[&str]) -> FreshBuildOptions {
     FreshBuildOptions::parse(
         PathBuf::from("/repo"),

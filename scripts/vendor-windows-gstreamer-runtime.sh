@@ -108,7 +108,7 @@ for dll in "${required_dlls[@]}"; do
   fi
 done
 
-required_dll_families=(cairo 'pango-' pangocairo pangoft2)
+required_dll_families=(cairo 'pango-' pangocairo pangowin32)
 for dll_family in "${required_dll_families[@]}"; do
   if ! find "$gst_bin" -maxdepth 1 -type f -iname "*${dll_family}*.dll" -print -quit \
     | grep -q .; then
