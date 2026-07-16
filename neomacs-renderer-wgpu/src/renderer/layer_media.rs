@@ -183,6 +183,8 @@ impl WgpuRenderer {
                 );
                 // Check if image texture is ready
                 if self.caches.image.get(image_id.get()).is_some() {
+                    self.media_budget
+                        .touch(crate::media_budget::MediaType::Image, image_id.get());
                     // Create vertices for image quad (white color = no tinting)
                     quads.push(MediaQuad {
                         id: image_id.get(),
@@ -340,6 +342,8 @@ impl WgpuRenderer {
 
                 // Check if video texture is ready
                 if let Some(cached) = self.caches.video.get(video_id.get()) {
+                    self.media_budget
+                        .touch(crate::media_budget::MediaType::Video, video_id.get());
                     tracing::trace!(
                         "Rendering video {} at ({}, {}) size {}x{} (clipped to {}), frame_count={}",
                         video_id,
@@ -457,6 +461,8 @@ impl WgpuRenderer {
                     let view_id = neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
                     // Check if webkit texture is ready
                     if self.caches.webkit.get(view_id).is_some() {
+                        self.media_budget
+                            .touch(crate::media_budget::MediaType::WebKit, view_id.get());
                         tracing::debug!(
                             "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
                             xwidget_id,
@@ -595,6 +601,8 @@ impl WgpuRenderer {
 
                 if self.caches.surface.get(surface_id.get()).is_some() {
                     self.caches.surface.mark_drawn(surface_id.get());
+                    self.media_budget
+                        .touch(crate::media_budget::MediaType::Surface, surface_id.get());
                     // Hover-only iMouse: while the pointer is inside the
                     // glyph rect (logical px), stream its normalized position
                     // into the surface's uniforms (picked up by the next

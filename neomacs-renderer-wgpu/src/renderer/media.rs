@@ -284,10 +284,11 @@ impl WgpuRenderer {
         height: u32,
         animate: bool,
         channel0: Option<crate::shader_surface::SurfaceChannelSource>,
+        recreatable: bool,
     ) -> Result<(), String> {
         let layout = self.caches.image.bind_group_layout();
         let sampler = self.caches.image.sampler();
-        self.caches.surface.create_shader(
+        let (width_px, height_px) = self.caches.surface.create_shader(
             &self.device,
             layout,
             sampler,
@@ -301,10 +302,14 @@ impl WgpuRenderer {
             self.scale_factor,
             animate,
             channel0,
-        )
+        )?;
+        self.register_surface_bytes(id, width_px, height_px, recreatable);
+        Ok(())
     }
 
-    /// Create a static surface from raw RGBA8 pixel data.
+    /// Create a static surface from raw RGBA8 pixel data. Pixel surfaces are
+    /// only created through the imperative API, so they are never
+    /// budget-evictable.
     pub fn create_pixel_surface(
         &mut self,
         id: u32,
@@ -314,9 +319,75 @@ impl WgpuRenderer {
     ) -> Result<(), String> {
         let layout = self.caches.image.bind_group_layout();
         let sampler = self.caches.image.sampler();
-        self.caches
-            .surface
-            .create_pixels(&self.device, &self.queue, layout, sampler, id, data, width, height)
+        let (width_px, height_px) = self.caches.surface.create_pixels(
+            &self.device,
+            &self.queue,
+            layout,
+            sampler,
+            id,
+            data,
+            width,
+            height,
+        )?;
+        self.register_surface_bytes(id, width_px, height_px, false);
+        Ok(())
+    }
+
+    /// Register a created surface's physical bytes and run the eviction
+    /// driver: over budget, free least-recently-used *recreatable* surfaces
+    /// (declarative specs re-resolve on the next redisplay walk). One victim
+    /// per iteration so the shrinking shortfall requeries the candidate
+    /// prefix; never the surface just created.
+    fn register_surface_bytes(&mut self, id: u32, width_px: u32, height_px: u32, recreatable: bool) {
+        use crate::media_budget::MediaType;
+        let bytes = width_px as usize * height_px as usize * 4;
+        self.media_budget.register(MediaType::Surface, id, bytes);
+        self.surface_recreatable.insert(id, recreatable);
+        while self.media_budget.is_over_budget() {
+            let victim = self
+                .media_budget
+                .get_eviction_candidates(0)
+                .into_iter()
+                .find(|(kind, victim_id)| {
+                    *kind == MediaType::Surface
+                        && *victim_id != id
+                        && self.surface_recreatable.get(victim_id) == Some(&true)
+                });
+            let Some((_, victim_id)) = victim else {
+                tracing::debug!(
+                    "media budget over limit ({} / {} bytes) with no \
+                     recreatable shader surface to evict",
+                    self.media_budget.current_usage(),
+                    self.media_budget.max_limit()
+                );
+                break;
+            };
+            self.caches.surface.free(victim_id);
+            self.media_budget.unregister(MediaType::Surface, victim_id);
+            self.surface_recreatable.remove(&victim_id);
+            tracing::info!("evicting shader surface {victim_id} (over media budget)");
+        }
+    }
+
+    /// Set the unified media budget limit (bytes).
+    pub fn set_media_budget_limit(&mut self, max_bytes: usize) {
+        self.media_budget = crate::media_budget::MediaBudget::with_max_bytes(max_bytes);
+    }
+
+    /// Drain the caches' accounting events into the budget. Runs once per
+    /// frame from `process_shader_surfaces`.
+    fn reconcile_media_budget(&mut self) {
+        for event in self.caches.image.drain_accounting() {
+            self.media_budget.apply(event);
+        }
+        #[cfg(feature = "video")]
+        for event in self.caches.video.drain_accounting() {
+            self.media_budget.apply(event);
+        }
+        #[cfg(feature = "wpe-webkit")]
+        for event in self.caches.webkit.drain_accounting() {
+            self.media_budget.apply(event);
+        }
     }
 
     /// Update one named uniform on a shader surface.
@@ -341,6 +412,9 @@ impl WgpuRenderer {
     /// Free a shader surface's GPU objects.
     pub fn free_surface(&mut self, id: u32) {
         self.caches.surface.free(id);
+        self.media_budget
+            .unregister(crate::media_budget::MediaType::Surface, id);
+        self.surface_recreatable.remove(&id);
     }
 
     /// Render pending shader-surface passes (call each frame before the main
@@ -349,6 +423,7 @@ impl WgpuRenderer {
     /// transparent black inside the surface cache.
     pub fn process_shader_surfaces(&mut self) {
         use crate::shader_surface::SurfaceChannelSource;
+        self.reconcile_media_budget();
         let mut external = std::collections::HashMap::new();
         for source in self.caches.surface.external_channel_sources() {
             let view = match source {

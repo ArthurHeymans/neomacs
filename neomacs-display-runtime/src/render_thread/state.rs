@@ -645,15 +645,6 @@ pub(super) struct RenderApp {
 
     /// Shared media memory accounting. Fed from the asset-command choke
     /// point (`asset_commands.rs`); shader surfaces only so far — see the
-    /// wiring-status note in `backend/wgpu/media_budget.rs`.
-    pub(super) media_budget: crate::backend::wgpu::media_budget::MediaBudget,
-
-    /// Per shader-surface eviction eligibility, keyed by surface id
-    /// (`AssetCommand::SurfaceCreate::recreatable`). The eviction driver in
-    /// `asset_commands.rs` only frees surfaces mapped to true — declarative
-    /// specs the resolver recreates on the next redisplay walk. Maintained
-    /// beside `media_budget`: insert on successful create, remove on free.
-    pub(super) surface_recreatable: std::collections::HashMap<u32, bool>,
 
     pub(super) faces: HashMap<neomacs_display_protocol::types::FaceId, Face>,
     /// Sorted (frame_id, ingest_seq) fingerprint of the frames the current
@@ -727,20 +718,16 @@ impl RenderLifecycle {
     }
 }
 
-/// Build the render thread's media budget, honoring the
-/// `NEOMACS_MEDIA_BUDGET_MB` override (a decimal megabyte count) so the
-/// eviction driver can be exercised interactively without allocating
+/// The `NEOMACS_MEDIA_BUDGET_MB` override (a decimal megabyte count) lets
+/// the eviction driver be exercised interactively without allocating
 /// hundreds of megabytes of surfaces. Unset or unparseable values fall back
-/// to the 256MB default.
-fn media_budget_from_env() -> crate::backend::wgpu::media_budget::MediaBudget {
-    use crate::backend::wgpu::media_budget::MediaBudget;
-    match std::env::var("NEOMACS_MEDIA_BUDGET_MB")
+/// to the renderer's 256MB default. Applied to the renderer (which owns the
+/// budget, beside the caches) at bootstrap.
+pub(super) fn media_budget_env_limit() -> Option<usize> {
+    std::env::var("NEOMACS_MEDIA_BUDGET_MB")
         .ok()
         .and_then(|raw| raw.trim().parse::<usize>().ok())
-    {
-        Some(mb) => MediaBudget::with_max_bytes(mb.saturating_mul(1024 * 1024)),
-        None => MediaBudget::new(),
-    }
+        .map(|mb| mb.saturating_mul(1024 * 1024))
 }
 
 impl RenderApp {
@@ -780,8 +767,6 @@ impl RenderApp {
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
-            media_budget: media_budget_from_env(),
-            surface_recreatable: std::collections::HashMap::new(),
             faces: HashMap::new(),
             faces_signature: Vec::new(),
             modifiers: 0,

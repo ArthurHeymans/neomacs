@@ -26,6 +26,8 @@ pub struct CachedWebKitView {
 /// `AssetCommand::WebKitDestroy` handler calls `remove` for every destroyed
 /// view, and dropping the renderer drops the cache wholesale.
 pub struct WgpuWebKitCache {
+    /// Budget accounting events since the last drain (texture create/free).
+    accounting: Vec<crate::media_budget::MediaAccounting>,
     views: HashMap<WebKitId, CachedWebKitView>,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -66,6 +68,7 @@ impl WgpuWebKitCache {
         });
 
         Self {
+            accounting: Vec::new(),
             views: HashMap::new(),
             bind_group_layout,
             sampler,
@@ -112,6 +115,12 @@ impl WgpuWebKitCache {
 
         let (width, height) = buffer.dimensions();
 
+        self.accounting
+            .push(crate::media_budget::MediaAccounting::Registered {
+                media_type: crate::media_budget::MediaType::WebKit,
+                id: view_id.get(),
+                size_bytes: (width as usize) * (height as usize) * 4,
+            });
         self.views.insert(
             view_id,
             CachedWebKitView {
@@ -189,6 +198,12 @@ impl WgpuWebKitCache {
             ],
         });
 
+        self.accounting
+            .push(crate::media_budget::MediaAccounting::Registered {
+                media_type: crate::media_budget::MediaType::WebKit,
+                id: view_id.get(),
+                size_bytes: (width as usize) * (height as usize) * 4,
+            });
         self.views.insert(
             view_id,
             CachedWebKitView {
@@ -222,7 +237,18 @@ impl WgpuWebKitCache {
 
     /// Remove a view.
     pub fn remove(&mut self, view_id: WebKitId) {
-        self.views.remove(&view_id);
+        if self.views.remove(&view_id).is_some() {
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Freed {
+                    media_type: crate::media_budget::MediaType::WebKit,
+                    id: view_id.get(),
+                });
+        }
+    }
+
+    /// Drain budget accounting events accumulated since the last call.
+    pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {
+        std::mem::take(&mut self.accounting)
     }
 
     /// Clear all cached views.

@@ -134,6 +134,8 @@ struct VideoPipeline {
 
 /// Video cache managing multiple videos with async decoding
 pub struct VideoCache {
+    /// Budget accounting events since the last drain (texture create/free).
+    accounting: Vec<crate::media_budget::MediaAccounting>,
     /// Cached videos by ID
     videos: HashMap<u32, CachedVideo>,
     /// Next video ID
@@ -169,6 +171,7 @@ impl VideoCache {
         });
 
         Self {
+            accounting: Vec::new(),
             videos: HashMap::new(),
             next_id: 1,
             load_tx,
@@ -336,8 +339,19 @@ impl VideoCache {
 
     /// Remove video from cache
     pub fn remove(&mut self, id: u32) {
-        self.videos.remove(&id);
+        if self.videos.remove(&id).is_some() {
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Freed {
+                    media_type: crate::media_budget::MediaType::Video,
+                    id,
+                });
+        }
         tracing::debug!("VideoCache: removed video {}", id);
+    }
+
+    /// Drain budget accounting events accumulated since the last call.
+    pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {
+        std::mem::take(&mut self.accounting)
     }
 
     /// Check if any video is currently in Playing state
@@ -458,6 +472,12 @@ impl VideoCache {
                 // Update dimensions
                 video.width = frame.width;
                 video.height = frame.height;
+                self.accounting
+                    .push(crate::media_budget::MediaAccounting::Registered {
+                        media_type: crate::media_budget::MediaType::Video,
+                        id: frame.video_id,
+                        size_bytes: (frame.width * frame.height * 4) as usize,
+                    });
                 if video.state == VideoState::Loading {
                     video.state = VideoState::Playing;
                 }

@@ -297,7 +297,7 @@ impl ShaderSurfaceCache {
         scale: f32,
         animate: bool,
         channel0: Option<SurfaceChannelSource>,
-    ) -> Result<(), String> {
+    ) -> Result<(u32, u32), String> {
         let (width_px, height_px) = Self::clamp_size(width, height, scale);
         let names: Vec<(String, u8)> = uniforms
             .iter()
@@ -374,7 +374,7 @@ impl ShaderSurfaceCache {
         tracing::info!(
             "shader surface {id} created: {width_px}x{height_px}px animate={animate} channel0={channel0:?}"
         );
-        Ok(())
+        Ok((width_px, height_px))
     }
 
     /// Create a static surface from raw RGBA8 pixels (stage 1: GPU texture
@@ -390,7 +390,7 @@ impl ShaderSurfaceCache {
         data: &[u8],
         width: u32,
         height: u32,
-    ) -> Result<(), String> {
+    ) -> Result<(u32, u32), String> {
         let width = width.clamp(1, MAX_SURFACE_SIZE);
         let height = height.clamp(1, MAX_SURFACE_SIZE);
         let expected = width as usize * height as usize * 4;
@@ -446,7 +446,7 @@ impl ShaderSurfaceCache {
             },
         );
         tracing::info!("pixel surface {id} created: {width}x{height}px");
-        Ok(())
+        Ok((width, height))
     }
 
     /// Update one named uniform; unknown names are ignored with a warning

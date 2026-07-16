@@ -4,16 +4,18 @@
 //! and shader surfaces. Each cache reports its usage; eviction is coordinated
 //! centrally.
 //!
-//! Wiring status: the render thread (`RenderApp`) owns the instance
-//! (`NEOMACS_MEDIA_BUDGET_MB` overrides the default limit at init) and so
-//! far registers **shader surfaces only** (create/free choke point in
-//! `render_thread/asset_commands.rs`). That choke point also runs the
-//! eviction driver: an over-budget SurfaceCreate consumes
-//! [`MediaBudget::get_eviction_candidates`] and frees *recreatable*
-//! (declarative-spec) surfaces until back under the limit. The
-//! image/video/webkit caches do not report their usage yet, and nothing
-//! calls [`MediaBudget::touch`] on draw (LRU decays to creation order) —
-//! that parity work is outstanding.
+//! Wiring status: `WgpuRenderer` owns the instance
+//! (`NEOMACS_MEDIA_BUDGET_MB` overrides the default limit at init, applied
+//! by the render thread via `set_media_budget_limit`). Every cache reports
+//! usage through `MediaAccounting` events drained per frame (images and
+//! videos at texture create/free, webkit at view create/resize/destroy,
+//! shader surfaces inline at create/free with physical bytes), and the
+//! inline-media draw phases `touch` what they composite so LRU order is
+//! real. The eviction driver runs on over-budget surface creates and frees
+//! *recreatable* (declarative-spec) surfaces only; other media types are
+//! accounted but never evicted by this driver (images have their own
+//! internal LRU; video/webkit are droppable only with playback/view state
+//! loss).
 
 use std::collections::BTreeMap;
 
@@ -32,6 +34,21 @@ pub enum MediaType {
     /// `RenderApp::surface_recreatable` carries that bit per id and the
     /// eviction driver only frees the recreatable ones)
     Surface,
+}
+
+/// One cache-side accounting event, drained by the renderer once per frame
+/// and applied to the budget. Caches stay decoupled from the budget: they
+/// only append events at texture-lifecycle points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MediaAccounting {
+    /// Texture created or resized (re-registration replaces the old size).
+    Registered {
+        media_type: MediaType,
+        id: u32,
+        size_bytes: usize,
+    },
+    /// Texture dropped.
+    Freed { media_type: MediaType, id: u32 },
 }
 
 /// Entry in the media budget tracker
@@ -110,6 +127,21 @@ impl MediaBudget {
     }
 
     /// Touch an entry (update last access time)
+    /// Apply one cache accounting event (see [`MediaAccounting`]).
+    pub fn apply(&mut self, event: MediaAccounting) {
+        match event {
+            MediaAccounting::Registered {
+                media_type,
+                id,
+                size_bytes,
+            } => {
+                self.unregister(media_type, id);
+                self.register(media_type, id, size_bytes);
+            }
+            MediaAccounting::Freed { media_type, id } => self.unregister(media_type, id),
+        }
+    }
+
     pub fn touch(&mut self, media_type: MediaType, id: u32) {
         let old_key = self
             .entries

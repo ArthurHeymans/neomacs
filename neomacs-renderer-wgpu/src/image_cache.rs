@@ -250,6 +250,8 @@ pub struct ImageMetadata {
 
 /// Async image cache
 pub struct ImageCache {
+    /// Budget accounting events since the last drain (texture create/free).
+    accounting: Vec<crate::media_budget::MediaAccounting>,
     /// Next image ID
     next_id: AtomicU32,
     /// Cached textures: id -> CachedImage
@@ -381,6 +383,7 @@ impl ImageCache {
             decoded_rx,
             decode_tx,
             bind_group_layout,
+            accounting: Vec::new(),
             sampler,
             total_memory: 0,
             access_clock: Cell::new(0),
@@ -397,6 +400,11 @@ impl ImageCache {
     fn begin_load(&mut self, id: u32) -> ImageLoadToken {
         if let Some(cached) = self.textures.remove(&id) {
             self.total_memory -= cached.memory_size;
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Freed {
+                    media_type: crate::media_budget::MediaType::Image,
+                    id,
+                });
         }
         self.pending_dimensions.remove(&id);
         self.loads.begin(id)
@@ -1244,6 +1252,12 @@ impl ImageCache {
 
             let memory_size = (width * height * 4) as usize;
             self.total_memory += memory_size;
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Registered {
+                    media_type: crate::media_budget::MediaType::Image,
+                    id,
+                    size_bytes: memory_size,
+                });
 
             self.textures.insert(
                 id,
@@ -1371,6 +1385,12 @@ impl ImageCache {
 
         let memory_size = (decoded.raster_width * decoded.raster_height * 4) as usize;
         self.total_memory += memory_size;
+        self.accounting
+            .push(crate::media_budget::MediaAccounting::Registered {
+                media_type: crate::media_budget::MediaType::Image,
+                id: decoded.load.id,
+                size_bytes: memory_size,
+            });
 
         self.textures.insert(
             decoded.load.id,
@@ -1413,6 +1433,11 @@ impl ImageCache {
             {
                 self.total_memory -= cached.memory_size;
                 self.states.remove(&id);
+                self.accounting
+                    .push(crate::media_budget::MediaAccounting::Freed {
+                        media_type: crate::media_budget::MediaType::Image,
+                        id,
+                    });
                 tracing::debug!(
                     "Evicted image {} to free {}KB",
                     id,
@@ -1464,9 +1489,19 @@ impl ImageCache {
         self.loads.free(id);
         if let Some(cached) = self.textures.remove(&id) {
             self.total_memory -= cached.memory_size;
+            self.accounting
+                .push(crate::media_budget::MediaAccounting::Freed {
+                    media_type: crate::media_budget::MediaType::Image,
+                    id,
+                });
         }
         self.states.remove(&id);
         self.pending_dimensions.remove(&id);
+    }
+
+    /// Drain budget accounting events accumulated since the last call.
+    pub fn drain_accounting(&mut self) -> Vec<crate::media_budget::MediaAccounting> {
+        std::mem::take(&mut self.accounting)
     }
 
     /// Clear entire cache

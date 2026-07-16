@@ -167,6 +167,10 @@ impl RenderApp {
             device: device.clone(),
             queue: queue.clone(),
         });
+        let mut renderer = renderer;
+        if let Some(max_bytes) = super::state::media_budget_env_limit() {
+            renderer.set_media_budget_limit(max_bytes);
+        }
         self.renderer = Some(renderer);
 
         self.frame_windows

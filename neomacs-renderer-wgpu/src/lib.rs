@@ -9,6 +9,7 @@ pub mod external_buffer;
 pub mod frame_post;
 pub mod glyph_atlas;
 pub mod image_cache;
+pub mod media_budget;
 pub mod overlay_state;
 pub mod renderer;
 pub mod shader_surface;

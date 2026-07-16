@@ -71,6 +71,11 @@ pub struct WgpuRenderer {
     pub(super) scale_factor: f32,
     /// User full-frame post shader (doc/display-engine/SHADER_SURFACES.md).
     pub(super) frame_post: Option<crate::frame_post::FramePost>,
+    /// Unified media memory accounting + surface eviction (media_budget.rs).
+    pub(super) media_budget: crate::media_budget::MediaBudget,
+    /// Which shader surfaces the eviction driver may free (declarative specs
+    /// re-resolve on the next redisplay walk; imperative handles cannot).
+    pub(super) surface_recreatable: std::collections::HashMap<u32, bool>,
 
     // All visual effect configurations
     pub effects: crate::effect_config::EffectsConfig,
@@ -962,6 +967,8 @@ impl WgpuRenderer {
             },
             arenas: VertexArenas::new(),
             frame_post: None,
+            media_budget: crate::media_budget::MediaBudget::new(),
+            surface_recreatable: std::collections::HashMap::new(),
             width,
             height,
             scale_factor,

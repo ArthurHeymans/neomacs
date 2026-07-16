@@ -5,7 +5,11 @@ mod events;
 pub mod toolbar_icons;
 mod transition;
 
-pub mod media_budget;
+pub mod media_budget {
+    //! Moved beside the renderer caches (real byte counts live there);
+    //! re-exported here so existing `backend::wgpu::media_budget` paths work.
+    pub use neomacs_renderer_wgpu::media_budget::*;
+}
 
 #[cfg(feature = "video")]
 pub use neomacs_renderer_wgpu::{CachedVideo, DecodedFrame, VideoCache, VideoState};
