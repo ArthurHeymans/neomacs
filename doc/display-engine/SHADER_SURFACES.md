@@ -70,7 +70,7 @@ surface id exactly like `(video :file …)` (`DisplayHost::request_surface`,
 |---|---|---|
 | WGSL errors | synchronous Lisp `error` | logged once, spec renders nothing |
 | `set-uniform` | yes (same id, no recompile) | no — new uniform values = new spec = new surface |
-| lifecycle | explicit `destroy` | memoized process-wide (like video/webkit resolves) |
+| lifecycle | explicit `destroy` (or buffer-tied via `neomacs-surface-attach`) | memoized FIFO-capped at 64 entries; eviction frees the GPU objects, and an evicted-but-visible spec re-resolves on the next redisplay walk |
 | use for | playgrounds, interactive uniforms | fire-and-forget decorations, modes, dashboards |
 
 ## Shader contract
@@ -164,8 +164,13 @@ offscreen pass and runtime WGSL compilation.
 - Dimension clamp 1..=4096 (matches `ImageCache::MAX_TEXTURE_SIZE`), uniform
   slots capped at 8, texture at physical (scale-factor) resolution.
 - Lifecycle: ids are host-allocated (`next_host_surface_id`); explicit
-  `neomacs-surface-destroy` frees the GPU objects (RAII drop). Not yet tied
-  to GC or `MediaBudget` — future work alongside video/webkit parity.
+  `neomacs-surface-destroy` frees the GPU objects (RAII drop).
+  `neomacs-surface-attach` ties an id to a buffer's lifetime via a local
+  `kill-buffer-hook` (and `neomacs-surface-create-and-insert` attaches
+  automatically); the declarative memo is FIFO-capped at 64 entries with
+  `SurfaceFree` on eviction; surface bytes are registered in `MediaBudget`
+  (render thread, `asset_commands.rs`) on create and removed on free. Still
+  not tied to GC, and nothing drives budget eviction yet.
 
 ## Staging
 
@@ -183,7 +188,16 @@ offscreen pass and runtime WGSL compilation.
 
 ## Known gaps (prototype)
 
-- No GC integration; leaked surfaces live until `destroy` or exit.
+- No GC integration: a bare `neomacs-surface-create` id that is neither
+  destroyed nor attached (`neomacs-surface-attach`, automatic in
+  `neomacs-surface-create-and-insert`) still lives until exit. The
+  declarative memo no longer leaks (FIFO cap 64, GPU objects freed on
+  eviction, evicted-but-visible specs re-resolve on the next walk).
+- `MediaBudget` is accounting-only: the render thread registers shader
+  surfaces (logical w*h*4 at create, removed at free) but no eviction
+  driver consumes `get_eviction_candidates`, image/video/webkit caches
+  never register at all, and shader bytes are really physical
+  (scale-factor squared) — full parity is future work.
 - DPI captured at create; no rescale on monitor change.
 - `iMouse` is hover-only: zw (click/drag state) not yet routed.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and

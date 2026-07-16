@@ -29,7 +29,7 @@ pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
 pub(crate) mod tty_layout;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -849,6 +849,63 @@ impl EvaluatorExit {
 const GUI_EVALUATOR_THREAD_STACK_SIZE: usize = 64 * 1024 * 1024;
 const CLIPBOARD_REPLY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// FIFO cap for the declarative-surface memo: each resolved entry keeps a
+/// live GPU texture on the render thread, so the memo must not grow without
+/// bound (unlike the video/webkit memos, whose entries are plain ids).
+const RESOLVED_SURFACE_MEMO_CAP: usize = 64;
+
+/// Memo for declarative `(surface :shader …)` display specs, FIFO-bounded at
+/// [`RESOLVED_SURFACE_MEMO_CAP`] entries.
+///
+/// Inserting past the cap evicts the oldest entry and reports its surface id
+/// so the caller can queue `AssetCommand::SurfaceFree` for the GPU objects.
+/// Evicting a spec that is still displayed is safe: the resolver re-runs on
+/// every redisplay walk of a visible spec, so an evicted-but-visible spec
+/// simply re-creates its surface on the next walk — eviction costs a
+/// re-resolve, never correctness.
+#[derive(Default)]
+struct ResolvedSurfaceMemo {
+    entries: HashMap<SurfaceResolveRequest, Option<ResolvedSurface>>,
+    /// Insertion order of `entries` keys, oldest first.
+    order: VecDeque<SurfaceResolveRequest>,
+}
+
+impl ResolvedSurfaceMemo {
+    fn get(&self, request: &SurfaceResolveRequest) -> Option<Option<ResolvedSurface>> {
+        self.entries.get(request).cloned()
+    }
+
+    /// Insert a resolution, evicting the oldest entry once the cap is
+    /// reached. Returns the surface id of an evicted *resolved* entry so the
+    /// caller can free its GPU objects (failed resolutions memoize `None`
+    /// and have nothing to free).
+    fn insert(
+        &mut self,
+        request: SurfaceResolveRequest,
+        resolved: Option<ResolvedSurface>,
+    ) -> Option<u32> {
+        if self.entries.contains_key(&request) {
+            // Re-resolution of a known spec: refresh the value in place and
+            // keep the FIFO position so `order` never holds duplicate keys.
+            self.entries.insert(request, resolved);
+            return None;
+        }
+        let evicted = if self.entries.len() >= RESOLVED_SURFACE_MEMO_CAP {
+            self.order.pop_front().and_then(|oldest| {
+                self.entries
+                    .remove(&oldest)
+                    .flatten()
+                    .map(|old| old.surface_id)
+            })
+        } else {
+            None
+        };
+        self.order.push_back(request.clone());
+        self.entries.insert(request, resolved);
+        evicted
+    }
+}
+
 struct PrimaryWindowDisplayHost {
     cmd_tx: crossbeam_channel::Sender<RenderCommand>,
     render_waker: Option<GuiEventLoopWaker>,
@@ -861,7 +918,7 @@ struct PrimaryWindowDisplayHost {
     image_catalog: AsyncImageCatalog,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
-    resolved_surfaces: Mutex<HashMap<SurfaceResolveRequest, Option<ResolvedSurface>>>,
+    resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1673,7 +1730,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                 Err(poisoned) => poisoned.into_inner(),
             };
             if let Some(resolved) = cache.get(&request) {
-                return Ok(resolved.clone());
+                return Ok(resolved);
             }
         }
 
@@ -1722,13 +1779,19 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }
         };
 
-        match self.resolved_surfaces.lock() {
-            Ok(mut cache) => {
-                cache.insert(request, resolved.clone());
-            }
-            Err(poisoned) => {
-                poisoned.into_inner().insert(request, resolved.clone());
-            }
+        let evicted_surface_id = match self.resolved_surfaces.lock() {
+            Ok(mut cache) => cache.insert(request, resolved.clone()),
+            Err(poisoned) => poisoned.into_inner().insert(request, resolved.clone()),
+        };
+        if let Some(id) = evicted_surface_id {
+            // The memo hit its FIFO cap: free the evicted entry's GPU
+            // objects. If that spec is still displayed somewhere, the next
+            // redisplay walk re-resolves (and re-creates) it, so eviction is
+            // never observable — only a one-off re-resolve cost.
+            self.send_render_command(
+                RenderCommand::Asset(AssetCommand::SurfaceFree { id }),
+                "failed to queue evicted declarative surface free",
+            )?;
         }
         Ok(resolved)
     }
@@ -2619,7 +2682,7 @@ fn run_gui_evaluator_worker(
         ),
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
-        resolved_surfaces: Mutex::new(HashMap::new()),
+        resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

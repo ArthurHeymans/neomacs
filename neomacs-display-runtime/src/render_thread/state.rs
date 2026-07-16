@@ -643,6 +643,11 @@ pub(super) struct RenderApp {
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
 
+    /// Shared media memory accounting. Fed from the asset-command choke
+    /// point (`asset_commands.rs`); shader surfaces only so far — see the
+    /// wiring-status note in `backend/wgpu/media_budget.rs`.
+    pub(super) media_budget: crate::backend::wgpu::media_budget::MediaBudget,
+
     pub(super) faces: HashMap<neomacs_display_protocol::types::FaceId, Face>,
     /// Sorted (frame_id, ingest_seq) fingerprint of the frames the current
     /// `faces` map was aggregated from; unchanged fingerprint skips the
@@ -752,6 +757,7 @@ impl RenderApp {
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
+            media_budget: crate::backend::wgpu::media_budget::MediaBudget::new(),
             faces: HashMap::new(),
             faces_signature: Vec::new(),
             modifiers: 0,

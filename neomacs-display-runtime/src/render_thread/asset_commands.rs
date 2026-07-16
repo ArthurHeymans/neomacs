@@ -1,6 +1,7 @@
 //! Asset and embedded-content render commands.
 
 use super::RenderApp;
+use crate::backend::wgpu::media_budget::MediaType;
 use crate::thread_comm::{AssetCommand, MediaSource};
 
 #[cfg(feature = "wpe-webkit")]
@@ -457,8 +458,22 @@ impl RenderApp {
                             renderer.create_pixel_surface(id, data, width, height)
                         }
                     };
-                    if let Err(err) = result {
-                        tracing::warn!("shader surface {id} create failed: {err}");
+                    match result {
+                        Ok(()) => {
+                            // Account the surface's texture against the shared
+                            // media budget. Logical w*h*4: shader surfaces
+                            // actually allocate at physical resolution (scale
+                            // factor squared larger) — refine alongside the
+                            // eviction driver, which does not exist yet.
+                            self.media_budget.register(
+                                MediaType::Surface,
+                                id,
+                                (width as usize) * (height as usize) * 4,
+                            );
+                        }
+                        Err(err) => {
+                            tracing::warn!("shader surface {id} create failed: {err}");
+                        }
                     }
                 } else {
                     tracing::warn!("Renderer not initialized, cannot create surface {id}");
@@ -470,6 +485,7 @@ impl RenderApp {
                 }
             }
             AssetCommand::SurfaceFree { id } => {
+                self.media_budget.unregister(MediaType::Surface, id);
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.free_surface(id);
                 }

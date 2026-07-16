@@ -56,11 +56,24 @@
                       'neomacs-surface-id id))
   id)
 
+(defun neomacs-surface-attach (id &optional buffer)
+  "Tie surface ID's lifetime to BUFFER, defaulting to the current buffer.
+Adds a buffer-local `kill-buffer-hook' that destroys ID when BUFFER is
+killed (errors are ignored, so an id already freed by an explicit
+`neomacs-surface-destroy' is harmless).  Returns ID."
+  (with-current-buffer (or buffer (current-buffer))
+    (add-hook 'kill-buffer-hook
+              (lambda () (ignore-errors (neomacs-surface-destroy id)))
+              nil t))
+  id)
+
 (defun neomacs-surface-create-and-insert (&rest args)
   "Create a surface from ARGS (see `neomacs-surface-create') and insert it.
-Returns the surface id."
+The surface is attached to the current buffer (`neomacs-surface-attach'),
+so killing the buffer frees it.  Returns the surface id."
   (let ((id (apply #'neomacs-surface-create args)))
-    (neomacs-surface-insert id (plist-get args :width) (plist-get args :height))))
+    (neomacs-surface-insert id (plist-get args :width) (plist-get args :height))
+    (neomacs-surface-attach id)))
 
 (defconst neomacs-surface--demo-shader
   "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
@@ -86,7 +99,9 @@ Returns the surface id."
     data))
 
 (defun neomacs-surface-demo ()
-  "Pop a buffer showing an animated shader surface and a pixel surface."
+  "Pop a buffer showing an animated shader surface and a pixel surface.
+Every surface is attached to the demo buffer (`neomacs-surface-attach'),
+so killing *surface-demo* frees them all."
   (interactive)
   (unless (neomacs-surface-available-p)
     (error "Shader surfaces need the NeoMacs GUI"))
@@ -109,9 +124,12 @@ Returns the surface id."
                               :uniforms '((speed . 4.0))
                               :width 200 :height 80)))
     (insert "\n\nChannel input: a shader warping the pixel surface above (:channel0):\n\n  ")
-    (let ((source (neomacs-surface-create
-                   :width 96 :height 96
-                   :pixels (neomacs-surface--demo-checkerboard 96 12))))
+    ;; The channel source is created without inserting it, so attach it to
+    ;; the demo buffer explicitly (create-and-insert attaches automatically).
+    (let ((source (neomacs-surface-attach
+                   (neomacs-surface-create
+                    :width 96 :height 96
+                    :pixels (neomacs-surface--demo-checkerboard 96 12)))))
       (neomacs-surface-create-and-insert
        :width 240 :height 96
        :channel0 source

@@ -1,7 +1,15 @@
 //! Unified memory budget management for all media caches.
 //!
-//! Provides a shared memory budget across images, video frames, and WebKit surfaces.
-//! Each cache reports its usage; eviction is coordinated centrally.
+//! Provides a shared memory budget across images, video frames, WebKit views,
+//! and shader surfaces. Each cache reports its usage; eviction is coordinated
+//! centrally.
+//!
+//! Wiring status: the render thread (`RenderApp`) owns the instance and so
+//! far registers **shader surfaces only** (create/free choke point in
+//! `render_thread/asset_commands.rs`). The image/video/webkit caches do not
+//! report their usage yet, and no eviction driver consumes
+//! [`MediaBudget::get_eviction_candidates`] — the budget is accounting-only
+//! until that parity work lands.
 
 use std::collections::BTreeMap;
 
@@ -14,6 +22,10 @@ pub enum MediaType {
     Video,
     /// WebKit surfaces (highest priority - expensive to recreate)
     WebKit,
+    /// Shader surfaces (evicted last: imperative ids handed to Lisp cannot
+    /// be recreated by the renderer; declarative specs re-resolve on the
+    /// next redisplay walk, but the budget cannot tell the two apart)
+    Surface,
 }
 
 /// Entry in the media budget tracker
