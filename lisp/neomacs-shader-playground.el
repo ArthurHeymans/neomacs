@@ -93,10 +93,53 @@ fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
   "C-c C-l" #'neomacs-shader-playground-live-mode
   "C-c C-k" #'neomacs-shader-playground-close-preview)
 
+(defvar neomacs-shader-playground-mode-syntax-table
+  (let ((table (make-syntax-table prog-mode-syntax-table)))
+    ;; C-style comments, shared by WGSL and GLSL: `//' to end of line
+    ;; and `/* ... */' blocks.  Strings stay the standard `"' syntax.
+    (modify-syntax-entry ?/ ". 124b" table)
+    (modify-syntax-entry ?* ". 23" table)
+    (modify-syntax-entry ?\n "> b" table)
+    table)
+  "Syntax table for `neomacs-shader-playground-mode'.")
+
+(defconst neomacs-shader-playground--font-lock-keywords
+  `(;; WGSL attributes and GLSL preprocessor directives.
+    ("@\\(?:vertex\\|fragment\\|group\\|binding\\|builtin\\|location\\)\\_>"
+     . 'font-lock-preprocessor-face)
+    ("^[ \t]*#[ \t]*\\(?:define\\|version\\)\\_>"
+     . 'font-lock-preprocessor-face)
+    ;; Contract uniform-block reads (`u.iTime') and generated
+    ;; per-uniform accessors (`u_speed()'), see SHADER_SURFACES.md.
+    ("\\_<u\\.[[:alnum:]_]+" . 'font-lock-builtin-face)
+    ("\\_<u_[[:alnum:]_]+" . 'font-lock-builtin-face)
+    ;; Names the generated prelude provides to both dialects.
+    (,(regexp-opt '("mainImage" "iTime" "iTimeDelta" "iFrame" "iResolution"
+                    "iMouse" "iChannel0" "iChannel0Sampler" "textureSample"
+                    "texture")
+                  'symbols)
+     . 'font-lock-builtin-face)
+    (,(regexp-opt '("fn" "let" "var" "const" "return" "if" "else" "for"
+                    "while" "loop" "break" "continue" "struct" "uniform"
+                    "void" "in" "out")
+                  'symbols)
+     . 'font-lock-keyword-face)
+    (,(regexp-opt '("f32" "u32" "i32" "bool" "vec2" "vec3" "vec4" "float"
+                    "int" "mat2" "mat3" "mat4" "texture_2d" "sampler"
+                    "sampler2D")
+                  'symbols)
+     . 'font-lock-type-face)
+    ("\\_<\\(?:0[xX][[:xdigit:]]+\\|[0-9]+\\(?:\\.[0-9]*\\)?\\(?:[eE][-+]?[0-9]+\\)?\\)[fhiu]?\\_>"
+     . 'font-lock-constant-face))
+  "Font-lock keywords for WGSL and Shadertoy-dialect GLSL.")
+
 (define-derived-mode neomacs-shader-playground-mode prog-mode "WGSL-Play"
   "Major mode for editing a WGSL shader with a live NeoMacs surface preview."
   (setq-local comment-start "// ")
-  (setq-local comment-end ""))
+  (setq-local comment-end "")
+  (setq-local comment-start-skip "\\(?://+\\|/\\*+\\)[ \t]*")
+  (setq-local font-lock-defaults
+              '(neomacs-shader-playground--font-lock-keywords)))
 
 ;;;###autoload
 (defun neomacs-shader-playground ()
@@ -164,15 +207,85 @@ in vec2)'), `:shader' (WGSL) otherwise."
     (ignore-errors (neomacs-surface-destroy neomacs-shader-playground--surface))
     (setq neomacs-shader-playground--surface nil)))
 
-(defun neomacs-shader-playground--show-errors (message)
-  "Pop the error buffer with naga's MESSAGE."
+;; naga reports errors against the composed module — generated prelude,
+;; then the user source — as `surface.wgsl:N:C' (WGSL) or
+;; `surface.frag:N:C' (GLSL) references.  The prelude length is
+;; deterministic; the constants below mirror `compose_surface_wgsl' and
+;; `compose_surface_glsl' in neomacs-renderer-wgpu/src/shader_surface.rs
+;; and must be updated in lockstep when the generated prelude changes.
+
+(defconst neomacs-shader-playground--wgsl-prelude-fixed-lines (+ 18 12)
+  "Fixed WGSL prelude lines around the per-uniform accessors.
+18 lines of NeoUniforms/channel declarations before the accessors, plus
+12 lines of vertex/fragment entry points ending at the
+`// ---- user source ----' marker.  Mirrors `compose_surface_wgsl' in
+neomacs-renderer-wgpu/src/shader_surface.rs.")
+
+(defconst neomacs-shader-playground--glsl-prelude-fixed-lines (+ 20 2)
+  "Fixed GLSL prelude lines around the per-uniform accessors.
+20 lines of #version/uniform-block/#define declarations before the
+accessors, plus 2 lines (the output declaration and the
+`// ---- user source ----' marker).  Mirrors `compose_surface_glsl' in
+neomacs-renderer-wgpu/src/shader_surface.rs.")
+
+(defconst neomacs-shader-playground--uniform-slots 8
+  "User uniform slots; one accessor line is generated per slot used.
+Mirrors SURFACE_USER_UNIFORM_SLOTS in
+neomacs-renderer-wgpu/src/shader_surface.rs.")
+
+(defun neomacs-shader-playground--prelude-lines (uniforms language)
+  "Lines the generated prelude occupies before the user source.
+UNIFORMS is the parsed `:uniforms' alist and LANGUAGE `:glsl' or
+`:shader'; each uniform contributes one accessor line, capped at the
+slot count.  Composed-module line N is user-source line N minus this."
+  (+ (if (eq language :glsl)
+         neomacs-shader-playground--glsl-prelude-fixed-lines
+       neomacs-shader-playground--wgsl-prelude-fixed-lines)
+     (min (length uniforms) neomacs-shader-playground--uniform-slots)))
+
+(defun neomacs-shader-playground--visit-line (line)
+  "Select the playground buffer and move point to LINE (1-based)."
+  (let ((buffer (get-buffer neomacs-shader-playground--buffer)))
+    (unless buffer
+      (user-error "No shader playground buffer"))
+    (pop-to-buffer buffer '((display-buffer-reuse-window)))
+    (goto-char (point-min))
+    (forward-line (1- line))))
+
+(defun neomacs-shader-playground--annotate-error-lines (prelude-lines)
+  "Follow each composed-module line reference with a jump button.
+Scan the current buffer for naga's `surface.wgsl:N:C' / `surface.frag:N:C'
+references and append a clickable \"(your line M)\" hint after each,
+where M = N - PRELUDE-LINES, jumping to line M in the playground
+buffer.  References into the generated prelude (M < 1) are left alone;
+the naga text itself is not modified."
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward
+            "surface\\.\\(?:wgsl\\|frag\\):\\([0-9]+\\):[0-9]+" nil t)
+      (let ((line (- (string-to-number (match-string 1)) prelude-lines)))
+        (when (>= line 1)
+          (insert " "
+                  (buttonize
+                   (format "(your line %d)" line)
+                   #'neomacs-shader-playground--visit-line line
+                   "mouse-2, RET: jump to this line in the playground")))))))
+
+(defun neomacs-shader-playground--show-errors (message &optional prelude-lines)
+  "Pop the error buffer with naga's MESSAGE.
+Non-nil PRELUDE-LINES is the generated-prelude line count
+\(`neomacs-shader-playground--prelude-lines'); composed-module line
+references in MESSAGE then get clickable playground-line hints."
   (with-current-buffer (get-buffer-create neomacs-shader-playground--error-buffer)
     (let ((inhibit-read-only t))
       (erase-buffer)
       (insert message "\n")
+      (when prelude-lines
+        (neomacs-shader-playground--annotate-error-lines prelude-lines))
       (insert "\n(Line numbers refer to the composed module: the generated\n"
               " prelude precedes your code.  The annotated source lines above\n"
-              " point at the offending WGSL.)\n")
+              " point at the offending shader source; each \"(your line N)\"\n"
+              " button jumps to that line in the playground buffer.)\n")
       (goto-char (point-min)))
     (special-mode)
     (display-buffer (current-buffer)
@@ -193,11 +306,11 @@ popping the error buffer."
   (interactive)
   (let* ((source (buffer-substring-no-properties (point-min) (point-max)))
          (uniforms (neomacs-shader-playground--uniforms))
+         (language (neomacs-shader-playground--language))
          (width (car neomacs-shader-playground-size))
          (height (cdr neomacs-shader-playground-size)))
     (condition-case err
-        (let ((id (apply #'neomacs-surface-create
-                         (neomacs-shader-playground--language) source
+        (let ((id (apply #'neomacs-surface-create language source
                          :width width :height height :animate t
                          (and uniforms (list :uniforms uniforms)))))
           (neomacs-shader-playground--show id width height)
@@ -208,7 +321,9 @@ popping the error buffer."
        (if quiet
            (message "shader error: %s"
                     (car (split-string (error-message-string err) "\n")))
-         (neomacs-shader-playground--show-errors (error-message-string err)))
+         (neomacs-shader-playground--show-errors
+          (error-message-string err)
+          (neomacs-shader-playground--prelude-lines uniforms language)))
        nil))))
 
 (defun neomacs-shader-playground-set-uniform (name value)
