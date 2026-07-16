@@ -229,6 +229,11 @@ fn row_text(row: &GlyphRow) -> (String, Vec<FaceRun>) {
                     col += marker.chars().count();
                     text.push_str(&marker);
                 }
+                GlyphType::Surface { surface_id, .. } => {
+                    let marker = format!("[surface:{surface_id}]");
+                    col += marker.chars().count();
+                    text.push_str(&marker);
+                }
                 GlyphType::Xwidget { xwidget_id, .. } => {
                     let marker = format!("[xwidget:{xwidget_id}]");
                     col += marker.chars().count();

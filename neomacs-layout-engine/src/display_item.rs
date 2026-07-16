@@ -861,6 +861,13 @@ pub(crate) struct DisplayXwidgetItem {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplaySurfaceItem {
+    pub(crate) surface_id: i32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayMediaReplacement {
     pub(crate) kind: DisplayMediaReplacementKind,
     pub(crate) width: f32,
@@ -883,6 +890,9 @@ pub(crate) enum DisplayMediaReplacementKind {
     },
     Xwidget {
         xwidget_id: u32,
+    },
+    Surface {
+        surface_id: u32,
     },
 }
 
@@ -932,6 +942,17 @@ impl DisplayMediaReplacement {
             width: display_replacement_dimension(xwidget.width),
             height: display_replacement_dimension(xwidget.height),
             ascent: display_replacement_ascent(xwidget.height),
+        }
+    }
+
+    pub(crate) fn surface(surface: DisplaySurfaceItem) -> Self {
+        Self {
+            kind: DisplayMediaReplacementKind::Surface {
+                surface_id: surface.surface_id.max(0) as u32,
+            },
+            width: display_replacement_dimension(surface.width),
+            height: display_replacement_dimension(surface.height),
+            ascent: display_replacement_ascent(surface.height),
         }
     }
 }

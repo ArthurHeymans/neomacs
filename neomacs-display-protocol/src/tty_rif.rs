@@ -981,7 +981,10 @@ fn glyph_to_char(glyph: &Glyph) -> char {
         GlyphType::Char { ch } => *ch,
         GlyphType::Composite { text } => text.chars().next().unwrap_or(' '),
         GlyphType::Stretch { .. } => ' ',
-        GlyphType::Image { .. } | GlyphType::Video { .. } | GlyphType::Xwidget { .. } => ' ',
+        GlyphType::Image { .. }
+        | GlyphType::Video { .. }
+        | GlyphType::Xwidget { .. }
+        | GlyphType::Surface { .. } => ' ',
         GlyphType::Glyphless { ch } => *ch,
     }
 }

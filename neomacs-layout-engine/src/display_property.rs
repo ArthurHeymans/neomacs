@@ -1,11 +1,12 @@
 use crate::display_item::{
     DisplayItemLayout, DisplayLength, DisplayLengthExpr, DisplayLengthSymbol,
-    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplayXwidgetItem,
+    DisplayMediaReplacement, DisplayStretch, DisplayStretchWidth, DisplaySurfaceItem,
+    DisplayXwidgetItem,
 };
 use crate::display_spec::{
     DisplayFringeLayout, DisplaySpaceKey, DisplaySpecHead, is_display_fringe_spec,
     is_display_space_spec, is_display_spec_list, parse_display_fringe_layout,
-    parse_display_xwidget_layout,
+    parse_display_surface_layout, parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::list_to_vec;
@@ -57,12 +58,16 @@ pub(crate) enum DisplayMediaReplacementProperty {
     Video,
     Xwidget(DisplayMediaReplacement),
     Webkit,
+    /// Shader surface: like Xwidget, the spec is self-contained (the id was
+    /// allocated by `neomacs-surface-create`), so layout resolves it without
+    /// a display-host round-trip.
+    Surface(DisplayMediaReplacement),
 }
 
 impl DisplayMediaReplacementProperty {
     pub(crate) fn direct_replacement(&self) -> Option<DisplayMediaReplacement> {
         match self {
-            Self::Xwidget(media) => Some(*media),
+            Self::Xwidget(media) | Self::Surface(media) => Some(*media),
             Self::Image | Self::Video | Self::Webkit => None,
         }
     }
@@ -91,7 +96,7 @@ impl DisplayMediaReplacementProperty {
         match self {
             Self::Image => Some("[img]"),
             Self::Video | Self::Webkit => Some("     "),
-            Self::Xwidget(_) => None,
+            Self::Xwidget(_) | Self::Surface(_) => None,
         }
     }
 }
@@ -190,6 +195,16 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         Some(DisplayReplacementProperty::Media(
             DisplayMediaReplacementProperty::Webkit,
         ))
+    } else if DisplaySpecHead::Surface.is_head_of(&value) {
+        parse_display_surface_layout(&value).map(|layout| {
+            DisplayReplacementProperty::Media(DisplayMediaReplacementProperty::Surface(
+                DisplayMediaReplacement::surface(DisplaySurfaceItem {
+                    surface_id: layout.surface_id.min(i32::MAX as u32) as i32,
+                    width: layout.width,
+                    height: layout.height,
+                }),
+            ))
+        })
     } else if is_display_fringe_spec(&value) {
         parse_display_fringe_layout(&value).map(DisplayReplacementProperty::Fringe)
     } else {

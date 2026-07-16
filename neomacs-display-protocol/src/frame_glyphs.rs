@@ -8,7 +8,8 @@ use crate::effect_config::EffectsConfig;
 use crate::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{
-    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId,
+    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId,
+    XwidgetId,
 };
 use std::collections::HashMap;
 
@@ -235,6 +236,21 @@ pub enum FrameGlyph {
         height: f32,
     },
 
+    /// Shader-surface glyph (inline in buffer): a texture the compositor
+    /// renders from a user-supplied WGSL shader or uploaded pixels
+    /// (`doc/display-engine/SHADER_SURFACES.md`).
+    Surface {
+        window_id: DisplayWindowId,
+        row_role: GlyphRowRole,
+        clip_rect: Option<Rect>,
+        slot_id: Option<DisplaySlotId>,
+        surface_id: SurfaceId,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
+
     /// Fringe bitmap drawn in a window's left or right fringe column. The
     /// monochrome bits live once per frame in
     /// [`FrameGlyphBuffer::fringe_bitmaps`], keyed by `bitmap_index`; the
@@ -327,6 +343,7 @@ impl FrameGlyph {
             FrameGlyph::Image { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Video { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Xwidget { row_role, .. } => row_role.is_chrome(),
+            FrameGlyph::Surface { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::FringeBitmap { row_role, .. } => row_role.is_chrome(),
             FrameGlyph::Border { row_role, .. } => row_role.is_chrome(),
             _ => false,
@@ -346,7 +363,8 @@ impl FrameGlyph {
             }
             FrameGlyph::Image { slot_id, .. }
             | FrameGlyph::Video { slot_id, .. }
-            | FrameGlyph::Xwidget { slot_id, .. } => *slot_id,
+            | FrameGlyph::Xwidget { slot_id, .. }
+            | FrameGlyph::Surface { slot_id, .. } => *slot_id,
             _ => None,
         }
     }
@@ -403,6 +421,13 @@ impl FrameGlyph {
                 width,
                 height,
                 ..
+            }
+            | FrameGlyph::Surface {
+                x,
+                y,
+                width,
+                height,
+                ..
             } => Some((*x, *y, *width, *height)),
             _ => None,
         }
@@ -422,6 +447,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { window_id, .. }
             | FrameGlyph::Video { window_id, .. }
             | FrameGlyph::Xwidget { window_id, .. }
+            | FrameGlyph::Surface { window_id, .. }
             | FrameGlyph::FringeBitmap { window_id, .. }
             | FrameGlyph::Border { window_id, .. }
             | FrameGlyph::ScrollBar { window_id, .. } => Some(*window_id),
@@ -438,6 +464,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { row_role, .. }
             | FrameGlyph::Video { row_role, .. }
             | FrameGlyph::Xwidget { row_role, .. }
+            | FrameGlyph::Surface { row_role, .. }
             | FrameGlyph::FringeBitmap { row_role, .. }
             | FrameGlyph::Border { row_role, .. }
             | FrameGlyph::ScrollBar { row_role, .. } => Some(*row_role),
@@ -453,6 +480,7 @@ impl FrameGlyph {
             | FrameGlyph::Image { clip_rect, .. }
             | FrameGlyph::Video { clip_rect, .. }
             | FrameGlyph::Xwidget { clip_rect, .. }
+            | FrameGlyph::Surface { clip_rect, .. }
             | FrameGlyph::FringeBitmap { clip_rect, .. }
             | FrameGlyph::Border { clip_rect, .. }
             | FrameGlyph::ScrollBar { clip_rect, .. } => *clip_rect,
@@ -495,6 +523,13 @@ impl FrameGlyph {
                 ..
             }
             | FrameGlyph::Xwidget {
+                x,
+                y,
+                width,
+                height,
+                ..
+            }
+            | FrameGlyph::Surface {
                 x,
                 y,
                 width,
@@ -1620,6 +1655,21 @@ impl FrameGlyphBuffer {
         });
     }
 
+    /// Add a shader-surface glyph.
+    pub fn add_surface(&mut self, surface_id: SurfaceId, x: f32, y: f32, width: f32, height: f32) {
+        self.glyphs.push(FrameGlyph::Surface {
+            window_id: self.current_window_id,
+            row_role: self.current_row_role,
+            clip_rect: self.current_clip_rect,
+            slot_id: Some(self.current_slot_id(x, y)),
+            surface_id,
+            x,
+            y,
+            width,
+            height,
+        });
+    }
+
     /// Add an xwidget glyph.
     pub fn add_xwidget(&mut self, xwidget_id: XwidgetId, x: f32, y: f32, width: f32, height: f32) {
         self.glyphs.push(FrameGlyph::Xwidget {
@@ -1789,7 +1839,10 @@ impl FrameGlyphBuffer {
     /// Set the authoritative physical cursor for the frame.
     pub fn set_phys_cursor(&mut self, mut cursor: PhysCursor) {
         if let Some(
-            FrameGlyph::Image { .. } | FrameGlyph::Video { .. } | FrameGlyph::Xwidget { .. },
+            FrameGlyph::Image { .. }
+            | FrameGlyph::Video { .. }
+            | FrameGlyph::Xwidget { .. }
+            | FrameGlyph::Surface { .. },
         ) = self.slot_glyph(cursor.slot_id)
         {
             cursor.style = CursorStyle::Hollow;
@@ -1950,6 +2003,13 @@ impl FrameGlyphBuffer {
                     ..
                 }
                 | FrameGlyph::Xwidget {
+                    x: slot_x,
+                    y: slot_y,
+                    width: slot_width,
+                    height: slot_height,
+                    ..
+                }
+                | FrameGlyph::Surface {
                     x: slot_x,
                     y: slot_y,
                     width: slot_width,

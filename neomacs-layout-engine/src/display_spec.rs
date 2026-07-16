@@ -25,6 +25,7 @@ pub(crate) enum DisplaySpecHead {
     Video,
     Webkit,
     Xwidget,
+    Surface,
 }
 
 impl DisplaySpecHead {
@@ -44,6 +45,7 @@ enum DisplayMediaKey {
     LoopCount,
     Autoplay,
     Xwidget,
+    Id,
 }
 
 impl DisplayMediaKey {
@@ -119,6 +121,16 @@ pub(crate) struct DisplayWebKitLayout {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayXwidgetLayout {
     pub(crate) xwidget_id: u32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+/// Parsed `(surface :id N [:width W] [:height H])` display spec. The id is a
+/// host-allocated shader-surface handle from `neomacs-surface-create`; layout
+/// needs no host round-trip (`doc/display-engine/SHADER_SURFACES.md`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplaySurfaceLayout {
+    pub(crate) surface_id: u32,
     pub(crate) width: f32,
     pub(crate) height: f32,
 }
@@ -377,6 +389,48 @@ pub(crate) fn parse_display_webkit_layout(
         },
         width,
         height,
+    })
+}
+
+/// Parse a `(surface :id N [:width W] [:height H])` spec. `:id` is required;
+/// missing dimensions fall back to a small visible square so a typo'd spec
+/// shows up instead of vanishing.
+pub(crate) fn parse_display_surface_layout(prop_val: &Value) -> Option<DisplaySurfaceLayout> {
+    let items = list_to_vec(prop_val)?;
+    if items.first()?.as_symbol_name() != Some(DisplaySpecHead::Surface.into()) {
+        return None;
+    }
+
+    let mut surface_id = None;
+    let mut width = 64.0f32;
+    let mut height = 64.0f32;
+
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        let value = items[i + 1];
+        match DisplayMediaKey::from_lisp_value(items[i]) {
+            Some(DisplayMediaKey::Id) => {
+                surface_id = value.as_int().filter(|id| *id >= 0).map(|id| id as u32);
+            }
+            Some(DisplayMediaKey::Width) => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    width = parsed.max(1) as f32;
+                }
+            }
+            Some(DisplayMediaKey::Height) => {
+                if let Some(parsed) = parse_image_dimension(value) {
+                    height = parsed.max(1) as f32;
+                }
+            }
+            _ => {}
+        }
+        i += 2;
+    }
+
+    Some(DisplaySurfaceLayout {
+        surface_id: surface_id?,
+        width: width.max(1.0),
+        height: height.max(1.0),
     })
 }
 

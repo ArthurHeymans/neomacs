@@ -16,7 +16,7 @@ use super::frame_glyphs::{
     GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint,
 };
-use super::types::{Color, DisplayWindowId, FaceId, ImageId, Px, Rect, VideoId, XwidgetId};
+use super::types::{Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
@@ -50,6 +50,9 @@ pub enum GlyphType {
     },
     /// Inline native/web widget.
     Xwidget { xwidget_id: i32, width_cols: u16 },
+    /// Inline shader surface (NeoMacs extension): a compositor-rendered GPU
+    /// texture owned by the row primitive that reserves its layout slot.
+    Surface { surface_id: i32, width_cols: u16 },
     /// Character with no available glyph (rendered as hex code or thin-space).
     Glyphless { ch: char },
 }
@@ -66,6 +69,8 @@ pub enum GlyphTypeKind {
     Xwidget = 5,
     /// Neomacs extension; GNU currently has no distinct video glyph kind.
     Video = 6,
+    /// Neomacs extension; GNU has no shader-surface glyph kind.
+    Surface = 7,
 }
 
 impl GlyphTypeKind {
@@ -89,6 +94,7 @@ impl GlyphType {
             GlyphType::Image { .. } => GlyphTypeKind::Image,
             GlyphType::Video { .. } => GlyphTypeKind::Video,
             GlyphType::Xwidget { .. } => GlyphTypeKind::Xwidget,
+            GlyphType::Surface { .. } => GlyphTypeKind::Surface,
             GlyphType::Stretch { .. } => GlyphTypeKind::Stretch,
         }
     }
@@ -333,7 +339,8 @@ impl Glyph {
             GlyphType::Stretch { width_cols } => width_cols.max(1),
             GlyphType::Image { width_cols, .. }
             | GlyphType::Video { width_cols, .. }
-            | GlyphType::Xwidget { width_cols, .. } => width_cols.max(1),
+            | GlyphType::Xwidget { width_cols, .. }
+            | GlyphType::Surface { width_cols, .. } => width_cols.max(1),
             _ if self.wide => 2,
             _ => 1,
         }
@@ -518,6 +525,12 @@ impl GlyphRow {
                         xwidget_id,
                         width_cols,
                     } => 0x5000_0000 | (*xwidget_id as u64) | u64::from(*width_cols).rotate_left(9),
+                    GlyphType::Surface {
+                        surface_id,
+                        width_cols,
+                    } => {
+                        0x7000_0000 ^ (*surface_id as u64) ^ u64::from(*width_cols).rotate_left(5)
+                    }
                     GlyphType::Glyphless { ch } => 0x2000_0000 | (*ch as u64),
                 };
                 hash ^= ch_val;
@@ -1436,7 +1449,8 @@ impl FrameDisplayState {
                 }
                 FrameGlyph::Image { .. }
                 | FrameGlyph::Video { .. }
-                | FrameGlyph::Xwidget { .. } => {}
+                | FrameGlyph::Xwidget { .. }
+                | FrameGlyph::Surface { .. } => {}
                 FrameGlyph::ScrollBar {
                     window_id,
                     row_role,
@@ -1894,6 +1908,7 @@ impl FrameDisplayState {
                     GlyphType::Image { .. }
                     | GlyphType::Video { .. }
                     | GlyphType::Xwidget { .. }
+                    | GlyphType::Surface { .. }
                     | GlyphType::Glyphless { .. } => char_w,
                     GlyphType::Char { .. } | GlyphType::Composite { .. } => {
                         if glyph.wide {
@@ -2101,6 +2116,34 @@ impl FrameDisplayState {
                             clip_rect,
                             slot_id: Some(slot_id),
                             xwidget_id: XwidgetId::new(*xwidget_id as u32),
+                            x,
+                            y: baseline - layout_ascent + glyph.vertical_offset_px,
+                            width: materialized_width,
+                            height: layout_height,
+                        });
+                    }
+                    GlyphType::Surface { surface_id, .. } => {
+                        let layout_height = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_height
+                        } else {
+                            row_height
+                        };
+                        let layout_ascent = if glyph.pixel_ascent > 0.0 {
+                            glyph.pixel_ascent
+                        } else {
+                            layout_height
+                        };
+                        let baseline = y + if glyph_row.ascent_px > 0.0 {
+                            glyph_row.ascent_px
+                        } else {
+                            row_height
+                        };
+                        push(FrameGlyph::Surface {
+                            window_id,
+                            row_role,
+                            clip_rect,
+                            slot_id: Some(slot_id),
+                            surface_id: SurfaceId::new(*surface_id as u32),
                             x,
                             y: baseline - layout_ascent + glyph.vertical_offset_px,
                             width: materialized_width,

@@ -1752,6 +1752,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 xwidget_id: xwidget_id as i32,
                 width_cols,
             },
+            DisplayMediaReplacementKind::Surface { surface_id } => GlyphType::Surface {
+                surface_id: surface_id as i32,
+                width_cols,
+            },
         };
         let mut glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
             pixel_width,

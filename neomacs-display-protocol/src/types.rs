@@ -46,6 +46,9 @@ display_id_type!(ImageId, u32);
 display_id_type!(VideoId, u32);
 display_id_type!(WebKitId, u32);
 display_id_type!(XwidgetId, u32);
+// Shader surface: a compositor-rendered texture created from Elisp
+// (`doc/display-engine/SHADER_SURFACES.md`).
+display_id_type!(SurfaceId, u32);
 // Realized face id, scoped to the owning frame's face table. Basic faces
 // occupy 0..BasicFaceId::SENTINEL; dynamic faces are allocated above that.
 // Raw u32 face ids remain only at the FFI edge (`FaceDataFFI`) and the
