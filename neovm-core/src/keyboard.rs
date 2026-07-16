@@ -947,6 +947,10 @@ pub enum InputEvent {
     SelectWindow { window_id: crate::window::WindowId },
     /// Window-manager close request.
     WindowClose { emacs_frame_id: u64 },
+    /// The display rebuilt its GPU state after a device loss. Renderer-side
+    /// media objects are gone: the display host must re-resolve them and a
+    /// full redisplay must be forced.
+    DisplayReset,
 }
 
 impl InputEvent {
@@ -3288,6 +3292,12 @@ impl crate::emacs_core::eval::Context {
                     outcome = outcome.merge(SpecialInputServiceOutcome::any_activity());
                     self.handle_window_close_input_event(emacs_frame_id)?;
                 }
+                InputEvent::DisplayReset => {
+                    // Like Resize: apply here, let the outcome trigger the
+                    // redisplay after servicing.
+                    outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
+                    self.handle_display_reset_input_event();
+                }
                 _ => {}
             }
         }
@@ -3297,6 +3307,24 @@ impl crate::emacs_core::eval::Context {
         ));
 
         Ok(outcome)
+    }
+
+    /// The display lost its GPU device and rebuilt from scratch
+    /// (`InputEvent::DisplayReset`). Ask the display host to re-resolve
+    /// everything renderer-resident (media memos, images, the frame
+    /// shader), then bust the redisplay signature: nothing in buffer or
+    /// window state changed, so without this the next redisplay would
+    /// early-return on an unchanged signature and never republish the
+    /// frame. (The WindowResize path gets the signature change for free
+    /// from the geometry update.)
+    fn handle_display_reset_input_event(&mut self) {
+        tracing::warn!(
+            "display reset: re-resolving GPU-resident media and forcing a full redisplay"
+        );
+        if let Some(host) = self.display_host.as_deref() {
+            host.display_reset();
+        }
+        self.invalidate_redisplay();
     }
 
     fn handle_window_close_input_event(
@@ -3932,6 +3960,15 @@ impl crate::emacs_core::eval::Context {
                 emacs_frame_id,
             } => {
                 self.apply_resize_input_event(width, height, scale_factor, emacs_frame_id, true);
+                self.redisplay();
+                self.timer_resume_idle();
+                Ok(None)
+            }
+            InputEvent::DisplayReset => {
+                // Mirrors the WindowResize shape: apply, redisplay, resume
+                // idle. The reset handler busts the redisplay signature
+                // itself since no buffer/geometry state changed.
+                self.handle_display_reset_input_event();
                 self.redisplay();
                 self.timer_resume_idle();
                 Ok(None)

@@ -643,6 +643,12 @@ pub(super) struct RenderApp {
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
 
+    /// Shared device-lost latch (`Arc<AtomicBool>` inside) plus the
+    /// consecutive surface-Lost streak. Fed by the wgpu device-lost callback
+    /// and the surface-acquire path; drained at the top of
+    /// `handle_about_to_wait`, which runs `recover_from_device_loss`.
+    pub(super) device_lost: super::device_loss::DeviceLossDetector,
+
     /// Shared media memory accounting. Fed from the asset-command choke
     /// point (`asset_commands.rs`); shader surfaces only so far — see the
 
@@ -767,6 +773,7 @@ impl RenderApp {
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,
+            device_lost: super::device_loss::DeviceLossDetector::new(),
             faces: HashMap::new(),
             faces_signature: Vec::new(),
             modifiers: 0,

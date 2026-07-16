@@ -51,6 +51,35 @@ impl AsyncImageCatalog {
         }
     }
 
+    /// Re-queue every known entry for decode + upload after the renderer's
+    /// image cache was destroyed by a GPU device loss.
+    ///
+    /// The catalog's map keys are the full [`ImageResolveRequest`]s (source
+    /// bytes/path plus sizing/realization), so each entry can rebuild its
+    /// exact original load command. Entries and their image ids are KEPT —
+    /// published frames still reference those ids, so re-uploading under the
+    /// same id re-textures the renderer's retained CPU frame as soon as the
+    /// decode lands, without waiting for a fresh redisplay. `Ready` metadata
+    /// stays valid (same source, same parameters); `Pending` entries
+    /// complete against the re-issued decode; `Failed` entries fail again
+    /// identically.
+    pub(super) fn invalidate_all(&self) {
+        let entries = self.entries.borrow();
+        for (request, state) in entries.iter() {
+            let image_id = state.placement().image_id();
+            let command = image_load_command(request, image_id);
+            if let Err(error) =
+                schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command)
+            {
+                tracing::warn!(
+                    image_id,
+                    %error,
+                    "failed to re-queue image decode after display reset"
+                );
+            }
+        }
+    }
+
     pub(super) fn resolve_sync(
         &self,
         request: ImageResolveRequest,
@@ -436,6 +465,49 @@ mod tests {
             }) if (realization.layout_scale() - (1.3 / 1.75)).abs() < 0.0001
                 && (realization.device_scale() - 1.75).abs() < f32::EPSILON
         ));
+    }
+
+    #[test]
+    fn invalidate_all_requeues_every_entry_under_its_existing_id() {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+
+        let first = catalog
+            .lookup(file_request("/tmp/one.png"))
+            .placement()
+            .image_id();
+        let second = catalog
+            .lookup(file_request("/tmp/two.png"))
+            .placement()
+            .image_id();
+        // Drain the two initial load commands.
+        assert!(cmd_rx.try_recv().is_ok());
+        assert!(cmd_rx.try_recv().is_ok());
+
+        catalog.invalidate_all();
+
+        let mut requeued_ids = Vec::new();
+        while let Ok(command) = cmd_rx.try_recv() {
+            match command {
+                RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) => {
+                    requeued_ids.push(id);
+                }
+                other => panic!("unexpected command re-queued: {other:?}"),
+            }
+        }
+        requeued_ids.sort_unstable();
+        let mut expected = vec![first, second];
+        expected.sort_unstable();
+        assert_eq!(requeued_ids, expected, "same ids, one command per entry");
+
+        // The entries survive: a later lookup reuses the id, no new load.
+        let again = catalog
+            .lookup(file_request("/tmp/one.png"))
+            .placement()
+            .image_id();
+        assert_eq!(again, first);
+        assert!(cmd_rx.try_recv().is_err());
     }
 
     #[test]

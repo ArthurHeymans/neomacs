@@ -1774,6 +1774,16 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
+    /// The display rebuilt its GPU state after a device loss
+    /// (`keyboard::InputEvent::DisplayReset`). Hosts drop every memo of
+    /// renderer-resident media (so redisplay re-creates it), re-upload
+    /// images, and re-send the frame shader. The caller then forces a full
+    /// redisplay.
+    fn display_reset(&self) {}
+    /// Debug-only hook behind the hidden `neomacs--debug-lose-device`
+    /// builtin: ask the display to simulate a GPU device loss so the whole
+    /// recovery path can be exercised against a healthy device.
+    fn debug_lose_device(&self) {}
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

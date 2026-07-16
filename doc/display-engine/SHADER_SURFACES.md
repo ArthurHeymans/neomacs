@@ -226,7 +226,9 @@ offscreen pass and runtime WGSL compilation.
   the quad simply doesn't draw.
 - naga guarantees memory safety, not termination: an infinite fragment loop
   can still TDR the GPU — the same accepted risk as Ghostty/Windows
-  Terminal. Device-loss recovery is future work; documented, capped by:
+  Terminal. The session now survives it: device loss triggers a contained
+  GPU rebuild (see Known gaps below for what does and does not survive).
+  Capped by:
 - Dimension clamp 1..=4096 (matches `ImageCache::MAX_TEXTURE_SIZE`), uniform
   slots capped at 8, texture at physical (scale-factor) resolution.
 - Lifecycle: ids are host-allocated (`next_host_surface_id`), and
@@ -265,6 +267,26 @@ offscreen pass and runtime WGSL compilation.
 
 ## Known gaps (prototype)
 
+- ~~No device-loss recovery~~ FIXED: a GPU hang (infinite user shader →
+  driver reset/TDR) no longer bricks the renderer. The wgpu device-lost
+  callback — or 30 consecutive swapchain `Lost` acquisitions, for backends
+  that only report the reset there — latches a flag; the render thread then
+  drops the renderer and GPU context, clears every per-window GPU-resident
+  object (glyph atlases, retained-static scene, transition snapshots, the
+  frame-post composition target), rebuilds instance/adapter/device/queue
+  plus all window surfaces, and sends `InputEvent::DisplayReset` to the
+  evaluator, which clears the declarative video/webkit/surface memos,
+  re-uploads all images under their existing ids, re-sends the frame
+  shader, and forces a full redisplay. Expect a brief flash: the committed
+  CPU frame re-renders immediately but its media quads stay blank until
+  the re-resolves land. Survival matrix — the **frame shader survives**
+  (host re-sends the composed module); **declarative media self-heals**
+  (surfaces/videos/webkits re-create on the next redisplay walk; images
+  re-decode under the same ids); **imperative surface textures do NOT
+  survive** (`neomacs-surface-create` handles keep their ids but the GPU
+  texture is gone — the quad stays blank until Lisp re-creates the
+  surface). The hidden `neomacs--debug-lose-device` builtin exercises the
+  whole path against a healthy device (no real TDR needed).
 - ~~No GC integration~~ FIXED: `neomacs-surface-create` returns a GC-managed
   handle; a dropped handle's GPU objects are destroyed at the next garbage
   collection (see Lifecycle above). The declarative memo no longer leaks

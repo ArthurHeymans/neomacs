@@ -145,6 +145,18 @@ impl RenderApp {
                     renderer.free_image(id);
                 }
             }
+            AssetCommand::DebugSimulateDeviceLoss => {
+                tracing::warn!(
+                    "simulating wgpu device loss (debug): rebuilding GPU state on the next pass"
+                );
+                self.device_lost.mark_lost_now();
+                // Guarantee another event-loop pass observes the latch even
+                // on an otherwise idle session: dirty content plus explicit
+                // redraw requests keep the loop awake until recovery runs.
+                self.frame_windows.mark_top_level_dirty();
+                self.frame_windows
+                    .for_each_top_level_window(|window_state| window_state.request_redraw());
+            }
             AssetCommand::WebKitCreate { id, width, height } => {
                 tracing::info!("Creating WebKit view: id={}, {}x{}", id, width, height);
                 #[cfg(feature = "wpe-webkit")]

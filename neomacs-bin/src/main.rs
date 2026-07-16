@@ -928,6 +928,12 @@ struct PrimaryWindowDisplayHost {
     /// `set_frame_shader_uniform` so `neomacs-frame-shader-set-uniform` can
     /// signal "no frame shader installed" instead of silently queueing.
     frame_shader_installed: AtomicBool,
+    /// The last frame shader installed via `set_frame_shader`, stored as the
+    /// COMPOSED module + language + uniform declarations the renderer
+    /// received. Re-sent on `display_reset` so the frame shader survives a
+    /// GPU device loss (it is Lisp-visible state, not a re-creatable cache).
+    last_frame_shader:
+        Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1985,6 +1991,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             None => None,
         };
         let installed = composed.is_some();
+        // Remember the composed triple so display_reset can re-install it
+        // after a device loss.
+        match self.last_frame_shader.lock() {
+            Ok(mut last) => *last = composed.clone(),
+            Err(poisoned) => *poisoned.into_inner() = composed.clone(),
+        }
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::FrameShaderSet { composed }),
             "failed to queue frame shader update",
@@ -2005,6 +2017,75 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             }),
             "failed to queue frame shader uniform update",
         )
+    }
+
+    /// The render thread lost its wgpu device and rebuilt the GPU stack
+    /// (`DisplayInputEvent::DisplayReset`). Every renderer-side media object
+    /// is gone; re-resolve what this host owns.
+    fn display_reset(&self) {
+        tracing::warn!("display reset: re-resolving GPU-resident media after device loss");
+
+        // Declarative surface and video objects died with the renderer's
+        // caches; drop the memos so the next redisplay walk re-creates them
+        // (same self-healing argument as the surface memo's FIFO eviction).
+        match self.resolved_videos.lock() {
+            Ok(mut cache) => cache.clear(),
+            Err(poisoned) => poisoned.into_inner().clear(),
+        }
+        match self.resolved_surfaces.lock() {
+            Ok(mut memo) => *memo = ResolvedSurfaceMemo::default(),
+            Err(poisoned) => *poisoned.into_inner() = ResolvedSurfaceMemo::default(),
+        }
+
+        // WebKit WPE views live outside the renderer (only their textures
+        // died) and would survive; destroy the old views so re-creation on
+        // the next walk does not leak living views.
+        let old_webkits: Vec<u32> = {
+            let mut cache = match self.resolved_webkits.lock() {
+                Ok(cache) => cache,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            cache.drain().map(|(_, webkit)| webkit.webkit_id).collect()
+        };
+        for id in old_webkits {
+            if let Err(error) = self.send_render_command(
+                RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
+                "failed to queue stale WebKit destroy after display reset",
+            ) {
+                tracing::warn!(id, %error, "display reset");
+            }
+        }
+
+        // The frame shader is Lisp-visible state, not a cache: re-install
+        // the exact composed module the renderer had.
+        let last_frame_shader = match self.last_frame_shader.lock() {
+            Ok(last) => last.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        if last_frame_shader.is_some()
+            && let Err(error) = self.send_render_command(
+                RenderCommand::Asset(AssetCommand::FrameShaderSet {
+                    composed: last_frame_shader,
+                }),
+                "failed to re-send frame shader after display reset",
+            )
+        {
+            tracing::warn!(%error, "display reset");
+        }
+
+        // Re-upload every known image under its existing id: published
+        // frames keep referencing those ids, so the renderer's kept CPU
+        // frame re-textures as soon as the decodes land.
+        self.image_catalog.invalidate_all();
+    }
+
+    fn debug_lose_device(&self) {
+        if let Err(error) = self.send_render_command(
+            RenderCommand::Asset(AssetCommand::DebugSimulateDeviceLoss),
+            "failed to queue simulated device loss",
+        ) {
+            tracing::warn!(%error, "debug_lose_device");
+        }
     }
 }
 
@@ -2777,6 +2858,7 @@ fn run_gui_evaluator_worker(
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
         frame_shader_installed: AtomicBool::new(false),
+        last_frame_shader: Mutex::new(None),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

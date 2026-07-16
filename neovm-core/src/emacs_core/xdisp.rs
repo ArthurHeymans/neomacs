@@ -5737,6 +5737,22 @@ pub(crate) fn builtin_neomacs_write_frame_snapshot(
     Ok(Value::T)
 }
 
+/// `(neomacs--debug-lose-device)` — hidden debug hook: ask the display to
+/// simulate a GPU device loss so the device-loss recovery path (GPU rebuild,
+/// media re-resolution, full redisplay) can be exercised against a healthy
+/// device. Returns t when a display host received the request, nil in batch
+/// mode. NeoMacs extension; never call from production code.
+pub(crate) fn builtin_neomacs_debug_lose_device(
+    eval: &mut super::eval::Context,
+    _args: Vec<Value>,
+) -> EvalResult {
+    let Some(host) = eval.display_host.as_deref() else {
+        return Ok(Value::NIL);
+    };
+    host.debug_lose_device();
+    Ok(Value::T)
+}
+
 // Tests
 // ---------------------------------------------------------------------------
 #[cfg(test)]

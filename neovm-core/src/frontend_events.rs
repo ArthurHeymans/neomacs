@@ -191,6 +191,9 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         },
         InputEvent::MenuBarClick { .. } => command(),
         InputEvent::Resize { .. } => special(PendingPolicy::Never, false, true),
+        // Same policy as Resize: not command input, serviced during waits so
+        // recovery does not sit behind a keystroke.
+        InputEvent::DisplayReset => special(PendingPolicy::Never, false, true),
         InputEvent::Focus { focused, .. } => {
             special(PendingPolicy::Focus { focused: *focused }, false, false)
         }
@@ -356,6 +359,13 @@ mod tests {
                 scale_factor: 1.0,
                 emacs_frame_id: 0,
             },
+            FrontendEventClass::LispSpecial,
+            PendingPolicy::Never,
+            false,
+            true,
+        );
+        assert_policy(
+            InputEvent::DisplayReset,
             FrontendEventClass::LispSpecial,
             PendingPolicy::Never,
             false,

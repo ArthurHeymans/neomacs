@@ -400,6 +400,7 @@ impl RenderApp {
         extra_line_spacing: f32,
         extra_letter_spacing: f32,
         cursor_only_hint: bool,
+        device_lost: &mut super::device_loss::DeviceLossDetector,
     ) -> Option<(
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
@@ -415,6 +416,7 @@ impl RenderApp {
             extra_letter_spacing,
             None,
             cursor_only_hint,
+            device_lost,
         )
     }
 
@@ -430,6 +432,7 @@ impl RenderApp {
         extra_letter_spacing: f32,
         output: Option<wgpu::SurfaceTexture>,
         cursor_only_hint: bool,
+        device_lost: &mut super::device_loss::DeviceLossDetector,
     ) -> Option<(
         wgpu::SurfaceTexture,
         crate::core::frame_glyphs::FrameGlyphBuffer,
@@ -471,10 +474,31 @@ impl RenderApp {
         } else {
             match native.surface.get_current_texture() {
                 wgpu::CurrentSurfaceTexture::Success(output)
-                | wgpu::CurrentSurfaceTexture::Suboptimal(output) => output,
-                wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
+                | wgpu::CurrentSurfaceTexture::Suboptimal(output) => {
+                    device_lost.record_surface_acquired();
+                    output
+                }
+                wgpu::CurrentSurfaceTexture::Lost => {
+                    // A one-off Lost is a swapchain hiccup; an unbroken
+                    // streak means the device itself is gone (TDR) and only
+                    // a full GPU rebuild brings frames back.
+                    if device_lost.record_surface_lost() {
+                        tracing::error!(
+                            "Surface for frame 0x{:x} lost {} times in a row: treating the wgpu device as lost",
+                            render.emacs_frame_id,
+                            super::device_loss::CONSECUTIVE_SURFACE_LOST_THRESHOLD
+                        );
+                    } else {
+                        tracing::info!(
+                            "Skipping redraw for frame 0x{:x}: surface lost",
+                            render.emacs_frame_id
+                        );
+                    }
+                    return None;
+                }
+                wgpu::CurrentSurfaceTexture::Outdated => {
                     tracing::info!(
-                        "Skipping redraw for frame 0x{:x}: surface lost or outdated",
+                        "Skipping redraw for frame 0x{:x}: surface outdated",
                         render.emacs_frame_id
                     );
                     return None;
@@ -1344,6 +1368,7 @@ impl RenderApp {
             self.extra_line_spacing,
             self.extra_letter_spacing,
             cursor_only_hint,
+            &mut self.device_lost,
         ) {
             if is_primary_frame {
                 let (w, h) = self

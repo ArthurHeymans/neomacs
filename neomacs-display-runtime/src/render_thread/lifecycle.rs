@@ -220,6 +220,14 @@ impl RenderApp {
             event_loop.exit();
             return;
         }
+        // Device-loss recovery (SHADER_SURFACES.md: user shader hang → TDR):
+        // latched by the wgpu device-lost callback, by a streak of
+        // consecutive surface-Lost acquisitions, or by the debug simulation
+        // command. Rebuild the whole GPU stack before doing anything else
+        // with it.
+        if self.device_lost.take() {
+            self.recover_from_device_loss(event_loop);
+        }
         self.refresh_monitor_snapshot(event_loop, true);
         if self.process_commands() {
             event_loop.exit();

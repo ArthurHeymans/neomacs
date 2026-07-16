@@ -2422,6 +2422,95 @@ impl GuiFrameWindowManager {
         });
     }
 
+    /// Drop every GPU-resident object owned by per-window render state after
+    /// the wgpu device was lost. CPU state — `current_frame`, row damage,
+    /// child frames, overlays, cursors, floating-webkit rects — is kept: the
+    /// next redraw re-renders the same scene on the rebuilt device.
+    pub(super) fn clear_gpu_resident_state(&mut self) {
+        self.for_each_top_level_window_mut(|window_state| {
+            let render = &mut window_state.render;
+            // Glyph atlas textures (recreated against the new device by
+            // populate_glyph_atlas / recreate_secondary_native_surfaces).
+            render.compositor.glyph_atlas = None;
+            // Retained cursorless scene: texture + view + bind group.
+            render.compositor.retained_static = None;
+            // Transition snapshots: offscreen_a/offscreen_b plus each
+            // crossfade/scroll-slide's old_texture/old_view/old_bind_group.
+            clear_frame_transition_textures(&mut render.compositor.transitions);
+            // Full-frame post shader composition target.
+            render.frame_post_src = None;
+            render.compositor.dirty = true;
+        });
+    }
+
+    /// Recreate the wgpu surface of every non-primary Active window on a new
+    /// instance/device after device-loss recovery (the primary window is
+    /// rebuilt by `init_wgpu` via `populate_primary_native`). Surfaces are
+    /// instance-owned, so old ones can never be configured against the new
+    /// device. Also repopulates the glyph atlases cleared by
+    /// `clear_gpu_resident_state`.
+    pub(super) fn recreate_secondary_native_surfaces(
+        &mut self,
+        instance: &wgpu::Instance,
+        device: &wgpu::Device,
+        adapter: &wgpu::Adapter,
+    ) {
+        let primary_key = self.primary_frame_key();
+        for (key, window_state) in self.windows.iter_mut() {
+            if *key == primary_key {
+                continue;
+            }
+            let FrameLifecycle::Active { native, .. } = &mut window_state.lifecycle else {
+                continue;
+            };
+            let surface = match instance.create_surface(native.window.clone()) {
+                Ok(surface) => surface,
+                Err(error) => {
+                    tracing::error!(
+                        ?key,
+                        ?error,
+                        "device-loss recovery: failed to recreate window surface"
+                    );
+                    continue;
+                }
+            };
+            let caps = surface.get_capabilities(adapter);
+            let format = caps
+                .formats
+                .iter()
+                .copied()
+                .find(|f| f.is_srgb())
+                .unwrap_or(caps.formats[0]);
+            let alpha_mode = if caps
+                .alpha_modes
+                .contains(&wgpu::CompositeAlphaMode::PreMultiplied)
+            {
+                wgpu::CompositeAlphaMode::PreMultiplied
+            } else {
+                caps.alpha_modes[0]
+            };
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format,
+                width: native.width,
+                height: native.height,
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode,
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            };
+            surface.configure(device, &config);
+            // Replacing the fields drops the old-instance surface in place.
+            native.surface = surface;
+            native.surface_config = config;
+            let scale_factor = native.scale_factor;
+            window_state
+                .render
+                .populate_glyph_atlas(device, scale_factor);
+            window_state.render.compositor.dirty = true;
+        }
+    }
+
     pub(super) fn apply_top_level_visual_cursor_animations(&mut self) {
         self.for_each_top_level_window_mut(|window_state| {
             window_state.render.apply_visual_cursor_animations();

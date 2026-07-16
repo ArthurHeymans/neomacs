@@ -5951,6 +5951,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(3),
     );
+    ctx.defsubr(
+        "neomacs--debug-lose-device",
+        super::xdisp::builtin_neomacs_debug_lose_device,
+        0,
+        Some(0),
+    );
     ctx.defsubr("record", |_ctx, args| builtin_record(args), 1, None);
     ctx.defsubr_1("recordp", builtin_recordp_1, 1);
     ctx.defsubr(

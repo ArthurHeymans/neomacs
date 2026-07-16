@@ -117,6 +117,12 @@ pub enum InputEvent {
     },
     /// Monitor configuration changed on the active terminal.
     MonitorsChanged { monitors: Vec<MonitorInfo> },
+    /// The wgpu device was lost (user shader hang → driver reset) and the
+    /// render thread rebuilt its GPU state from scratch. Every renderer-side
+    /// media object (decoded images, videos, webkit textures, shader
+    /// surfaces, the frame post shader) is gone; the evaluator must
+    /// re-resolve them and force a full redisplay.
+    DisplayReset,
     /// WebKit view title changed
     #[cfg(feature = "wpe-webkit")]
     WebKitTitleChanged { id: u32, title: String },
@@ -395,6 +401,11 @@ pub enum AssetCommand {
     ImageFree {
         id: u32,
     },
+    /// Debug-only: latch the device-lost flag so the full device-loss
+    /// recovery path (GPU rebuild + `InputEvent::DisplayReset`) runs against
+    /// a healthy device. Sent by the hidden `neomacs--debug-lose-device`
+    /// builtin; never used in production paths.
+    DebugSimulateDeviceLoss,
     /// Create a WebKit view
     WebKitCreate {
         id: u32,
@@ -953,6 +964,7 @@ impl RenderComms {
                 | InputEvent::WindowClose { .. }
                 | InputEvent::WindowFocus { .. }
                 | InputEvent::MonitorsChanged { .. }
+                | InputEvent::DisplayReset
         )
     }
 
@@ -967,6 +979,7 @@ impl RenderComms {
             InputEvent::WindowClose { .. } => "window-close",
             InputEvent::WindowFocus { .. } => "window-focus",
             InputEvent::MonitorsChanged { .. } => "monitors-changed",
+            InputEvent::DisplayReset => "display-reset",
             #[cfg(feature = "wpe-webkit")]
             InputEvent::WebKitTitleChanged { .. } => "webkit-title-changed",
             #[cfg(feature = "wpe-webkit")]

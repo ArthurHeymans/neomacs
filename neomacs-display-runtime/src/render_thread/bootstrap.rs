@@ -79,6 +79,22 @@ impl RenderApp {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
+        // Device-loss detection (doc/display-engine/SHADER_SURFACES.md): a
+        // user shader with an infinite loop can hang the GPU; the driver
+        // resets (TDR) and this device is lost. Latch the loss and let
+        // handle_about_to_wait rebuild the GPU state. The callback may fire
+        // on any thread from inside wgpu's maintain paths. `Destroyed` is an
+        // intentional teardown (shutdown or a recovery rebuild), never a
+        // loss.
+        let lost_flag = self.device_lost.shared_flag();
+        device.set_device_lost_callback(move |reason, message| {
+            if matches!(reason, wgpu::DeviceLostReason::Destroyed) {
+                return;
+            }
+            tracing::error!(?reason, message, "wgpu device lost");
+            lost_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
         let phys = window.inner_size();
         let raw_scale_factor = window.scale_factor();
         let effective_scale = super::state::effective_window_scale_factor(raw_scale_factor);
@@ -208,8 +224,11 @@ impl RenderApp {
             self.sync_frame_chrome_assets(frame_chrome);
         }
 
+        // The WPE backend is independent of wgpu; keep the existing backend
+        // (and its live views) when init_wgpu re-runs for device-loss
+        // recovery.
         #[cfg(feature = "wpe-webkit")]
-        {
+        if self.wpe_backend.is_none() {
             use crate::backend::wgpu::get_render_node_from_adapter_info;
 
             let render_node = get_render_node_from_adapter_info(&adapter_info)
@@ -232,6 +251,93 @@ impl RenderApp {
 
         #[cfg(feature = "video")]
         tracing::info!("Video cache initialized");
+    }
+
+    /// Rebuild the entire GPU stack after the wgpu device was lost (a user
+    /// shader hang / TDR, or a simulated loss via
+    /// `AssetCommand::DebugSimulateDeviceLoss`).
+    ///
+    /// Everything renderer-owned (pipelines and the image/video/webkit/
+    /// shader-surface caches) dies with the old device and is recreated
+    /// empty; each window's committed `current_frame` is CPU data and is
+    /// kept, so the next redraw re-renders the same scene (media quads stay
+    /// blank for a moment — the evaluator re-resolves media after receiving
+    /// `InputEvent::DisplayReset`).
+    pub(super) fn recover_from_device_loss(&mut self, event_loop: &ActiveEventLoop) {
+        tracing::error!(
+            "wgpu device lost — rebuilding GPU state and asking the evaluator to re-resolve media"
+        );
+
+        // Renderer first: pipelines and every media cache (image, video,
+        // webkit, shader surfaces, frame post shader) hold old-device
+        // objects.
+        self.renderer = None;
+
+        // Per-window GPU-resident compositor state. `current_frame` /
+        // `current_row_damage` (CPU glyph data) are deliberately kept.
+        self.frame_windows.clear_gpu_resident_state();
+
+        // Toolbar icon ids point into the dropped renderer's image cache;
+        // clear them so sync_frame_chrome_assets (run by init_wgpu below)
+        // re-uploads the icons into the new renderer.
+        self.toolbar.icon_textures.clear();
+
+        // Old instance/adapter/device/queue handles. The old per-window
+        // surfaces still hold internal references; they die as they are
+        // replaced below.
+        self.gpu = None;
+
+        let Some(primary_window) = self
+            .frame_windows
+            .primary_window()
+            .and_then(|window_state| window_state.window())
+            .cloned()
+        else {
+            tracing::error!(
+                "device-loss recovery: no active primary window, cannot rebuild wgpu"
+            );
+            return;
+        };
+
+        // New instance/adapter/device/queue + primary surface + renderer;
+        // also re-registers the device-lost callback and repopulates the
+        // primary glyph atlas (cleared above). populate_primary_native is
+        // replace-safe: it re-keys the same winit window id and preserves
+        // the Active lifecycle's IME/mouse state.
+        self.init_wgpu(event_loop, primary_window);
+
+        if self.gpu.is_none() {
+            // The driver may still be resetting. Leave the latch set so the
+            // next event-loop pass retries; no explicit wake, so this cannot
+            // busy-spin.
+            tracing::error!(
+                "device-loss recovery: wgpu re-initialization failed; will retry on the next wake"
+            );
+            self.device_lost.mark_lost_now();
+            return;
+        }
+
+        // Secondary top-level windows: their surfaces belong to the dropped
+        // instance and can never be configured against the new device;
+        // recreate them on the new instance and rebuild their glyph atlases.
+        if let Some(gpu) = self.gpu.as_ref() {
+            self.frame_windows.recreate_secondary_native_surfaces(
+                &gpu.instance,
+                &gpu.device,
+                &gpu.adapter,
+            );
+        }
+
+        // Everything re-renders from the kept CPU frames on the next pass.
+        self.frame_windows.mark_top_level_dirty();
+        self.frame_windows
+            .for_each_top_level_window(|window_state| window_state.request_redraw());
+
+        // Tell the evaluator: it clears its media memos (declarative
+        // surfaces/videos/webkits re-create on the next redisplay walk),
+        // re-sends the frame shader, re-uploads images, and forces a full
+        // redisplay.
+        self.comms.send_input(InputEvent::DisplayReset);
     }
 }
 

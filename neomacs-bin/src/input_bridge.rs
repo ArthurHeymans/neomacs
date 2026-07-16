@@ -247,6 +247,9 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MonitorsChanged { monitors } => Some(KbInputEvent::MonitorsChanged {
             monitors: convert_monitor_infos(monitors),
         }),
+        // GPU device lost and rebuilt: the evaluator re-resolves media and
+        // forces a full redisplay.
+        DisplayEvent::DisplayReset => Some(KbInputEvent::DisplayReset),
         // Ignore other events (WebKit title changes, etc.)
         _ => None,
     }
