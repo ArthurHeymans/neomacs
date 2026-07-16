@@ -214,7 +214,7 @@ in vec2)'), `:shader' (WGSL) otherwise."
 ;; `compose_surface_glsl' in neomacs-renderer-wgpu/src/shader_surface.rs
 ;; and must be updated in lockstep when the generated prelude changes.
 
-(defconst neomacs-shader-playground--wgsl-prelude-fixed-lines (+ 18 12)
+(defconst neomacs-shader-playground--wgsl-prelude-fixed-lines (+ 20 12)
   "Fixed WGSL prelude lines around the per-uniform accessors.
 18 lines of NeoUniforms/channel declarations before the accessors, plus
 12 lines of vertex/fragment entry points ending at the
