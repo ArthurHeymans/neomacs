@@ -3104,10 +3104,11 @@ fn display_spec_head_starts_list(car: Value) -> bool {
     }
     const SINGLE_SPEC_HEADS: &[&str] = &[
         "image",
-        // `video`/`webkit` are neomacs media-replacement extensions, classified
-        // as single specs like `image` (GNU has no such heads).
+        // `video`/`webkit`/`surface` are neomacs media-replacement extensions,
+        // classified as single specs like `image` (GNU has no such heads).
         "video",
         "webkit",
+        "surface",
         "xwidget",
         "space",
         "when",
@@ -3159,6 +3160,7 @@ fn display_single_spec_replacing_p(spec: Value, frame_window_p: bool) -> bool {
             || car.is_symbol_named("xwidget")
             || car.is_symbol_named("video")
             || car.is_symbol_named("webkit")
+            || car.is_symbol_named("surface")
         {
             return frame_window_p;
         }

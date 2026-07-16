@@ -578,6 +578,7 @@ const SINGLE_DISPLAY_SPEC_HEADS: &[&str] = &[
     // NeoMacs-only convenience heads handled as single specs.
     "video",
     "webkit",
+    "surface",
 ];
 
 /// Mirror of GNU `handle_display_spec`'s list-of-specs test (src/xdisp.c):

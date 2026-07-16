@@ -9133,6 +9133,54 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
 }
 
 #[test]
+fn layout_frame_rust_emits_inline_surface_glyphs_for_display_surface_specs() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aSb");
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(1));
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::symbol("surface"),
+                Value::keyword("id"),
+                Value::fixnum(4242),
+                Value::keyword("width"),
+                Value::fixnum(80),
+                Value::keyword("height"),
+                Value::fixnum(45),
+            ]),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-inline-surface", 320, 120, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let surface = state.surfaces.first().expect("inline surface glyph");
+    assert_eq!(surface.surface_id.get(), 4242);
+    assert_eq!(surface.width, 80.0);
+    assert_eq!(surface.height, 45.0);
+    let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
+    let slot_id = surface.slot_id.expect("surface slot id");
+    assert_eq!(i64::from(slot_id.col), replacement.col);
+}
+
+#[test]
 fn layout_frame_rust_captures_cursor_inside_hscroll_skipped_text_without_rescan() {
     let mut eval = Context::new();
     let buf_id = eval
