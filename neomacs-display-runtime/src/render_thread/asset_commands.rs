@@ -447,12 +447,13 @@ impl RenderApp {
             } => {
                 if let Some(ref mut renderer) = self.renderer {
                     let result = match &source {
-                        crate::thread_comm::SurfaceSource::Wgsl {
+                        crate::thread_comm::SurfaceSource::Shader {
+                            language,
                             source,
                             uniforms,
                             channel0,
                         } => renderer.create_shader_surface(
-                            id, source, uniforms, width, height, animate, *channel0,
+                            id, *language, source, uniforms, width, height, animate, *channel0,
                         ),
                         crate::thread_comm::SurfaceSource::Pixels { data } => {
                             renderer.create_pixel_surface(id, data, width, height)
@@ -493,8 +494,8 @@ impl RenderApp {
             AssetCommand::FrameShaderSet { composed } => {
                 if let Some(ref mut renderer) = self.renderer {
                     match composed {
-                        Some(source) => {
-                            if let Err(err) = renderer.set_frame_post(&source) {
+                        Some((source, language)) => {
+                            if let Err(err) = renderer.set_frame_post(language, &source) {
                                 tracing::warn!("frame shader install failed: {err}");
                             }
                         }

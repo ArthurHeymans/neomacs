@@ -42,7 +42,10 @@ use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
     build_render_event_loop, run_render_loop_current_thread,
 };
-use neomacs_display_runtime::shader_surface::{SurfaceUniformInit, validate_surface_wgsl};
+use neomacs_display_runtime::shader_surface::{
+    SurfaceShaderLanguage as RendererShaderLanguage, SurfaceUniformInit, validate_surface_glsl,
+    validate_surface_wgsl,
+};
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
     InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, SurfaceSource,
@@ -61,8 +64,9 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
     ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
-    ShaderSurfaceContent, ShaderSurfaceCreateRequest, SurfaceResolveRequest, VideoResolveRequest,
-    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+    ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
+    SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
+    WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -949,6 +953,26 @@ fn next_host_surface_id() -> u32 {
     HOST_SURFACE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
+fn renderer_shader_language(language: ShaderSurfaceLanguage) -> RendererShaderLanguage {
+    match language {
+        ShaderSurfaceLanguage::Wgsl => RendererShaderLanguage::Wgsl,
+        ShaderSurfaceLanguage::Glsl => RendererShaderLanguage::Glsl,
+    }
+}
+
+/// Validate + compose a user surface shader in either dialect on the Lisp
+/// thread (errors become Lisp signals); returns the composed module source.
+fn validate_surface_shader(
+    language: ShaderSurfaceLanguage,
+    source: &str,
+    uniforms: &[(String, u8)],
+) -> Result<String, String> {
+    match language {
+        ShaderSurfaceLanguage::Wgsl => validate_surface_wgsl(source, uniforms),
+        ShaderSurfaceLanguage::Glsl => validate_surface_glsl(source, uniforms),
+    }
+}
+
 fn read_primary_window_size(shared: &SharedPrimaryWindowSize) -> PrimaryWindowSize {
     match shared.lock() {
         Ok(state) => *state,
@@ -1754,13 +1778,14 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             .iter()
             .map(|u| (u.name.clone(), u.components))
             .collect();
-        let resolved = match validate_surface_wgsl(&request.source, &names) {
+        let resolved = match validate_surface_shader(request.language, &request.source, &names) {
             Ok(_) => {
                 let surface_id = next_host_surface_id();
                 self.send_render_command(
                     RenderCommand::Asset(AssetCommand::SurfaceCreate {
                         id: surface_id,
-                        source: SurfaceSource::Wgsl {
+                        source: SurfaceSource::Shader {
+                            language: renderer_shader_language(request.language),
                             source: request.source.clone(),
                             uniforms,
                             channel0: request.channel0,
@@ -1835,7 +1860,8 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn create_shader_surface(&self, request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
         let source = match request.content {
-            ShaderSurfaceContent::Wgsl {
+            ShaderSurfaceContent::Shader {
+                language,
                 source,
                 uniforms,
                 channel0,
@@ -1848,14 +1874,15 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                         components: u.components,
                     })
                     .collect();
-                // Validate synchronously on the Lisp thread so WGSL compile
-                // errors become Lisp errors with naga diagnostics.
+                // Validate synchronously on the Lisp thread so compile errors
+                // become Lisp errors with naga diagnostics.
                 let names: Vec<(String, u8)> = uniforms
                     .iter()
                     .map(|u| (u.name.clone(), u.components))
                     .collect();
-                validate_surface_wgsl(&source, &names)?;
-                SurfaceSource::Wgsl {
+                validate_surface_shader(language, &source, &names)?;
+                SurfaceSource::Shader {
+                    language: renderer_shader_language(language),
                     source,
                     uniforms,
                     channel0,
@@ -1900,12 +1927,18 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
-    fn set_frame_shader(&self, source: Option<String>) -> Result<(), String> {
+    fn set_frame_shader(
+        &self,
+        source: Option<(String, ShaderSurfaceLanguage)>,
+    ) -> Result<(), String> {
         let composed = match source {
             // Validate + compose on the Lisp thread so compile errors signal
             // synchronously; the renderer receives the finished module. No
             // custom uniforms in v1 — iTime/iResolution/iMouse only.
-            Some(source) => Some(validate_surface_wgsl(&source, &[])?),
+            Some((source, language)) => Some((
+                validate_surface_shader(language, &source, &[])?,
+                renderer_shader_language(language),
+            )),
             None => None,
         };
         self.send_render_command(

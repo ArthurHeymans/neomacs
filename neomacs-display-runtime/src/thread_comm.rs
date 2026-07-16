@@ -331,11 +331,13 @@ impl MediaSource {
 /// (`doc/display-engine/SHADER_SURFACES.md`).
 #[derive(Debug)]
 pub enum SurfaceSource {
-    /// User WGSL defining `fn mainImage(fragCoord: vec2<f32>) -> vec4<f32>`;
-    /// the render thread composes it with the generated prelude. `uniforms`
-    /// carries the named user uniforms in slot order with initial values;
-    /// `channel0` optionally names another surface sampled as `iChannel0`.
-    Wgsl {
+    /// User shader source (WGSL or Shadertoy-dialect GLSL) defining
+    /// `mainImage`; the render thread composes it with the generated prelude.
+    /// `uniforms` carries the named user uniforms in slot order with initial
+    /// values; `channel0` optionally names another surface sampled as
+    /// `iChannel0`.
+    Shader {
+        language: neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage,
         source: String,
         uniforms: Vec<neomacs_renderer_wgpu::SurfaceUniformInit>,
         channel0: Option<u32>,
@@ -496,10 +498,10 @@ pub enum AssetCommand {
     SurfaceFree {
         id: u32,
     },
-    /// Install (Some, already composed+validated WGSL) or remove (None) the
-    /// full-frame post shader
+    /// Install (Some, already composed+validated source in the given
+    /// language) or remove (None) the full-frame post shader
     FrameShaderSet {
-        composed: Option<String>,
+        composed: Option<(String, neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage)>,
     },
     /// Create video player
     VideoCreate {

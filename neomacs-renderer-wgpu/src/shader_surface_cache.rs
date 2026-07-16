@@ -16,9 +16,89 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::shader_surface::{
-    SURFACE_UNIFORM_BYTES, SURFACE_USER_UNIFORM_SLOTS, SurfaceUniformInit, compose_surface_wgsl,
-    uniform_accessor_name,
+    SURFACE_UNIFORM_BYTES, SURFACE_USER_UNIFORM_SLOTS, SurfaceShaderLanguage, SurfaceUniformInit,
+    compose_surface_glsl, compose_surface_wgsl, uniform_accessor_name,
 };
+
+/// Build the render pipeline for a composed surface shader in either dialect.
+/// GLSL modules carry only the fragment stage (entry `main`), so the vertex
+/// stage comes from a minimal WGSL fullscreen-triangle module. Wrapped in a
+/// validation error scope: the host already naga-validated the same source,
+/// so a failure here is device-specific and reported, not fatal.
+pub(crate) fn build_surface_pipeline(
+    device: &wgpu::Device,
+    uniform_layout: &wgpu::BindGroupLayout,
+    target_format: wgpu::TextureFormat,
+    language: SurfaceShaderLanguage,
+    composed_source: &str,
+    label: &str,
+) -> Result<wgpu::RenderPipeline, String> {
+    const VS_WGSL: &str = "@vertex\n\
+        fn neo_vs_main(@builtin(vertex_index) neo_vi: u32) -> @builtin(position) vec4<f32> {\n\
+            var neo_pos = array<vec2<f32>, 3>(\n\
+                vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));\n\
+            return vec4<f32>(neo_pos[neo_vi], 0.0, 1.0);\n\
+        }\n";
+    let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let (vs_module, fs_module, fs_entry) = match language {
+        SurfaceShaderLanguage::Wgsl => {
+            let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(label),
+                source: wgpu::ShaderSource::Wgsl(composed_source.into()),
+            });
+            (module.clone(), module, "neo_fs_main")
+        }
+        SurfaceShaderLanguage::Glsl => {
+            let vs = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Surface Vertex (GLSL companion)"),
+                source: wgpu::ShaderSource::Wgsl(VS_WGSL.into()),
+            });
+            let fs = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(label),
+                source: wgpu::ShaderSource::Glsl {
+                    shader: composed_source.into(),
+                    stage: naga::ShaderStage::Fragment,
+                    defines: Default::default(),
+                },
+            });
+            (vs, fs, "main")
+        }
+    };
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some(label),
+        bind_group_layouts: &[Some(uniform_layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &vs_module,
+            entry_point: Some("neo_vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &fs_module,
+            entry_point: Some(fs_entry),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: target_format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    if let Some(error) = pollster::block_on(error_scope.pop()) {
+        return Err(format!("{label}: pipeline rejected: {error}"));
+    }
+    Ok(pipeline)
+}
 
 /// Largest allowed surface edge in physical pixels (matches
 /// `ImageCache::MAX_TEXTURE_SIZE`).
@@ -202,6 +282,7 @@ impl ShaderSurfaceCache {
         composite_sampler: &wgpu::Sampler,
         target_format: wgpu::TextureFormat,
         id: u32,
+        language: SurfaceShaderLanguage,
         user_source: &str,
         uniforms: &[SurfaceUniformInit],
         width: u32,
@@ -215,46 +296,19 @@ impl ShaderSurfaceCache {
             .iter()
             .map(|u| (u.name.clone(), u.components))
             .collect();
-        let source = compose_surface_wgsl(user_source, &names);
-
-        let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Shader Surface Module"),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Shader Surface Pipeline Layout"),
-            bind_group_layouts: &[Some(&self.uniform_bind_group_layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Shader Surface Pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("neo_vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("neo_fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-        if let Some(error) = pollster::block_on(error_scope.pop()) {
-            return Err(format!("shader surface {id}: pipeline rejected: {error}"));
-        }
+        let source = match language {
+            SurfaceShaderLanguage::Wgsl => compose_surface_wgsl(user_source, &names),
+            SurfaceShaderLanguage::Glsl => compose_surface_glsl(user_source, &names),
+        };
+        let pipeline = build_surface_pipeline(
+            device,
+            &self.uniform_bind_group_layout,
+            target_format,
+            language,
+            &source,
+            "Shader Surface Pipeline",
+        )
+        .map_err(|err| format!("shader surface {id}: {err}"))?;
 
         let (texture, view) = Self::make_texture(device, width_px, height_px, target_format, true);
         let composite_bind_group =

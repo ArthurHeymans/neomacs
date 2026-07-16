@@ -7,8 +7,8 @@
 
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{
-    SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
-    WebKitResolveSource,
+    ShaderSurfaceLanguage, SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image::ImageSpecKey;
 use neovm_core::emacs_core::image_catalog::{
@@ -48,6 +48,7 @@ enum DisplayMediaKey {
     Xwidget,
     Id,
     Shader,
+    Glsl,
     Uniforms,
     Animate,
     Channel0,
@@ -504,6 +505,7 @@ pub(crate) fn parse_display_surface_source_layout(
     }
 
     let mut source = None;
+    let mut language = ShaderSurfaceLanguage::Wgsl;
     let mut uniforms = Vec::new();
     let mut width = fallback_width.max(1.0);
     let mut height = fallback_height.max(1.0);
@@ -518,6 +520,13 @@ pub(crate) fn parse_display_surface_source_layout(
                 source = value
                     .as_lisp_string()
                     .and_then(|s| s.as_utf8_str().map(str::to_owned));
+                language = ShaderSurfaceLanguage::Wgsl;
+            }
+            Some(DisplayMediaKey::Glsl) => {
+                source = value
+                    .as_lisp_string()
+                    .and_then(|s| s.as_utf8_str().map(str::to_owned));
+                language = ShaderSurfaceLanguage::Glsl;
             }
             Some(DisplayMediaKey::Uniforms) => {
                 if let Some(entries) = list_to_vec(&value) {
@@ -547,6 +556,7 @@ pub(crate) fn parse_display_surface_source_layout(
 
     Some(DisplaySurfaceSourceLayout {
         request: SurfaceResolveRequest {
+            language,
             source: source?,
             uniforms,
             width: width.round().max(1.0) as u32,

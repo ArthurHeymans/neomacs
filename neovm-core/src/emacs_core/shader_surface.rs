@@ -7,7 +7,8 @@
 
 use super::error::{EvalResult, signal};
 use super::eval::{
-    Context, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceUniformInit,
+    Context, ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
+    ShaderSurfaceUniformInit,
 };
 use super::value::{Value, list_to_vec};
 
@@ -115,11 +116,23 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
     }
     let width = dimension(plist_get(&args, ":width"), ":width")?;
     let height = dimension(plist_get(&args, ":height"), ":height")?;
-    let shader = plist_get(&args, ":shader").filter(|value| !value.is_nil());
+    let wgsl = plist_get(&args, ":shader").filter(|value| !value.is_nil());
+    let glsl = plist_get(&args, ":glsl").filter(|value| !value.is_nil());
     let pixels = plist_get(&args, ":pixels").filter(|value| !value.is_nil());
     let animate = plist_get(&args, ":animate")
         .map(|value| !value.is_nil())
         .unwrap_or(true);
+    if wgsl.is_some() && glsl.is_some() {
+        return Err(surface_error(
+            "neomacs-surface-create: :shader (WGSL) and :glsl are mutually exclusive",
+        ));
+    }
+    let language = if glsl.is_some() {
+        ShaderSurfaceLanguage::Glsl
+    } else {
+        ShaderSurfaceLanguage::Wgsl
+    };
+    let shader = wgsl.or(glsl);
 
     let content = match (shader, pixels) {
         (Some(shader), None) => {
@@ -127,7 +140,7 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
                 .as_lisp_string()
                 .and_then(|s| s.as_utf8_str().map(str::to_owned))
                 .ok_or_else(|| {
-                    surface_error("neomacs-surface-create: :shader must be a string")
+                    surface_error("neomacs-surface-create: :shader/:glsl must be a string")
                 })?;
             let mut uniforms = Vec::new();
             if let Some(list) = plist_get(&args, ":uniforms").filter(|value| !value.is_nil()) {
@@ -152,7 +165,8 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
                 ),
                 None => None,
             };
-            ShaderSurfaceContent::Wgsl {
+            ShaderSurfaceContent::Shader {
+                language,
                 source,
                 uniforms,
                 channel0,
@@ -178,17 +192,17 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
         }
         (Some(_), Some(_)) => {
             return Err(surface_error(
-                "neomacs-surface-create: :shader and :pixels are mutually exclusive",
+                "neomacs-surface-create: :shader/:glsl and :pixels are mutually exclusive",
             ));
         }
         (None, None) => {
             return Err(surface_error(
-                "neomacs-surface-create: one of :shader or :pixels is required",
+                "neomacs-surface-create: one of :shader, :glsl, or :pixels is required",
             ));
         }
     };
 
-    let animate = animate && matches!(content, ShaderSurfaceContent::Wgsl { .. });
+    let animate = animate && matches!(content, ShaderSurfaceContent::Shader { .. });
     let request = ShaderSurfaceCreateRequest {
         content,
         width,
@@ -246,25 +260,38 @@ pub(crate) fn builtin_neomacs_surface_available_p(
     Ok(Value::bool_val(eval.display_host.is_some()))
 }
 
-/// (neomacs-frame-shader SOURCE)
+/// (neomacs-frame-shader SOURCE &optional LANGUAGE)
 ///
-/// Install a full-frame post shader: SOURCE is WGSL defining `mainImage`,
-/// applied over the whole rendered frame (the frame is `iChannel0`; note the
-/// frame texture is top-left origin while fragCoord is y-up, so the pixel
-/// under fragCoord is at uv `(fragCoord.x, iResolution.y - fragCoord.y) /
-/// iResolution.xy`). nil removes the shader. Signals on WGSL compile errors.
+/// Install a full-frame post shader: SOURCE defines `mainImage`, applied
+/// over the whole rendered frame (the frame is `iChannel0`; note the frame
+/// texture is top-left origin while fragCoord is y-up, so the pixel under
+/// fragCoord is at uv `(fragCoord.x, iResolution.y - fragCoord.y) /
+/// iResolution.xy`). LANGUAGE is `wgsl` (default) or `glsl`
+/// (Shadertoy-dialect). nil SOURCE removes the shader. Signals on compile
+/// errors.
 pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    let language = match args.get(1).copied().filter(|value| !value.is_nil()) {
+        None => ShaderSurfaceLanguage::Wgsl,
+        Some(value) if value.is_symbol_named("wgsl") => ShaderSurfaceLanguage::Wgsl,
+        Some(value) if value.is_symbol_named("glsl") => ShaderSurfaceLanguage::Glsl,
+        Some(_) => {
+            return Err(surface_error(
+                "neomacs-frame-shader: LANGUAGE must be `wgsl' or `glsl'",
+            ));
+        }
+    };
     let source = if args[0].is_nil() {
         None
     } else {
-        Some(
+        Some((
             args[0]
                 .as_lisp_string()
                 .and_then(|s| s.as_utf8_str().map(str::to_owned))
                 .ok_or_else(|| {
                     surface_error("neomacs-frame-shader: SOURCE must be a string or nil")
                 })?,
-        )
+            language,
+        ))
     };
     let host = eval.display_host.as_ref().ok_or_else(|| {
         surface_error("neomacs-frame-shader: no GUI display host in this session")

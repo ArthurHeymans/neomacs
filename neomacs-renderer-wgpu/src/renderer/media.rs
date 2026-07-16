@@ -277,6 +277,7 @@ impl WgpuRenderer {
     pub fn create_shader_surface(
         &mut self,
         id: u32,
+        language: crate::shader_surface::SurfaceShaderLanguage,
         user_source: &str,
         uniforms: &[crate::shader_surface::SurfaceUniformInit],
         width: u32,
@@ -292,6 +293,7 @@ impl WgpuRenderer {
             sampler,
             self.surface_format,
             id,
+            language,
             user_source,
             uniforms,
             width,
@@ -345,10 +347,15 @@ impl WgpuRenderer {
     /// Install (or replace) the full-frame post shader from an
     /// already-composed WGSL module (the host validates + composes on the
     /// Lisp thread).
-    pub fn set_frame_post(&mut self, composed_source: &str) -> Result<(), String> {
+    pub fn set_frame_post(
+        &mut self,
+        language: crate::shader_surface::SurfaceShaderLanguage,
+        composed_source: &str,
+    ) -> Result<(), String> {
         let post = crate::frame_post::FramePost::new(
             &self.device,
             self.surface_format,
+            language,
             composed_source,
         )?;
         self.frame_post = Some(post);

@@ -126,6 +126,16 @@ Returns an alist suitable for `neomacs-surface-create' :uniforms."
          (message "shader-playground: ignoring malformed uniforms line")
          nil)))))
 
+(defun neomacs-shader-playground--language ()
+  "Return the shader language keyword: `:glsl' when a `// language: glsl'
+header line is present (Shadertoy-dialect GLSL, `void mainImage(out vec4,
+in vec2)'), `:shader' (WGSL) otherwise."
+  (save-excursion
+    (goto-char (point-min))
+    (if (re-search-forward "^// *language: *glsl *$" nil t)
+        :glsl
+      :shader)))
+
 (defun neomacs-shader-playground--show (id width height)
   "Show surface ID at WIDTH x HEIGHT in the preview window, freeing the old one."
   (let ((old neomacs-shader-playground--surface)
@@ -187,7 +197,8 @@ popping the error buffer."
          (height (cdr neomacs-shader-playground-size)))
     (condition-case err
         (let ((id (apply #'neomacs-surface-create
-                         :shader source :width width :height height :animate t
+                         (neomacs-shader-playground--language) source
+                         :width width :height height :animate t
                          (and uniforms (list :uniforms uniforms)))))
           (neomacs-shader-playground--show id width height)
           (neomacs-shader-playground--hide-errors)

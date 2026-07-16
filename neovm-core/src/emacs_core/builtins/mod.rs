@@ -1402,7 +1402,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         "neomacs-frame-shader",
         super::shader_surface::builtin_neomacs_frame_shader,
         1,
-        Some(1),
+        Some(2),
     );
     ctx.defsubr(
         "make-xwidget",

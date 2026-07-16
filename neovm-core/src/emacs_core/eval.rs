@@ -1517,11 +1517,20 @@ pub struct ShaderSurfaceUniformInit {
     pub components: u8,
 }
 
-/// Content of a shader surface: user WGSL rendered by the compositor, or raw
-/// RGBA8 pixels uploaded once.
+/// Shader source dialect: native WGSL, or Shadertoy-dialect GLSL
+/// (`void mainImage(out vec4 fragColor, in vec2 fragCoord)`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ShaderSurfaceLanguage {
+    Wgsl,
+    Glsl,
+}
+
+/// Content of a shader surface: user shader source rendered by the
+/// compositor, or raw RGBA8 pixels uploaded once.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ShaderSurfaceContent {
-    Wgsl {
+    Shader {
+        language: ShaderSurfaceLanguage,
         source: String,
         uniforms: Vec<ShaderSurfaceUniformInit>,
         /// Another surface sampled as `iChannel0` in the shader.
@@ -1547,6 +1556,7 @@ pub struct ShaderSurfaceCreateRequest {
 /// `Hash`/`Eq` for the host memo.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SurfaceResolveRequest {
+    pub language: ShaderSurfaceLanguage,
     pub source: String,
     /// `(name, value bits, component count)` in slot order.
     pub uniforms: Vec<(String, [u32; 4], u8)>,
@@ -1724,9 +1734,12 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
-    /// Install (Some WGSL, validated synchronously) or remove (None) the
+    /// Install (Some source, validated synchronously) or remove (None) the
     /// full-frame post shader.
-    fn set_frame_shader(&self, _source: Option<String>) -> Result<(), String> {
+    fn set_frame_shader(
+        &self,
+        _source: Option<(String, ShaderSurfaceLanguage)>,
+    ) -> Result<(), String> {
         Err("frame shaders are unsupported by this display host".to_owned())
     }
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {

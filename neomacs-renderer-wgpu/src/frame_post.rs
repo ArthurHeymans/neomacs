@@ -16,7 +16,8 @@
 
 use std::time::Instant;
 
-use crate::shader_surface::SURFACE_UNIFORM_BYTES;
+use crate::shader_surface::{SURFACE_UNIFORM_BYTES, SurfaceShaderLanguage};
+use crate::shader_surface_cache::build_surface_pipeline;
 
 pub struct FramePost {
     pipeline: wgpu::RenderPipeline,
@@ -36,6 +37,7 @@ impl FramePost {
     pub fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
+        language: SurfaceShaderLanguage,
         composed_source: &str,
     ) -> Result<Self, String> {
         let bind_group_layout =
@@ -71,44 +73,15 @@ impl FramePost {
                 ],
             });
 
-        let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Frame Post Module"),
-            source: wgpu::ShaderSource::Wgsl(composed_source.into()),
-        });
-        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Frame Post Pipeline Layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
-            immediate_size: 0,
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Frame Post Pipeline"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("neo_vs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("neo_fs_main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
-        if let Some(error) = pollster::block_on(error_scope.pop()) {
-            return Err(format!("frame shader: pipeline rejected: {error}"));
-        }
+        let pipeline = build_surface_pipeline(
+            device,
+            &bind_group_layout,
+            format,
+            language,
+            composed_source,
+            "Frame Post Pipeline",
+        )
+        .map_err(|err| format!("frame shader: {err}"))?;
 
         let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Frame Post Uniform Buffer"),

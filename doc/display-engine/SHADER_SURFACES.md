@@ -112,6 +112,45 @@ samples/blends it exactly like a decoded PNG. Alpha < 1 composites over the
 buffer background (image pipeline alpha blend). Shadertoy ports that output
 display-space color need `pow(c, vec3(2.2))` — documented, not hidden.
 
+### GLSL (Shadertoy dialect)
+
+`:glsl SOURCE` (imperative and declarative) accepts Shadertoy-style GLSL —
+`void mainImage(out vec4 fragColor, in vec2 fragCoord)` reading bare
+`iTime`, `iResolution` (vec3), `iMouse`, `iFrame` (int), `iTimeDelta`,
+`texture(iChannel0, uv)` — most Shadertoy/Ghostty shaders paste unmodified.
+The GLSL prelude (`compose_surface_glsl`) declares a std140 uniform block
+byte-identical to the WGSL `NeoUniforms`, separate texture/sampler bindings
+with `#define iChannel0 sampler2D(iChannel0Tex, iChannel0Sampler)` (naga's
+glsl-in supports the Vulkan combined constructor), per-uniform accessor
+functions, and a `main()` footer calling `mainImage` with y-up fragCoord.
+The pipeline pairs the GLSL fragment module with a minimal WGSL vertex
+module (`build_surface_pipeline`). Deliberately **no** `mainImage`
+prototype in the prelude: with one, naga validates a call to a
+never-defined function (silently blank surface); without it, a missing
+`mainImage` is a synchronous Lisp error. The playground selects GLSL with a
+`// language: glsl` header line.
+
+## Full-frame post shader
+
+```elisp
+(neomacs-frame-shader "fn mainImage(...) { ... }")        ; WGSL
+(neomacs-frame-shader shadertoy-source 'glsl)              ; Shadertoy GLSL
+(neomacs-frame-shader nil)                                 ; remove
+```
+
+The Ghostty / Windows Terminal `custom-shader` feature: the shader runs
+over the whole composited frame before present, with the frame bound as
+`iChannel0` and `iTime`/`iResolution`/`iMouse` live (mouse in physical px,
+y-up). Implementation: an installed shader forces the offscreen render path
+and `FramePost` replaces the scene→swapchain blit (both the transitions
+path and the retained-static cursor-only path in `render_pass.rs`);
+validation/composition happen on the Lisp thread (errors signal
+synchronously); demand stays continuous while installed. v1 scope: the
+frame texture is top-left origin while fragCoord is y-up — the pixel under
+fragCoord is `vec2(fragCoord.x, iResolution.y - fragCoord.y) /
+iResolution.xy`; overlays/transitions/cursor draw over the shaded frame
+unprocessed; no custom uniforms.
+
 ## Architecture
 
 Mirror of the video path at every seam; the only new machinery is the
