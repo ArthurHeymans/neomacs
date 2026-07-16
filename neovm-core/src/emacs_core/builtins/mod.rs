@@ -1375,6 +1375,30 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("get-buffer-create", builtin_get_buffer_create, 1, Some(2));
     ctx.defsubr("get-buffer", builtin_get_buffer, 1, Some(1));
     ctx.defsubr(
+        "neomacs-surface-create",
+        super::shader_surface::builtin_neomacs_surface_create,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "neomacs-surface-set-uniform",
+        super::shader_surface::builtin_neomacs_surface_set_uniform,
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "neomacs-surface-destroy",
+        super::shader_surface::builtin_neomacs_surface_destroy,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "neomacs-surface-available-p",
+        super::shader_surface::builtin_neomacs_surface_available_p,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
         "make-xwidget",
         super::xwidget::builtin_make_xwidget,
         4,

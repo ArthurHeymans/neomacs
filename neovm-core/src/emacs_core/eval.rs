@@ -1507,6 +1507,37 @@ pub enum CursorEffectArg {
     String(String),
 }
 
+/// One named user uniform for a shader surface, in slot order
+/// (`doc/display-engine/SHADER_SURFACES.md`). `components` (1..=4) selects
+/// the WGSL accessor type (f32/vec2/vec3/vec4).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShaderSurfaceUniformInit {
+    pub name: String,
+    pub value: [f32; 4],
+    pub components: u8,
+}
+
+/// Content of a shader surface: user WGSL rendered by the compositor, or raw
+/// RGBA8 pixels uploaded once.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ShaderSurfaceContent {
+    Wgsl {
+        source: String,
+        uniforms: Vec<ShaderSurfaceUniformInit>,
+    },
+    Pixels {
+        data: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShaderSurfaceCreateRequest {
+    pub content: ShaderSurfaceContent,
+    pub width: u32,
+    pub height: u32,
+    pub animate: bool,
+}
+
 pub trait DisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
     fn resize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String>;
@@ -1642,6 +1673,23 @@ pub trait DisplayHost {
         Ok(())
     }
     fn destroy_webkit_xwidget(&self, _id: u32) -> Result<(), String> {
+        Ok(())
+    }
+    /// Validate and create a shader surface, returning its host-allocated id.
+    /// WGSL validation happens synchronously so `neomacs-surface-create` can
+    /// signal compile errors as Lisp errors.
+    fn create_shader_surface(&self, _request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
+        Err("shader surfaces are unsupported by this display host".to_owned())
+    }
+    fn set_shader_surface_uniform(
+        &self,
+        _id: u32,
+        _name: &str,
+        _value: [f32; 4],
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {
         Ok(())
     }
     fn set_cursor_blink(&mut self, _enabled: bool, _interval_ms: u32) -> Result<(), String> {

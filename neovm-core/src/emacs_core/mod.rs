@@ -136,6 +136,7 @@ pub(crate) mod windows;
 pub mod xdisp;
 pub mod xfaces;
 pub mod xml;
+pub mod shader_surface;
 pub mod xwidget;
 #[cfg(test)]
 mod xwidget_test;

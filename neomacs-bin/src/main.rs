@@ -42,10 +42,11 @@ use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
     build_render_event_loop, run_render_loop_current_thread,
 };
+use neomacs_display_runtime::shader_surface::{SurfaceUniformInit, validate_surface_wgsl};
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
-    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, ThreadComms,
-    UiCommand, WindowCommand, WindowFullscreenMode,
+    InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, SurfaceSource,
+    ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
 };
 use neomacs_layout_engine::font_metrics::FontMetricsService;
 use neomacs_layout_engine::fontconfig::FontSizing;
@@ -59,8 +60,9 @@ use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
-    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedVideo, ResolvedWebKit, VideoResolveRequest,
-    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+    ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedVideo, ResolvedWebKit,
+    ShaderSurfaceContent, ShaderSurfaceCreateRequest, VideoResolveRequest, VideoResolveSource,
+    WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -882,6 +884,13 @@ fn next_host_webkit_id() -> u32 {
     HOST_WEBKIT_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
+const HOST_SURFACE_ID_START: u32 = 0x7000_0000;
+static HOST_SURFACE_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_SURFACE_ID_START);
+
+fn next_host_surface_id() -> u32 {
+    HOST_SURFACE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+}
+
 fn read_primary_window_size(shared: &SharedPrimaryWindowSize) -> PrimaryWindowSize {
     match shared.lock() {
         Ok(state) => *state,
@@ -1687,6 +1696,65 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::WebKitDestroy { id }),
             "failed to queue WebKit xwidget destroy",
+        )
+    }
+
+    fn create_shader_surface(&self, request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
+        let source = match request.content {
+            ShaderSurfaceContent::Wgsl { source, uniforms } => {
+                let uniforms: Vec<SurfaceUniformInit> = uniforms
+                    .into_iter()
+                    .map(|u| SurfaceUniformInit {
+                        name: u.name,
+                        value: u.value,
+                        components: u.components,
+                    })
+                    .collect();
+                // Validate synchronously on the Lisp thread so WGSL compile
+                // errors become Lisp errors with naga diagnostics.
+                let names: Vec<(String, u8)> = uniforms
+                    .iter()
+                    .map(|u| (u.name.clone(), u.components))
+                    .collect();
+                validate_surface_wgsl(&source, &names)?;
+                SurfaceSource::Wgsl { source, uniforms }
+            }
+            ShaderSurfaceContent::Pixels { data } => SurfaceSource::Pixels { data },
+        };
+        let surface_id = next_host_surface_id();
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::SurfaceCreate {
+                id: surface_id,
+                source,
+                width: request.width,
+                height: request.height,
+                animate: request.animate,
+            }),
+            "failed to queue surface create",
+        )?;
+        Ok(surface_id)
+    }
+
+    fn set_shader_surface_uniform(
+        &self,
+        id: u32,
+        name: &str,
+        value: [f32; 4],
+    ) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::SurfaceSetUniform {
+                id,
+                name: name.to_owned(),
+                value,
+            }),
+            "failed to queue surface uniform update",
+        )
+    }
+
+    fn destroy_shader_surface(&self, id: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::SurfaceFree { id }),
+            "failed to queue surface destroy",
         )
     }
 }

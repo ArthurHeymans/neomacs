@@ -38,6 +38,12 @@ pub mod layout {
 
 pub use crate::core::*;
 
+/// Shader-surface composition/validation (re-exported so the frontend can
+/// naga-validate user WGSL on the Lisp thread without a renderer dependency).
+pub mod shader_surface {
+    pub use neomacs_renderer_wgpu::shader_surface::*;
+}
+
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
