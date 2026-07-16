@@ -2571,11 +2571,14 @@ impl Obarray {
 
     /// Check if a symbol is a constant by identity.
     pub fn is_constant_id(&self, id: SymId) -> bool {
-        (Self::is_canonical_symbol_id(id)
-            && resolve_sym_lisp_string(id)
-                .as_bytes()
-                .first()
-                .is_some_and(|byte| *byte == b':'))
+        // Keywords (`:foo`) are self-evaluating constants. Use the thread-local
+        // cached `is_keyword_id` predicate rather than re-resolving the symbol's
+        // name to a string on every call: this runs on every `setq`/`set`, and
+        // the old `resolve_sym_lisp_string` path took a registry read-lock and
+        // materialized the name string each time (~7.6% of total CPU on a
+        // setq-heavy load). `is_keyword_id` is exactly `canonical &&
+        // name-starts-with-':'`, cached after the first lookup.
+        crate::emacs_core::intern::is_keyword_id(id)
             || self
                 .slot(id)
                 .is_some_and(|s| s.flags.trapped_write() == SymbolTrappedWrite::NoWrite)
