@@ -245,23 +245,25 @@ offscreen pass and runtime WGSL compilation.
   buffer's lifetime via a local `kill-buffer-hook` (and
   `neomacs-surface-create-and-insert` attaches automatically); the
   declarative memo is FIFO-capped at 64 entries with `SurfaceFree` on
-  eviction; surface bytes are registered in `MediaBudget` (render thread,
-  `asset_commands.rs`) on create and removed on free, and an over-budget
-  create evicts *recreatable* (declarative-spec) surfaces — the same
-  re-resolve-on-next-walk safety argument as the memo cap.
+  eviction; surface bytes are registered in `MediaBudget` (renderer,
+  `media_budget.rs`, beside the caches it polices) on create and removed on
+  free, and an over-budget create evicts *recreatable* (declarative-spec)
+  surfaces — the same re-resolve-on-next-walk safety argument as the memo
+  cap.
 
 ## Staging
 
 1. **DONE (this change)** — static pixels from Lisp (`:pixels`).
 2. **DONE (this change)** — animated WGSL fragment surfaces: prelude,
    compositor clock, named uniforms, sync errors, visibility-scoped demand.
-3. **PARTIALLY DONE** — `:channel0` surface-to-surface inputs landed (pixel
-   sources + multipass chains); `iMouse` routing landed (hover xy + click
-   state zw from render-thread hit tests).
-   Remaining: image/video/webkit ids as channel
-   sources (cross-cache binding), GLSL-in via naga
-   (imports the Ghostty/Shadertoy shader corpus), full-frame post pass
-   (librashader runs on wgpu — RetroArch preset ecosystem nearly free).
+3. **DONE** — `:channel0` inputs (surface-to-surface, `(image …)` and
+   `(video …)` specs via cross-cache binding, multipass chains); `iMouse`
+   routing (hover xy + click state zw from render-thread hit tests);
+   GLSL-in via naga (verbatim Shadertoy/Ghostty sources — three Ghostty
+   shaders ship in `neomacs-shaders.el`, validated byte-identical);
+   full-frame post pass (`neomacs-frame-shader`, custom uniforms with live
+   `neomacs-frame-shader-set-uniform`); org-babel `wgsl`/`glsl` blocks
+   render live surfaces under `#+RESULTS` (`lisp/ob-wgsl.el`).
 4. Optional 3D mesh API — raymarching already covers most demand inside
    `mainImage`; revisit only with real users.
 
@@ -292,16 +294,18 @@ offscreen pass and runtime WGSL compilation.
   collection (see Lifecycle above). The declarative memo no longer leaks
   either (FIFO cap 64, GPU objects freed on eviction, evicted-but-visible
   specs re-resolve on the next walk).
-- `MediaBudget` covers shader surfaces only: the render thread registers
-  them (logical w*h*4 at create, removed at free) and an eviction driver
-  now runs on over-budget creates, freeing least-recently-created
-  *recreatable* surfaces — declarative specs only; imperative handles held
-  by Lisp are never evicted (`recreatable` flag on
-  `AssetCommand::SurfaceCreate`; `NEOMACS_MEDIA_BUDGET_MB` overrides the
-  256MB limit for testing). Image/video/webkit caches still never
-  register, entries are not touched on draw (LRU decays to creation
-  order), and shader bytes are really physical (scale-factor squared) —
-  full parity is future work.
+- ~~`MediaBudget` covers shader surfaces only~~ FIXED: the budget lives in
+  the renderer beside the caches it polices (`media_budget.rs`); image,
+  video, webkit, and surface textures all register physical bytes
+  (`MediaAccounting` events drained per frame via
+  `reconcile_media_budget`), draws touch their entry (true LRU, wired in
+  `layer_media.rs`), and an over-budget create evicts least-recently-used
+  *recreatable* surfaces. Eviction still targets declarative surfaces only:
+  imperative handles held by Lisp are never evicted (`recreatable` flag on
+  `AssetCommand::SurfaceCreate`), and image/video/webkit entries are
+  accounted but not evicted — their caches keep their own lifecycle
+  (catalog re-decode, video playback, live WPE views).
+  `NEOMACS_MEDIA_BUDGET_MB` overrides the 256MB limit for testing.
 - DPI captured at create; no rescale on monitor change.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
