@@ -678,13 +678,32 @@ impl<'a> Vm<'a> {
         specpdl_base: usize,
         frame_base: usize,
     ) -> EvalResult {
-        // GNU bytecode.c keeps a bytecode return value in `TOP` while
-        // unwinding back to the caller. Neomacs uses recursive Rust frames,
-        // so root the result while this frame removes condition/specpdl state
-        // and truncates its bytecode stack slice.
+        // GNU bytecode.c keeps a bytecode return value in `TOP` while unwinding
+        // back to the caller. Neomacs uses recursive Rust frames, so the result
+        // must be rooted only while this frame runs an operation that can GC.
+        //
+        // Dropping this frame's condition handlers is one such teardown step but
+        // cannot GC: truncate_condition_stack is a plain Vec truncate over
+        // ConditionFrame (no Drop), so run it unconditionally first, outside any
+        // root scope.
+        self.ctx.truncate_condition_stack(condition_stack_base);
+        // unbind_to (unwind-protect bodies / binding restores) is then the ONLY
+        // remaining step that can GC; bc_buf.truncate and bc_frames.pop merely
+        // drop Copy stack slots and hit no safe point. When the frame left no
+        // dynamic binds (the common lexical case — args and locals live on the
+        // operand stack, not specpdl; a backtrace frame from the caller sits
+        // below this frame's specpdl_base), unbind_to would only re-run its
+        // fixed profiler_poll / quit-flag preamble over an empty span, nothing
+        // can GC, and rooting the result is pure overhead. The result is
+        // returned un-rooted in both paths (the caller re-roots it), so skipping
+        // the root keeps the same post-return contract.
+        if self.ctx.specpdl.len() == specpdl_base {
+            self.ctx.bc_buf.truncate(frame_base);
+            self.ctx.bc_frames.pop();
+            return result;
+        }
         let root_scope = self.ctx.save_vm_roots();
         self.ctx.push_eval_result_roots(&result);
-        self.ctx.truncate_condition_stack(condition_stack_base);
         self.ctx.unbind_to(specpdl_base);
         self.ctx.bc_buf.truncate(frame_base);
         self.ctx.bc_frames.pop();
@@ -794,17 +813,24 @@ impl<'a> Vm<'a> {
     ) -> EvalResult {
         let args = args.into();
 
-        // Root the bytecode function's constants so they survive GC during
-        // nested calls. Heap bytecode calls also root func_value below, which
-        // mirrors GNU's frame-held function object; direct/manual bytecode
-        // execution can pass NIL func_value, so constants still need roots.
+        // Root the executing function across nested calls that can GC. A heap
+        // func_value is the frame-held function object (GNU-style): every caller
+        // derives `func` by dereferencing this same ByteCode object, so rooting
+        // func_value keeps its constants vector marked transitively — the GC
+        // traces ByteCodeObj.data.constants, and post-publish bytecode is
+        // immutable, so those constants stay reachable for the whole
+        // invocation. This mirrors the JIT Plan::Compiled path, which roots only
+        // the function and relies on the identical transitive marking. Only the
+        // direct/manual path (func_value == NIL, e.g. `execute()`) holds nothing
+        // else alive, so it still roots each constant individually.
         let result = self.maybe_grow_vm_stack(|vm| {
             vm.with_dynamic_vm_roots(|vm| {
                 if func_value.is_heap_object() {
                     vm.push_dynamic_vm_root(func_value);
-                }
-                for value in func.constants.iter().copied() {
-                    vm.push_dynamic_vm_root(value);
+                } else {
+                    for value in func.constants.iter().copied() {
+                        vm.push_dynamic_vm_root(value);
+                    }
                 }
                 vm.run_frame(func, args, func_value)
             })
