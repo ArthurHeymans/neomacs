@@ -460,21 +460,35 @@ impl WgpuRenderer {
 
     /// Install (or replace) the full-frame post shader from an
     /// already-composed WGSL module (the host validates + composes on the
-    /// Lisp thread).
+    /// Lisp thread, uniform accessors included; `uniforms` carries the
+    /// name -> slot table and initial values in slot order).
     pub fn set_frame_post(
         &mut self,
         language: crate::shader_surface::SurfaceShaderLanguage,
         composed_source: &str,
+        uniforms: &[crate::shader_surface::SurfaceUniformInit],
     ) -> Result<(), String> {
         let post = crate::frame_post::FramePost::new(
             &self.device,
             self.surface_format,
             language,
             composed_source,
+            uniforms,
         )?;
         self.frame_post = Some(post);
         tracing::info!("frame post shader installed");
         Ok(())
+    }
+
+    /// Update one named uniform on the installed frame post shader (cheap;
+    /// no recompile). Unknown names warn inside [`crate::frame_post::FramePost::set_uniform`];
+    /// no shader installed warns here — the host errors to Lisp before this
+    /// point, so hitting it means install/remove raced ahead in the queue.
+    pub fn set_frame_post_uniform(&mut self, name: &str, value: [f32; 4]) {
+        match self.frame_post.as_mut() {
+            Some(post) => post.set_uniform(name, value),
+            None => tracing::warn!("set_frame_post_uniform: no frame post shader installed"),
+        }
     }
 
     /// Remove the full-frame post shader.

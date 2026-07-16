@@ -1402,6 +1402,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         "neomacs-frame-shader",
         super::shader_surface::builtin_neomacs_frame_shader,
         1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "neomacs-frame-shader-set-uniform",
+        super::shader_surface::builtin_neomacs_frame_shader_set_uniform,
+        2,
         Some(2),
     );
     ctx.defsubr(

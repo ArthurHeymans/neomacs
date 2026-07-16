@@ -363,15 +363,18 @@ pub(crate) fn builtin_neomacs_surface_available_p(
     Ok(Value::bool_val(eval.display_host.is_some()))
 }
 
-/// (neomacs-frame-shader SOURCE &optional LANGUAGE)
+/// (neomacs-frame-shader SOURCE &optional LANGUAGE UNIFORMS)
 ///
 /// Install a full-frame post shader: SOURCE defines `mainImage`, applied
 /// over the whole rendered frame (the frame is `iChannel0`; note the frame
 /// texture is top-left origin while fragCoord is y-up, so the pixel under
 /// fragCoord is at uv `(fragCoord.x, iResolution.y - fragCoord.y) /
 /// iResolution.xy`). LANGUAGE is `wgsl` (default) or `glsl`
-/// (Shadertoy-dialect). nil SOURCE removes the shader. Signals on compile
-/// errors.
+/// (Shadertoy-dialect). UNIFORMS is a `((NAME . VALUE) …)` alist like
+/// `neomacs-surface-create's :uniforms — each entry generates a `u_NAME()`
+/// accessor and its slot can be updated live with
+/// `neomacs-frame-shader-set-uniform`. nil SOURCE removes the shader.
+/// Signals on compile errors.
 pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     let language = match args.get(1).copied().filter(|value| !value.is_nil()) {
         None => ShaderSurfaceLanguage::Wgsl,
@@ -386,19 +389,45 @@ pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>)
     let source = if args[0].is_nil() {
         None
     } else {
-        Some((
-            args[0]
-                .as_lisp_string()
-                .and_then(|s| s.as_utf8_str().map(str::to_owned))
-                .ok_or_else(|| {
-                    surface_error("neomacs-frame-shader: SOURCE must be a string or nil")
-                })?,
-            language,
-        ))
+        let text = args[0]
+            .as_lisp_string()
+            .and_then(|s| s.as_utf8_str().map(str::to_owned))
+            .ok_or_else(|| {
+                surface_error("neomacs-frame-shader: SOURCE must be a string or nil")
+            })?;
+        let mut uniforms = Vec::new();
+        if let Some(list) = args.get(2).copied().filter(|value| !value.is_nil()) {
+            let entries = list_to_vec(&list).ok_or_else(|| {
+                surface_error("neomacs-frame-shader: UNIFORMS must be an alist")
+            })?;
+            for entry in entries {
+                uniforms.push(parse_uniform_entry(entry)?);
+            }
+        }
+        Some((text, language, uniforms))
     };
     let host = eval.display_host.as_ref().ok_or_else(|| {
         surface_error("neomacs-frame-shader: no GUI display host in this session")
     })?;
     host.set_frame_shader(source).map_err(surface_error)?;
+    Ok(Value::NIL)
+}
+
+/// (neomacs-frame-shader-set-uniform NAME VALUE)
+///
+/// Update one named uniform on the installed full-frame post shader. NAME
+/// was declared in `neomacs-frame-shader's UNIFORMS alist; VALUE is a number
+/// or a vector of 1..=4 numbers. Cheap: writes a uniform slot, no shader
+/// recompile. Signals an error when no frame shader is installed.
+pub(crate) fn builtin_neomacs_frame_shader_set_uniform(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let entry = parse_uniform_entry(Value::cons(args[0], args[1]))?;
+    let host = eval.display_host.as_ref().ok_or_else(|| {
+        surface_error("neomacs-frame-shader-set-uniform: no GUI display host in this session")
+    })?;
+    host.set_frame_shader_uniform(&entry.name, entry.value)
+        .map_err(|err| surface_error(format!("neomacs-frame-shader-set-uniform: {err}")))?;
     Ok(Value::NIL)
 }

@@ -65,9 +65,9 @@ use neovm_core::emacs_core::display::gui_window_system_symbol;
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
     ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
-    ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, SurfaceChannelKind,
-    SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource, WebKitResolveRequest,
-    WebKitResolveSource,
+    ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
+    ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
+    VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -924,6 +924,10 @@ struct PrimaryWindowDisplayHost {
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
+    /// Whether a full-frame post shader is currently installed — gates
+    /// `set_frame_shader_uniform` so `neomacs-frame-shader-set-uniform` can
+    /// signal "no frame shader installed" instead of silently queueing.
+    frame_shader_installed: AtomicBool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1952,21 +1956,54 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn set_frame_shader(
         &self,
-        source: Option<(String, ShaderSurfaceLanguage)>,
+        source: Option<(String, ShaderSurfaceLanguage, Vec<ShaderSurfaceUniformInit>)>,
     ) -> Result<(), String> {
         let composed = match source {
             // Validate + compose on the Lisp thread so compile errors signal
-            // synchronously; the renderer receives the finished module. No
-            // custom uniforms in v1 — iTime/iResolution/iMouse only.
-            Some((source, language)) => Some((
-                validate_surface_shader(language, &source, &[])?,
-                renderer_shader_language(language),
-            )),
+            // synchronously; the renderer receives the finished module with
+            // the uniform accessors already composed in — `FramePost` only
+            // records the name -> slot table and initial values.
+            Some((source, language, uniforms)) => {
+                let uniforms: Vec<SurfaceUniformInit> = uniforms
+                    .into_iter()
+                    .map(|u| SurfaceUniformInit {
+                        name: u.name,
+                        value: u.value,
+                        components: u.components,
+                    })
+                    .collect();
+                let names: Vec<(String, u8)> = uniforms
+                    .iter()
+                    .map(|u| (u.name.clone(), u.components))
+                    .collect();
+                Some((
+                    validate_surface_shader(language, &source, &names)?,
+                    renderer_shader_language(language),
+                    uniforms,
+                ))
+            }
             None => None,
         };
+        let installed = composed.is_some();
         self.send_render_command(
             RenderCommand::Asset(AssetCommand::FrameShaderSet { composed }),
             "failed to queue frame shader update",
+        )?;
+        self.frame_shader_installed
+            .store(installed, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn set_frame_shader_uniform(&self, name: &str, value: [f32; 4]) -> Result<(), String> {
+        if !self.frame_shader_installed.load(Ordering::Relaxed) {
+            return Err("no frame shader installed".to_owned());
+        }
+        self.send_render_command(
+            RenderCommand::Asset(AssetCommand::FrameShaderSetUniform {
+                name: name.to_owned(),
+                value,
+            }),
+            "failed to queue frame shader uniform update",
         )
     }
 }
@@ -2739,6 +2776,7 @@ fn run_gui_evaluator_worker(
         resolved_videos: Mutex::new(HashMap::new()),
         resolved_webkits: Mutex::new(HashMap::new()),
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
+        frame_shader_installed: AtomicBool::new(false),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

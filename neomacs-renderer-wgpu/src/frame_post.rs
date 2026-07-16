@@ -12,11 +12,17 @@
 //! frame texture is top-left origin — sampling the pixel under fragCoord is
 //! `vec2(fragCoord.x, u.iResolution.y - fragCoord.y) / u.iResolution.xy`.
 //! Overlays drawn after the blit stage (transitions, menus, cursor) are not
-//! post-processed. No custom uniforms yet.
+//! post-processed. Custom uniforms use the surface contract: the host
+//! composes the accessor functions into the module, this side only keeps the
+//! name -> slot table so [`FramePost::set_uniform`] can update values live.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::shader_surface::{SURFACE_UNIFORM_BYTES, SurfaceShaderLanguage};
+use crate::shader_surface::{
+    SURFACE_UNIFORM_BYTES, SURFACE_USER_UNIFORM_SLOTS, SurfaceShaderLanguage, SurfaceUniformInit,
+    uniform_accessor_name,
+};
 use crate::shader_surface_cache::build_surface_pipeline;
 
 pub struct FramePost {
@@ -24,6 +30,9 @@ pub struct FramePost {
     uniform_buffer: wgpu::Buffer,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    /// name -> (slot, components) for `set_uniform` by Lisp name.
+    uniform_slots: HashMap<String, (usize, u8)>,
+    custom: [[f32; 4]; SURFACE_USER_UNIFORM_SLOTS],
     start: Instant,
     last: Option<Instant>,
     frame_index: u32,
@@ -34,11 +43,16 @@ impl FramePost {
     /// targeting `format`. Wrapped in a validation error scope: the host
     /// already naga-validated the same source, so a failure here is
     /// device-specific and reported, not fatal.
+    ///
+    /// `uniforms` lists the user uniforms in slot order. Composition already
+    /// happened host-side (the accessor functions are in `composed_source`);
+    /// this only records the name -> slot table and the initial values.
     pub fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         language: SurfaceShaderLanguage,
         composed_source: &str,
+        uniforms: &[SurfaceUniformInit],
     ) -> Result<Self, String> {
         let bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -97,15 +111,37 @@ impl FramePost {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
+        let mut uniform_slots = HashMap::new();
+        let mut custom = [[0.0f32; 4]; SURFACE_USER_UNIFORM_SLOTS];
+        for (slot, init) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS) {
+            uniform_slots.insert(init.name.clone(), (slot, init.components));
+            custom[slot] = init.value;
+        }
         Ok(Self {
             pipeline,
             uniform_buffer,
             bind_group_layout,
             sampler,
+            uniform_slots,
+            custom,
             start: Instant::now(),
             last: None,
             frame_index: 0,
         })
+    }
+
+    /// Update one named uniform; unknown names are ignored with a warning
+    /// (the accessor set is fixed at install time). No dirty flag needed:
+    /// the post pass runs every frame while installed, so the next frame
+    /// picks the value up — no recompile.
+    pub fn set_uniform(&mut self, name: &str, value: [f32; 4]) {
+        match self.uniform_slots.get(name) {
+            Some((slot, _)) => self.custom[*slot] = value,
+            None => tracing::warn!(
+                "frame shader has no uniform {name:?} (accessor {})",
+                uniform_accessor_name(name)
+            ),
+        }
     }
 
     /// Run the post pass: sample `src_view` (the rendered frame), write the
@@ -141,6 +177,9 @@ impl FramePost {
         uniforms[8] = now.duration_since(self.start).as_secs_f32();
         uniforms[9] = dt;
         uniforms[10] = self.frame_index as f32;
+        for (slot, value) in self.custom.iter().enumerate() {
+            uniforms[12 + slot * 4..12 + slot * 4 + 4].copy_from_slice(value);
+        }
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&uniforms));
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

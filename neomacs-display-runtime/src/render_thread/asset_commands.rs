@@ -490,13 +490,20 @@ impl RenderApp {
             AssetCommand::FrameShaderSet { composed } => {
                 if let Some(ref mut renderer) = self.renderer {
                     match composed {
-                        Some((source, language)) => {
-                            if let Err(err) = renderer.set_frame_post(language, &source) {
+                        Some((source, language, uniforms)) => {
+                            if let Err(err) =
+                                renderer.set_frame_post(language, &source, &uniforms)
+                            {
                                 tracing::warn!("frame shader install failed: {err}");
                             }
                         }
                         None => renderer.clear_frame_post(),
                     }
+                }
+            }
+            AssetCommand::FrameShaderSetUniform { name, value } => {
+                if let Some(ref mut renderer) = self.renderer {
+                    renderer.set_frame_post_uniform(&name, value);
                 }
             }
         }

@@ -152,15 +152,23 @@ never-defined function (silently blank surface); without it, a missing
 ## Full-frame post shader
 
 ```elisp
-(neomacs-frame-shader "fn mainImage(...) { ... }")        ; WGSL
-(neomacs-frame-shader shadertoy-source 'glsl)              ; Shadertoy GLSL
-(neomacs-frame-shader nil)                                 ; remove
+(neomacs-frame-shader "fn mainImage(...) { ... }")          ; WGSL
+(neomacs-frame-shader shadertoy-source 'glsl)               ; Shadertoy GLSL
+(neomacs-frame-shader src 'glsl '((curvature . 0.10)))      ; custom uniforms
+(neomacs-frame-shader-set-uniform 'curvature 0.25)          ; live; no recompile
+(neomacs-frame-shader nil)                                  ; remove
 ```
 
 The Ghostty / Windows Terminal `custom-shader` feature: the shader runs
 over the whole composited frame before present, with the frame bound as
 `iChannel0` and `iTime`/`iResolution`/`iMouse` live (mouse in physical px,
-y-up). Implementation: an installed shader forces the offscreen render path
+y-up). UNIFORMS is the same alist as `:uniforms` — the same 8 `vec4` slots
+and generated accessors (`(curvature . 0.10)` ⇒ `u_curvature()`), and
+`neomacs-frame-shader-set-uniform` writes a slot on the installed shader
+without recompiling (an error when none is installed). Example: `M-x
+neomacs-shaders-crt` declares a `curvature` uniform and
+`M-x neomacs-shaders-crt-curvature` retunes the barrel distortion live.
+Implementation: an installed shader forces the offscreen render path
 and `FramePost` replaces the scene→swapchain blit (both the transitions
 path and the retained-static cursor-only path in `render_pass.rs`);
 validation/composition happen on the Lisp thread (errors signal
@@ -168,7 +176,7 @@ synchronously); demand stays continuous while installed. v1 scope: the
 frame texture is top-left origin while fragCoord is y-up — the pixel under
 fragCoord is `vec2(fragCoord.x, iResolution.y - fragCoord.y) /
 iResolution.xy`; overlays/transitions/cursor draw over the shaded frame
-unprocessed; no custom uniforms.
+unprocessed.
 
 ## Architecture
 

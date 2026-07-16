@@ -1745,12 +1745,17 @@ pub trait DisplayHost {
     ) -> Result<(), String> {
         Ok(())
     }
-    /// Install (Some source, validated synchronously) or remove (None) the
-    /// full-frame post shader.
+    /// Install (Some source with its user uniforms in slot order, validated
+    /// synchronously) or remove (None) the full-frame post shader.
     fn set_frame_shader(
         &self,
-        _source: Option<(String, ShaderSurfaceLanguage)>,
+        _source: Option<(String, ShaderSurfaceLanguage, Vec<ShaderSurfaceUniformInit>)>,
     ) -> Result<(), String> {
+        Err("frame shaders are unsupported by this display host".to_owned())
+    }
+    /// Update one named uniform on the installed full-frame post shader
+    /// (cheap; no recompile). Errors when no frame shader is installed.
+    fn set_frame_shader_uniform(&self, _name: &str, _value: [f32; 4]) -> Result<(), String> {
         Err("frame shaders are unsupported by this display host".to_owned())
     }
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {

@@ -30,6 +30,9 @@
 ;;   M-x neomacs-shaders-crt       CRT frame shader over the whole editor
 ;;                                 (barrel distortion, scanlines, vignette;
 ;;                                 Shadertoy-dialect GLSL)
+;;   M-x neomacs-shaders-crt-curvature
+;;                                 retune the CRT barrel distortion live
+;;                                 (frame-shader custom uniform; no recompile)
 ;;   M-x neomacs-shaders-glow      soft bloom frame shader (WGSL)
 ;;   M-x neomacs-shaders-matrix    digital-rain frame shader (GLSL)
 ;;   M-x neomacs-shaders-off       remove the frame shader
@@ -136,7 +139,7 @@
     vec2 uv = vec2(fragCoord.x, iResolution.y - fragCoord.y) / iResolution.xy;
     vec2 c = uv - 0.5;
     float r2 = dot(c, c);
-    uv = 0.5 + c * (1.0 + 0.10 * r2);
+    uv = 0.5 + c * (1.0 + u_curvature() * r2);
     vec3 col;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
         col = vec3(0.0);
@@ -149,7 +152,9 @@
     col *= 1.0 - 0.4 * r2;
     fragColor = vec4(col, 1.0);
 }"
-  "CRT: barrel distortion, scanlines, warm tint, vignette (GLSL).")
+  "CRT: barrel distortion, scanlines, warm tint, vignette (GLSL).
+The distortion strength is the `curvature' custom uniform
+\(`u_curvature()'), retunable live with `neomacs-shaders-crt-curvature'.")
 
 (defconst neomacs-shaders--glow-wgsl
   "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
@@ -191,8 +196,20 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 (defun neomacs-shaders-crt ()
   "Apply the CRT frame shader to the whole editor."
   (interactive)
-  (neomacs-frame-shader neomacs-shaders--crt-glsl 'glsl)
-  (message "CRT on — M-x neomacs-shaders-off to remove"))
+  (neomacs-frame-shader neomacs-shaders--crt-glsl 'glsl
+                        '((curvature . 0.10)))
+  (message "CRT on — M-x neomacs-shaders-crt-curvature tunes it, M-x neomacs-shaders-off removes"))
+
+;;;###autoload
+(defun neomacs-shaders-crt-curvature (amount)
+  "Set the CRT frame shader's barrel-distortion AMOUNT live.
+0.0 is flat, 0.10 is the default, 0.3 is heavy.  Updates the
+`curvature' uniform on the installed frame shader without
+recompiling; signals an error if no frame shader is installed
+\(run `neomacs-shaders-crt' first)."
+  (interactive "nCRT curvature (0.0 flat, 0.10 default, 0.3 heavy): ")
+  (neomacs-frame-shader-set-uniform 'curvature (float amount))
+  (message "CRT curvature: %s" amount))
 
 ;;;###autoload
 (defun neomacs-shaders-glow ()

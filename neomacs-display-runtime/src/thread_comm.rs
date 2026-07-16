@@ -506,9 +506,20 @@ pub enum AssetCommand {
         id: u32,
     },
     /// Install (Some, already composed+validated source in the given
-    /// language) or remove (None) the full-frame post shader
+    /// language, plus the user uniforms in slot order) or remove (None) the
+    /// full-frame post shader
     FrameShaderSet {
-        composed: Option<(String, neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage)>,
+        composed: Option<(
+            String,
+            neomacs_renderer_wgpu::shader_surface::SurfaceShaderLanguage,
+            Vec<neomacs_renderer_wgpu::shader_surface::SurfaceUniformInit>,
+        )>,
+    },
+    /// Update one named uniform on the installed full-frame post shader
+    /// (cheap; no recompile)
+    FrameShaderSetUniform {
+        name: String,
+        value: [f32; 4],
     },
     /// Create video player
     VideoCreate {
