@@ -2941,8 +2941,10 @@ impl<'a> Vm<'a> {
                 if !val.is_nil() {
                     return Ok(val);
                 }
+                let name_localized = self.ctx.obarray.is_localized(name_id);
                 if let Some(buf) = self.ctx.buffers.current_buffer() {
-                    if let Some(blv) = buf.get_buffer_local_by_sym_id(name_id) {
+                    if let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
+                    {
                         if !blv.is_nil() {
                             return Ok(blv);
                         }
@@ -3030,8 +3032,12 @@ impl<'a> Vm<'a> {
         // undo list.  Check buffer-local before falling through to
         // the obarray default so the byte-compiled code sees the
         // correct per-buffer value.
+        // Global (Plainval) specials are never in any `local_var_alist`, so skip
+        // the per-buffer scan for them (slot/undo names still resolve inside the
+        // gated call). See `Obarray::is_localized`.
+        let name_localized = self.ctx.obarray.is_localized(name_id);
         if let Some(buf) = self.ctx.buffers.current_buffer() {
-            if let Some(val) = buf.get_buffer_local_by_sym_id(name_id) {
+            if let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized) {
                 if !val.is_nil() {
                     return Ok(val);
                 }
@@ -3049,7 +3055,7 @@ impl<'a> Vm<'a> {
         // Retry buffer-local for nil-valued defaults (e.g. unset
         // `buffer-undo-list` on a clean buffer).
         if let Some(buf) = self.ctx.buffers.current_buffer() {
-            if let Some(val) = buf.get_buffer_local_by_sym_id(name_id) {
+            if let Some(val) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized) {
                 return Ok(val);
             }
         }
@@ -4521,8 +4527,9 @@ impl<'a> Vm<'a> {
                 if !val.is_nil() {
                     return (VR_PLAIN, false);
                 }
+                let name_localized = self.ctx.obarray.is_localized(name_id);
                 if let Some(buf) = self.ctx.buffers.current_buffer()
-                    && let Some(blv) = buf.get_buffer_local_by_sym_id(name_id)
+                    && let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
                     && !blv.is_nil()
                 {
                     return (VR_PLAIN_NIL_BLV, false);

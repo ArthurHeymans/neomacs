@@ -15117,7 +15117,10 @@ impl Context {
                                     buf.local_var_alist,
                                 )
                             } else {
-                                buf.has_buffer_local_by_sym_id(sym_id)
+                                // `is_localized` is false here, so a non-slot,
+                                // non-undo symbol is never in the alist: gate the
+                                // scan away (slot/undo still resolve).
+                                buf.has_buffer_local_by_sym_id_gated(sym_id, false)
                             }
                         }
                     };
@@ -15554,10 +15557,14 @@ pub(crate) fn set_runtime_binding(
     // Preserve the pre-Phase-10 behavior for those names: if the
     // current buffer already reports the variable as local, write the
     // current buffer binding instead of the obarray cell.
+    // Non-localized globals are never in any `local_var_alist`, so skip the
+    // per-buffer scan for them (slot/undo names still resolve inside the gated
+    // call). `redirect` was fetched above. See `Obarray::is_localized`.
+    let sym_is_localized = matches!(redirect, Some(SymbolRedirect::Localized));
     if symbol_is_interned_global
         && let Some(current_id) = buffers.current_buffer_id()
         && let Some(buf) = buffers.get(current_id)
-        && buf.has_buffer_local_by_sym_id(sym_id)
+        && buf.has_buffer_local_by_sym_id_gated(sym_id, sym_is_localized)
     {
         let _ = buffers.set_buffer_local_property_by_sym_id(current_id, sym_id, value);
         return Some(current_id);
@@ -15578,10 +15585,12 @@ pub(crate) fn makunbound_runtime_binding_in_state(
 
     // specbind writes directly to obarray, so no dynamic frame lookup needed.
 
+    // Non-localized globals are never in any `local_var_alist`; skip the scan.
+    let sym_is_localized = obarray.is_localized(sym_id);
     if symbol_is_canonical
         && let Some(current_id) = buffers.current_buffer_id()
         && let Some(buf) = buffers.get(current_id)
-        && buf.has_buffer_local_by_sym_id(sym_id)
+        && buf.has_buffer_local_by_sym_id_gated(sym_id, sym_is_localized)
     {
         let _ = buffers.set_buffer_local_void_property_by_sym_id(current_id, sym_id);
         return;

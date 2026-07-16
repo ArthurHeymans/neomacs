@@ -1682,6 +1682,18 @@ impl Obarray {
 
     /// Read a LOCALIZED symbol's BLV (immutable borrow). Returns
     /// `None` if the symbol is not LOCALIZED.
+    /// Whether `id`'s redirect is `Localized` — i.e. the symbol has ever been
+    /// made buffer-local somewhere, so a per-buffer binding *could* exist in a
+    /// buffer's `local_var_alist`. A `Plainval`/global symbol is never inserted
+    /// into any `local_var_alist` (every insertion path first marks the symbol
+    /// `Localized` via `make_symbol_localized`), so display/VM variable
+    /// resolution can skip the O(n) alist walk for non-localized symbols. O(1).
+    #[inline]
+    pub fn is_localized(&self, id: SymId) -> bool {
+        self.slot(id)
+            .is_some_and(|sym| sym.flags.redirect() == SymbolRedirect::Localized)
+    }
+
     pub fn blv(&self, id: SymId) -> Option<&LispBufferLocalValue> {
         let sym = self.slot(id)?;
         if sym.flags.redirect() != SymbolRedirect::Localized {

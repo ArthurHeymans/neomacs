@@ -2371,6 +2371,46 @@ fn buffer_local_multiple_vars() {
 }
 
 #[test]
+fn buffer_local_gated_skips_alist_scan_but_keeps_slot_and_undo() {
+    use crate::emacs_core::intern::intern;
+    crate::test_utils::init_test_tracing();
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+
+    // A non-slot alist entry.
+    let my_local = intern("neo-gate-test-local");
+    buf.set_buffer_local_by_sym_id(my_local, Value::fixnum(42));
+    // A slot-backed name.
+    let tab_width = intern("tab-width");
+    buf.set_buffer_local_by_sym_id(tab_width, Value::fixnum(4));
+
+    // localized=true -> the alist entry is found (unchanged behavior).
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(my_local, true),
+        Some(Value::fixnum(42))
+    );
+    // localized=false -> the alist walk is skipped. Callers only pass false for
+    // symbols the obarray reports as non-Localized, which by invariant are never
+    // in the alist; this pins the gate's contract.
+    assert_eq!(buf.get_buffer_local_by_sym_id_gated(my_local, false), None);
+
+    // Slot-backed names resolve regardless of `localized` (the slot check runs
+    // before the gate) -- a global (non-localized) slot var must not be dropped.
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(tab_width, false),
+        Some(Value::fixnum(4))
+    );
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(tab_width, true),
+        Some(Value::fixnum(4))
+    );
+
+    // A symbol absent from the alist: None either way (no scan when false).
+    let absent = intern("neo-gate-test-absent");
+    assert_eq!(buf.get_buffer_local_by_sym_id_gated(absent, false), None);
+    assert_eq!(buf.get_buffer_local_by_sym_id_gated(absent, true), None);
+}
+
+#[test]
 fn buffer_local_defaults_include_builtin_per_buffer_vars() {
     crate::test_utils::init_test_tracing();
     let buf = Buffer::new(BufferId(1), Value::string("test"));

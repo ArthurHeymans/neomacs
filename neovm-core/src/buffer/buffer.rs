@@ -3622,6 +3622,22 @@ impl Buffer {
     }
 
     pub fn get_buffer_local_by_sym_id(&self, sym_id: SymId) -> Option<Value> {
+        self.get_buffer_local_by_sym_id_gated(sym_id, true)
+    }
+
+    /// Same as [`Self::get_buffer_local_by_sym_id`], but the caller passes
+    /// whether `sym_id` is a `Localized` symbol (via `Obarray::is_localized`).
+    /// When it is not, the `local_var_alist` walk is skipped: a non-localized
+    /// symbol can never have an alist entry (see `Obarray::is_localized`), so
+    /// the scan would only ever return `None` after walking the whole list.
+    /// This is the hot path for display/VM variable resolution, where most
+    /// referenced specials are global. Slot-backed and `buffer-undo-list`
+    /// names are always resolved (they are per-buffer without being localized).
+    pub(crate) fn get_buffer_local_by_sym_id_gated(
+        &self,
+        sym_id: SymId,
+        localized: bool,
+    ) -> Option<Value> {
         // Slot-backed names resolve to the live slot value, mirroring
         // GNU's `BVAR(buf, …)` accessor. Conditional slots only
         // report a per-buffer binding when the local-flags bit is
@@ -3637,6 +3653,9 @@ impl Buffer {
         // indirect buffers see the root buffer's undo state.
         if sym_id == buffer_undo_list_sym() {
             return Some(self.get_undo_list());
+        }
+        if !localized {
+            return None;
         }
         // Everything else: walk `local_var_alist`. Mirrors GNU's
         // `assq_no_quit (var, BVAR (buf, local_var_alist))` at
@@ -3674,6 +3693,16 @@ impl Buffer {
     }
 
     pub fn get_buffer_local_binding_by_sym_id(&self, sym_id: SymId) -> Option<RuntimeBindingValue> {
+        self.get_buffer_local_binding_by_sym_id_gated(sym_id, true)
+    }
+
+    /// Gated form of [`Self::get_buffer_local_binding_by_sym_id`]; see
+    /// [`Self::get_buffer_local_by_sym_id_gated`] for the `localized` contract.
+    pub(crate) fn get_buffer_local_binding_by_sym_id_gated(
+        &self,
+        sym_id: SymId,
+        localized: bool,
+    ) -> Option<RuntimeBindingValue> {
         // BUFFER_OBJFWD slots are always live and bypass any
         // "present/absent" short-circuit. They never go void in
         // GNU — a nil slot still resolves as Bound(nil).
@@ -3688,6 +3717,9 @@ impl Buffer {
         }
         if sym_id == buffer_undo_list_sym() {
             return Some(RuntimeBindingValue::Bound(self.get_undo_list()));
+        }
+        if !localized {
+            return None;
         }
         // An UNBOUND cdr in the alist marks a void per-buffer
         // binding — the variable IS local (Some) but has no
@@ -3708,6 +3740,15 @@ impl Buffer {
     }
 
     pub fn has_buffer_local_by_sym_id(&self, sym_id: SymId) -> bool {
+        self.has_buffer_local_by_sym_id_gated(sym_id, true)
+    }
+
+    /// Gated form of [`Self::has_buffer_local_by_sym_id`]; the caller passes
+    /// whether `sym_id` is `Localized` (via `Obarray::is_localized`). A
+    /// non-localized symbol can never have an alist entry (see
+    /// `Obarray::is_localized`), so the alist walk is skipped for it. Slot and
+    /// `buffer-undo-list` names are still resolved (always per-buffer).
+    pub(crate) fn has_buffer_local_by_sym_id_gated(&self, sym_id: SymId, localized: bool) -> bool {
         // BUFFER_OBJFWD-style names are conceptually always
         // per-buffer (mirrors GNU's `local-variable-p` returning t
         // for DEFVAR_PER_BUFFER variables regardless of whether the
@@ -3726,6 +3767,9 @@ impl Buffer {
         // is unconditionally allocated; there's no "unset" state).
         if sym_id == buffer_undo_list_sym() {
             return true;
+        }
+        if !localized {
+            return false;
         }
         find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id).is_some()
     }
