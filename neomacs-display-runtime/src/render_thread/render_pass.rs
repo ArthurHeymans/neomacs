@@ -458,10 +458,7 @@ impl RenderApp {
         // cursor. The frame's stored cursor geometry is no longer mutated here,
         // so the materialized frame stays a pure function of the layout snapshot.
 
-        // A frame post shader needs the scene in an offscreen texture to
-        // sample as iChannel0, so it forces the offscreen path.
         let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
-            || renderer.has_frame_post()
             || frame_for_decision.effect_hints.iter().any(|hint| {
                 matches!(
                     hint,
@@ -510,6 +507,17 @@ impl RenderApp {
         let surface_view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        // Full-frame post shader: compose the ENTIRE frame (content,
+        // transitions, overlays, cursor) into an intermediate texture and
+        // shade it into the swapchain as the LAST step, so every present is
+        // uniformly post-processed (Ghostty semantics — cursor included) and
+        // partial-damage frames cannot mix shaded and unshaded regions.
+        let frame_post_active = renderer.has_frame_post();
+        let composition_view = if frame_post_active {
+            Self::ensure_frame_post_src(renderer, render, native.width, native.height)
+        } else {
+            surface_view.clone()
+        };
         let old_scale_factor = renderer.scale_factor();
         let old_width = renderer.width();
         let old_height = renderer.height();
@@ -587,27 +595,15 @@ impl RenderApp {
                 super::frame_stats::count(&super::frame_stats::RETAINED_STATIC_BUILDS);
             }
             if let Some(rs) = render.compositor.retained_static.as_ref() {
-                if renderer.has_frame_post() {
-                    // Post-process the retained scene instead of blitting it.
-                    let src = rs.view.clone();
-                    renderer.frame_post_to_view(
-                        &src,
-                        &surface_view,
-                        native.width,
-                        native.height,
-                        mouse_pos,
-                    );
-                } else {
-                    renderer.blit_texture_to_view(
-                        &rs.bind_group,
-                        &surface_view,
-                        native.width,
-                        native.height,
-                    );
-                }
+                renderer.blit_texture_to_view(
+                    &rs.bind_group,
+                    &composition_view,
+                    native.width,
+                    native.height,
+                );
             }
             renderer.render_cursor_only(
-                &surface_view,
+                &composition_view,
                 &frame,
                 native.width,
                 native.height,
@@ -625,7 +621,7 @@ impl RenderApp {
                 Self::composite_filled_box_cursor_cells(
                     renderer,
                     render,
-                    &surface_view,
+                    &composition_view,
                     native.width,
                     native.height,
                     animated_cursor,
@@ -633,6 +629,15 @@ impl RenderApp {
                 );
             }
             super::frame_stats::count(&super::frame_stats::COMPOSITE_ONLY_FRAMES);
+            if frame_post_active {
+                renderer.frame_post_to_view(
+                    &composition_view,
+                    &surface_view,
+                    native.width,
+                    native.height,
+                    mouse_pos,
+                );
+            }
             render.finish_pointer_paint_render();
             renderer.set_scale_factor(old_scale_factor);
             renderer.resize(old_width, old_height);
@@ -715,47 +720,17 @@ impl RenderApp {
             }
 
             if let Some(current_bg) = current_bg {
-                if renderer.has_frame_post() {
-                    // Post-process the rendered scene instead of blitting it.
-                    // Later stages (transitions, overlays, cursor) draw over
-                    // the shaded frame unprocessed (v1 scope).
-                    let src_view = if render.compositor.transitions.current_is_a {
-                        render
-                            .compositor
-                            .transitions
-                            .offscreen_a
-                            .as_ref()
-                            .map(|(_, view, _)| view.clone())
-                    } else {
-                        render
-                            .compositor
-                            .transitions
-                            .offscreen_b
-                            .as_ref()
-                            .map(|(_, view, _)| view.clone())
-                    };
-                    if let Some(src_view) = src_view {
-                        renderer.frame_post_to_view(
-                            &src_view,
-                            &surface_view,
-                            native.width,
-                            native.height,
-                            render.mouse_pos,
-                        );
-                    }
-                } else {
-                    renderer.blit_texture_to_view(
-                        &current_bg,
-                        &surface_view,
-                        native.width,
-                        native.height,
-                    );
-                }
+                renderer.blit_texture_to_view(
+                    &current_bg,
+                    &composition_view,
+                    native.width,
+                    native.height,
+                );
             }
             render_frame_transitions(
                 renderer,
                 &mut render.compositor.transitions,
-                &surface_view,
+                &composition_view,
                 native.width,
                 native.height,
             );
@@ -766,7 +741,7 @@ impl RenderApp {
                 renderer,
                 native,
                 render,
-                &surface_view,
+                &composition_view,
                 &frame,
                 cursor_visible,
                 animated_cursor,
@@ -779,7 +754,7 @@ impl RenderApp {
                 renderer,
                 native,
                 render,
-                &surface_view,
+                &composition_view,
                 &frame,
                 cursor_visible,
                 root_animated_cursor,
@@ -804,6 +779,15 @@ impl RenderApp {
             render.mark_active_visuals_dirty();
         }
 
+        if frame_post_active {
+            renderer.frame_post_to_view(
+                &composition_view,
+                &surface_view,
+                native.width,
+                native.height,
+                render.mouse_pos,
+            );
+        }
         render.finish_pointer_paint_render();
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
@@ -1252,6 +1236,30 @@ impl RenderApp {
     /// Ensure the window's retained-static texture exists at `width`x`height`
     /// in the surface format, recreating it on a size change. Leaves the
     /// generation stamp untouched (the caller sets it after rendering).
+    /// Ensure the intermediate composition texture for the full-frame post
+    /// shader exists at the window's physical size; returns its view.
+    fn ensure_frame_post_src(
+        renderer: &mut WgpuRenderer,
+        render: &mut GuiFrameRenderState,
+        width: u32,
+        height: u32,
+    ) -> wgpu::TextureView {
+        let needs_new = match &render.frame_post_src {
+            Some((texture, _)) => texture.width() != width || texture.height() != height,
+            None => true,
+        };
+        if needs_new {
+            let (texture, view) = renderer.create_offscreen_texture(width, height);
+            render.frame_post_src = Some((texture, view));
+        }
+        render
+            .frame_post_src
+            .as_ref()
+            .expect("frame post src just ensured")
+            .1
+            .clone()
+    }
+
     fn ensure_retained_static_texture(
         renderer: &WgpuRenderer,
         render: &mut GuiFrameRenderState,

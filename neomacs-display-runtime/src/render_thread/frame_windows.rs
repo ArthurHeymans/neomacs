@@ -126,6 +126,10 @@ pub(crate) struct GuiFrameRenderState {
     deferred_pointer_retirements: Vec<u64>,
     /// Transient renderer-owned overlays (popup, tooltip, bell, fps, typing, idle).
     pub overlays: OverlayState,
+    /// Intermediate composition target while a full-frame post shader is
+    /// installed: the whole frame renders here, then the post pass shades it
+    /// into the swapchain as the final step. Recreated on resize.
+    pub(super) frame_post_src: Option<(wgpu::Texture, wgpu::TextureView)>,
     /// The current native input-method composition, if any.
     ///
     /// `Option` is the active-state invariant: a preedit cannot be "active"
@@ -378,6 +382,7 @@ impl GuiFrameRenderState {
                 typing_speed: TypingSpeedState::default(),
                 idle_dim: IdleDimState::default(),
             },
+            frame_post_src: None,
             input_method: InputMethodState::default(),
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
@@ -422,6 +427,7 @@ impl GuiFrameRenderState {
                 typing_speed: TypingSpeedState::default(),
                 idle_dim: IdleDimState::default(),
             },
+            frame_post_src: None,
             input_method: InputMethodState::default(),
             cursor: CursorState::default(),
             mouse_pos: (0.0, 0.0),
