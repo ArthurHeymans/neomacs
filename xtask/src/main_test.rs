@@ -2,6 +2,184 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+fn windows_installer_removes_the_legacy_path_rewrite_implementation() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    for forbidden in [
+        "ENVIRONMENT_KEY",
+        "WriteRegExpandStr",
+        "AddToSystemPath",
+        "RemoveFromSystemPath",
+        "AddedToPath",
+    ] {
+        assert!(
+            !installer.contains(forbidden),
+            "legacy whole-PATH rewrite marker must stay removed; found {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn windows_installer_defaults_to_a_non_elevated_user_scope() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    assert!(installer.contains("RequestExecutionLevel user"));
+    assert!(installer.contains(r#"InstallDir "$LOCALAPPDATA\Programs\${PRODUCT_NAME}""#));
+    assert!(installer.contains("SetShellVarContext current"));
+    assert!(
+        !installer.lines().any(|line| {
+            let line = line.trim_start();
+            line.starts_with("ReadRegStr HKLM")
+                || line.starts_with("WriteRegStr HKLM")
+                || line.starts_with("WriteRegDWORD HKLM")
+                || line.starts_with("DeleteRegKey HKLM")
+        }),
+        "default Windows installer must not mutate machine-scoped registration"
+    );
+}
+
+#[test]
+fn windows_installer_owns_app_paths_for_both_commands() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    for executable in ["neomacs.exe", "neomacsclient.exe"] {
+        let app_path = format!(r#"App Paths\{executable}"#);
+        let installed_executable = format!(r#"$INSTDIR\bin\{executable}"#);
+        assert!(
+            installer.contains(&app_path),
+            "installer must register {executable} with Windows App Paths"
+        );
+        assert!(
+            installer.contains(&installed_executable),
+            "App Paths registration must resolve to {installed_executable}"
+        );
+    }
+
+    assert!(installer.contains("!macro RemoveOwnedAppPath KEY EXECUTABLE"));
+    assert!(installer.contains("DeleteRegKey /ifempty HKCU \"${KEY}\""));
+    assert!(
+        installer.contains(
+            "!insertmacro RemoveOwnedAppPath \"${NEOMACS_APP_PATH_KEY}\" \"neomacs.exe\""
+        )
+    );
+    assert!(installer.contains(
+        "!insertmacro RemoveOwnedAppPath \"${NEOMACSCLIENT_APP_PATH_KEY}\" \"neomacsclient.exe\""
+    ));
+}
+
+#[test]
+fn windows_installer_owns_current_user_start_menu_shortcuts() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    assert!(installer.contains(
+        r#"CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\bin\neomacs.exe""#
+    ));
+    assert!(installer.contains(
+        r#"CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\uninstall.exe""#
+    ));
+    assert!(installer.contains(r#"Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk""#));
+    assert!(
+        installer.contains(r#"Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk""#)
+    );
+    assert!(installer.contains("Function un.onInit"));
+    assert_eq!(installer.matches("SetShellVarContext current").count(), 2);
+}
+
+#[test]
+fn windows_installer_publishes_complete_owned_uninstall_metadata() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    for field in [
+        "DisplayName",
+        "DisplayVersion",
+        "Publisher",
+        "URLInfoAbout",
+        "InstallLocation",
+        "DisplayIcon",
+        "UninstallString",
+        "QuietUninstallString",
+        "EstimatedSize",
+        "NoModify",
+        "NoRepair",
+    ] {
+        assert!(
+            installer.contains(&format!(r#""{field}""#)),
+            "Apps & Features metadata must include {field}"
+        );
+    }
+    assert!(installer.contains(r#"!define PRODUCT_REGISTRATION_NAME "${PRODUCT_NAME} (User)""#));
+    assert!(installer.contains(r#"'"$INSTDIR\uninstall.exe"'"#));
+}
+
+#[test]
+fn windows_installer_removes_the_previous_owned_payload_before_replacement() {
+    let installer = include_str!("../../assets/windows-installer.nsi");
+
+    assert!(installer.contains("Function RemovePreviousUserInstallation"));
+    assert!(installer.contains(r#"ExecWait '"$R0\uninstall.exe" /S _?=$R0' $R1"#));
+
+    let initialization = installer
+        .split_once("Function .onInit")
+        .and_then(|(_, rest)| rest.split_once("FunctionEnd"))
+        .map(|(body, _)| body)
+        .expect("installer must define .onInit");
+    assert!(
+        !initialization.contains("Call RemovePreviousUserInstallation"),
+        "opening and cancelling the installer must not remove the current version"
+    );
+
+    let install_section = installer
+        .split_once(r#"Section "!${PRODUCT_NAME}" SEC_MAIN"#)
+        .and_then(|(_, rest)| rest.split_once("SectionEnd"))
+        .map(|(body, _)| body)
+        .expect("installer must define its main installation section");
+    let first_instruction = install_section
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .expect("main installation section must not be empty");
+    assert_eq!(first_instruction, "Call RemovePreviousUserInstallation");
+}
+
+#[test]
+#[cfg(unix)]
+fn windows_uninstall_manifest_names_only_packaged_files_and_empty_directories() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf();
+    let fixture = tempdir();
+    let package = fixture.join("package");
+    let output = fixture.join("uninstall-files.nsh");
+    fs::create_dir_all(package.join("bin")).unwrap();
+    fs::create_dir_all(package.join("share/neomacs/lisp")).unwrap();
+    fs::write(package.join("bin/neomacs.exe"), b"fixture").unwrap();
+    fs::write(package.join("share/neomacs/lisp/startup.el"), b"fixture").unwrap();
+
+    let result = Command::new("bash")
+        .arg(repo_root.join("scripts/generate-nsis-uninstall-include.sh"))
+        .arg(&package)
+        .arg(&output)
+        .output()
+        .expect("run uninstall-manifest generator");
+    assert!(
+        result.status.success(),
+        "generator failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let manifest = fs::read_to_string(output).unwrap();
+    assert!(manifest.contains(r#"Delete "$INSTDIR\bin\neomacs.exe""#));
+    assert!(manifest.contains(r#"Delete "$INSTDIR\share\neomacs\lisp\startup.el""#));
+    assert!(manifest.contains(r#"RMDir "$INSTDIR\share\neomacs\lisp""#));
+    assert!(manifest.contains(r#"RMDir "$INSTDIR""#));
+    assert!(
+        !manifest.contains("RMDir /r"),
+        "uninstaller must preserve files not owned by its package manifest"
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn windows_gstreamer_packager_accepts_official_pango_runtime_shape() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

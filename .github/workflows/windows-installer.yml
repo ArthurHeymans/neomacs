@@ -1,14 +1,46 @@
-name: tmp Windows fresh build
+name: Windows installer contract
 
 on:
+  push:
+    paths:
+      - .github/workflows/windows-installer.yml
+      - assets/windows-installer.nsi
+      - scripts/generate-nsis-uninstall-include.sh
+      - scripts/compile-windows-installer.sh
+      - scripts/package-release.sh
+      - scripts/package-windows-installer.sh
+      - scripts/package-windows-installer-upgrade-fixtures.sh
+      - scripts/run-windows-installer-contract.ps1
+      - scripts/setup-windows-gstreamer.ps1
+      - scripts/test-windows-installer.ps1
+      - scripts/test-windows-installer-upgrade.ps1
+      - scripts/vendor-windows-gstreamer-runtime.sh
+      - scripts/windows-gstreamer-env.sh
+      - xtask/**
+  pull_request:
+    paths:
+      - .github/workflows/windows-installer.yml
+      - assets/windows-installer.nsi
+      - scripts/generate-nsis-uninstall-include.sh
+      - scripts/compile-windows-installer.sh
+      - scripts/package-release.sh
+      - scripts/package-windows-installer.sh
+      - scripts/package-windows-installer-upgrade-fixtures.sh
+      - scripts/run-windows-installer-contract.ps1
+      - scripts/setup-windows-gstreamer.ps1
+      - scripts/test-windows-installer.ps1
+      - scripts/test-windows-installer-upgrade.ps1
+      - scripts/vendor-windows-gstreamer-runtime.sh
+      - scripts/windows-gstreamer-env.sh
+      - xtask/**
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  fresh-build:
-    name: cargo xtask fresh-build --release
+  installer-contract:
+    name: install, upgrade, and uninstall
     runs-on: windows-latest
     timeout-minutes: 180
     env:
@@ -122,3 +154,8 @@ jobs:
         run: |
           source scripts/windows-gstreamer-env.sh
           ./scripts/package-windows-installer.sh --skip-build --no-smoke
+
+      - name: Verify Windows installer ownership contract
+        shell: powershell
+        timeout-minutes: 10
+        run: ./scripts/run-windows-installer-contract.ps1 -ConfirmEphemeralRunner

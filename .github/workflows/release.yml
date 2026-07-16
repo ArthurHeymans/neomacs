@@ -366,6 +366,11 @@ jobs:
           source scripts/windows-gstreamer-env.sh
           ./scripts/package-windows-installer.sh --skip-build --no-smoke
 
+      - name: Verify Windows installer ownership contract
+        shell: powershell
+        timeout-minutes: 10
+        run: ./scripts/run-windows-installer-contract.ps1 -ConfirmEphemeralRunner
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

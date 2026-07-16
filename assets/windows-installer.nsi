@@ -10,30 +10,31 @@
 !error "OUTPUT_FILE must be defined by the packaging script"
 !endif
 
+!ifndef UNINSTALL_INCLUDE
+!error "UNINSTALL_INCLUDE must be defined by the packaging script"
+!endif
+
 !define PRODUCT_NAME "NEO Emacs"
+!define PRODUCT_REGISTRATION_NAME "${PRODUCT_NAME} (User)"
 !define PRODUCT_PUBLISHER "eval-exec"
 !define PRODUCT_WEB_SITE "https://github.com/eval-exec/neomacs"
-!define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
+!define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_REGISTRATION_NAME}"
+!define NEOMACS_APP_PATH_KEY "Software\Microsoft\Windows\CurrentVersion\App Paths\neomacs.exe"
+!define NEOMACSCLIENT_APP_PATH_KEY "Software\Microsoft\Windows\CurrentVersion\App Paths\neomacsclient.exe"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
 OutFile "${OUTPUT_FILE}"
-InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
+InstallDir "$LOCALAPPDATA\Programs\${PRODUCT_NAME}"
+InstallDirRegKey HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation"
 ShowInstDetails show
 ShowUnInstDetails show
-RequestExecutionLevel admin
+RequestExecutionLevel user
 SetCompressor /SOLID lzma
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
-!include "StrFunc.nsh"
-!include "WinMessages.nsh"
 !include "x64.nsh"
-
-${Using:StrFunc} StrStr
-${Using:StrFunc} UnStrRep
-
-!define ENVIRONMENT_KEY "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
 
 !define MUI_ABORTWARNING
 !define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
@@ -41,7 +42,6 @@ ${Using:StrFunc} UnStrRep
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -52,103 +52,89 @@ ${Using:StrFunc} UnStrRep
 
 !insertmacro MUI_LANGUAGE "English"
 
+!macro RemoveOwnedAppPath KEY EXECUTABLE
+  ReadRegStr $0 HKCU "${KEY}" ""
+  ${If} $0 == "$INSTDIR\bin\${EXECUTABLE}"
+    DeleteRegValue HKCU "${KEY}" ""
+    ReadRegStr $1 HKCU "${KEY}" "Path"
+    ${If} $1 == "$INSTDIR\bin"
+      DeleteRegValue HKCU "${KEY}" "Path"
+    ${EndIf}
+    DeleteRegKey /ifempty HKCU "${KEY}"
+  ${EndIf}
+!macroend
+
+Function RemovePreviousUserInstallation
+  ReadRegStr $R0 HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation"
+  ${If} $R0 != ""
+  ${AndIf} ${FileExists} "$R0\uninstall.exe"
+    DetailPrint "Removing the previous ${PRODUCT_NAME} user installation..."
+    ExecWait '"$R0\uninstall.exe" /S _?=$R0' $R1
+    ${If} $R1 != 0
+      MessageBox MB_OK|MB_ICONSTOP \
+        "The previous ${PRODUCT_NAME} installation could not be removed (exit code $R1)."
+      Abort
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_OK "${PRODUCT_NAME} requires 64-bit Windows."
     Abort
   ${EndIf}
   SetRegView 64
+  SetShellVarContext current
 FunctionEnd
 
-Function AddToSystemPath
+Function un.onInit
   SetRegView 64
-  ReadRegStr $0 HKLM "${ENVIRONMENT_KEY}" "Path"
-
-  ${If} $0 == ""
-    WriteRegExpandStr HKLM "${ENVIRONMENT_KEY}" "Path" "$INSTDIR\bin"
-    StrCpy $4 "1"
-  ${Else}
-    StrCpy $1 ";$0;"
-    StrCpy $2 ";$INSTDIR\bin;"
-    ${StrStr} $3 "$1" "$2"
-    ${If} $3 == ""
-      WriteRegExpandStr HKLM "${ENVIRONMENT_KEY}" "Path" "$0;$INSTDIR\bin"
-      StrCpy $4 "1"
-    ${Else}
-      StrCpy $4 "0"
-    ${EndIf}
-  ${EndIf}
-
-  ${If} $4 == "1"
-    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
-  ${EndIf}
-  Push $4
-FunctionEnd
-
-Function un.RemoveFromSystemPath
-  SetRegView 64
-  ReadRegStr $0 HKLM "${ENVIRONMENT_KEY}" "Path"
-
-  ${If} $0 != ""
-    StrCpy $1 ";$0;"
-    StrCpy $2 ";$INSTDIR\bin;"
-    ${UnStrRep} $3 "$1" "$2" ";"
-    ${If} $3 != "$1"
-      ${If} $3 == ";"
-        StrCpy $3 ""
-      ${Else}
-        StrLen $4 $3
-        IntOp $4 $4 - 2
-        StrCpy $3 $3 $4 1
-      ${EndIf}
-      WriteRegExpandStr HKLM "${ENVIRONMENT_KEY}" "Path" "$3"
-      SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
-    ${EndIf}
-  ${EndIf}
+  SetShellVarContext current
 FunctionEnd
 
 Section "!${PRODUCT_NAME}" SEC_MAIN
+  Call RemovePreviousUserInstallation
   SetRegView 64
   SetOutPath "$INSTDIR"
   SetOverwrite on
 
   File /r "${SOURCE_DIR}\*.*"
 
+  WriteRegStr HKCU "${NEOMACS_APP_PATH_KEY}" "" "$INSTDIR\bin\neomacs.exe"
+  WriteRegStr HKCU "${NEOMACS_APP_PATH_KEY}" "Path" "$INSTDIR\bin"
+  WriteRegStr HKCU "${NEOMACSCLIENT_APP_PATH_KEY}" "" "$INSTDIR\bin\neomacsclient.exe"
+  WriteRegStr HKCU "${NEOMACSCLIENT_APP_PATH_KEY}" "Path" "$INSTDIR\bin"
+
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_NAME}"
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
-  WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\bin\neomacs.exe"
+  CreateShortcut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\uninstall.exe"
+
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayName" "${PRODUCT_REGISTRATION_NAME}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLInfoAbout" "${PRODUCT_WEB_SITE}"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "DisplayIcon" "$INSTDIR\bin\neomacs.exe,0"
+  WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoModify" 1
+  WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoRepair" 1
 
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
-  WriteRegDWORD HKLM "${PRODUCT_UNINST_KEY}" "EstimatedSize" "$0"
+  WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "EstimatedSize" "$0"
 SectionEnd
-
-Section "Add to PATH" SEC_PATH
-  Call AddToSystemPath
-  Pop $0
-  ${If} $0 == "1"
-    WriteRegStr HKLM "${PRODUCT_UNINST_KEY}" "AddedToPath" "1"
-  ${EndIf}
-SectionEnd
-
-!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_MAIN} "Install ${PRODUCT_NAME} editor and runtime files."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_PATH} "Add $INSTDIR\bin to your system PATH."
-!insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 Section Uninstall
-  SetRegView 64
-  ReadRegStr $0 HKLM "${PRODUCT_UNINST_KEY}" "AddedToPath"
-  ${If} $0 == "1"
-    Call un.RemoveFromSystemPath
-  ${EndIf}
+  !insertmacro RemoveOwnedAppPath "${NEOMACS_APP_PATH_KEY}" "neomacs.exe"
+  !insertmacro RemoveOwnedAppPath "${NEOMACSCLIENT_APP_PATH_KEY}" "neomacsclient.exe"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk"
+  RMDir "$SMPROGRAMS\${PRODUCT_NAME}"
 
-  RMDir /r "$INSTDIR"
+  !include "${UNINSTALL_INCLUDE}"
 
-  DeleteRegKey HKLM "${PRODUCT_UNINST_KEY}"
+  DeleteRegKey HKCU "${PRODUCT_UNINST_KEY}"
 SectionEnd

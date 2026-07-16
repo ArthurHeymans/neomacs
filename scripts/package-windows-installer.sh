@@ -12,7 +12,7 @@ Prerequisites:
   On GitHub Actions: choco install nsis.
 
 Output:
-  dist/neomacs-{version}-x86_64-pc-windows-msvc.exe
+  dist/neomacs-{version}-x86_64-pc-windows-msvc-user-setup.exe
 USAGE
 }
 
@@ -56,13 +56,8 @@ version="$(get_version)"
 target_triple="x86_64-pc-windows-msvc"
 package_name="neomacs-${version}-${target_triple}"
 package_dir="$dist_dir/$package_name"
-exe_name="neomacs-${version}-${target_triple}.exe"
+exe_name="neomacs-${version}-${target_triple}-user-setup.exe"
 exe_path="$dist_dir/$exe_name"
-
-if ! command -v makensis &>/dev/null; then
-  echo "makensis not found; install NSIS first" >&2
-  exit 1
-fi
 
 pkg_args=(--target "$target_triple")
 if ((skip_build)); then
@@ -76,29 +71,8 @@ scripts/vendor-windows-gstreamer-runtime.sh \
   --package-root "$package_dir" \
   --bin-dir "$package_dir/bin"
 
-nsi_script="$repo_root/assets/windows-installer.nsi"
-if [[ ! -f "$nsi_script" ]]; then
-  echo "NSIS script not found: $nsi_script" >&2
-  exit 1
-fi
-
-unix2dos() {
-  if command -v unix2dos &>/dev/null; then
-    unix2dos "$@"
-  elif command -v sed &>/dev/null; then
-    for f in "$@"; do
-      sed -i 's/$/\r/' "$f"
-    done
-  fi
-}
-
 echo "creating Windows installer..."
-
-makensis -V2 \
-  -DPRODUCT_VERSION="${version}" \
-  -DSOURCE_DIR="$(cygpath -w "$package_dir" 2>/dev/null || echo "$package_dir")" \
-  -DOUTPUT_FILE="$(cygpath -w "$exe_path" 2>/dev/null || echo "$exe_path")" \
-  "$nsi_script"
+scripts/compile-windows-installer.sh "$package_dir" "$version" "$exe_path"
 
 if ((smoke)); then
   echo "smoke-testing installed binary..."
@@ -106,5 +80,3 @@ if ((smoke)); then
     timeout 30s "$package_dir/bin/neomacs.exe" \
       --batch --eval "(kill-emacs 0)" || true
 fi
-
-echo "wrote $exe_path"
