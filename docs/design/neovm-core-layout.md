@@ -236,9 +236,9 @@ port and should fail at registration (debug assert), not be patched over.
 | Step | Status |
 |---|---|
 | Extraction tooling + this document | done 2026-07-16 |
-| Per-module `syms_of_*` decomposition of `builtins/mod.rs` | in progress |
-| `emacs_core/shims/` quarantine | in progress |
-| `defun!` + exemplar migration | in progress |
-| Grab-bag dissolution (`misc.rs`, `builtins/misc_pure.rs`, …) | exemplars first |
+| Per-module `syms_of_*` decomposition of `builtins/mod.rs` | **done 2026-07-16** — 1,248 statements into 57 `syms_of_*` registrars; 316 statements remain in `init_builtins` (EL-shadow/NEO-only names, unmapped homes: `frame.c`, most of `emacs.c`, `fringe.c`, `cmds.c`, platform stubs, cfg blocks, `defsubr_pure!` units) |
+| `emacs_core/shims/` quarantine | **done 2026-07-16** — abbrev, bookmark, cl_lib, isearch, rect, register moved with tracking headers; re-exported under old paths |
+| `defun!` + exemplar migration | **done 2026-07-16** — `emacs_core/defun.rs`; exemplars: `zlib.rs` (full decompress.c mirror), `emacs.rs`, `identity`/`secure-hash-algorithms` in `fns.rs`. Note: `defun!`-declared subrs are invisible to the tmp TSV extractor and to the compat-surface `ctx.defsubr(` scanner — extend both parsers when converting `window.c`/`xfaces.c`-scope functions |
+| Grab-bag dissolution (`misc.rs`, `builtins/misc_pure.rs`, …) | started — `emacs.c` cluster (daemonp, daemon-initialized, invocation-name/-directory) moved into new `emacs.rs` mirror; `identity` + `secure-hash-algorithms` into `fns.rs`. Remaining `misc_pure.rs` backlog by GNU home: message/message-box/message-or-box/current-message → `editfns.rs` (echo/message-log helpers split to `xdisp.rs`), prefix-numeric-value → callint mirror (`interactive.rs`), documentation-stringp → `doc.rs`, flush-standard-output → `print.rs`, force-mode-line-update → `buffer/`, get-internal-run-time → sysdep (no mirror yet), ignore → subr.el shim, make-symbol → `alloc.rs`, symbol-name → `data/` |
 | Machinery eviction from `emacs_core/` (`jit/`, `perf_trace.rs`, …) | deferred (mechanical, low urgency) |
 | Un-namespaced invention cleanup (see NEO-only audit) | deferred — needs per-name decision |

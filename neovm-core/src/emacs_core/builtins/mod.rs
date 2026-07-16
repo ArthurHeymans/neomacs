@@ -1298,6 +1298,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     super::doc::syms_of_doc(ctx);
     super::editfns::syms_of_editfns(ctx);
     super::dynamic_module::syms_of_module(ctx);
+    super::emacs::syms_of_emacs(ctx);
     super::eval::syms_of_eval(ctx);
     super::fileio::syms_of_fileio(ctx);
     super::floatfns::syms_of_floatfns(ctx);
@@ -2066,20 +2067,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr("daemonp", |_ctx, args| builtin_daemonp(args), 0, Some(0));
-    ctx.defsubr(
-        "daemon-initialized",
-        |_ctx, args| builtin_daemon_initialized(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "invocation-directory",
-        builtin_invocation_directory,
-        0,
-        Some(0),
-    );
-    ctx.defsubr("invocation-name", builtin_invocation_name, 0, Some(0));
     ctx.defsubr(
         "set-frame-size-and-position-pixelwise",
         super::window_cmds::builtin_set_frame_size_and_position_pixelwise,

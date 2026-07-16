@@ -1909,6 +1909,27 @@ pub(crate) fn builtin_string_collate_equalp(args: Vec<Value>) -> EvalResult {
 #[path = "fns_test.rs"]
 mod tests;
 
+use crate::emacs_core::defun::defun;
+
+// (identity ARG) — GNU Fidentity, fns.c.
+defun!(IDENTITY: "identity", min = 1,
+fn identity(_ctx: &mut Context, arg: Value) -> EvalResult {
+    Ok(arg)
+});
+
+// (secure-hash-algorithms) — GNU Fsecure_hash_algorithms, fns.c.
+defun!(SECURE_HASH_ALGORITHMS: "secure-hash-algorithms",
+fn secure_hash_algorithms(_ctx: &mut Context) -> EvalResult {
+    Ok(Value::list(vec![
+        Value::symbol("md5"),
+        Value::symbol("sha1"),
+        Value::symbol("sha224"),
+        Value::symbol("sha256"),
+        Value::symbol("sha384"),
+        Value::symbol("sha512"),
+    ]))
+});
+
 /// Register this module's subrs. GNU: `syms_of_fns` in `src/fns.c`.
 /// Extracted verbatim from the former flat `builtins::init_builtins`.
 pub(crate) fn syms_of_fns(ctx: &mut crate::emacs_core::eval::Context) {
@@ -2078,18 +2099,8 @@ pub(crate) fn syms_of_fns(ctx: &mut crate::emacs_core::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "identity",
-        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_identity(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "secure-hash-algorithms",
-        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_secure_hash_algorithms(args),
-        0,
-        Some(0),
-    );
+    ctx.defsubr_decl(&IDENTITY);
+    ctx.defsubr_decl(&SECURE_HASH_ALGORITHMS);
     ctx.defsubr(
         "load-average",
         |_ctx, args| super::editfns::builtin_load_average(args),

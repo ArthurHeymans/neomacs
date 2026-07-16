@@ -4,11 +4,6 @@ use super::*;
 // Misc
 // ===========================================================================
 
-pub(crate) fn builtin_identity(args: Vec<Value>) -> EvalResult {
-    expect_args("identity", &args, 1)?;
-    Ok(args[0])
-}
-
 pub(crate) fn builtin_prefix_numeric_value(args: Vec<Value>) -> EvalResult {
     expect_args("prefix-numeric-value", &args, 1)?;
     let numeric = crate::emacs_core::prefix::prefix_numeric_value(&args[0]);
@@ -383,21 +378,6 @@ pub(crate) fn builtin_current_message(
     Ok(ctx.current_message_value().unwrap_or(Value::NIL))
 }
 
-pub(crate) fn builtin_daemonp(args: Vec<Value>) -> EvalResult {
-    expect_args("daemonp", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_daemon_initialized(args: Vec<Value>) -> EvalResult {
-    expect_args("daemon-initialized", &args, 0)?;
-    Err(signal(
-        "error",
-        vec![Value::string(
-            "This function can only be called if emacs is run as a daemon",
-        )],
-    ))
-}
-
 pub(crate) fn builtin_documentation_stringp(args: Vec<Value>) -> EvalResult {
     expect_args("documentation-stringp", &args, 1)?;
     let is_compiled_ref = match args[0].kind() {
@@ -441,36 +421,6 @@ pub(crate) fn builtin_get_internal_run_time(args: Vec<Value>) -> EvalResult {
         Value::fixnum(secs & 0xFFFF),
         Value::fixnum(usecs),
         Value::fixnum(0),
-    ]))
-}
-
-pub(crate) fn builtin_invocation_directory(
-    ctx: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("invocation-directory", &args, 0)?;
-    let value = ctx.eval_symbol_by_id(super::super::intern::intern("invocation-directory"))?;
-    builtin_copy_sequence(vec![value])
-}
-
-pub(crate) fn builtin_invocation_name(
-    ctx: &mut super::super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("invocation-name", &args, 0)?;
-    let value = ctx.eval_symbol_by_id(super::super::intern::intern("invocation-name"))?;
-    builtin_copy_sequence(vec![value])
-}
-
-pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {
-    expect_args("secure-hash-algorithms", &args, 0)?;
-    Ok(Value::list(vec![
-        Value::symbol("md5"),
-        Value::symbol("sha1"),
-        Value::symbol("sha224"),
-        Value::symbol("sha256"),
-        Value::symbol("sha384"),
-        Value::symbol("sha512"),
     ]))
 }
 

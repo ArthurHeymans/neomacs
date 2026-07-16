@@ -46,6 +46,7 @@ pub mod dispnew;
 pub mod doc;
 pub mod dynamic_module;
 pub mod editfns;
+pub mod emacs;
 pub mod emacs_char;
 pub mod error;
 pub mod errors;
