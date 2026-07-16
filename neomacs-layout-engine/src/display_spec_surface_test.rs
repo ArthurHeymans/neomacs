@@ -65,7 +65,15 @@ fn parse_surface_source_layout_accepts_handle_channel0() {
         480.0,
     )
     .expect("declarative surface layout with handle channel0");
-    assert_eq!(layout.request.channel0, Some(7));
+    // The parser keeps the raw value; the resolver (which has the display
+    // host) interprets it — handles resolve to Surface channel ids there.
+    assert_eq!(
+        layout
+            .channel0_value
+            .and_then(|value| value.as_surface_handle()),
+        Some(7)
+    );
+    assert_eq!(layout.request.channel0, None);
 }
 
 #[test]

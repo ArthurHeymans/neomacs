@@ -867,8 +867,11 @@ fn resolve_surface_channel(
     value: &Value,
     params: DisplayMediaResolveParams<'_>,
 ) -> Option<(SurfaceChannelKind, u32)> {
-    if let Some(id) = value.as_int().filter(|id| *id >= 0) {
-        return Some((SurfaceChannelKind::Surface, id as u32));
+    if let Some(id) = value
+        .as_surface_handle()
+        .or_else(|| value.as_int().filter(|id| *id >= 0).map(|id| id as u32))
+    {
+        return Some((SurfaceChannelKind::Surface, id));
     }
     if DisplaySpecHead::Image.is_head_of(value) {
         let spec = parse_display_image_layout(value, params.default_fg, params.default_bg)?;
