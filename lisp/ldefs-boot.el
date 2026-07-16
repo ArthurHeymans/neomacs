@@ -22998,6 +22998,13 @@ Optional COLS, ROWS set the terminal size.
 (register-definition-prefixes "neomacs-image" '("neomacs-image-"))
 
 
+;;; Generated autoloads from neomacs-shader-playground.el
+
+(autoload 'neomacs-shader-playground "neomacs-shader-playground"
+"Open the shader playground: WGSL buffer plus a live GPU preview." t)
+(register-definition-prefixes "neomacs-shader-playground" '("neomacs-shader-playground-"))
+
+
 ;;; Generated autoloads from neomacs-surface.el
 
 (register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
