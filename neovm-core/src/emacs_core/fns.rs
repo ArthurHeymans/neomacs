@@ -16,6 +16,7 @@ use crate::buffer::{
 };
 use sha1::Sha1;
 use sha2::{Digest, Sha224, Sha256, Sha384, Sha512};
+use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use std::borrow::Cow;
 use std::ffi::CString;
 
@@ -1135,6 +1136,26 @@ fn secure_hash_digest_bytes(algo_name: &str, input: &[u8]) -> Result<Vec<u8>, Fl
             h.update(input);
             h.finalize().to_vec()
         }
+        "sha3-224" => {
+            let mut h = Sha3_224::new();
+            h.update(input);
+            h.finalize().to_vec()
+        }
+        "sha3-256" => {
+            let mut h = Sha3_256::new();
+            h.update(input);
+            h.finalize().to_vec()
+        }
+        "sha3-384" => {
+            let mut h = Sha3_384::new();
+            h.update(input);
+            h.finalize().to_vec()
+        }
+        "sha3-512" => {
+            let mut h = Sha3_512::new();
+            h.update(input);
+            h.finalize().to_vec()
+        }
         _ => {
             return Err(signal(
                 "error",
@@ -1927,6 +1948,10 @@ fn secure_hash_algorithms(_ctx: &mut Context) -> EvalResult {
         Value::symbol("sha256"),
         Value::symbol("sha384"),
         Value::symbol("sha512"),
+        Value::symbol("sha3-224"),
+        Value::symbol("sha3-256"),
+        Value::symbol("sha3-384"),
+        Value::symbol("sha3-512"),
     ]))
 });
 
