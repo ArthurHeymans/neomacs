@@ -1677,6 +1677,38 @@ struct FramePresentationState {
 // Frame
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum FrameDisplayIdentity {
+    #[default]
+    None,
+    Wayland(String),
+    X11(String),
+}
+
+impl FrameDisplayIdentity {
+    pub fn wayland(display: impl Into<String>) -> Self {
+        Self::Wayland(display.into())
+    }
+
+    pub fn x11(display: impl Into<String>) -> Self {
+        Self::X11(display.into())
+    }
+
+    pub fn native_display(&self) -> Option<&str> {
+        match self {
+            Self::None => None,
+            Self::Wayland(display) | Self::X11(display) => Some(display),
+        }
+    }
+
+    pub fn x_display(&self) -> Option<&str> {
+        match self {
+            Self::X11(display) => Some(display),
+            Self::None | Self::Wayland(_) => None,
+        }
+    }
+}
+
 /// A frame (top-level window/screen).
 pub struct Frame {
     pub id: FrameId,
@@ -1733,6 +1765,11 @@ pub struct Frame {
     /// Internal window-system kind, mirroring GNU Emacs frame state rather
     /// than the mutable Lisp-visible frame parameter alist.
     pub window_system: Option<Value>,
+    /// Native display connection plus the X display inherited by child
+    /// processes. These differ for a Wayland frame running alongside
+    /// Xwayland, just as GNU's PGTK backend distinguishes its GDK display from
+    /// the `DISPLAY` exported to subprocesses.
+    display_identity: FrameDisplayIdentity,
     /// Frame parameters.
     ///
     /// Window audit Medium 12 in
@@ -1888,6 +1925,7 @@ impl Frame {
             left_pos: 0,
             top_pos: 0,
             window_system: None,
+            display_identity: FrameDisplayIdentity::default(),
             // GNU terminal frames expose the terminal's default colors as
             // string sentinel values, not concrete RGB colors.  `term.c`
             // initializes FRAME_FOREGROUND_PIXEL / FRAME_BACKGROUND_PIXEL to
@@ -2139,6 +2177,19 @@ impl Frame {
 
     pub fn parameter(&self, key: &str) -> Option<Value> {
         self.parameters.get(&Value::symbol(key)).copied()
+    }
+
+    pub fn set_display_identity(&mut self, identity: FrameDisplayIdentity) {
+        if let Some(display) = identity.native_display() {
+            self.set_parameter(Value::symbol("display"), Value::string(display));
+        } else {
+            self.remove_parameter(Value::symbol("display"));
+        }
+        self.display_identity = identity;
+    }
+
+    pub fn display_identity(&self) -> &FrameDisplayIdentity {
+        &self.display_identity
     }
 
     pub fn known_parameter(&self, key: FrameParam) -> Option<Value> {

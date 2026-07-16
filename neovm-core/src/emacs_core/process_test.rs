@@ -2360,6 +2360,243 @@ fn getenv_nonexistent() {
 }
 
 #[test]
+fn getenv_missing_non_display_variable_does_not_escape_to_host_environment() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "process-environment",
+        Value::list(vec![Value::string("NEOMACS_ENV_POLICY=present")]),
+    );
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("PATH=/initial/path")]),
+    );
+
+    let result = builtin_getenv_internal(&mut eval, vec![Value::string("PATH")])
+        .expect("getenv-internal should succeed");
+
+    assert_eq!(
+        result,
+        Value::NIL,
+        "GNU only consults the native OS environment for its Windows-specific environment repairs"
+    );
+}
+
+#[test]
+fn getenv_display_prefers_selected_frame_then_initial_snapshot() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_parameter(Value::symbol("display"), Value::string(":frame"));
+    eval.obarray.set_symbol_value(
+        "process-environment",
+        Value::list(vec![Value::string("NEOMACS_ENV_POLICY=present")]),
+    );
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+
+    let frame_display = builtin_getenv_internal(&mut eval, vec![Value::string("DISPLAY")])
+        .expect("frame DISPLAY lookup");
+    assert_eq!(frame_display.as_utf8_str(), Some(":frame"));
+
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .remove_parameter(Value::symbol("display"));
+    let initial_display = builtin_getenv_internal(&mut eval, vec![Value::string("DISPLAY")])
+        .expect("initial DISPLAY lookup");
+    assert_eq!(initial_display.as_utf8_str(), Some(":initial"));
+}
+
+#[test]
+fn getenv_display_on_wayland_uses_initial_x_display_not_native_display() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_display_identity(crate::window::FrameDisplayIdentity::wayland("wayland-7"));
+    eval.obarray.set_symbol_value(
+        "process-environment",
+        Value::list(vec![Value::string("NEOMACS_ENV_POLICY=present")]),
+    );
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+
+    let display =
+        builtin_getenv_internal(&mut eval, vec![Value::string("DISPLAY")]).expect("DISPLAY lookup");
+    assert_eq!(display.as_utf8_str(), Some(":initial"));
+    let native_display = eval
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.parameter("display"))
+        .expect("native frame display");
+    assert_eq!(native_display.as_utf8_str(), Some("wayland-7"));
+}
+
+#[test]
+fn child_environment_on_wayland_uses_initial_x_display_not_native_display() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_display_identity(crate::window::FrameDisplayIdentity::wayland("wayland-7"));
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+    let sh = find_bin("sh");
+
+    let result = eval_one_in_context(
+        &mut eval,
+        &format!(
+            r#"(let ((process-environment '("NEOMACS_ENV_POLICY=present")))
+                 (with-temp-buffer
+                   (call-process "{sh}" nil t nil
+                                 "-c" "printf %s \"${{DISPLAY-}}\"")
+                   (buffer-string)))"#
+        ),
+    );
+
+    assert_eq!(result, r#"OK ":initial""#);
+}
+
+#[test]
+fn getenv_explicit_negative_display_suppresses_adaptive_fallback() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_parameter(Value::symbol("display"), Value::string(":frame"));
+    eval.obarray.set_symbol_value(
+        "process-environment",
+        Value::list(vec![Value::string("DISPLAY")]),
+    );
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+
+    let result = builtin_getenv_internal(&mut eval, vec![Value::string("DISPLAY")])
+        .expect("negative DISPLAY lookup");
+
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
+fn call_process_materializes_adaptive_display_and_honors_explicit_policy() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_parameter(Value::symbol("display"), Value::string(":frame"));
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+    let sh = find_bin("sh");
+    let cat = find_bin("cat");
+
+    let result = eval_one_in_context(
+        &mut eval,
+        &format!(
+            r#"(let ((probe
+                      (lambda (environment)
+                        (let ((process-environment environment))
+                          (with-temp-buffer
+                            (call-process "{sh}" nil t nil
+                                          "-c" "printf %s \"${{DISPLAY-}}\"")
+                            (buffer-string))))))
+                 (list (funcall probe '("NEOMACS_ENV_POLICY=present"))
+                       (funcall probe '("DISPLAY" "NEOMACS_ENV_POLICY=present"))
+                       (funcall probe '("DISPLAY=:explicit"
+                                        "NEOMACS_ENV_POLICY=present"))
+                       (let ((process-environment
+                              '("NEOMACS_ENV_POLICY=present")))
+                         (with-temp-buffer
+                           (insert "input")
+                           (call-process-region
+                            (point-min) (point-max) "{sh}" t t nil
+                            "-c" "\"{cat}\" >/dev/null; printf %s \"${{DISPLAY-}}\"")
+                           (buffer-string)))))"#
+        ),
+    );
+
+    assert_eq!(result, r#"OK (":frame" "" ":explicit" ":frame")"#);
+}
+
+fn async_child_display_probe(
+    process_connection_type: &str,
+    make_process_connection_type: &str,
+) -> String {
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_parameter(Value::symbol("display"), Value::string(":frame"));
+    eval.obarray.set_symbol_value(
+        "initial-environment",
+        Value::list(vec![Value::string("DISPLAY=:initial")]),
+    );
+    let sh = find_bin("sh");
+
+    eval_one_in_context(
+        &mut eval,
+        &format!(
+            r#"(let ((process-environment '("NEOMACS_ENV_POLICY=present"))
+                     (output "")
+                     (process-connection-type {process_connection_type})
+                     (process nil))
+                 (unwind-protect
+                     (progn
+                       (setq process
+                             (make-process
+                              :name "adaptive-display-probe"
+                              :buffer nil
+                              :connection-type {make_process_connection_type}
+                              :command '("{sh}" "-c"
+                                         "printf %s \"${{DISPLAY-}}\"")
+                              :filter (lambda (_process chunk)
+                                        (setq output (concat output chunk)))))
+                       (while (process-live-p process)
+                         (accept-process-output process 1))
+                       (while (accept-process-output process 0))
+                       output)
+                   (when process
+                     (ignore-errors (delete-process process)))))"#
+        ),
+    )
+}
+
+#[test]
+fn make_process_pipe_uses_the_canonical_child_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(async_child_display_probe("nil", "'pipe"), r#"OK ":frame""#);
+}
+
+#[cfg(unix)]
+#[test]
+fn make_process_pty_uses_the_canonical_child_environment() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(async_child_display_probe("t", "'pty"), r#"OK ":frame""#);
+}
+
+#[test]
 fn getenv_name_must_be_string() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(r#"(condition-case err (getenv-internal nil) (error err))"#);

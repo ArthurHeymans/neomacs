@@ -13,11 +13,12 @@ use super::{
     StartupOptions, adopt_existing_primary_gui_frame, bootstrap_buffers,
     bootstrap_default_font_name, bootstrap_display_config, bootstrap_frame_metrics,
     bootstrap_frame_metrics_for_font_sizing, bootstrap_frame_metrics_for_frontend,
-    classify_early_cli_action, configure_gnu_startup_state, load_neomacs_gui_term_layer,
-    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
-    render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
-    run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
-    sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
+    classify_early_cli_action, configure_gnu_startup_state, gui_display_identity,
+    load_neomacs_gui_term_layer, parse_startup_options, publish_gui_frame, raw_loadup_command_line,
+    raw_loadup_startup_surface, render_fingerprint_text, render_help_text,
+    render_startup_image_error, render_version_text, run_gnu_startup,
+    runtime_mode_from_program_name, startup_dimensions, sync_live_gui_frame_titles,
+    sync_selected_gui_chrome_state,
 };
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{
@@ -57,6 +58,17 @@ use std::time::{Duration, Instant};
 
 fn gui_display() -> BootstrapDisplayConfig {
     bootstrap_display_config(FrontendKind::Gui, Interactivity::Interactive)
+}
+
+#[test]
+fn gui_display_identity_records_the_native_backend() {
+    let wayland = gui_display_identity(Some("wayland-7"), Some(":42"));
+    assert_eq!(wayland.native_display(), Some("wayland-7"));
+    assert_eq!(wayland.x_display(), None);
+
+    let x11 = gui_display_identity(None, Some(":42"));
+    assert_eq!(x11.native_display(), Some(":42"));
+    assert_eq!(x11.x_display(), Some(":42"));
 }
 
 fn shared_primary_window_size(width: u32, height: u32) -> Arc<Mutex<PrimaryWindowSize>> {

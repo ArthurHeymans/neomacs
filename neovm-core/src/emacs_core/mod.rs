@@ -44,6 +44,7 @@ pub mod doc;
 pub mod dynamic_module;
 pub mod editfns;
 pub mod emacs_char;
+pub(crate) mod environment;
 pub mod error;
 pub mod errors;
 pub mod eval;

@@ -4333,6 +4333,7 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
     {
         let parent = ev.frames.get_mut(parent_id).expect("parent frame");
         parent.set_window_system(Some(Value::symbol("neo")));
+        parent.set_display_identity(crate::window::FrameDisplayIdentity::wayland("wayland-7"));
         parent.char_width = 10.0;
         parent.char_height = 20.0;
         parent.font_pixel_size = 20.0;
@@ -4385,6 +4386,8 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
     assert_eq!(child.height, 100);
     assert_eq!(child.char_width, 10.0);
     assert_eq!(child.char_height, 20.0);
+    assert_eq!(child.parameter("display"), Some(Value::string("wayland-7")));
+    assert_eq!(child.display_identity().x_display(), None);
     assert!(child.undecorated);
     assert!(child.no_accept_focus);
     assert_eq!(child.minibuffer_window, Some(parent_minibuffer));

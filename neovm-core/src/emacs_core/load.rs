@@ -2682,8 +2682,10 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
         obarray.make_special("initial-environment");
         obarray.make_special("process-environment");
     }
-    eval.set_variable("initial-environment", process_environment.clone());
-    eval.set_variable("process-environment", process_environment.clone());
+    let initial_environment = super::builtins::builtin_copy_sequence(vec![process_environment])
+        .expect("copy the startup environment snapshot");
+    eval.set_variable("initial-environment", initial_environment);
+    eval.set_variable("process-environment", process_environment);
     super::runtime_identity::install(eval);
     let system_configuration = super::builtins_extra::system_configuration_value();
     let system_configuration_options = super::builtins_extra::system_configuration_options_value();

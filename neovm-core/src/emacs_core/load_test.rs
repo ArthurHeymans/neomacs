@@ -139,6 +139,27 @@ fn runtime_load_path_without_empty_element_appends_defaults() {
 }
 
 #[test]
+fn startup_environment_snapshot_is_independent_from_process_policy() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root")
+        .to_path_buf();
+
+    ensure_startup_compat_variables(&mut eval, &project_root);
+
+    let same_list = eval
+        .eval_str("(eq initial-environment process-environment)")
+        .expect("compare startup environment lists");
+    assert_eq!(
+        same_list,
+        Value::NIL,
+        "GNU keeps initial-environment as an independent snapshot so destructive process-environment updates cannot mutate it"
+    );
+}
+
+#[test]
 fn stale_preloaded_face_doc_ref_restore_is_idempotent() {
     let mut eval = Context::new();
     let face = Value::symbol("blink-matching-paren-offscreen");

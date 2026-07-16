@@ -7659,6 +7659,11 @@ pub(crate) fn x_create_frame_impl(
                 Some((public_font, font_parameter))
             })
     };
+    let inherited_display_identity = parent_id
+        .and_then(|parent_id| frames.get(parent_id))
+        .or_else(|| frames.selected_frame())
+        .map(|frame| frame.display_identity().clone())
+        .unwrap_or_default();
     let metrics = parent_id
         .and_then(|parent_id| frames.get(parent_id))
         .map(|parent| GuiFrameMetrics {
@@ -7770,6 +7775,7 @@ pub(crate) fn x_create_frame_impl(
         frame.set_window_system(Some(Value::symbol(
             crate::emacs_core::display::gui_window_system_symbol(),
         )));
+        frame.set_display_identity(inherited_display_identity);
         frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
         frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
         frame.install_gnu_gui_default_parameters();

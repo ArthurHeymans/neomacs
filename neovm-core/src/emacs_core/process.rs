@@ -1267,14 +1267,6 @@ fn process_spawn_lisp_argv(proc: &Process) -> Option<Vec<LispString>> {
     Some(argv)
 }
 
-fn lisp_string_from_bytes(bytes: &[u8], multibyte: bool) -> LispString {
-    if multibyte {
-        LispString::from_emacs_bytes(bytes.to_vec())
-    } else {
-        LispString::from_unibyte(bytes.to_vec())
-    }
-}
-
 fn lisp_bytes_to_os_string(bytes: &[u8], _multibyte: bool) -> OsString {
     // Issue #131: on Unix the OS path is the string's bytes verbatim — for a
     // unibyte string those are the raw bytes, for a multibyte string they are the
@@ -1633,43 +1625,6 @@ fn env_var_name_bytes_eq(left: &[u8], right: &[u8]) -> bool {
     {
         left == right
     }
-}
-
-fn split_process_environment_entry(entry: &LispString) -> (OsString, Option<OsString>) {
-    let bytes = entry.as_bytes();
-    let multibyte = entry.is_multibyte();
-    if let Some(eq_pos) = bytes.iter().position(|&byte| byte == b'=') {
-        (
-            lisp_bytes_to_os_string(&bytes[..eq_pos], multibyte),
-            Some(lisp_bytes_to_os_string(&bytes[eq_pos + 1..], multibyte)),
-        )
-    } else {
-        (lisp_bytes_to_os_string(bytes, multibyte), None)
-    }
-}
-
-pub(crate) fn process_environment_entries(
-    process_environment: Option<Value>,
-) -> Option<Vec<(OsString, Option<OsString>)>> {
-    let env_list = process_environment?;
-    if !env_list.is_cons() {
-        return None;
-    }
-    list_to_vec(&env_list).map(|entries| {
-        // GNU's `make_environment_block`/`add_env` (callproc.c) keeps the
-        // FIRST definition of a given variable that appears in
-        // `process-environment` and drops later duplicates. This applies to
-        // both "VAR=value" entries and bare "VAR" unset entries: whichever
-        // occurs first wins. Dedup by variable name preserving first-seen so
-        // every spawn path (call-process and make-process/pipe/pty) gets the
-        // same precedence.
-        let mut seen: std::collections::HashSet<OsString> = std::collections::HashSet::new();
-        entries
-            .iter()
-            .filter_map(|entry| entry.as_lisp_string().map(split_process_environment_entry))
-            .filter(|(key, _)| seen.insert(key.clone()))
-            .collect()
-    })
 }
 
 fn update_process_mark(buffers: &mut BufferManager, proc: &mut Process) -> EvalResult {
@@ -3765,11 +3720,11 @@ impl ProcessManager {
         self.spawn_child_with_environment(id, use_pty, None)
     }
 
-    pub fn spawn_child_with_environment(
+    pub(crate) fn spawn_child_with_environment(
         &mut self,
         id: ProcessId,
         use_pty: bool,
-        process_environment: Option<Value>,
+        child_environment: Option<super::environment::ChildEnvironment>,
     ) -> Result<(), String> {
         let proc = self
             .processes
@@ -3806,18 +3761,18 @@ impl ProcessManager {
         // PTY path (Unix only).
         #[cfg(unix)]
         if use_pty {
-            return self.spawn_child_pty(id, process_environment, &env_overrides);
+            return self.spawn_child_pty(id, child_environment.as_ref(), &env_overrides);
         }
 
         // Pipe path (all platforms, or when use_pty is false).
-        self.spawn_child_pipe(id, process_environment, &env_overrides)
+        self.spawn_child_pipe(id, child_environment.as_ref(), &env_overrides)
     }
 
     /// Pipe-based child spawn (traditional stdin/stdout/stderr pipes).
     fn spawn_child_pipe(
         &mut self,
         id: ProcessId,
-        process_environment: Option<Value>,
+        child_environment: Option<&super::environment::ChildEnvironment>,
         env_overrides: &[(LispString, Option<LispString>)],
     ) -> Result<(), String> {
         let proc = self
@@ -3854,15 +3809,8 @@ impl ProcessManager {
             cmd.current_dir(dir);
         }
 
-        if let Some(entries) = process_environment_entries(process_environment) {
-            cmd.env_clear();
-            for (key, value) in entries {
-                if let Some(value) = value {
-                    cmd.env(&key, &value);
-                } else {
-                    cmd.env_remove(&key);
-                }
-            }
+        if let Some(environment) = child_environment {
+            environment.apply_to_command(&mut cmd);
         }
 
         for (key, val) in env_overrides {
@@ -3992,7 +3940,7 @@ impl ProcessManager {
     fn spawn_child_pty(
         &mut self,
         id: ProcessId,
-        process_environment: Option<Value>,
+        child_environment: Option<&super::environment::ChildEnvironment>,
         env_overrides: &[(LispString, Option<LispString>)],
     ) -> Result<(), String> {
         let proc = self
@@ -4070,18 +4018,8 @@ impl ProcessManager {
             if let Some(dir) = &default_directory {
                 cmd.current_dir(dir);
             }
-            if let Some(entries) = process_environment_entries(process_environment) {
-                cmd.env_clear();
-                for (key, value) in entries {
-                    match value {
-                        Some(value) => {
-                            cmd.env(&key, &value);
-                        }
-                        None => {
-                            cmd.env_remove(&key);
-                        }
-                    }
-                }
+            if let Some(environment) = child_environment {
+                environment.apply_to_command(&mut cmd);
             }
             for (key, val) in env_overrides {
                 let key_str = lisp_string_to_os_string(key);
@@ -4131,15 +4069,8 @@ impl ProcessManager {
             if let Some(dir) = &default_directory {
                 cmd.cwd(dir);
             }
-            if let Some(entries) = process_environment_entries(process_environment) {
-                cmd.env_clear();
-                for (key, value) in entries {
-                    if let Some(value) = value {
-                        cmd.env(&key, &value);
-                    } else {
-                        cmd.env_remove(&key);
-                    }
-                }
+            if let Some(environment) = child_environment {
+                environment.apply_to_pty_command(&mut cmd);
             }
             for (key, val) in env_overrides {
                 let key_str = lisp_string_to_os_string(key);
@@ -11779,7 +11710,6 @@ pub(crate) fn builtin_start_process(
         exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
         default_directory: default_directory.as_ref(),
     };
-    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     let executable = if args[2].is_nil() {
         None
     } else {
@@ -11788,6 +11718,10 @@ pub(crate) fn builtin_start_process(
 
     let use_pty = process_connection_type_is_pty(&eval.obarray);
     let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
+    let child_environment = Some(super::environment::ChildEnvironment::materialize(
+        eval,
+        subprocess_cwd.as_deref(),
+    ));
     let id = eval
         .processes
         .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
@@ -11800,7 +11734,7 @@ pub(crate) fn builtin_start_process(
 
     if let Err(e) = eval
         .processes
-        .spawn_child_with_environment(id, use_pty, process_environment)
+        .spawn_child_with_environment(id, use_pty, child_environment)
     {
         // GNU `start-process` creates the process object before the child-side
         // exec.  An exec failure is then reported as an asynchronous process
@@ -12525,8 +12459,11 @@ pub(crate) fn builtin_make_process(
         exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
         default_directory: default_directory.as_ref(),
     };
-    let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
+    let child_environment = Some(super::environment::ChildEnvironment::materialize(
+        eval,
+        subprocess_cwd.as_deref(),
+    ));
     eval.sync_process_read_config_from_visible_variables();
     builtin_make_process_impl_with_environment(
         &mut eval.processes,
@@ -12534,7 +12471,7 @@ pub(crate) fn builtin_make_process(
         &eval.threads,
         args,
         use_pty,
-        process_environment,
+        child_environment,
         Some(lookup),
         subprocess_cwd,
         Some(&eval.coding_systems),
@@ -12579,7 +12516,7 @@ fn builtin_make_process_impl_with_environment(
     threads: &ThreadManager,
     args: Vec<Value>,
     default_use_pty: bool,
-    process_environment: Option<Value>,
+    child_environment: Option<super::environment::ChildEnvironment>,
     lookup: Option<ProcessExecLookup<'_>>,
     subprocess_cwd: Option<PathBuf>,
     coding_systems: Option<&super::coding::CodingSystemManager>,
@@ -12772,7 +12709,7 @@ fn builtin_make_process_impl_with_environment(
         }
     }
 
-    if let Err(e) = processes.spawn_child_with_environment(id, use_pty, process_environment) {
+    if let Err(e) = processes.spawn_child_with_environment(id, use_pty, child_environment) {
         if use_pty {
             let exit_code = async_process_spawn_failure_exit_code(&e);
             processes.set_child_exit_status_pending(id, process_status_exit_value(exit_code));
@@ -14298,10 +14235,6 @@ pub(crate) fn builtin_set_process_plist_impl(
 // ---------------------------------------------------------------------------
 
 /// (getenv-internal VARIABLE &optional ENV) -> string or nil
-///
-/// GNU-compatible: checks process-environment first, then falls back
-/// to the real OS environment (matching callproc.c:getenv_internal).
-/// When ENV is a list, searches that list instead.
 pub(crate) fn builtin_getenv_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -14317,70 +14250,7 @@ pub(crate) fn builtin_getenv_internal(
         ));
     }
     let varname = super::builtins::expect_lisp_string(&args[0])?;
-
-    // If ENV arg is a list, search it directly (GNU behavior).
-    if let Some(env_list) = args.get(1) {
-        if env_list.is_cons() {
-            return Ok(match getenv_from_list(varname, *env_list) {
-                EnvLookup::Value(value) => value,
-                EnvLookup::Negative => Value::T,
-                EnvLookup::Missing => Value::NIL,
-            });
-        }
-    }
-
-    // Check process-environment first (GNU callproc.c:1720 getenv_internal,
-    // which consults Vprocess_environment — i.e. the dynamic binding, so
-    // honor let-bindings rather than only the global value).
-    let proc_env = eval.visible_variable_value_or_nil("process-environment");
-    if proc_env.is_cons() {
-        match getenv_from_list(varname, proc_env) {
-            EnvLookup::Value(value) => return Ok(value),
-            EnvLookup::Negative => return Ok(Value::NIL),
-            EnvLookup::Missing => {}
-        }
-    }
-
-    // Fall back to real OS environment.
-    match std::env::var_os(lisp_string_to_os_string(varname)) {
-        Some(val) => Ok(Value::heap_string(os_str_to_lisp_string(val.as_os_str()))),
-        None => Ok(Value::NIL),
-    }
-}
-
-enum EnvLookup {
-    Value(Value),
-    Negative,
-    Missing,
-}
-
-/// Search a process-environment-style list for VARIABLE, matching GNU
-/// `getenv_internal_1`: scan cons cells, ignore non-string entries, and treat
-/// a bare "VARIABLE" string as an explicit negative entry.
-fn getenv_from_list(varname: &LispString, env_list: Value) -> EnvLookup {
-    let var_bytes = varname.as_bytes();
-    let mut env = env_list;
-    while env.is_cons() {
-        let entry = env.cons_car();
-        if let Some(s) = entry.as_lisp_string() {
-            let bytes = s.as_bytes();
-            if bytes.len() >= var_bytes.len()
-                && env_var_name_bytes_eq(&bytes[..var_bytes.len()], var_bytes)
-            {
-                if bytes.len() > var_bytes.len() && bytes[var_bytes.len()] == b'=' {
-                    return EnvLookup::Value(Value::heap_string(lisp_string_from_bytes(
-                        &bytes[var_bytes.len() + 1..],
-                        s.is_multibyte(),
-                    )));
-                }
-                if bytes.len() == var_bytes.len() {
-                    return EnvLookup::Negative;
-                }
-            }
-        }
-        env = env.cons_cdr();
-    }
-    EnvLookup::Missing
+    super::environment::getenv_internal(eval, varname, args.get(1).copied().unwrap_or(Value::NIL))
 }
 
 pub(crate) fn make_network_process_subfeatures() -> Value {

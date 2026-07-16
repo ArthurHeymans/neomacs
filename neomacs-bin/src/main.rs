@@ -78,7 +78,7 @@ use neovm_core::emacs_core::{
 };
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
 use neovm_core::heap_types::LispString;
-use neovm_core::window::{FrameFullscreen, FrameId, FrameParam, Window};
+use neovm_core::window::{FrameDisplayIdentity, FrameFullscreen, FrameId, FrameParam, Window};
 
 use image_catalog::AsyncImageCatalog;
 
@@ -208,6 +208,25 @@ struct BootstrapDisplayConfig {
     color_cells: i64,
     background_mode: &'static str,
     interactivity: Interactivity,
+}
+
+fn gui_display_identity(
+    wayland_display: Option<&str>,
+    x_display: Option<&str>,
+) -> FrameDisplayIdentity {
+    let wayland_display = wayland_display
+        .filter(|display| !display.is_empty())
+        .map(FrameDisplayIdentity::wayland);
+    let x_display = x_display
+        .filter(|display| !display.is_empty())
+        .map(FrameDisplayIdentity::x11);
+    wayland_display.or(x_display).unwrap_or_default()
+}
+
+fn host_gui_display_identity() -> FrameDisplayIdentity {
+    let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
+    let x_display = std::env::var("DISPLAY").ok();
+    gui_display_identity(wayland_display.as_deref(), x_display.as_deref())
 }
 
 const EARLY_HELP_BODY: &str = concat!(
@@ -3248,6 +3267,8 @@ fn bootstrap_buffers(
     display: BootstrapDisplayConfig,
 ) -> BootstrapResult {
     let frame_metrics = bootstrap_frame_metrics_for_display(display);
+    let gui_display_identity =
+        (display.frontend == FrontendKind::Gui).then(host_gui_display_identity);
     let find_or_create_buffer = |eval: &mut Context, name: &str| {
         eval.buffer_manager()
             .find_buffer_by_name(name)
@@ -3400,6 +3421,7 @@ fn bootstrap_buffers(
             frame.set_window_system(None);
         }
         if display.frontend == FrontendKind::Gui {
+            frame.set_display_identity(gui_display_identity.clone().unwrap_or_default());
             frame.set_parameter(
                 Value::symbol("display-type"),
                 Value::symbol(display.display_type_symbol()),
@@ -3409,6 +3431,7 @@ fn bootstrap_buffers(
                 Value::symbol(display.background_mode),
             );
         } else {
+            frame.set_display_identity(FrameDisplayIdentity::default());
             frame.remove_parameter(Value::symbol("display-type"));
             frame.remove_parameter(Value::symbol("background-mode"));
         }

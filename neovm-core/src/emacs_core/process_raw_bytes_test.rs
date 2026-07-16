@@ -85,9 +85,14 @@ fn spawn_child_with_environment_uses_process_environment_list() {
             LispString::from_utf8("printf %s \"$NEOMACS_CHILD_ENV\""),
         ],
     );
-    let env = Value::list(vec![Value::heap_string(LispString::from_unibyte(
-        b"NEOMACS_CHILD_ENV=from-lisp".to_vec(),
-    ))]);
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "process-environment",
+        Value::list(vec![Value::heap_string(LispString::from_unibyte(
+            b"NEOMACS_CHILD_ENV=from-lisp".to_vec(),
+        ))]),
+    );
+    let env = crate::emacs_core::environment::ChildEnvironment::materialize(&eval, None);
 
     processes
         .spawn_child_with_environment(pid, false, Some(env))
