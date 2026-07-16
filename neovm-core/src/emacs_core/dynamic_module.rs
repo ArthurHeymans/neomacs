@@ -2782,3 +2782,14 @@ mod tests {
             .expect("a full GC must still run after a contained panic");
     }
 }
+
+/// Register this module's subrs. GNU: `syms_of_emacs_module` in `src/emacs-module.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_module(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "module-load",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_module_load(ctx, args),
+        1,
+        Some(1),
+    );
+}

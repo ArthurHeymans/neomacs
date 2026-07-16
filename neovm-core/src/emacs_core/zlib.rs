@@ -188,3 +188,20 @@ fn decompress_zlib(compressed: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     decoder.read_to_end(&mut output)?;
     Ok(output)
 }
+
+/// Register this module's subrs. GNU: `syms_of_decompress` in `src/decompress.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_decompress(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "zlib-available-p",
+        |_ctx, args| super::zlib::builtin_zlib_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "zlib-decompress-region",
+        |ctx, args| super::zlib::builtin_zlib_decompress_region(ctx, args),
+        2,
+        Some(3),
+    );
+}

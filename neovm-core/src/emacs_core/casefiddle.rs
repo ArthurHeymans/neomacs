@@ -1205,3 +1205,76 @@ pub(crate) fn builtin_char_resolve_modifiers(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "casefiddle_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_casefiddle` in `src/casefiddle.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_casefiddle(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "downcase-region",
+        super::casefiddle::builtin_downcase_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "upcase-region",
+        super::casefiddle::builtin_upcase_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "capitalize-region",
+        super::casefiddle::builtin_capitalize_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "downcase-word",
+        super::casefiddle::builtin_downcase_word,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "upcase-word",
+        super::casefiddle::builtin_upcase_word,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "capitalize-word",
+        super::casefiddle::builtin_capitalize_word,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "capitalize",
+        super::casefiddle::builtin_capitalize_in_state,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "upcase-initials-region",
+        super::casefiddle::builtin_upcase_initials_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "upcase",
+        crate::emacs_core::builtins::strings::builtin_upcase_in_state,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "downcase",
+        crate::emacs_core::builtins::strings::builtin_downcase_in_state,
+        1,
+        Some(1),
+    );
+
+    // -- Case/char --
+    ctx.defsubr(
+        "upcase-initials",
+        super::casefiddle::builtin_upcase_initials_in_state,
+        1,
+        Some(1),
+    );
+}

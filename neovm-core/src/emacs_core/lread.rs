@@ -1105,3 +1105,91 @@ fn integer_access_predicate_matches(candidate: &LispString, mask: i64) -> bool {
 #[cfg(test)]
 #[path = "lread_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_lread` in `src/lread.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_lread(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "intern",
+        crate::emacs_core::builtins::symbols::builtin_intern_fn,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "intern-soft",
+        crate::emacs_core::builtins::symbols::builtin_intern_soft,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "read-from-string",
+        super::reader::builtin_read_from_string,
+        1,
+        Some(3),
+    );
+    ctx.defsubr("read", super::reader::builtin_read, 0, Some(1));
+    ctx.defsubr("mapatoms", super::hashtab::builtin_mapatoms, 1, Some(2));
+    // GNU `Sunintern` is `2, 2, 0`: the OBARRAY argument is mandatory (it may
+    // be nil to default to `obarray`, but it must be supplied).
+    ctx.defsubr("unintern", super::hashtab::builtin_unintern, 2, Some(2));
+    ctx.defsubr("eval-buffer", super::lread::builtin_eval_buffer, 0, Some(5));
+    ctx.defsubr("eval-region", super::lread::builtin_eval_region, 2, Some(4));
+    ctx.defsubr(
+        "load",
+        crate::emacs_core::builtins::defsubr_load,
+        1,
+        Some(5),
+    );
+    ctx.defsubr(
+        "internal--obarray-buckets",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_internal_obarray_buckets(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "lread--substitute-object-in-subtree",
+        |_ctx, args| {
+            crate::emacs_core::builtins::symbols::builtin_lread_substitute_object_in_subtree(args)
+        },
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "obarray-clear",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_obarray_clear(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "obarray-make",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_obarray_make(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "read-positioning-symbols",
+        |ctx, args| super::reader::builtin_read_impl(ctx, args, true),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "obarrayp",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_obarrayp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "locate-file-internal",
+        super::lread::builtin_locate_file_internal,
+        2,
+        Some(4),
+    );
+
+    // -- Lread --
+    ctx.defsubr(
+        "get-load-suffixes",
+        |ctx, args| super::lread::builtin_get_load_suffixes(&ctx.obarray, args),
+        0,
+        Some(0),
+    );
+}

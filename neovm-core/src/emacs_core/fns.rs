@@ -1908,3 +1908,573 @@ pub(crate) fn builtin_string_collate_equalp(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "fns_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_fns` in `src/fns.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_fns(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "provide",
+        crate::emacs_core::builtins::misc_eval::builtin_provide,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "require",
+        crate::emacs_core::builtins::misc_eval::builtin_require,
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "mapcan",
+        crate::emacs_core::builtins::higher_order::builtin_mapcan,
+        2,
+        Some(2),
+    );
+    ctx.defsubr_2(
+        "mapcar",
+        crate::emacs_core::builtins::higher_order::builtin_mapcar_2,
+        2,
+    );
+    ctx.defsubr_2(
+        "mapc",
+        crate::emacs_core::builtins::higher_order::builtin_mapc_2,
+        2,
+    );
+    ctx.defsubr(
+        "mapconcat",
+        crate::emacs_core::builtins::higher_order::builtin_mapconcat,
+        2,
+        Some(3),
+    );
+    ctx.defsubr_slice(
+        "sort",
+        crate::emacs_core::builtins::higher_order::builtin_sort_slice,
+        1,
+        None,
+    );
+    ctx.defsubr_2(
+        "get",
+        crate::emacs_core::builtins::symbols::builtin_get_2,
+        2,
+    );
+    ctx.defsubr_3(
+        "put",
+        crate::emacs_core::builtins::symbols::builtin_put_3,
+        3,
+    );
+    ctx.defsubr(
+        "featurep",
+        crate::emacs_core::builtins::hooks::builtin_featurep,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "buffer-line-statistics",
+        crate::emacs_core::builtins::buffers::builtin_buffer_line_statistics,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "base64-encode-region",
+        super::fns::builtin_base64_encode_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "base64-decode-region",
+        super::fns::builtin_base64_decode_region,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "base64url-encode-region",
+        super::fns::builtin_base64url_encode_region,
+        2,
+        Some(3),
+    );
+    ctx.defsubr("md5", super::fns::builtin_md5, 1, Some(5));
+    ctx.defsubr("secure-hash", super::fns::builtin_secure_hash, 2, Some(5));
+    ctx.defsubr("buffer-hash", super::fns::builtin_buffer_hash, 0, Some(1));
+    ctx.defsubr(
+        "line-number-at-pos",
+        super::navigation::builtin_line_number_at_pos,
+        0,
+        Some(2),
+    );
+    ctx.defsubr("maphash", super::hashtab::builtin_maphash, 2, Some(2));
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "assoc",
+            crate::emacs_core::builtins::cons_list::builtin_assoc,
+            2,
+            Some(3),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "plist-member",
+            crate::emacs_core::builtins::collections::builtin_plist_member,
+            2,
+            Some(3),
+        ),
+    );
+    ctx.defsubr(
+        "length<",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_length_lt(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "length=",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_length_eq(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "length>",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_length_gt(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "substring-no-properties",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_substring_no_properties(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "random",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_random(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "delete",
+        crate::emacs_core::builtins::cons_list::builtin_delete_with_ctx,
+        2,
+        Some(2),
+    );
+    ctx.defsubr_2(
+        "delq",
+        crate::emacs_core::builtins::cons_list::builtin_delq_2,
+        2,
+    );
+    ctx.defsubr(
+        "elt",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_elt(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr_2(
+        "memql",
+        crate::emacs_core::builtins::cons_list::builtin_memql_2,
+        2,
+    );
+    ctx.defsubr_slice(
+        "nconc",
+        crate::emacs_core::builtins::cons_list::builtin_nconc_slice,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "identity",
+        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_identity(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "secure-hash-algorithms",
+        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_secure_hash_algorithms(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "load-average",
+        |_ctx, args| super::editfns::builtin_load_average(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "object-intervals",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_object_intervals(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "string-distance",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_string_distance(args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "value<",
+        crate::emacs_core::builtins::symbols::builtin_value_lt,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "fillarray",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_fillarray(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "define-hash-table-test",
+        |_ctx, args| crate::emacs_core::builtins::collections::builtin_define_hash_table_test(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "hash-table-test",
+        |_ctx, args| super::hashtab::builtin_hash_table_test(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "hash-table-size",
+        |_ctx, args| super::hashtab::builtin_hash_table_size(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "hash-table-rehash-size",
+        |_ctx, args| super::hashtab::builtin_hash_table_rehash_size(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "hash-table-rehash-threshold",
+        |_ctx, args| super::hashtab::builtin_hash_table_rehash_threshold(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "hash-table-weakness",
+        |_ctx, args| super::hashtab::builtin_hash_table_weakness(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "copy-hash-table",
+        |_ctx, args| super::hashtab::builtin_copy_hash_table(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "sxhash-eq",
+        |_ctx, args| super::hashtab::builtin_sxhash_eq(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "sxhash-eql",
+        |_ctx, args| super::hashtab::builtin_sxhash_eql(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "sxhash-equal",
+        |_ctx, args| super::hashtab::builtin_sxhash_equal(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "sxhash-equal-including-properties",
+        |_ctx, args| super::hashtab::builtin_sxhash_equal_including_properties(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal--hash-table-buckets",
+        |_ctx, args| super::hashtab::builtin_internal_hash_table_buckets(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal--hash-table-histogram",
+        |_ctx, args| super::hashtab::builtin_internal_hash_table_histogram(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal--hash-table-index-size",
+        |_ctx, args| super::hashtab::builtin_internal_hash_table_index_size(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "ntake",
+        |_ctx, args| crate::emacs_core::builtins::buffers::builtin_ntake(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "hash-table-p",
+        |_ctx, args| crate::emacs_core::builtins::types::builtin_hash_table_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr_2("eql", crate::emacs_core::builtins::types::builtin_eql_2, 2);
+    ctx.defsubr_2(
+        "equal",
+        crate::emacs_core::builtins::types::builtin_equal_2,
+        2,
+    );
+    ctx.defsubr_1(
+        "length",
+        crate::emacs_core::builtins::cons_list::builtin_length_1,
+        1,
+    );
+    ctx.defsubr_2(
+        "nth",
+        crate::emacs_core::builtins::cons_list::builtin_nth_2,
+        2,
+    );
+    ctx.defsubr_2(
+        "nthcdr",
+        crate::emacs_core::builtins::cons_list::builtin_nthcdr_2,
+        2,
+    );
+    ctx.defsubr_slice(
+        "append",
+        crate::emacs_core::builtins::cons_list::builtin_append_slice,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "reverse",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_reverse(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr_1(
+        "nreverse",
+        crate::emacs_core::builtins::cons_list::builtin_nreverse_1,
+        1,
+    );
+    ctx.defsubr_2(
+        "member",
+        crate::emacs_core::builtins::cons_list::builtin_member_2,
+        2,
+    );
+    ctx.defsubr_2(
+        "memq",
+        crate::emacs_core::builtins::cons_list::builtin_memq_2,
+        2,
+    );
+    ctx.defsubr_2(
+        "assq",
+        crate::emacs_core::builtins::cons_list::builtin_assq_2,
+        2,
+    );
+    ctx.defsubr(
+        "copy-sequence",
+        |_ctx, args| crate::emacs_core::builtins::cons_list::builtin_copy_sequence(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "plist-get",
+        crate::emacs_core::builtins::collections::builtin_plist_get_with_ctx,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "plist-put",
+        crate::emacs_core::builtins::collections::builtin_plist_put_with_ctx,
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "copy-alist",
+        |_ctx, args| super::misc::builtin_copy_alist(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr("rassoc", super::misc::builtin_rassoc_with_ctx, 2, Some(2));
+    ctx.defsubr_2("rassq", super::misc::builtin_rassq_2, 2);
+    ctx.defsubr(
+        "safe-length",
+        |_ctx, args| super::misc::builtin_safe_length(args),
+        1,
+        Some(1),
+    );
+
+    // -- String --
+    ctx.defsubr(
+        "string-equal",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_string_equal(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "string-lessp",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_string_lessp(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr_slice(
+        "substring",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_substring_slice(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr_slice(
+        "concat",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_concat_slice(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "clear-string",
+        |_ctx, args| crate::emacs_core::builtins::buffers::builtin_clear_string(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "compare-strings",
+        |_ctx, args| super::fns::builtin_compare_strings(args),
+        6,
+        Some(7),
+    );
+    ctx.defsubr(
+        "string-version-lessp",
+        |_ctx, args| super::fns::builtin_string_version_lessp(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "string-collate-lessp",
+        |_ctx, args| super::fns::builtin_string_collate_lessp(args),
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "string-collate-equalp",
+        |_ctx, args| super::fns::builtin_string_collate_equalp(args),
+        2,
+        Some(4),
+    );
+    ctx.defsubr_2(
+        "equal-including-properties",
+        super::fns::builtin_equal_including_properties_2,
+        2,
+    );
+    ctx.defsubr(
+        "string-make-multibyte",
+        |_ctx, args| super::fns::builtin_string_make_multibyte(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "string-make-unibyte",
+        |_ctx, args| super::fns::builtin_string_make_unibyte(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "string-to-multibyte",
+        |_ctx, args| super::misc::builtin_string_to_multibyte(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "string-to-unibyte",
+        |_ctx, args| super::misc::builtin_string_to_unibyte(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "string-as-unibyte",
+        |_ctx, args| super::misc::builtin_string_as_unibyte(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "string-as-multibyte",
+        |_ctx, args| super::misc::builtin_string_as_multibyte(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr_slice(
+        "vconcat",
+        |_ctx, args| crate::emacs_core::builtins::collections::builtin_vconcat_slice(args),
+        0,
+        None,
+    );
+
+    // -- Hash table --
+    ctx.defsubr_slice(
+        "make-hash-table",
+        |_ctx, args| crate::emacs_core::builtins::collections::builtin_make_hash_table_slice(args),
+        0,
+        None,
+    );
+    ctx.defsubr_3(
+        "gethash",
+        crate::emacs_core::builtins::collections::builtin_gethash_3,
+        2,
+    );
+    ctx.defsubr_3(
+        "puthash",
+        crate::emacs_core::builtins::collections::builtin_puthash_3,
+        3,
+    );
+    ctx.defsubr_2(
+        "remhash",
+        crate::emacs_core::builtins::collections::builtin_remhash_2,
+        2,
+    );
+    ctx.defsubr(
+        "clrhash",
+        |_ctx, args| crate::emacs_core::builtins::collections::builtin_clrhash(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "hash-table-count",
+        |_ctx, args| crate::emacs_core::builtins::collections::builtin_hash_table_count(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "locale-info",
+        |_ctx, args| super::misc::builtin_locale_info(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "string-bytes",
+        |_ctx, args| crate::encoding::builtin_string_bytes(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "yes-or-no-p",
+        super::reader::builtin_yes_or_no_p,
+        1,
+        Some(1),
+    );
+
+    // -- Base64/hash --
+    ctx.defsubr(
+        "base64-encode-string",
+        |_ctx, args| super::fns::builtin_base64_encode_string(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "base64-decode-string",
+        |_ctx, args| super::fns::builtin_base64_decode_string(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "base64url-encode-string",
+        |_ctx, args| super::fns::builtin_base64url_encode_string(args),
+        1,
+        Some(2),
+    );
+}

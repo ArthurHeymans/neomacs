@@ -675,7 +675,7 @@ fn eval_error_to_flow(e: super::error::EvalError) -> Flow {
 }
 
 /// `(garbage-collect)` — run a full GC cycle and return memory statistics.
-pub(super) fn builtin_garbage_collect(
+pub(crate) fn builtin_garbage_collect(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {

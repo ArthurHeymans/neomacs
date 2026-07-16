@@ -805,3 +805,88 @@ pub(crate) fn builtin_set_category_table_in_buffers(
 #[cfg(test)]
 #[path = "category_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_category` in `src/category.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_category(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "define-category",
+        super::category::builtin_define_category,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "category-docstring",
+        super::category::builtin_category_docstring,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "modify-category-entry",
+        super::category::builtin_modify_category_entry,
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "char-category-set",
+        super::category::builtin_char_category_set,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "category-table",
+        super::category::builtin_category_table,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "set-category-table",
+        super::category::builtin_set_category_table,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "make-category-set",
+        |_ctx, args| super::category::builtin_make_category_set(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "get-unused-category",
+        super::category::builtin_get_unused_category,
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "standard-category-table",
+        super::category::builtin_standard_category_table,
+        0,
+        None,
+    );
+
+    // -- Category --
+    ctx.defsubr(
+        "category-table-p",
+        |_ctx, args| super::category::builtin_category_table_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "copy-category-table",
+        |_ctx, args| super::category::builtin_copy_category_table(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "make-category-table",
+        |_ctx, args| super::category::builtin_make_category_table(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "category-set-mnemonics",
+        |_ctx, args| super::category::builtin_category_set_mnemonics(args),
+        0,
+        None,
+    );
+}

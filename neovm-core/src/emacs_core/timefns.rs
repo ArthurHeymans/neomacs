@@ -2122,3 +2122,94 @@ pub(crate) fn builtin_set_time_zone_rule(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "timefns_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_timefns` in `src/timefns.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_timefns(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "current-time",
+        |ctx, args| super::timefns::builtin_current_time_in_context(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "current-cpu-time",
+        |_ctx, args| crate::emacs_core::builtins::misc_eval::builtin_current_cpu_time(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "float-time",
+        |_ctx, args| super::timefns::builtin_float_time(args),
+        0,
+        Some(1),
+    );
+
+    // -- Time/date --
+    ctx.defsubr(
+        "time-add",
+        |_ctx, args| super::timefns::builtin_time_add(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "time-subtract",
+        |_ctx, args| super::timefns::builtin_time_subtract(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "time-less-p",
+        |_ctx, args| super::timefns::builtin_time_less_p(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "time-equal-p",
+        |_ctx, args| super::timefns::builtin_time_equal_p(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "current-time-string",
+        |_ctx, args| super::timefns::builtin_current_time_string(args),
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "current-time-zone",
+        |_ctx, args| super::timefns::builtin_current_time_zone(args),
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "encode-time",
+        |_ctx, args| super::timefns::builtin_encode_time(args),
+        1,
+        None,
+    );
+    ctx.defsubr(
+        "decode-time",
+        |_ctx, args| super::timefns::builtin_decode_time(args),
+        0,
+        Some(3),
+    );
+    ctx.defsubr(
+        "time-convert",
+        |ctx, args| super::timefns::builtin_time_convert_in_context(ctx, args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "set-time-zone-rule",
+        |_ctx, args| super::timefns::builtin_set_time_zone_rule(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "format-time-string",
+        |_ctx, args| super::format::builtin_format_time_string(args),
+        1,
+        Some(3),
+    );
+}

@@ -668,3 +668,124 @@ fn gnutls_cipher_extraction_error(description: &str) -> crate::emacs_core::error
 fn unibyte_value(bytes: &[u8]) -> Value {
     Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()))
 }
+
+/// Register this module's subrs. GNU: `syms_of_gnutls` in `src/gnutls.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_gnutls(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "gnutls-boot",
+        crate::emacs_core::process::builtin_gnutls_boot,
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "gnutls-available-p",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "gnutls-asynchronous-parameters",
+        crate::emacs_core::process::builtin_gnutls_asynchronous_parameters,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "gnutls-bye",
+        crate::emacs_core::process::builtin_gnutls_bye,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "gnutls-ciphers",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_ciphers(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "gnutls-deinit",
+        crate::emacs_core::process::builtin_gnutls_deinit,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-digests",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_digests(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "gnutls-error-fatalp",
+        crate::emacs_core::builtins::gnutls::builtin_gnutls_error_fatalp_with_ctx,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-error-string",
+        crate::emacs_core::builtins::gnutls::builtin_gnutls_error_string_with_ctx,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-errorp",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_errorp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-format-certificate",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_format_certificate(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-get-initstage",
+        crate::emacs_core::process::builtin_gnutls_get_initstage,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-hash-digest",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_hash_digest(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "gnutls-hash-mac",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_hash_mac(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "gnutls-macs",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_macs(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "gnutls-peer-status",
+        crate::emacs_core::process::builtin_gnutls_peer_status,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-peer-status-warning-describe",
+        |_ctx, args| {
+            crate::emacs_core::builtins::gnutls::builtin_gnutls_peer_status_warning_describe(args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "gnutls-symmetric-decrypt",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_symmetric_decrypt(args),
+        4,
+        Some(5),
+    );
+    ctx.defsubr(
+        "gnutls-symmetric-encrypt",
+        |_ctx, args| crate::emacs_core::builtins::gnutls::builtin_gnutls_symmetric_encrypt(args),
+        4,
+        Some(5),
+    );
+}

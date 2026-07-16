@@ -1232,3 +1232,56 @@ fn font_vector_get_flexible(items: &[Value], prop: &str) -> Option<Value> {
 #[cfg(test)]
 #[path = "fontset_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_fontset` in `src/fontset.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_fontset(ctx: &mut crate::emacs_core::eval::Context) {
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "new-fontset",
+            crate::emacs_core::builtins::symbols::builtin_new_fontset,
+            2,
+            Some(2),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "set-fontset-font",
+            crate::emacs_core::builtins::symbols::builtin_set_fontset_font,
+            3,
+            Some(5),
+        ),
+    );
+    ctx.defsubr(
+        "fontset-font",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_fontset_font(args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "fontset-info",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_fontset_info(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "fontset-list",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_fontset_list(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "fontset-list-all",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_fontset_list_all(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "query-fontset",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_query_fontset(args),
+        1,
+        Some(2),
+    );
+}

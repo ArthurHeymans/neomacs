@@ -3399,3 +3399,86 @@ fn store_bv_result_with_expected_lengths(
 #[cfg(test)]
 #[path = "chartable_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_chartab` in `src/chartab.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_chartab(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "map-char-table",
+        super::chartable::builtin_map_char_table,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "get-unicode-property-internal",
+        |_ctx, args| super::chartable::builtin_get_unicode_property_internal(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "optimize-char-table",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_optimize_char_table(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "put-unicode-property-internal",
+        |_ctx, args| super::chartable::builtin_put_unicode_property_internal(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "unicode-property-table-internal",
+        |ctx, args| super::chartable::builtin_unicode_property_table_internal(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "set-char-table-range",
+        |ctx, args| super::chartable::builtin_set_char_table_range(args, Some(&ctx.obarray)),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "char-table-range",
+        |ctx, args| super::chartable::builtin_char_table_range(args, Some(&ctx.obarray)),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "char-table-parent",
+        |_ctx, args| super::chartable::builtin_char_table_parent(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "set-char-table-parent",
+        |_ctx, args| super::chartable::builtin_set_char_table_parent(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "char-table-extra-slot",
+        |_ctx, args| super::chartable::builtin_char_table_extra_slot(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "set-char-table-extra-slot",
+        |_ctx, args| super::chartable::builtin_set_char_table_extra_slot(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "char-table-subtype",
+        |_ctx, args| super::chartable::builtin_char_table_subtype(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "make-char-table",
+        super::chartable::builtin_make_char_table,
+        1,
+        Some(2),
+    );
+}

@@ -218,3 +218,160 @@ pub(crate) fn builtin_ftruncate(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "floatfns_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_floatfns` in `src/floatfns.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_floatfns(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "sqrt",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_sqrt(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "sin",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_sin(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "cos",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_cos(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "tan",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_tan(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "asin",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_asin(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "acos",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_acos(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "atan",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_atan(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "exp",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_exp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "log",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_log(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "expt",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_expt(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "isnan",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_isnan(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "abs",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_abs(args),
+        1,
+        Some(1),
+    );
+
+    // -- Float / math / conversion --
+    ctx.defsubr(
+        "float",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_float(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "truncate",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_truncate(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "floor",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_floor(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "ceiling",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_ceiling(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "round",
+        |_ctx, args| crate::emacs_core::builtins::arithmetic::builtin_round(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "copysign",
+        |_ctx, args| super::floatfns::builtin_copysign(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "frexp",
+        |_ctx, args| super::floatfns::builtin_frexp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "ldexp",
+        |_ctx, args| super::floatfns::builtin_ldexp(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "logb",
+        |_ctx, args| super::floatfns::builtin_logb(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "fceiling",
+        |_ctx, args| super::floatfns::builtin_fceiling(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "ffloor",
+        |_ctx, args| super::floatfns::builtin_ffloor(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "fround",
+        |_ctx, args| super::floatfns::builtin_fround(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "ftruncate",
+        |_ctx, args| super::floatfns::builtin_ftruncate(args),
+        1,
+        Some(1),
+    );
+}

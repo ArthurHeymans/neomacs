@@ -1313,3 +1313,29 @@ pub(crate) fn builtin_json_insert(eval: &mut super::eval::Context, args: Vec<Val
 #[cfg(test)]
 #[path = "json_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_json` in `src/json.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_json(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "json-parse-buffer",
+        super::json::builtin_json_parse_buffer,
+        0,
+        None,
+    );
+    ctx.defsubr("json-insert", super::json::builtin_json_insert, 1, None);
+
+    // -- JSON --
+    ctx.defsubr(
+        "json-serialize",
+        |_ctx, args| super::json::builtin_json_serialize(args),
+        1,
+        None,
+    );
+    ctx.defsubr(
+        "json-parse-string",
+        |_ctx, args| super::json::builtin_json_parse_string(args),
+        1,
+        None,
+    );
+}

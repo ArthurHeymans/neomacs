@@ -570,3 +570,46 @@ fn resolve_macro_events(eval: &super::eval::Context, value: &Value) -> Result<Ve
 #[cfg(test)]
 #[path = "kmacro_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_macros` in `src/macros.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_macros(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "start-kbd-macro",
+        super::kmacro::builtin_start_kbd_macro,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "end-kbd-macro",
+        super::kmacro::builtin_end_kbd_macro,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "call-last-kbd-macro",
+        super::kmacro::builtin_call_last_kbd_macro,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "execute-kbd-macro",
+        super::kmacro::builtin_execute_kbd_macro,
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "store-kbd-macro-event",
+        super::kmacro::builtin_store_kbd_macro_event,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "cancel-kbd-macro-events",
+        |ctx, args| {
+            crate::emacs_core::builtins::misc_eval::builtin_cancel_kbd_macro_events(ctx, args)
+        },
+        0,
+        Some(0),
+    );
+}

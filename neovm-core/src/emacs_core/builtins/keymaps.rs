@@ -193,7 +193,7 @@ fn expect_key_description(value: &Value) -> Result<Vec<KeyEvent>, Flow> {
 }
 
 /// `(accessible-keymaps KEYMAP &optional PREFIXES)` -> list of accessible keymaps.
-pub(super) fn builtin_accessible_keymaps(
+pub(crate) fn builtin_accessible_keymaps(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -269,7 +269,7 @@ pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value])
 }
 
 /// (make-keymap) -> keymap
-pub(super) fn builtin_make_keymap(
+pub(crate) fn builtin_make_keymap(
     _eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -291,7 +291,7 @@ pub(crate) fn builtin_make_keymap_pure(args: &[Value]) -> EvalResult {
 }
 
 /// (make-sparse-keymap &optional NAME) -> keymap
-pub(super) fn builtin_make_sparse_keymap(
+pub(crate) fn builtin_make_sparse_keymap(
     _eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -309,7 +309,7 @@ pub(super) fn builtin_make_sparse_keymap(
 }
 
 /// `(copy-keymap KEYMAP)` -> keymap copy.
-pub(super) fn builtin_copy_keymap(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_copy_keymap(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_copy_keymap_impl(eval.obarray(), &args)
 }
 
@@ -320,7 +320,7 @@ pub(crate) fn builtin_copy_keymap_impl(obarray: &Obarray, args: &[Value]) -> Eva
 }
 
 /// (define-key KEYMAP KEY DEF &optional REMOVE) -> DEF
-pub(super) fn builtin_define_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_define_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("define-key", &args, 3)?;
     expect_max_args("define-key", &args, 4)?;
     let keymap = expect_keymap(eval, &args[0])?;
@@ -342,7 +342,7 @@ pub(super) fn builtin_define_key(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 /// (lookup-key KEYMAP KEY &optional ACCEPT-DEFAULTS) -> binding or nil
-pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("lookup-key", &args, 2)?;
     expect_max_args("lookup-key", &args, 3)?;
     let t_ok = args.get(2).is_some_and(|v| v.is_truthy());
@@ -453,7 +453,7 @@ fn resolve_lookup_keymaps_in_runtime(
 }
 
 /// (global-set-key KEY COMMAND)
-pub(super) fn builtin_global_set_key(
+pub(crate) fn builtin_global_set_key(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -469,7 +469,7 @@ pub(super) fn builtin_global_set_key(
 }
 
 /// (local-set-key KEY COMMAND)
-pub(super) fn builtin_local_set_key(
+pub(crate) fn builtin_local_set_key(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -491,7 +491,7 @@ pub(super) fn builtin_local_set_key(
 }
 
 /// (use-local-map KEYMAP)
-pub(super) fn builtin_use_local_map(
+pub(crate) fn builtin_use_local_map(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -506,7 +506,7 @@ pub(super) fn builtin_use_local_map(
 }
 
 /// (use-global-map KEYMAP)
-pub(super) fn builtin_use_global_map(
+pub(crate) fn builtin_use_global_map(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -517,7 +517,7 @@ pub(super) fn builtin_use_global_map(
 }
 
 /// (current-local-map) -> keymap or nil
-pub(super) fn builtin_current_local_map(
+pub(crate) fn builtin_current_local_map(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -533,7 +533,7 @@ pub(crate) fn builtin_current_local_map_impl(
 }
 
 /// (current-global-map) -> keymap
-pub(super) fn builtin_current_global_map(
+pub(crate) fn builtin_current_global_map(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -541,7 +541,7 @@ pub(super) fn builtin_current_global_map(
     Ok(ensure_global_keymap(eval))
 }
 
-pub(super) fn builtin_describe_buffer_bindings(
+pub(crate) fn builtin_describe_buffer_bindings(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -675,7 +675,7 @@ pub(super) fn builtin_describe_buffer_bindings(
 ///
 /// Returns list of currently active keymaps in priority order.
 /// GNU Emacs order: minor-mode maps > local-map > global-map.
-pub(super) fn builtin_current_active_maps(
+pub(crate) fn builtin_current_active_maps(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -693,7 +693,7 @@ pub(crate) fn builtin_current_active_maps_impl(
 }
 
 /// `(current-minor-mode-maps)` -> list of active minor mode keymaps.
-pub(super) fn builtin_current_minor_mode_maps(
+pub(crate) fn builtin_current_minor_mode_maps(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -799,7 +799,7 @@ pub(crate) fn execute_keymap_iteration_callbacks(
 ///
 /// Call FUNCTION for each binding in KEYMAP and its parents.
 /// FUNCTION receives two arguments: the event and the binding definition.
-pub(super) fn builtin_map_keymap(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_map_keymap(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("map-keymap", &args, 2)?;
     expect_max_args("map-keymap", &args, 3)?;
     let function = args[0];
@@ -823,7 +823,7 @@ pub(super) fn builtin_map_keymap(eval: &mut super::eval::Context, args: Vec<Valu
 ///
 /// Call FUNCTION for each binding in KEYMAP (not its parents).
 /// Returns the parent keymap if it has one.
-pub(super) fn builtin_map_keymap_internal(
+pub(crate) fn builtin_map_keymap_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -847,7 +847,7 @@ fn map_keymap_internal_impl(
 }
 
 /// (keymap-parent KEYMAP) -> keymap or nil
-pub(super) fn builtin_keymap_parent(
+pub(crate) fn builtin_keymap_parent(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -857,7 +857,7 @@ pub(super) fn builtin_keymap_parent(
 }
 
 /// (set-keymap-parent KEYMAP PARENT) -> PARENT
-pub(super) fn builtin_set_keymap_parent(
+pub(crate) fn builtin_set_keymap_parent(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -879,7 +879,7 @@ pub(super) fn builtin_set_keymap_parent(
 }
 
 /// (keymapp OBJ) -> t or nil
-pub(super) fn builtin_keymapp(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_keymapp(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_keymapp_impl(eval.obarray(), &args)
 }
 
@@ -904,7 +904,7 @@ pub(crate) fn builtin_event_convert_list(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(text-char-description CHARACTER)` -> printable text description.
-pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
     expect_args("text-char-description", &args, 1)?;
     let code = match args[0].kind() {
         ValueKind::Fixnum(n) if (0..=KEY_CHAR_CODE_MASK).contains(&n) => n,
@@ -962,7 +962,7 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(single-key-description KEY &optional NO-ANGLES)` -> string
-pub(super) fn builtin_single_key_description(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_single_key_description(args: Vec<Value>) -> EvalResult {
     expect_range_args("single-key-description", &args, 1, 2)?;
     let no_angles = args.get(1).is_some_and(|v| v.is_truthy());
     Ok(Value::string(describe_single_key_value(

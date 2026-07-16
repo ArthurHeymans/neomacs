@@ -1037,3 +1037,20 @@ mod tests {
         assert_eq!(SqliteBindSymbol::from_value(&Value::T), None);
     }
 }
+
+/// Register this module's subrs. GNU: `syms_of_sqlite` in `src/sqlite.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_sqlite(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "sqlite-available-p",
+        |_ctx, args| super::sqlite::builtin_sqlite_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "sqlitep",
+        |_ctx, args| super::sqlite::builtin_sqlitep(args),
+        1,
+        Some(1),
+    );
+}

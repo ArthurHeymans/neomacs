@@ -1492,3 +1492,26 @@ mod child_isolation_tests {
         );
     }
 }
+
+/// Register this module's subrs. GNU: `syms_of_callproc` in `src/callproc.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_callproc(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "getenv-internal",
+        super::process::builtin_getenv_internal,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "call-process",
+        super::process::builtin_call_process,
+        1,
+        None,
+    );
+    ctx.defsubr(
+        "call-process-region",
+        super::process::builtin_call_process_region,
+        3,
+        None,
+    );
+}

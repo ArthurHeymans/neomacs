@@ -211,3 +211,26 @@ pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
         Ok(Value::T)
     })
 }
+
+/// Register this module's subrs. GNU: `syms_of_inotify` in `src/inotify.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_inotify(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "inotify-add-watch",
+        |_ctx, args| crate::emacs_core::builtins::file_notify::builtin_inotify_add_watch(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "inotify-rm-watch",
+        |_ctx, args| crate::emacs_core::builtins::file_notify::builtin_inotify_rm_watch(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "inotify-valid-p",
+        |_ctx, args| crate::emacs_core::builtins::file_notify::builtin_inotify_valid_p(args),
+        1,
+        Some(1),
+    );
+}

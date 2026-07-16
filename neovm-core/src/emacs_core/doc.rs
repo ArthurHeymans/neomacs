@@ -8138,3 +8138,48 @@ pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "doc_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_doc` in `src/doc.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_doc(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "documentation",
+        super::doc::builtin_documentation,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "documentation-property",
+        super::doc::builtin_documentation_property,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "internal-subr-documentation",
+        |_ctx, args| {
+            crate::emacs_core::builtins::symbols::builtin_internal_subr_documentation(args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "documentation-stringp",
+        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_documentation_stringp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "text-quoting-style",
+        |ctx, args| super::coding::builtin_text_quoting_style(ctx, args),
+        0,
+        Some(0),
+    );
+
+    // -- Documentation/help --
+    ctx.defsubr(
+        "Snarf-documentation",
+        |_ctx, args| super::doc::builtin_snarf_documentation(args),
+        1,
+        Some(1),
+    );
+}

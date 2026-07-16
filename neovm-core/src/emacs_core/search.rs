@@ -966,3 +966,127 @@ pub(crate) fn builtin_replace_regexp_in_string(
 #[cfg(test)]
 #[path = "search_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_search` in `src/search.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_search(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "search-forward",
+        crate::emacs_core::builtins::search::builtin_search_forward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "search-backward",
+        crate::emacs_core::builtins::search::builtin_search_backward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "re-search-forward",
+        crate::emacs_core::builtins::search::builtin_re_search_forward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "re-search-backward",
+        crate::emacs_core::builtins::search::builtin_re_search_backward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "looking-at",
+        crate::emacs_core::builtins::search::builtin_looking_at,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "posix-looking-at",
+        crate::emacs_core::builtins::search::builtin_posix_looking_at,
+        1,
+        Some(2),
+    );
+    ctx.defsubr_slice(
+        "string-match",
+        crate::emacs_core::builtins::search::builtin_string_match_slice,
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "posix-string-match",
+        crate::emacs_core::builtins::search::builtin_posix_string_match,
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "match-beginning",
+        crate::emacs_core::builtins::search::builtin_match_beginning,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "match-end",
+        crate::emacs_core::builtins::search::builtin_match_end,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "match-data",
+        crate::emacs_core::builtins::search::builtin_match_data,
+        0,
+        Some(3),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "match-data--translate",
+            crate::emacs_core::builtins::search::builtin_match_data_translate,
+            1,
+            Some(1),
+        ),
+    );
+    ctx.defsubr(
+        "set-match-data",
+        crate::emacs_core::builtins::search::builtin_set_match_data,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "replace-match",
+        crate::emacs_core::builtins::search::builtin_replace_match,
+        1,
+        Some(5),
+    );
+    ctx.defsubr(
+        "posix-search-forward",
+        super::builtins::search::builtin_posix_search_forward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "posix-search-backward",
+        super::builtins::search::builtin_posix_search_backward,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "newline-cache-check",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_newline_cache_check(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "re--describe-compiled",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_re_describe_compiled(args),
+        1,
+        Some(2),
+    );
+
+    // -- Search --
+    ctx.defsubr(
+        "regexp-quote",
+        |_ctx, args| super::search::builtin_regexp_quote(args),
+        1,
+        Some(1),
+    );
+}

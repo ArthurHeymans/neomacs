@@ -2433,3 +2433,148 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
 #[cfg(test)]
 #[path = "charset_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_charset` in `src/charset.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_charset(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "find-charset-region",
+        super::charset::builtin_find_charset_region,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "charset-after",
+        super::charset::builtin_charset_after,
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "charsetp",
+        |_ctx, args| super::charset::builtin_charsetp(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "charset-plist",
+        |_ctx, args| super::charset::builtin_charset_plist(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "define-charset-internal",
+        |_ctx, args| super::charset::builtin_define_charset_internal(args),
+        17,
+        None,
+    );
+    ctx.defsubr(
+        "define-charset-alias",
+        |_ctx, args| super::charset::builtin_define_charset_alias(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "iso-charset",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_iso_charset(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "make-char",
+        |_ctx, args| super::charset::builtin_make_char(args),
+        1,
+        Some(5),
+    );
+    ctx.defsubr(
+        "map-charset-chars",
+        crate::emacs_core::builtins::symbols::builtin_map_charset_chars,
+        2,
+        Some(5),
+    );
+    ctx.defsubr(
+        "set-charset-plist",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_set_charset_plist(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "sort-charsets",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_sort_charsets(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "split-char",
+        |_ctx, args| super::charset::builtin_split_char(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "unify-charset",
+        |_ctx, args| super::charset::builtin_unify_charset(args),
+        1,
+        Some(3),
+    );
+
+    // -- Charset --
+    ctx.defsubr(
+        "charset-priority-list",
+        |_ctx, args| super::charset::builtin_charset_priority_list(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "set-charset-priority",
+        |_ctx, args| super::charset::builtin_set_charset_priority(args),
+        1,
+        None,
+    );
+    ctx.defsubr(
+        "char-charset",
+        |_ctx, args| super::charset::builtin_char_charset(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "charset-id-internal",
+        |_ctx, args| super::charset::builtin_charset_id_internal(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "declare-equiv-charset",
+        |_ctx, args| super::charset::builtin_declare_equiv_charset(args),
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "find-charset-string",
+        |_ctx, args| super::charset::builtin_find_charset_string(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "decode-char",
+        |_ctx, args| super::charset::builtin_decode_char(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "encode-char",
+        |_ctx, args| super::charset::builtin_encode_char(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "get-unused-iso-final-char",
+        |_ctx, args| super::charset::builtin_get_unused_iso_final_char(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "clear-charset-maps",
+        |_ctx, args| super::charset::builtin_clear_charset_maps(args),
+        0,
+        None,
+    );
+}

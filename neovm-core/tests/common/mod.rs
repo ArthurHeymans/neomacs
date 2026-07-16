@@ -188,3 +188,119 @@ pub fn run_neovm_eval(form: &str) -> Result<String, String> {
     let result = eval.eval_str(form);
     Ok(format_eval_result_with_eval(&eval, &result))
 }
+
+/// Collect every `ctx.defsubr("name", target, ...)` registration under
+/// `src_root` (recursively, skipping test files) into a name -> target map.
+///
+/// Registrations used to live in one flat `builtins::init_builtins`; since
+/// the per-module `syms_of_*` decomposition (docs/design/neovm-core-layout.md)
+/// they sit next to the code they register, so surface audits must scan the
+/// whole tree rather than builtins/mod.rs alone.
+#[allow(dead_code)] // used by the compat_*_surface audits only
+pub fn collect_defsubr_targets(src_root: &Path) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![src_root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("read src dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !name.ends_with(".rs") || name.contains("_test") || name == "tests.rs" {
+                continue;
+            }
+            parse_defsubr_targets_into(&path, &mut out);
+        }
+    }
+    out
+}
+
+#[allow(dead_code)]
+fn parse_defsubr_targets_into(path: &Path, out: &mut std::collections::BTreeMap<String, String>) {
+    let source = std::fs::read_to_string(path).expect("read source file");
+    let mut block = String::new();
+    let mut capturing = false;
+    for line in source.lines() {
+        if !capturing {
+            if let Some(idx) = line.find("ctx.defsubr(") {
+                capturing = true;
+                block.clear();
+                block.push_str(&line[idx..]);
+                block.push('\n');
+                if line.contains(");")
+                    && let Some((name, target)) = extract_defsubr_name_and_target(&block)
+                {
+                    out.insert(name, target);
+                    block.clear();
+                    capturing = false;
+                }
+            }
+            continue;
+        }
+        block.push_str(line);
+        block.push('\n');
+        if line.contains(");")
+            && let Some((name, target)) = extract_defsubr_name_and_target(&block)
+        {
+            out.insert(name, target);
+            block.clear();
+            capturing = false;
+        }
+    }
+
+    // Also pick up entries registered via
+    // `register_builtin(ctx, BuiltinRegistration::...("name", target, ...))` —
+    // eval-state-aware primitives that don't go through ctx.defsubr. The
+    // target may be a path identifier or a closure; accept both.
+    let re = regex::Regex::new(
+        r#"BuiltinRegistration::[A-Za-z0-9_]+\(\s*"([^"]+)"\s*,\s*((?:\|[^|]*\|\s*)?[^,)]+)"#,
+    )
+    .expect("builtin reg regex");
+    for caps in re.captures_iter(&source) {
+        let name = caps[1].to_string();
+        let target = caps[2].trim().to_string();
+        out.entry(name).or_insert(target);
+    }
+}
+
+#[allow(dead_code)]
+fn extract_defsubr_name_and_target(block: &str) -> Option<(String, String)> {
+    let re = regex::Regex::new(r#"ctx\.defsubr\(\s*"([^"]+)""#).expect("defsubr regex");
+    let caps = re.captures(block)?;
+    let name = caps.get(1)?.as_str().to_string();
+    let full = caps.get(0)?;
+    let rest = &block[full.end()..];
+    let comma = rest.find(',')?;
+    let mut target = String::new();
+    let mut paren_depth = 0usize;
+    let mut in_pipe = false;
+    let mut started = false;
+    for ch in rest[comma + 1..].chars() {
+        if !started && ch.is_whitespace() {
+            continue;
+        }
+        started = true;
+        match ch {
+            '|' if paren_depth == 0 => {
+                in_pipe = !in_pipe;
+                target.push(ch);
+            }
+            '(' if !in_pipe => {
+                paren_depth += 1;
+                target.push(ch);
+            }
+            ')' if !in_pipe => {
+                paren_depth = paren_depth.saturating_sub(1);
+                target.push(ch);
+            }
+            ',' if !in_pipe && paren_depth == 0 => break,
+            _ => target.push(ch),
+        }
+    }
+    Some((
+        name,
+        target.split_whitespace().collect::<Vec<_>>().join(" "),
+    ))
+}

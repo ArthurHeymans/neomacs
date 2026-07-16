@@ -166,3 +166,94 @@ pub(crate) fn builtin_comp_native_driver_options_effective_p(args: Vec<Value>) -
 #[cfg(test)]
 #[path = "comp_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_comp` in `src/comp.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_comp(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "native-comp-available-p",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_native_comp_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "native-elisp-load",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_native_elisp_load(args),
+        1,
+        Some(2),
+    );
+
+    // -- Native compilation compatibility --
+    ctx.defsubr(
+        "comp--compile-ctxt-to-file0",
+        |_ctx, args| super::comp::builtin_comp_compile_ctxt_to_file0(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "comp--init-ctxt",
+        |_ctx, args| super::comp::builtin_comp_init_ctxt(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "comp--install-trampoline",
+        |_ctx, args| super::comp::builtin_comp_install_trampoline(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "comp--late-register-subr",
+        |_ctx, args| super::comp::builtin_comp_late_register_subr(args),
+        7,
+        Some(7),
+    );
+    ctx.defsubr(
+        "comp--register-lambda",
+        |_ctx, args| super::comp::builtin_comp_register_lambda(args),
+        7,
+        Some(7),
+    );
+    ctx.defsubr(
+        "comp--register-subr",
+        |_ctx, args| super::comp::builtin_comp_register_subr(args),
+        7,
+        Some(7),
+    );
+    ctx.defsubr(
+        "comp--release-ctxt",
+        |_ctx, args| super::comp::builtin_comp_release_ctxt(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "comp--subr-signature",
+        |_ctx, args| super::comp::builtin_comp_subr_signature(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "comp-el-to-eln-filename",
+        |_ctx, args| super::comp::builtin_comp_el_to_eln_filename(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "comp-el-to-eln-rel-filename",
+        |_ctx, args| super::comp::builtin_comp_el_to_eln_rel_filename(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "comp-native-compiler-options-effective-p",
+        |_ctx, args| super::comp::builtin_comp_native_compiler_options_effective_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "comp-native-driver-options-effective-p",
+        |_ctx, args| super::comp::builtin_comp_native_driver_options_effective_p(args),
+        0,
+        Some(0),
+    );
+}

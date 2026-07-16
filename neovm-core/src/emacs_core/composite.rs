@@ -1002,3 +1002,46 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
 #[cfg(test)]
 #[path = "composite_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_composite` in `src/composite.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_composite(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "compose-region-internal",
+        super::composite::builtin_compose_region_internal,
+        2,
+        Some(4),
+    );
+
+    // -- Composite --
+    ctx.defsubr(
+        "compose-string-internal",
+        |_ctx, args| super::composite::builtin_compose_string_internal(args),
+        3,
+        Some(5),
+    );
+    ctx.defsubr(
+        "find-composition-internal",
+        super::composite::builtin_find_composition_internal,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "composition-get-gstring",
+        |ctx, args| super::composite::builtin_composition_get_gstring(ctx, args),
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "clear-composition-cache",
+        |_ctx, args| super::composite::builtin_clear_composition_cache(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "composition-sort-rules",
+        |_ctx, args| super::composite::builtin_composition_sort_rules(args),
+        1,
+        Some(1),
+    );
+}

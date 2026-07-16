@@ -1416,3 +1416,70 @@ pub fn utf8_to_emacs(s: &str) -> Vec<u8> {
 #[cfg(test)]
 #[path = "emacs_char_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_character` in `src/character.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_character(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "get-byte",
+        crate::emacs_core::builtins::buffers::builtin_get_byte,
+        0,
+        Some(2),
+    );
+    ctx.defsubr_slice(
+        "string",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_string_slice(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "string-width",
+        |ctx, args| crate::emacs_core::builtins::strings::builtin_string_width(ctx, args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "characterp",
+        |_ctx, args| crate::emacs_core::builtins::types::builtin_characterp(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "unibyte-string",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_unibyte_string(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "unibyte-char-to-multibyte",
+        |_ctx, args| super::misc::builtin_unibyte_char_to_multibyte(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "multibyte-char-to-unibyte",
+        |_ctx, args| super::misc::builtin_multibyte_char_to_unibyte(args),
+        0,
+        None,
+    );
+
+    // -- Character encoding --
+    ctx.defsubr(
+        "char-width",
+        |ctx, args| crate::encoding::builtin_char_width_in_context(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "max-char",
+        |_ctx, args| crate::encoding::builtin_max_char(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "char-resolve-modifiers",
+        |_ctx, args| super::casefiddle::builtin_char_resolve_modifiers(args),
+        0,
+        None,
+    );
+}

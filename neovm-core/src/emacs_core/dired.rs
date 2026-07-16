@@ -1357,3 +1357,58 @@ fn read_colon_file_names(path: &str) -> Vec<String> {
 #[cfg(test)]
 #[path = "dired_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_dired` in `src/dired.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_dired(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "file-name-completion",
+        super::dired::builtin_file_name_completion,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "directory-files",
+        super::fileio::builtin_directory_files,
+        1,
+        Some(5),
+    );
+    ctx.defsubr(
+        "file-attributes",
+        super::dired::builtin_file_attributes,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "directory-files-and-attributes",
+        super::dired::builtin_directory_files_and_attributes,
+        1,
+        Some(6),
+    );
+    ctx.defsubr(
+        "file-name-all-completions",
+        super::dired::builtin_file_name_all_completions,
+        2,
+        Some(2),
+    );
+
+    // -- File I/O --
+    ctx.defsubr(
+        "file-attributes-lessp",
+        |_ctx, args| super::dired::builtin_file_attributes_lessp(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "system-users",
+        |_ctx, args| super::dired::builtin_system_users(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "system-groups",
+        |_ctx, args| super::dired::builtin_system_groups(args),
+        0,
+        Some(0),
+    );
+}

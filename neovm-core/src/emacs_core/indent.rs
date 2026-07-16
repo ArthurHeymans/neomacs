@@ -1341,3 +1341,48 @@ pub fn init_indent_vars(obarray: &mut super::symbol::Obarray) {
 #[cfg(test)]
 #[path = "indent_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_indent` in `src/indent.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_indent(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr("indent-to", super::indent::builtin_indent_to, 1, Some(2));
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "vertical-motion",
+            crate::emacs_core::builtins::symbols::builtin_vertical_motion,
+            1,
+            Some(3),
+        ),
+    );
+    ctx.defsubr(
+        "current-indentation",
+        super::indent::builtin_current_indentation,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "current-column",
+        super::indent::builtin_current_column,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "move-to-column",
+        super::indent::builtin_move_to_column,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "compute-motion",
+        super::builtins::buffers::builtin_compute_motion,
+        7,
+        Some(7),
+    );
+    ctx.defsubr(
+        "line-number-display-width",
+        super::xdisp::builtin_line_number_display_width,
+        0,
+        None,
+    );
+}

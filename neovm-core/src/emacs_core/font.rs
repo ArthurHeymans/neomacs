@@ -6891,3 +6891,130 @@ pub(crate) fn builtin_x_load_color_file(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "font_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_font` in `src/font.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_font(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr("list-fonts", super::font::builtin_list_fonts, 1, Some(4));
+    ctx.defsubr("find-font", super::font::builtin_find_font, 1, Some(2));
+    ctx.defsubr(
+        "font-family-list",
+        super::font::builtin_font_family_list,
+        0,
+        Some(1),
+    );
+    ctx.defsubr("font-info", super::font::builtin_font_info, 1, Some(2));
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "font-at",
+            super::font::builtin_font_at,
+            1,
+            Some(3),
+        ),
+    );
+    ctx.defsubr(
+        "font-face-attributes",
+        |_ctx, args| super::font::builtin_font_face_attributes(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "font-get-glyphs",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_font_get_glyphs(args),
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "font-has-char-p",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_font_has_char_p(args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "font-match-p",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_font_match_p(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "font-shape-gstring",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_font_shape_gstring(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "font-variation-glyphs",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_font_variation_glyphs(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "frame-font-cache",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_frame_font_cache(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "internal-char-font",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_internal_char_font(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "open-font",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_open_font(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "query-font",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_query_font(args),
+        1,
+        Some(1),
+    );
+
+    // -- Font/face --
+    ctx.defsubr(
+        "fontp",
+        |_ctx, args| super::font::builtin_fontp(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "font-spec",
+        |_ctx, args| super::font::builtin_font_spec(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "font-get",
+        |_ctx, args| super::font::builtin_font_get(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "font-put",
+        |_ctx, args| super::font::builtin_font_put(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "font-xlfd-name",
+        |_ctx, args| super::font::builtin_font_xlfd_name(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "close-font",
+        |_ctx, args| super::font::builtin_close_font(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "clear-font-cache",
+        |_ctx, args| super::font::builtin_clear_font_cache(args),
+        0,
+        Some(0),
+    );
+}

@@ -1112,3 +1112,73 @@ pub(crate) fn builtin_image_transforms_p(args: Vec<Value>) -> EvalResult {
 #[cfg(test)]
 #[path = "image_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_image` in `src/image.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_image(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "init-image-library",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_init_image_library(args),
+        1,
+        Some(1),
+    );
+
+    // -- Image --
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "image-size",
+            super::image::builtin_image_size_in_context,
+            1,
+            Some(3),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "image-mask-p",
+            super::image::builtin_image_mask_p_in_context,
+            1,
+            Some(2),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "image-flush",
+            super::image::builtin_image_flush_in_context,
+            1,
+            Some(2),
+        ),
+    );
+    ctx.defsubr(
+        "clear-image-cache",
+        |_ctx, args| super::image::builtin_clear_image_cache(args),
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "image-cache-size",
+        |_ctx, args| super::image::builtin_image_cache_size(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "image-metadata",
+        |_ctx, args| super::image::builtin_image_metadata(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "imagep",
+        |_ctx, args| super::image::builtin_imagep(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "image-transforms-p",
+        |_ctx, args| super::image::builtin_image_transforms_p(args),
+        0,
+        Some(1),
+    );
+}

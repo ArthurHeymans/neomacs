@@ -800,3 +800,45 @@ pub(crate) fn builtin_mark_marker(eval: &mut super::eval::Context, args: Vec<Val
 #[cfg(test)]
 #[path = "marker_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_marker` in `src/marker.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_marker(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr("set-marker", super::marker::builtin_set_marker, 2, Some(3));
+    ctx.defsubr(
+        "marker-position",
+        super::marker::builtin_marker_position,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "marker-buffer",
+        super::marker::builtin_marker_buffer,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "copy-marker",
+        super::marker::builtin_copy_marker,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "marker-insertion-type",
+        |_ctx, args| super::marker::builtin_marker_insertion_type(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "marker-last-position",
+        |_ctx, args| crate::emacs_core::builtins::symbols::builtin_marker_last_position(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "set-marker-insertion-type",
+        super::marker::builtin_set_marker_insertion_type,
+        0,
+        None,
+    );
+}

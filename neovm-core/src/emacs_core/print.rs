@@ -2730,3 +2730,92 @@ fn append_hash_table_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptio
 #[cfg(test)]
 #[path = "print_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_print` in `src/print.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_print(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "print--preprocess",
+        super::process::builtin_print_preprocess,
+        1,
+        Some(1),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "princ",
+            crate::emacs_core::builtins::misc_eval::builtin_princ,
+            1,
+            Some(2),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "prin1",
+            crate::emacs_core::builtins::misc_eval::builtin_prin1,
+            1,
+            Some(3),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "prin1-to-string",
+            crate::emacs_core::builtins::misc_eval::builtin_prin1_to_string,
+            1,
+            Some(3),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "print",
+            crate::emacs_core::builtins::misc_eval::builtin_print,
+            1,
+            Some(2),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "terpri",
+            crate::emacs_core::builtins::misc_eval::builtin_terpri,
+            0,
+            Some(2),
+        ),
+    );
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "write-char",
+            crate::emacs_core::builtins::misc_eval::builtin_write_char,
+            1,
+            Some(2),
+        ),
+    );
+    ctx.defsubr(
+        "error-message-string",
+        super::errors::builtin_error_message_string,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "flush-standard-output",
+        |_ctx, args| crate::emacs_core::builtins::misc_pure::builtin_flush_standard_output(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "external-debugging-output",
+        crate::emacs_core::builtins::stubs::builtin_external_debugging_output,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "redirect-debugging-output",
+        crate::emacs_core::builtins::symbols::builtin_redirect_debugging_output,
+        1,
+        Some(2),
+    );
+}

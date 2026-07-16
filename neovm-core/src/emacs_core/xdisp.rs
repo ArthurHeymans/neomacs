@@ -5708,3 +5708,112 @@ pub(crate) fn builtin_neomacs_write_frame_snapshot(
 #[cfg(test)]
 #[path = "xdisp_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_xdisp` in `src/xdisp.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_xdisp(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "buffer-text-pixel-size",
+        crate::emacs_core::builtins::buffers::builtin_buffer_text_pixel_size,
+        0,
+        Some(4),
+    );
+    ctx.defsubr(
+        "format-mode-line",
+        super::xdisp::builtin_format_mode_line_ctx,
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "tool-bar-height",
+        super::xdisp::builtin_tool_bar_height_ctx,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "tab-bar-height",
+        super::xdisp::builtin_tab_bar_height_ctx,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "get-display-property",
+        super::textprop::builtin_get_display_property,
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "display--line-is-continued-p",
+        |_ctx, args| crate::emacs_core::builtins::stubs::builtin_display_line_is_continued_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "set-buffer-redisplay",
+        crate::emacs_core::builtins::symbols::builtin_set_buffer_redisplay,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "remember-mouse-glyph",
+        crate::emacs_core::builtins::stubs::builtin_remember_mouse_glyph,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "window-text-pixel-size",
+        super::xdisp::builtin_window_text_pixel_size_ctx,
+        0,
+        Some(7),
+    );
+
+    // -- Display engine (xdisp) --
+    ctx.defsubr(
+        "invisible-p",
+        |ctx, args| super::xdisp::builtin_invisible_p(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "line-pixel-height",
+        |_ctx, args| super::xdisp::builtin_line_pixel_height(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "move-point-visually",
+        |_ctx, args| super::xdisp::builtin_move_point_visually(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "lookup-image-map",
+        |_ctx, args| super::xdisp::builtin_lookup_image_map(args),
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "current-bidi-paragraph-direction",
+        |ctx, args| super::xdisp::builtin_current_bidi_paragraph_direction(ctx, args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "bidi-resolved-levels",
+        |_ctx, args| super::xdisp::builtin_bidi_resolved_levels(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "bidi-find-overridden-directionality",
+        |_ctx, args| super::xdisp::builtin_bidi_find_overridden_directionality(args),
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "long-line-optimizations-p",
+        |_ctx, args| super::xdisp::builtin_long_line_optimizations_p(args),
+        0,
+        Some(0),
+    );
+}

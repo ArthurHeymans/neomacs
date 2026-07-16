@@ -981,7 +981,7 @@ pub(crate) fn builtin_symbol_plist_fn(
     Ok(eval.obarray().symbol_plist_id(symbol))
 }
 
-pub(super) fn builtin_register_code_conversion_map(
+pub(crate) fn builtin_register_code_conversion_map(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -1043,7 +1043,7 @@ fn symbol_has_valid_ccl_program_idx(
     symbol_has_valid_ccl_program_idx_in_obarray(eval.obarray(), symbol)
 }
 
-pub(super) fn builtin_ccl_program_p(
+pub(crate) fn builtin_ccl_program_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -1056,7 +1056,7 @@ pub(super) fn builtin_ccl_program_p(
     super::ccl::builtin_ccl_program_p_impl(args)
 }
 
-pub(super) fn builtin_ccl_execute(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_ccl_execute(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let obarray = eval.obarray();
     if args.first().is_some_and(|v| v.is_symbol())
         && !symbol_has_valid_ccl_program_idx_in_obarray(obarray, &args[0])?
@@ -1068,7 +1068,7 @@ pub(super) fn builtin_ccl_execute(eval: &mut super::eval::Context, args: Vec<Val
     super::ccl::builtin_ccl_execute_impl(args)
 }
 
-pub(super) fn builtin_ccl_execute_on_string(
+pub(crate) fn builtin_ccl_execute_on_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -1083,7 +1083,7 @@ pub(super) fn builtin_ccl_execute_on_string(
     super::ccl::builtin_ccl_execute_on_string_impl(args)
 }
 
-pub(super) fn builtin_register_ccl_program(
+pub(crate) fn builtin_register_ccl_program(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {

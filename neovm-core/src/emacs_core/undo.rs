@@ -609,3 +609,17 @@ pub(crate) fn builtin_undo(eval: &mut super::eval::Context, args: Vec<Value>) ->
 #[cfg(test)]
 #[path = "undo_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_undo` in `src/undo.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_undo(ctx: &mut crate::emacs_core::eval::Context) {
+    crate::emacs_core::builtins::register_builtin(
+        ctx,
+        crate::emacs_core::builtins::BuiltinRegistration::requires_eval_state(
+            "undo-boundary",
+            super::undo::builtin_undo_boundary,
+            0,
+            Some(0),
+        ),
+    );
+}

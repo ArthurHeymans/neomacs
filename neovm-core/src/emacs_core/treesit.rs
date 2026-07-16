@@ -534,3 +534,422 @@ fn record_tag_is(value: Value, expected_tag: &str) -> bool {
         .and_then(|tag| tag.as_symbol_name())
         == Some(expected_tag)
 }
+
+/// Register this module's subrs. GNU: `syms_of_treesit` in `src/treesit.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_treesit(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "treesit-available-p",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_available_p(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "treesit-compiled-query-p",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_compiled_query_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-induce-sparse-tree",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_induce_sparse_tree(ctx, args)
+        },
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "treesit-language-abi-version",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_language_abi_version(ctx, args)
+        },
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-language-available-p",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_language_available_p(ctx, args)
+        },
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-library-abi-version",
+        |_ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_library_abi_version(args)
+        },
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-check",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_check(ctx, args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-child",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_child(ctx, args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit-node-child-by-field-name",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_child_by_field_name(
+                ctx, args,
+            )
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-child-count",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_child_count(ctx, args)
+        },
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-descendant-for-range",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_descendant_for_range(
+                ctx, args,
+            )
+        },
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "treesit-node-end",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_end(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-eq",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_eq(ctx, args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-field-name-for-child",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_field_name_for_child(
+                ctx, args,
+            )
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-first-child-for-pos",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_first_child_for_pos(
+                ctx, args,
+            )
+        },
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit-node-match-p",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_match_p(ctx, args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit-node-next-sibling",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_next_sibling(ctx, args)
+        },
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-p",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-parent",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_parent(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-parser",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_parser(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-prev-sibling",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_node_prev_sibling(ctx, args)
+        },
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-node-start",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_start(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-string",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_string(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-node-type",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_node_type(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-add-notifier",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_add_notifier(ctx, args)
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-parser-buffer",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_buffer(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-create",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_create(ctx, args),
+        1,
+        Some(4),
+    );
+    ctx.defsubr(
+        "treesit-parser-delete",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_delete(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-included-ranges",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_included_ranges(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-language",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_language(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-list",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_list(ctx, args),
+        0,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit-parser-notifiers",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_notifiers(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-p",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-remove-notifier",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_remove_notifier(ctx, args)
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-parser-root-node",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_root_node(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-set-included-ranges",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_set_included_ranges(
+                ctx, args,
+            )
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-parser-tag",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parser_tag(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-pattern-expand",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_pattern_expand(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-query-capture",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_capture(ctx, args),
+        2,
+        Some(6),
+    );
+    ctx.defsubr(
+        "treesit-query-compile",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_compile(ctx, args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit-query-expand",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_expand(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-query-language",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_language(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-query-p",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-search-forward",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_search_forward(ctx, args),
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "treesit-search-subtree",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_search_subtree(ctx, args),
+        2,
+        Some(5),
+    );
+    ctx.defsubr(
+        "treesit-subtree-stat",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_subtree_stat(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-grammar-location",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_grammar_location(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-tracking-line-column-p",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_tracking_line_column_p(ctx, args)
+        },
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-tracking-line-column-p",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_tracking_line_column_p(
+                ctx, args,
+            )
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-query-eagerly-compiled-p",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_query_eagerly_compiled_p(
+                ctx, args,
+            )
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-query-source",
+        |_ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_query_source(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-embed-level",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_embed_level(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit-parser-set-embed-level",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_set_embed_level(ctx, args)
+        },
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-parse-string",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_parse_string(ctx, args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "treesit-parser-changed-regions",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_parser_changed_regions(ctx, args)
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit--linecol-at",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_linecol_at(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "treesit--linecol-cache-set",
+        |ctx, args| {
+            crate::emacs_core::builtins::treesit::builtin_treesit_linecol_cache_set(ctx, args)
+        },
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "treesit--linecol-cache",
+        |ctx, args| crate::emacs_core::builtins::treesit::builtin_treesit_linecol_cache(ctx, args),
+        0,
+        Some(0),
+    );
+}

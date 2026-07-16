@@ -181,3 +181,27 @@ pub(crate) fn builtin_dbus_message_internal(ctx: &mut Context, args: Vec<Value>)
 #[cfg(test)]
 #[path = "dbus_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_dbusbind` in `src/dbusbind.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_dbusbind(ctx: &mut crate::emacs_core::eval::Context) {
+    // -- DBus compatibility --
+    ctx.defsubr(
+        "dbus--init-bus",
+        |_ctx, args| super::dbus::builtin_dbus_init_bus(args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "dbus-get-unique-name",
+        |_ctx, args| super::dbus::builtin_dbus_get_unique_name(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "dbus-message-internal",
+        |ctx, args| super::dbus::builtin_dbus_message_internal(ctx, args),
+        0,
+        None,
+    );
+}

@@ -340,3 +340,189 @@ pub(crate) fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Valu
 #[cfg(test)]
 #[path = "xfaces_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_xfaces` in `src/xfaces.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_xfaces(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "x-list-fonts",
+        super::display::builtin_x_list_fonts,
+        1,
+        Some(5),
+    );
+    ctx.defsubr("face-font", super::font::builtin_face_font, 1, Some(3));
+    ctx.defsubr(
+        "display-supports-face-attributes-p",
+        super::display::builtin_display_supports_face_attributes_p,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "internal-lisp-face-p",
+        super::font::builtin_internal_lisp_face_p,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-make-lisp-face",
+        super::font::builtin_internal_make_lisp_face,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-set-lisp-face-attribute",
+        super::font::builtin_internal_set_lisp_face_attribute,
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "x-load-color-file",
+        |_ctx, args| super::font::builtin_x_load_color_file(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "face-attributes-as-vector",
+        |_ctx, args| super::xfaces::builtin_face_attributes_as_vector(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+    "internal-set-lisp-face-attribute-from-resource",
+    |ctx, args| crate::emacs_core::builtins::symbols::builtin_internal_set_lisp_face_attribute_from_resource(ctx, args),
+    3,
+    Some(4),
+    );
+    ctx.defsubr(
+        "tty-suppress-bold-inverse-default-colors",
+        |_ctx, args| {
+            crate::emacs_core::builtins::symbols::builtin_tty_suppress_bold_inverse_default_colors(
+                args,
+            )
+        },
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "frame--face-hash-table",
+        super::xfaces::builtin_frame_face_hash_table,
+        0,
+        Some(1),
+    );
+
+    // -- Misc pure --
+    ctx.defsubr(
+        "bitmap-spec-p",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_bitmap_spec_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "clear-face-cache",
+        |_ctx, args| crate::emacs_core::builtins::strings::builtin_clear_face_cache(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "internal-lisp-face-attribute-values",
+        |_ctx, args| super::font::builtin_internal_lisp_face_attribute_values(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "internal-lisp-face-equal-p",
+        |_ctx, args| super::font::builtin_internal_lisp_face_equal_p(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-lisp-face-empty-p",
+        |_ctx, args| super::font::builtin_internal_lisp_face_empty_p(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "face-attribute-relative-p",
+        |_ctx, args| super::font::builtin_face_attribute_relative_p(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "merge-face-attribute",
+        super::font::builtin_merge_face_attribute_with_eval,
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "color-gray-p",
+        |ctx, args| super::font::builtin_color_gray_p(ctx, args),
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "color-supported-p",
+        |_ctx, args| super::font::builtin_color_supported_p(args),
+        1,
+        Some(3),
+    );
+    ctx.defsubr(
+        "color-distance",
+        |ctx, args| super::font::builtin_color_distance(ctx, args),
+        2,
+        Some(4),
+    );
+    ctx.defsubr(
+        "color-values-from-color-spec",
+        |_ctx, args| super::font::builtin_color_values_from_color_spec(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "internal-face-x-get-resource",
+        |_ctx, args| super::font::builtin_internal_face_x_get_resource(args),
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "internal-set-font-selection-order",
+        |_ctx, args| super::font::builtin_internal_set_font_selection_order(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-set-alternative-font-family-alist",
+        |_ctx, args| super::font::builtin_internal_set_alternative_font_family_alist(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "internal-set-alternative-font-registry-alist",
+        |_ctx, args| super::font::builtin_internal_set_alternative_font_registry_alist(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-copy-lisp-face",
+        super::font::builtin_internal_copy_lisp_face,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "internal-get-lisp-face-attribute",
+        super::font::builtin_internal_get_lisp_face_attribute,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "internal-merge-in-global-face",
+        super::font::builtin_internal_merge_in_global_face,
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "x-family-fonts",
+        |_ctx, args| super::display::builtin_x_family_fonts(args),
+        0,
+        Some(2),
+    );
+}

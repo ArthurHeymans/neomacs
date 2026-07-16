@@ -477,14 +477,14 @@ pub(super) use super::value;
 pub(super) use super::window_cmds;
 
 // --- Submodules ---
-mod arithmetic;
-mod buffer_text_backend;
+pub(crate) mod arithmetic;
+pub(crate) mod buffer_text_backend;
 pub(crate) mod collections;
-mod cons_list;
+pub(crate) mod cons_list;
 pub(crate) mod from_value;
-mod misc_pure;
-mod strings;
-mod types;
+pub(crate) mod misc_pure;
+pub(crate) mod strings;
+pub(crate) mod types;
 
 pub(crate) use arithmetic::*;
 pub(crate) use buffer_text_backend::*;
@@ -504,19 +504,19 @@ pub(crate) use types::*;
 // instead of reimplementing them (matches the sibling `navigation`/`editfns`/
 // `search` modules, already crate-visible).
 pub(crate) mod buffers;
-mod file_notify;
+pub(crate) mod file_notify;
 pub(crate) mod fringe_bitmap;
 pub(crate) mod fringe_standard_bitmaps;
 pub(crate) mod gnutls;
 pub(crate) mod higher_order;
-mod hooks;
+pub(crate) mod hooks;
 pub(crate) mod keymaps;
-mod lcms;
+pub(crate) mod lcms;
 pub(crate) mod misc_eval;
 pub(crate) mod search;
-mod stubs;
+pub(crate) mod stubs;
 pub(crate) mod symbols;
-mod treesit;
+pub(crate) mod treesit;
 
 pub(crate) use buffers::*;
 pub(crate) use file_notify::*;
@@ -628,14 +628,14 @@ pub(crate) fn dispatch_builtin_by_id(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BuiltinNoEvalPlaceholder {
+pub(crate) enum BuiltinNoEvalPlaceholder {
     Nil,
     FixnumZero,
     WindowLineHeight,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum BuiltinNoEvalPolicy {
+pub(crate) enum BuiltinNoEvalPolicy {
     Native,
     RequiresEvalState,
     Placeholder(BuiltinNoEvalPlaceholder),
@@ -644,11 +644,11 @@ enum BuiltinNoEvalPolicy {
 static BUILTIN_NO_EVAL_POLICIES: OnceLock<Mutex<Vec<Option<BuiltinNoEvalPolicy>>>> =
     OnceLock::new();
 
-fn builtin_no_eval_policies() -> &'static Mutex<Vec<Option<BuiltinNoEvalPolicy>>> {
+pub(crate) fn builtin_no_eval_policies() -> &'static Mutex<Vec<Option<BuiltinNoEvalPolicy>>> {
     BUILTIN_NO_EVAL_POLICIES.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-fn record_builtin_no_eval_policy(name: &str, policy: BuiltinNoEvalPolicy) {
+pub(crate) fn record_builtin_no_eval_policy(name: &str, policy: BuiltinNoEvalPolicy) {
     let sym_id = intern(name);
     let mut policies = builtin_no_eval_policies()
         .lock()
@@ -661,7 +661,7 @@ fn record_builtin_no_eval_policy(name: &str, policy: BuiltinNoEvalPolicy) {
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn builtin_no_eval_policy(sym_id: SymId) -> BuiltinNoEvalPolicy {
+pub(crate) fn builtin_no_eval_policy(sym_id: SymId) -> BuiltinNoEvalPolicy {
     builtin_no_eval_policies()
         .lock()
         .expect("builtin no-eval policy registry poisoned")
@@ -717,16 +717,16 @@ pub(crate) fn dispatch_builtin_without_eval_state(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
-mod replace_region_contents_test;
+pub(crate) mod replace_region_contents_test;
 
 // -----------------------------------------------------------------------
 // Wrapper functions for builtins that need tracing or non-standard access
 // -----------------------------------------------------------------------
 
-fn defsubr_run_hooks(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_run_hooks(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let hook_names: Vec<String> = args
         .iter()
         .filter_map(|a| a.as_symbol_name().map(|s| s.to_string()))
@@ -744,7 +744,7 @@ fn defsubr_run_hooks(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalR
     result
 }
 
-fn defsubr_load(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_load(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let file_name = args.first().map(|a| format!("{}", a)).unwrap_or_default();
     tracing::debug!(file = %file_name, "load called");
     let result = builtin_load(eval, args);
@@ -752,7 +752,7 @@ fn defsubr_load(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult
     result
 }
 
-fn defsubr_message(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_message(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let msg_preview: String = args
         .first()
         .map(|a| {
@@ -768,53 +768,86 @@ fn defsubr_message(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalRes
     builtin_message(eval, args)
 }
 
-fn defsubr_coding_system_aliases(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_aliases(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_aliases(&eval.coding_systems, args)
 }
-fn defsubr_coding_system_plist(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_plist(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_plist(&eval.coding_systems, args)
 }
-fn defsubr_coding_system_put(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_put(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_put(&mut eval.coding_systems, args)
 }
-fn defsubr_coding_system_base(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_base(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_base(&eval.coding_systems, args)
 }
-fn defsubr_coding_system_eol_type(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_eol_type(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_eol_type(&eval.coding_systems, args)
 }
-fn defsubr_detect_coding_string(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_detect_coding_string(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_detect_coding_string(&eval.coding_systems, args)
 }
-fn defsubr_detect_coding_region(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_detect_coding_region(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_detect_coding_region(&eval.coding_systems, &eval.buffers, args)
 }
-fn defsubr_keyboard_coding_system(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_keyboard_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_keyboard_coding_system(&eval.coding_systems, args)
 }
-fn defsubr_terminal_coding_system(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_terminal_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_terminal_coding_system(&eval.coding_systems, args)
 }
-fn defsubr_coding_system_priority_list(
+pub(crate) fn defsubr_coding_system_priority_list(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     super::coding::builtin_coding_system_priority_list(&eval.coding_systems, args)
 }
 
-fn defsubr_coding_system_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_coding_system_p(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_coding_system_p(&eval.coding_systems, args)
 }
-fn defsubr_check_coding_system(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_check_coding_system(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     super::coding::builtin_check_coding_system(&eval.coding_systems, args)
 }
-fn defsubr_check_coding_systems_region(
+pub(crate) fn defsubr_check_coding_systems_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     super::coding::builtin_check_coding_systems_region(eval, args)
 }
-fn defsubr_define_coding_system_internal(
+pub(crate) fn defsubr_define_coding_system_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -825,7 +858,7 @@ fn defsubr_define_coding_system_internal(
     super::coding::record_lisp_define_coding_system_internal(&mut eval.obarray, &args);
     Ok(result)
 }
-fn defsubr_define_coding_system_alias(
+pub(crate) fn defsubr_define_coding_system_alias(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -834,7 +867,7 @@ fn defsubr_define_coding_system_alias(
     super::coding::record_lisp_define_coding_system_alias(&mut eval.obarray, &args);
     Ok(result)
 }
-fn defsubr_set_coding_system_priority(
+pub(crate) fn defsubr_set_coding_system_priority(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -846,19 +879,19 @@ fn defsubr_set_coding_system_priority(
     eval.set_variable("coding-category-list", list);
     Ok(result)
 }
-fn defsubr_set_keyboard_coding_system_internal(
+pub(crate) fn defsubr_set_keyboard_coding_system_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     super::coding::builtin_set_keyboard_coding_system_internal(&mut eval.coding_systems, args)
 }
-fn defsubr_set_safe_terminal_coding_system_internal(
+pub(crate) fn defsubr_set_safe_terminal_coding_system_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     super::coding::builtin_set_safe_terminal_coding_system_internal(&mut eval.coding_systems, args)
 }
-fn defsubr_set_terminal_coding_system_internal(
+pub(crate) fn defsubr_set_terminal_coding_system_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -868,7 +901,7 @@ fn defsubr_set_terminal_coding_system_internal(
 type BuiltinFn = fn(&mut super::eval::Context, Vec<Value>) -> EvalResult;
 
 #[derive(Clone, Copy)]
-struct BuiltinRegistration {
+pub(crate) struct BuiltinRegistration {
     name: &'static str,
     func: BuiltinFn,
     min_args: u16,
@@ -877,7 +910,7 @@ struct BuiltinRegistration {
 }
 
 impl BuiltinRegistration {
-    const fn requires_eval_state(
+    pub(crate) const fn requires_eval_state(
         name: &'static str,
         func: BuiltinFn,
         min_args: u16,
@@ -892,7 +925,7 @@ impl BuiltinRegistration {
         }
     }
 
-    const fn placeholder(
+    pub(crate) const fn placeholder(
         name: &'static str,
         func: BuiltinFn,
         min_args: u16,
@@ -1182,7 +1215,10 @@ fn register_cursor_effect_subrs(ctx: &mut super::eval::Context) {
 /// (OP-MIX + SUBR-MIX + the Op::Call/CallBuiltinSym entry split). Call before a
 /// measured batch editing session so loadup/startup traffic is excluded.
 #[cfg(feature = "vm-profile")]
-fn defsubr_vm_profile_reset(_eval: &mut super::eval::Context, _args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_vm_profile_reset(
+    _eval: &mut super::eval::Context,
+    _args: Vec<Value>,
+) -> EvalResult {
     crate::emacs_core::bytecode::vm::vm_profile::reset();
     Ok(Value::NIL)
 }
@@ -1191,7 +1227,10 @@ fn defsubr_vm_profile_reset(_eval: &mut super::eval::Context, _args: Vec<Value>)
 /// stderr with an optional LABEL (string). Returns nil. Pairs with
 /// `neovm--vm-profile-reset` for a reset → workload → dump batch session.
 #[cfg(feature = "vm-profile")]
-fn defsubr_vm_profile_dump(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_vm_profile_dump(
+    _eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     let label = args
         .first()
         .map(|v| format!("{v}").trim_matches('"').to_string())
@@ -1206,7 +1245,10 @@ fn defsubr_vm_profile_dump(_eval: &mut super::eval::Context, args: Vec<Value>) -
 /// originate a HOST-code panic from Lisp: a foreign Rust module's own panic
 /// cannot cross its statically linked std into our `catch_unwind`, and no
 /// legitimate Lisp input panics the evaluator on demand.
-fn defsubr_neovm_internal_panic(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+pub(crate) fn defsubr_neovm_internal_panic(
+    _eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     let message = args
         .first()
         .and_then(|v| v.as_lisp_string())
@@ -1215,7 +1257,7 @@ fn defsubr_neovm_internal_panic(_eval: &mut super::eval::Context, args: Vec<Valu
     panic!("{message}");
 }
 
-fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration) {
+pub(crate) fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration) {
     if builtin.no_eval_policy != BuiltinNoEvalPolicy::Native {
         record_builtin_no_eval_policy(builtin.name, builtin.no_eval_policy);
     }
@@ -1233,6 +1275,63 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
 /// Each registered builtin is called via a direct function pointer,
 /// matching GNU Emacs's defsubr/funcall_subr architecture.
 pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
+    // Per-module registrars (GNU syms_of_* pattern); order is not
+    // observable — the subr table is SymId-keyed with independent entries.
+    super::alloc::syms_of_alloc(ctx);
+    super::buffer::syms_of_buffer(ctx);
+    super::bytecode::syms_of_bytecode(ctx);
+    super::callproc::syms_of_callproc(ctx);
+    super::casefiddle::syms_of_casefiddle(ctx);
+    super::casetab::syms_of_casetab(ctx);
+    super::category::syms_of_category(ctx);
+    super::emacs_char::syms_of_character(ctx);
+    super::charset::syms_of_charset(ctx);
+    super::chartable::syms_of_chartab(ctx);
+    super::coding::syms_of_coding(ctx);
+    super::comp::syms_of_comp(ctx);
+    super::composite::syms_of_composite(ctx);
+    super::data::syms_of_data(ctx);
+    super::dbus::syms_of_dbusbind(ctx);
+    super::zlib::syms_of_decompress(ctx);
+    super::dired::syms_of_dired(ctx);
+    super::dispnew::syms_of_dispnew(ctx);
+    super::doc::syms_of_doc(ctx);
+    super::editfns::syms_of_editfns(ctx);
+    super::dynamic_module::syms_of_module(ctx);
+    super::eval::syms_of_eval(ctx);
+    super::fileio::syms_of_fileio(ctx);
+    super::floatfns::syms_of_floatfns(ctx);
+    super::fns::syms_of_fns(ctx);
+    super::font::syms_of_font(ctx);
+    super::fontset::syms_of_fontset(ctx);
+    gnutls::syms_of_gnutls(ctx);
+    super::image::syms_of_image(ctx);
+    super::indent::syms_of_indent(ctx);
+    file_notify::syms_of_inotify(ctx);
+    super::json::syms_of_json(ctx);
+    super::keyboard::syms_of_keyboard(ctx);
+    super::keymap::syms_of_keymap(ctx);
+    super::lread::syms_of_lread(ctx);
+    super::kmacro::syms_of_macros(ctx);
+    super::marker::syms_of_marker(ctx);
+    super::minibuffer::syms_of_minibuf(ctx);
+    super::print::syms_of_print(ctx);
+    super::process::syms_of_process(ctx);
+    super::profiler::syms_of_profiler(ctx);
+    super::search::syms_of_search(ctx);
+    super::sound::syms_of_sound(ctx);
+    super::sqlite::syms_of_sqlite(ctx);
+    super::syntax::syms_of_syntax(ctx);
+    super::terminal::syms_of_terminal(ctx);
+    super::textprop::syms_of_textprop(ctx);
+    super::threads::syms_of_threads(ctx);
+    super::timefns::syms_of_timefns(ctx);
+    super::treesit::syms_of_treesit(ctx);
+    super::undo::syms_of_undo(ctx);
+    super::window_cmds::syms_of_window(ctx);
+    super::xdisp::syms_of_xdisp(ctx);
+    super::xfaces::syms_of_xfaces(ctx);
+    super::xml::syms_of_xml(ctx);
     use super::value::*;
     #[cfg(windows)]
     super::windows::register_builtin_subrs(ctx);
@@ -1259,121 +1358,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr_slice("apply", builtin_apply_slice, 1, None);
-    ctx.defsubr_slice("funcall", builtin_funcall_slice, 1, None);
     ctx.defsubr_slice(
         "funcall-interactively",
         builtin_funcall_interactively_slice,
         0,
         None,
     );
-    ctx.defsubr(
-        "funcall-with-delayed-message",
-        builtin_funcall_with_delayed_message,
-        3,
-        Some(3),
-    );
-    ctx.defsubr("defalias", builtin_defalias, 2, Some(3));
-    ctx.defsubr("provide", builtin_provide, 1, Some(2));
-    ctx.defsubr("require", builtin_require, 1, Some(3));
-    ctx.defsubr("mapcan", builtin_mapcan, 2, Some(2));
-    ctx.defsubr_2("mapcar", builtin_mapcar_2, 2);
-    ctx.defsubr_2("mapc", builtin_mapc_2, 2);
-    ctx.defsubr("mapconcat", builtin_mapconcat, 2, Some(3));
-    ctx.defsubr_slice("sort", builtin_sort_slice, 1, None);
-    record_builtin_no_eval_policy("functionp", BuiltinNoEvalPolicy::RequiresEvalState);
-    ctx.defsubr_1("functionp", builtin_functionp_1, 1);
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("defvaralias", builtin_defvaralias, 2, Some(3)),
-    );
-    ctx.defsubr_1("boundp", builtin_boundp_1, 1);
-    ctx.defsubr("default-boundp", builtin_default_boundp, 1, Some(1));
-    ctx.defsubr(
-        "default-toplevel-value",
-        builtin_default_toplevel_value,
-        1,
-        Some(1),
-    );
-    ctx.defsubr_1("fboundp", builtin_fboundp_1, 1);
-    ctx.defsubr(
-        "internal-make-var-non-special",
-        builtin_internal_make_var_non_special,
-        1,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "indirect-variable",
-            builtin_indirect_variable,
-            1,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("handler-bind-1", builtin_handler_bind_1, 1, None),
-    );
-    ctx.defsubr_1("symbol-value", builtin_symbol_value_1, 1);
-    ctx.defsubr_1("symbol-function", builtin_symbol_function_1, 1);
-    ctx.defsubr_2("set", builtin_set_2, 2);
-    ctx.defsubr("fset", builtin_fset, 2, Some(2));
-    ctx.defsubr("makunbound", builtin_makunbound, 1, Some(1));
-    ctx.defsubr("fmakunbound", builtin_fmakunbound, 1, Some(1));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("macroexpand", builtin_macroexpand, 1, Some(2)),
-    );
-    ctx.defsubr_2("get", builtin_get_2, 2);
-    ctx.defsubr_3("put", builtin_put_3, 3);
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("setplist", builtin_setplist, 2, Some(2)),
-    );
-    ctx.defsubr("symbol-plist", builtin_symbol_plist_fn, 1, Some(1));
-    ctx.defsubr("indirect-function", builtin_indirect_function, 1, Some(2));
-    ctx.defsubr("signal", super::errors::builtin_signal, 1, Some(2));
-    ctx.defsubr(
-        "getenv-internal",
-        super::process::builtin_getenv_internal,
-        1,
-        Some(2),
-    );
-    ctx.defsubr_1("special-variable-p", builtin_special_variable_p_1, 1);
-    ctx.defsubr("intern", builtin_intern_fn, 1, Some(2));
-    ctx.defsubr("intern-soft", builtin_intern_soft, 1, Some(2));
-    ctx.defsubr("run-hook-with-args", builtin_run_hook_with_args, 1, None);
-    ctx.defsubr(
-        "run-hook-with-args-until-success",
-        builtin_run_hook_with_args_until_success,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "run-hook-with-args-until-failure",
-        builtin_run_hook_with_args_until_failure,
-        1,
-        None,
-    );
-    ctx.defsubr("run-hook-wrapped", builtin_run_hook_wrapped, 2, None);
-    ctx.defsubr(
-        "run-window-configuration-change-hook",
-        hooks::builtin_run_window_configuration_change_hook,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "run-window-scroll-functions",
-        super::window_cmds::builtin_run_window_scroll_functions,
-        0,
-        None,
-    );
-    ctx.defsubr("featurep", builtin_featurep, 1, Some(2));
-    ctx.defsubr("garbage-collect", builtin_garbage_collect, 0, Some(0));
-    ctx.defsubr_2("eval", builtin_eval_2, 1);
-    ctx.defsubr("get-buffer-create", builtin_get_buffer_create, 1, Some(2));
-    ctx.defsubr("get-buffer", builtin_get_buffer, 1, Some(1));
     ctx.defsubr(
         "make-xwidget",
         super::xwidget::builtin_make_xwidget,
@@ -1507,477 +1497,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(2),
     );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "make-indirect-buffer",
-            builtin_make_indirect_buffer,
-            2,
-            Some(4),
-        ),
-    );
-    ctx.defsubr("find-buffer", builtin_find_buffer, 2, Some(2));
-    ctx.defsubr("buffer-live-p", builtin_buffer_live_p, 1, Some(1));
-    ctx.defsubr(
-        "barf-if-buffer-read-only",
-        builtin_barf_if_buffer_read_only,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "bury-buffer-internal",
-        builtin_bury_buffer_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("get-file-buffer", builtin_get_file_buffer, 1, Some(1));
-    ctx.defsubr("kill-buffer", builtin_kill_buffer, 0, Some(1));
-    ctx.defsubr("set-buffer", builtin_set_buffer, 1, Some(1));
-    ctx.defsubr("current-buffer", builtin_current_buffer, 0, Some(0));
-    ctx.defsubr("buffer-name", builtin_buffer_name, 0, Some(1));
-    ctx.defsubr("buffer-file-name", builtin_buffer_file_name, 0, Some(1));
-    ctx.defsubr("buffer-base-buffer", builtin_buffer_base_buffer, 0, Some(1));
-    ctx.defsubr("buffer-last-name", builtin_buffer_last_name, 0, Some(1));
-    ctx.defsubr("rename-buffer", builtin_rename_buffer, 1, Some(2));
-    ctx.defsubr("buffer-string", builtin_buffer_string, 0, Some(0));
-    ctx.defsubr(
-        "buffer-line-statistics",
-        builtin_buffer_line_statistics,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "buffer-text-pixel-size",
-        builtin_buffer_text_pixel_size,
-        0,
-        Some(4),
-    );
-    ctx.defsubr(
-        "base64-encode-region",
-        super::fns::builtin_base64_encode_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "base64-decode-region",
-        super::fns::builtin_base64_decode_region,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "base64url-encode-region",
-        super::fns::builtin_base64url_encode_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr("md5", super::fns::builtin_md5, 1, Some(5));
-    ctx.defsubr("secure-hash", super::fns::builtin_secure_hash, 2, Some(5));
-    ctx.defsubr("buffer-hash", super::fns::builtin_buffer_hash, 0, Some(1));
-    ctx.defsubr("buffer-substring", builtin_buffer_substring, 2, Some(2));
-    ctx.defsubr(
-        "compare-buffer-substrings",
-        builtin_compare_buffer_substrings,
-        6,
-        Some(6),
-    );
-    ctx.defsubr_0("point", builtin_point_0);
-    ctx.defsubr_0("point-min", builtin_point_min_0);
-    ctx.defsubr_0("point-max", builtin_point_max_0);
-    ctx.defsubr_1("goto-char", builtin_goto_char_1, 1);
-    ctx.defsubr("field-beginning", builtin_field_beginning, 0, Some(3));
-    ctx.defsubr("field-end", builtin_field_end, 0, Some(3));
-    ctx.defsubr("field-string", builtin_field_string, 0, Some(1));
-    ctx.defsubr(
-        "field-string-no-properties",
-        builtin_field_string_no_properties,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("constrain-to-field", builtin_constrain_to_field, 2, Some(5));
-    ctx.defsubr("insert", builtin_insert, 0, None);
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "insert-and-inherit",
-            builtin_insert_and_inherit,
-            0,
-            None,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "insert-before-markers-and-inherit",
-            builtin_insert_before_markers_and_inherit,
-            0,
-            None,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "insert-buffer-substring",
-            builtin_insert_buffer_substring,
-            1,
-            Some(3),
-        ),
-    );
-    ctx.defsubr("insert-char", builtin_insert_char, 1, Some(3));
-    ctx.defsubr("insert-byte", builtin_insert_byte, 2, Some(3));
-    ctx.defsubr(
-        "replace-region-contents",
-        builtin_replace_region_contents,
-        3,
-        Some(6),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "set-buffer-multibyte",
-            builtin_set_buffer_multibyte,
-            1,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "kill-all-local-variables",
-            builtin_kill_all_local_variables,
-            0,
-            Some(1),
-        ),
-    );
-    ctx.defsubr("buffer-swap-text", builtin_buffer_swap_text, 1, Some(1));
-    ctx.defsubr(
-        "delete-region",
-        super::editfns::builtin_delete_region,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "delete-and-extract-region",
-        super::editfns::builtin_delete_and_extract_region,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "subst-char-in-region",
-        builtin_subst_char_in_region,
-        4,
-        Some(5),
-    );
-    ctx.defsubr("delete-field", builtin_delete_field, 0, Some(1));
-    ctx.defsubr(
-        "delete-all-overlays",
-        builtin_delete_all_overlays,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "erase-buffer",
-        super::editfns::builtin_erase_buffer,
-        0,
-        Some(0),
-    );
-    ctx.defsubr("buffer-enable-undo", builtin_buffer_enable_undo, 0, Some(1));
-    ctx.defsubr("buffer-size", builtin_buffer_size, 0, Some(1));
-    ctx.defsubr("narrow-to-region", builtin_narrow_to_region, 2, Some(2));
-    ctx.defsubr("widen", builtin_widen, 0, Some(0));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "internal--labeled-narrow-to-region",
-            builtin_internal_labeled_narrow_to_region,
-            3,
-            Some(3),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "internal--labeled-widen",
-            builtin_internal_labeled_widen,
-            1,
-            Some(1),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    ctx.defsubr("buffer-modified-p", builtin_buffer_modified_p, 0, Some(1));
-    ctx.defsubr(
-        "set-buffer-modified-p",
-        builtin_set_buffer_modified_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "buffer-modified-tick",
-        builtin_buffer_modified_tick,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "buffer-chars-modified-tick",
-        builtin_buffer_chars_modified_tick,
-        0,
-        None,
-    );
-    ctx.defsubr("buffer-list", builtin_buffer_list, 0, Some(1));
-    ctx.defsubr("other-buffer", builtin_other_buffer, 0, Some(3));
-    ctx.defsubr(
-        "generate-new-buffer-name",
-        builtin_generate_new_buffer_name,
-        1,
-        Some(2),
-    );
-    ctx.defsubr("char-after", builtin_char_after, 0, Some(1));
-    ctx.defsubr("char-before", builtin_char_before, 0, Some(1));
-    ctx.defsubr("byte-to-position", builtin_byte_to_position, 1, Some(1));
-    ctx.defsubr("position-bytes", builtin_position_bytes, 1, Some(1));
-    ctx.defsubr("get-byte", builtin_get_byte, 0, Some(2));
-    ctx.defsubr("buffer-local-value", builtin_buffer_local_value, 2, Some(2));
-    ctx.defsubr(
-        "local-variable-if-set-p",
-        builtin_local_variable_if_set_p,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "variable-binding-locus",
-        builtin_variable_binding_locus,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("interactive-form", builtin_interactive_form, 1, Some(1));
-    ctx.defsubr(
-        "command-modes",
-        super::interactive::builtin_command_modes,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("search-forward", builtin_search_forward, 1, Some(4));
-    ctx.defsubr("search-backward", builtin_search_backward, 1, Some(4));
-    ctx.defsubr("re-search-forward", builtin_re_search_forward, 1, Some(4));
-    ctx.defsubr("re-search-backward", builtin_re_search_backward, 1, Some(4));
-    ctx.defsubr("looking-at", builtin_looking_at, 1, Some(2));
-    ctx.defsubr("posix-looking-at", builtin_posix_looking_at, 1, Some(2));
-    ctx.defsubr_slice("string-match", builtin_string_match_slice, 2, Some(4));
     ctx.defsubr("string-match-p", builtin_string_match_p, 0, None);
-    ctx.defsubr("posix-string-match", builtin_posix_string_match, 2, Some(4));
-    ctx.defsubr("match-beginning", builtin_match_beginning, 1, Some(1));
-    ctx.defsubr("match-end", builtin_match_end, 1, Some(1));
-    ctx.defsubr("match-data", builtin_match_data, 0, Some(3));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "match-data--translate",
-            builtin_match_data_translate,
-            1,
-            Some(1),
-        ),
-    );
-    ctx.defsubr("set-match-data", builtin_set_match_data, 1, Some(2));
-    ctx.defsubr("replace-match", builtin_replace_match, 1, Some(5));
-    ctx.defsubr(
-        "find-charset-region",
-        super::charset::builtin_find_charset_region,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "charset-after",
-        super::charset::builtin_charset_after,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "format-mode-line",
-        super::xdisp::builtin_format_mode_line_ctx,
-        1,
-        Some(4),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "window-line-height",
-            super::xdisp::builtin_window_line_height,
-            0,
-            Some(2),
-            BuiltinNoEvalPlaceholder::WindowLineHeight,
-        ),
-    );
-    ctx.defsubr(
-        "posn-at-point",
-        super::xdisp::builtin_posn_at_point,
-        0,
-        Some(2),
-    );
-    ctx.defsubr("posn-at-x-y", super::xdisp::builtin_posn_at_x_y, 2, Some(4));
-    ctx.defsubr(
-        "coordinates-in-window-p",
-        super::window_cmds::builtin_coordinates_in_window_p,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "tool-bar-height",
-        super::xdisp::builtin_tool_bar_height_ctx,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "tab-bar-height",
-        super::xdisp::builtin_tab_bar_height_ctx,
-        0,
-        Some(2),
-    );
-    ctx.defsubr("list-fonts", super::font::builtin_list_fonts, 1, Some(4));
-    ctx.defsubr("find-font", super::font::builtin_find_font, 1, Some(2));
-    ctx.defsubr(
-        "font-family-list",
-        super::font::builtin_font_family_list,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("font-info", super::font::builtin_font_info, 1, Some(2));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("new-fontset", builtin_new_fontset, 2, Some(2)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "set-fontset-font",
-            builtin_set_fontset_font,
-            3,
-            Some(5),
-        ),
-    );
-    ctx.defsubr(
-        "insert-file-contents",
-        super::fileio::builtin_insert_file_contents,
-        1,
-        Some(5),
-    );
-    ctx.defsubr(
-        "write-region",
-        super::fileio::builtin_write_region,
-        3,
-        Some(7),
-    );
-    ctx.defsubr(
-        "file-name-completion",
-        super::dired::builtin_file_name_completion,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-visited-file-modtime",
-        super::fileio::builtin_set_visited_file_modtime,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("make-keymap", builtin_make_keymap, 0, Some(1));
-    ctx.defsubr("make-sparse-keymap", builtin_make_sparse_keymap, 0, Some(1));
-    ctx.defsubr("copy-keymap", builtin_copy_keymap, 1, Some(1));
-    ctx.defsubr("define-key", builtin_define_key, 3, Some(4));
-    ctx.defsubr("lookup-key", builtin_lookup_key, 2, Some(3));
     ctx.defsubr("global-set-key", builtin_global_set_key, 0, None);
     ctx.defsubr("local-set-key", builtin_local_set_key, 0, None);
-    ctx.defsubr("use-local-map", builtin_use_local_map, 1, Some(1));
-    ctx.defsubr("use-global-map", builtin_use_global_map, 1, Some(1));
-    ctx.defsubr("current-local-map", builtin_current_local_map, 0, Some(0));
-    ctx.defsubr("current-global-map", builtin_current_global_map, 0, Some(0));
-    ctx.defsubr(
-        "current-active-maps",
-        builtin_current_active_maps,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "current-minor-mode-maps",
-        builtin_current_minor_mode_maps,
-        0,
-        Some(0),
-    );
-    ctx.defsubr("keymap-parent", builtin_keymap_parent, 1, Some(1));
-    ctx.defsubr("set-keymap-parent", builtin_set_keymap_parent, 2, Some(2));
-    ctx.defsubr("keymapp", builtin_keymapp, 1, Some(1));
-    ctx.defsubr("accessible-keymaps", builtin_accessible_keymaps, 1, Some(2));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("map-keymap", builtin_map_keymap, 2, Some(3)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "map-keymap-internal",
-            builtin_map_keymap_internal,
-            2,
-            Some(2),
-        ),
-    );
-    ctx.defsubr(
-        "print--preprocess",
-        super::process::builtin_print_preprocess,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "format-network-address",
-        super::process::builtin_format_network_address,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "network-interface-list",
-        super::process::builtin_network_interface_list,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "network-interface-info",
-        super::process::builtin_network_interface_info,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "signal-names",
-        super::process::builtin_signal_names,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "accept-process-output",
-        super::process::builtin_accept_process_output,
-        0,
-        Some(4),
-    );
-    ctx.defsubr(
-        "list-system-processes",
-        super::process::builtin_list_system_processes,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "num-processors",
-        super::process::builtin_num_processors,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-process",
-        super::process::builtin_make_process,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "make-network-process",
-        super::process::builtin_make_network_process,
-        0,
-        None,
-    );
     ctx.defsubr(
         "neomacs-open-tls-stream",
         super::process::builtin_neomacs_open_tls_stream,
@@ -1995,102 +1517,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| super::tls::builtin_neomacs_tls_available_p(args),
         0,
         Some(0),
-    );
-    ctx.defsubr(
-        "make-pipe-process",
-        super::process::builtin_make_pipe_process,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "gnutls-boot",
-        super::process::builtin_gnutls_boot,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "make-serial-process",
-        super::process::builtin_make_serial_process,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "serial-process-configure",
-        super::process::builtin_serial_process_configure,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "call-process",
-        super::process::builtin_call_process,
-        1,
-        None,
-    );
-    ctx.defsubr(
-        "call-process-region",
-        super::process::builtin_call_process_region,
-        3,
-        None,
-    );
-    ctx.defsubr(
-        "continue-process",
-        super::process::builtin_continue_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "delete-process",
-        super::process::builtin_delete_process,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "interrupt-process",
-        super::process::builtin_interrupt_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "kill-process",
-        super::process::builtin_kill_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "quit-process",
-        super::process::builtin_quit_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "signal-process",
-        super::process::builtin_signal_process,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "stop-process",
-        super::process::builtin_stop_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "get-process",
-        super::process::builtin_get_process,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "get-buffer-process",
-        super::process::builtin_get_buffer_process,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-attributes",
-        super::process::builtin_process_attributes,
-        1,
-        Some(1),
     );
     ctx.defsubr(
         "start-process",
@@ -2115,298 +1541,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::process::builtin_start_file_process_shell_command,
         3,
         Some(3),
-    );
-
-    ctx.defsubr("processp", super::process::builtin_processp, 1, Some(1));
-    ctx.defsubr("process-id", super::process::builtin_process_id, 1, Some(1));
-    ctx.defsubr(
-        "process-command",
-        super::process::builtin_process_command,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-contact",
-        super::process::builtin_process_contact,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "process-filter",
-        super::process::builtin_process_filter,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-filter",
-        super::process::builtin_set_process_filter,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-sentinel",
-        super::process::builtin_process_sentinel,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-sentinel",
-        super::process::builtin_set_process_sentinel,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-coding-system",
-        super::process::builtin_process_coding_system,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-datagram-address",
-        super::process::builtin_process_datagram_address,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-buffer",
-        super::process::builtin_set_process_buffer,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-process-thread",
-        super::process::builtin_set_process_thread,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-process-window-size",
-        super::process::builtin_set_process_window_size,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "process-tty-name",
-        super::process::builtin_process_tty_name,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-plist",
-        super::process::builtin_process_plist,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-plist",
-        super::process::builtin_set_process_plist,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-mark",
-        super::process::builtin_process_mark,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-type",
-        super::process::builtin_process_type,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-thread",
-        super::process::builtin_process_thread,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-running-child-p",
-        super::process::builtin_process_running_child_p,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-send-region",
-        super::process::builtin_process_send_region,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "process-send-eof",
-        super::process::builtin_process_send_eof,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-send-string",
-        super::process::builtin_process_send_string,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-status",
-        super::process::builtin_process_status,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-exit-status",
-        super::process::builtin_process_exit_status,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-list",
-        super::process::builtin_process_list,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "process-name",
-        super::process::builtin_process_name,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "process-buffer",
-        super::process::builtin_process_buffer,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("sleep-for", super::timer::builtin_sleep_for, 1, Some(2));
-    // Timer functions (run-at-time, run-with-timer, run-with-idle-timer,
-    // cancel-timer, timerp, timer-activate) are NOT C primitives in GNU
-    // Emacs — they're defined in timer.el as Elisp functions.
-    // The C layer only provides timer-check (in keyboard.rs) which reads
-    // timer-list / timer-idle-list and calls timer-event-handler.
-    // Registering them as Rust builtins would shadow the Elisp definitions
-    // and create an incompatible parallel timer system.
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "add-variable-watcher",
-            super::advice::builtin_add_variable_watcher,
-            2,
-            Some(2),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "remove-variable-watcher",
-            super::advice::builtin_remove_variable_watcher,
-            2,
-            Some(2),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "get-variable-watchers",
-            super::advice::builtin_get_variable_watchers,
-            1,
-            Some(1),
-        ),
-    );
-    ctx.defsubr(
-        "modify-syntax-entry",
-        super::syntax::builtin_modify_syntax_entry,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "syntax-table",
-        super::syntax::builtin_syntax_table,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-syntax-table",
-        super::syntax::builtin_set_syntax_table,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "char-syntax",
-        super::syntax::builtin_char_syntax,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "matching-paren",
-        super::syntax::builtin_matching_paren,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "forward-comment",
-        super::syntax::builtin_forward_comment,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "backward-prefix-chars",
-        super::syntax::builtin_backward_prefix_chars,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "forward-word",
-        super::syntax::builtin_forward_word,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("scan-lists", super::syntax::builtin_scan_lists, 3, Some(3));
-    ctx.defsubr("scan-sexps", super::syntax::builtin_scan_sexps, 2, Some(2));
-    ctx.defsubr(
-        "parse-partial-sexp",
-        super::syntax::builtin_parse_partial_sexp,
-        2,
-        Some(6),
-    );
-    ctx.defsubr(
-        "skip-syntax-forward",
-        super::syntax::builtin_skip_syntax_forward,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "skip-syntax-backward",
-        super::syntax::builtin_skip_syntax_backward,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "start-kbd-macro",
-        super::kmacro::builtin_start_kbd_macro,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "end-kbd-macro",
-        super::kmacro::builtin_end_kbd_macro,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "call-last-kbd-macro",
-        super::kmacro::builtin_call_last_kbd_macro,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "execute-kbd-macro",
-        super::kmacro::builtin_execute_kbd_macro,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "store-kbd-macro-event",
-        super::kmacro::builtin_store_kbd_macro_event,
-        1,
-        Some(1),
     );
     ctx.defsubr(
         "defining-kbd-macro",
@@ -2445,206 +1579,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "put-text-property",
-        super::textprop::builtin_put_text_property,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "get-text-property",
-        super::textprop::builtin_get_text_property,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "get-char-property",
-        super::textprop::builtin_get_char_property,
-        2,
-        Some(3),
-    );
-    ctx.defsubr("get-pos-property", builtin_get_pos_property, 2, Some(3));
-    ctx.defsubr(
-        "add-face-text-property",
-        super::textprop::builtin_add_face_text_property,
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "add-text-properties",
-        super::textprop::builtin_add_text_properties,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "set-text-properties",
-        super::textprop::builtin_set_text_properties,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "remove-text-properties",
-        super::textprop::builtin_remove_text_properties,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "text-properties-at",
-        super::textprop::builtin_text_properties_at,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "get-display-property",
-        super::textprop::builtin_get_display_property,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "next-single-char-property-change",
-        builtin_next_single_char_property_change,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "previous-single-char-property-change",
-        builtin_previous_single_char_property_change,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "next-property-change",
-        super::textprop::builtin_next_property_change,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "next-char-property-change",
-        builtin_next_char_property_change,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "previous-property-change",
-        builtin_previous_property_change,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "previous-char-property-change",
-        builtin_previous_char_property_change,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "text-property-any",
-        super::textprop::builtin_text_property_any,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "text-property-not-all",
-        super::textprop::builtin_text_property_not_all,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "next-overlay-change",
-        super::textprop::builtin_next_overlay_change,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "previous-overlay-change",
-        super::textprop::builtin_previous_overlay_change,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-overlay",
-        super::textprop::builtin_make_overlay,
-        2,
-        Some(5),
-    );
-    ctx.defsubr(
-        "delete-overlay",
-        super::textprop::builtin_delete_overlay,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "overlay-put",
-        super::textprop::builtin_overlay_put,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "overlay-get",
-        super::textprop::builtin_overlay_get,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "overlays-at",
-        super::textprop::builtin_overlays_at,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "overlays-in",
-        super::textprop::builtin_overlays_in,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "move-overlay",
-        super::textprop::builtin_move_overlay,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "overlay-start",
-        super::textprop::builtin_overlay_start,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "overlay-end",
-        super::textprop::builtin_overlay_end,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "overlay-buffer",
-        super::textprop::builtin_overlay_buffer,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "overlay-properties",
-        super::textprop::builtin_overlay_properties,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("overlayp", super::textprop::builtin_overlayp, 1, Some(1));
-    ctx.defsubr("bobp", super::navigation::builtin_bobp, 0, Some(0));
-    ctx.defsubr("eobp", super::navigation::builtin_eobp, 0, Some(0));
-    ctx.defsubr("bolp", super::navigation::builtin_bolp, 0, Some(0));
-    ctx.defsubr("eolp", super::navigation::builtin_eolp, 0, Some(0));
-    ctx.defsubr("pos-bol", builtin_pos_bol, 0, Some(1));
-    ctx.defsubr(
-        "line-end-position",
-        super::navigation::builtin_line_end_position,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("pos-eol", builtin_pos_eol, 0, Some(1));
-    ctx.defsubr(
-        "line-number-at-pos",
-        super::navigation::builtin_line_number_at_pos,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
         "forward-line",
         super::navigation::builtin_forward_line,
         0,
@@ -2675,355 +1609,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "skip-chars-forward",
-        super::navigation::builtin_skip_chars_forward,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "skip-chars-backward",
-        super::navigation::builtin_skip_chars_backward,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "mark-marker",
-        super::marker::builtin_mark_marker,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "region-beginning",
-        super::navigation::builtin_region_beginning,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "region-end",
-        super::navigation::builtin_region_end,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
         "transient-mark-mode",
         super::navigation::builtin_transient_mark_mode,
         0,
         None,
     );
-    ctx.defsubr(
-        "make-local-variable",
-        super::custom::builtin_make_local_variable,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "local-variable-p",
-        super::custom::builtin_local_variable_p,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "buffer-local-variables",
-        super::custom::builtin_buffer_local_variables,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "kill-local-variable",
-        super::custom::builtin_kill_local_variable,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "default-value",
-        super::custom::builtin_default_value,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-default",
-        super::custom::builtin_set_default,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-default-toplevel-value",
-        builtin_set_default_toplevel_value,
-        2,
-        Some(2),
-    );
-    ctx.defsubr("autoload", super::autoload::builtin_autoload, 2, Some(5));
-    ctx.defsubr_3(
-        "autoload-do-load",
-        super::autoload::builtin_autoload_do_load_3,
-        1,
-    );
     ctx.defsubr("symbol-file", super::autoload::builtin_symbol_file, 0, None);
-    ctx.defsubr(
-        "downcase-region",
-        super::casefiddle::builtin_downcase_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "upcase-region",
-        super::casefiddle::builtin_upcase_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "capitalize-region",
-        super::casefiddle::builtin_capitalize_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "downcase-word",
-        super::casefiddle::builtin_downcase_word,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "upcase-word",
-        super::casefiddle::builtin_upcase_word,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "capitalize-word",
-        super::casefiddle::builtin_capitalize_word,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("indent-to", super::indent::builtin_indent_to, 1, Some(2));
-    ctx.defsubr(
-        "selected-window",
-        super::window_cmds::builtin_selected_window,
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "old-selected-window",
-            super::window_cmds::builtin_old_selected_window,
-            0,
-            Some(0),
-        ),
-    );
-    ctx.defsubr(
-        "minibuffer-window",
-        super::window_cmds::builtin_minibuffer_window,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-parameter",
-        super::window_cmds::builtin_window_parameter,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-window-parameter",
-        super::window_cmds::builtin_set_window_parameter,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "window-parameters",
-        super::window_cmds::builtin_window_parameters,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-parent",
-        super::window_cmds::builtin_window_parent,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-top-child",
-        super::window_cmds::builtin_window_top_child,
-        0,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-left-child",
-            super::window_cmds::builtin_window_left_child,
-            0,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-next-sibling",
-            super::window_cmds::builtin_window_next_sibling,
-            0,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-prev-sibling",
-            super::window_cmds::builtin_window_prev_sibling,
-            0,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-normal-size",
-            super::window_cmds::builtin_window_normal_size,
-            0,
-            Some(2),
-        ),
-    );
-    ctx.defsubr(
-        "window-display-table",
-        super::window_cmds::builtin_window_display_table,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-cursor-type",
-        super::window_cmds::builtin_window_cursor_type,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-buffer",
-        super::window_cmds::builtin_window_buffer,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-start",
-        super::window_cmds::builtin_window_start,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-end",
-        super::window_cmds::builtin_window_end,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-point",
-        super::window_cmds::builtin_window_point,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-use-time",
-        super::window_cmds::builtin_window_use_time,
-        0,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-bump-use-time",
-            super::window_cmds::builtin_window_bump_use_time,
-            0,
-            Some(1),
-        ),
-    );
-    ctx.defsubr(
-        "window-old-point",
-        super::window_cmds::builtin_window_old_point,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-old-buffer",
-        super::window_cmds::builtin_window_old_buffer,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-prev-buffers",
-        super::window_cmds::builtin_window_prev_buffers,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-next-buffers",
-        super::window_cmds::builtin_window_next_buffers,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-left-column",
-        super::window_cmds::builtin_window_left_column,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-top-line",
-        super::window_cmds::builtin_window_top_line,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-pixel-left",
-        super::window_cmds::builtin_window_pixel_left,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-pixel-top",
-        super::window_cmds::builtin_window_pixel_top,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-hscroll",
-        super::window_cmds::builtin_window_hscroll,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-vscroll",
-        super::window_cmds::builtin_window_vscroll,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-margins",
-        super::window_cmds::builtin_window_margins,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-fringes",
-        super::window_cmds::builtin_window_fringes,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-scroll-bars",
-        super::window_cmds::builtin_window_scroll_bars,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-pixel-height",
-        super::window_cmds::builtin_window_pixel_height,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-pixel-width",
-        super::window_cmds::builtin_window_pixel_width,
-        0,
-        Some(1),
-    );
     ctx.defsubr(
         "window-edges",
         super::window_cmds::builtin_window_edges,
@@ -3043,135 +1634,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "window-body-height",
-        super::window_cmds::builtin_window_body_height,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-body-width",
-        super::window_cmds::builtin_window_body_width,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-text-height",
-        super::window_cmds::builtin_window_text_height,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-text-width",
-        super::window_cmds::builtin_window_text_width,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-total-height",
-        super::window_cmds::builtin_window_total_height,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-total-width",
-        super::window_cmds::builtin_window_total_width,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-list",
-        super::window_cmds::builtin_window_list,
-        0,
-        Some(3),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-list-1",
-            super::window_cmds::builtin_window_list_1,
-            0,
-            Some(3),
-        ),
-    );
-    ctx.defsubr(
-        "get-buffer-window",
-        super::window_cmds::builtin_get_buffer_window,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-dedicated-p",
-        super::window_cmds::builtin_window_dedicated_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-minibuffer-p",
-        super::window_cmds::builtin_window_minibuffer_p,
-        0,
-        None,
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "window-at",
-            super::window_cmds::builtin_window_at,
-            2,
-            Some(3),
-        ),
-    );
-    ctx.defsubr(
-        "window-live-p",
-        super::window_cmds::builtin_window_live_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-window-start",
-        super::window_cmds::builtin_set_window_start,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-window-hscroll",
-        super::window_cmds::builtin_set_window_hscroll,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-window-margins",
-        super::window_cmds::builtin_set_window_margins,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-window-fringes",
-        super::window_cmds::builtin_set_window_fringes,
-        2,
-        Some(5),
-    );
-    ctx.defsubr(
-        "set-window-vscroll",
-        super::window_cmds::builtin_set_window_vscroll,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "set-window-point",
-        super::window_cmds::builtin_set_window_point,
-        2,
-        Some(2),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "split-window-internal",
-            super::window_cmds::builtin_split_window_internal,
-            4,
-            Some(5),
-        ),
-    );
-    ctx.defsubr(
         "delete-window",
         super::window_cmds::builtin_delete_window,
         0,
@@ -3188,82 +1650,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::window_cmds::builtin_fit_window_to_buffer,
         0,
         Some(6),
-    );
-    ctx.defsubr(
-        "select-window",
-        super::window_cmds::builtin_select_window,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "scroll-up",
-        super::window_cmds::builtin_scroll_up,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "scroll-down",
-        super::window_cmds::builtin_scroll_down,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "scroll-left",
-        super::window_cmds::builtin_scroll_left,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "scroll-right",
-        super::window_cmds::builtin_scroll_right,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-resize-apply",
-        super::window_cmds::builtin_window_resize_apply,
-        0,
-        Some(2),
-    );
-    ctx.defsubr("recenter", super::window_cmds::builtin_recenter, 0, Some(2));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "vertical-motion",
-            builtin_vertical_motion,
-            1,
-            Some(3),
-        ),
-    );
-    ctx.defsubr(
-        "next-window",
-        super::window_cmds::builtin_next_window,
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "previous-window",
-        super::window_cmds::builtin_previous_window,
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-window-buffer",
-        super::window_cmds::builtin_set_window_buffer,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "current-window-configuration",
-        super::window_cmds::builtin_current_window_configuration,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-window-configuration",
-        super::window_cmds::builtin_set_window_configuration,
-        1,
-        Some(3),
     );
     register_builtin(
         ctx,
@@ -3470,38 +1856,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "frame-initial-p",
-        super::window_cmds::builtin_frame_initial_p,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "frame-first-window",
-        super::window_cmds::builtin_frame_first_window,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "frame-root-window",
-        super::window_cmds::builtin_frame_root_window,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("windowp", super::window_cmds::builtin_windowp, 1, Some(1));
-    ctx.defsubr(
-        "window-valid-p",
-        super::window_cmds::builtin_window_valid_p,
-        1,
-        Some(1),
-    );
     ctx.defsubr("framep", super::window_cmds::builtin_framep, 1, Some(1));
-    ctx.defsubr(
-        "window-frame",
-        super::window_cmds::builtin_window_frame,
-        0,
-        Some(1),
-    );
     ctx.defsubr("frame-id", builtin_frame_id, 0, Some(1));
     ctx.defsubr("frame-root-frame", builtin_frame_root_frame, 0, None);
     ctx.defsubr(
@@ -3516,12 +1871,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(4),
     );
-    ctx.defsubr(
-        "x-list-fonts",
-        super::display::builtin_x_list_fonts,
-        1,
-        Some(5),
-    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(
@@ -3531,7 +1880,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(1),
         ),
     );
-    ctx.defsubr("current-idle-time", builtin_current_idle_time, 0, Some(0));
     ctx.defsubr(
         "x-server-version",
         super::display::builtin_x_server_version,
@@ -3593,76 +1941,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
-        "commandp",
-        super::interactive::builtin_commandp_interactive,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "command-remapping",
-        super::interactive::builtin_command_remapping,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
         "self-insert-command",
         super::interactive::builtin_self_insert_command,
         1,
         Some(2),
-    );
-    ctx.defsubr(
-        "key-binding",
-        super::interactive::builtin_key_binding,
-        1,
-        Some(4),
-    );
-    ctx.defsubr(
-        "where-is-internal",
-        super::interactive::builtin_where_is_internal,
-        1,
-        Some(5),
-    );
-    ctx.defsubr(
-        "this-command-keys",
-        super::interactive::builtin_this_command_keys,
-        0,
-        Some(0),
-    );
-    ctx.defsubr_slice("format", builtin_format_slice, 1, None);
-    ctx.defsubr_slice("format-message", builtin_format_message_slice, 1, None);
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("message-box", builtin_message_box, 1, None),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("message-or-box", builtin_message_or_box, 1, None),
-    );
-    ctx.defsubr("current-message", builtin_current_message, 0, Some(0));
-    ctx.defsubr(
-        "read-from-string",
-        super::reader::builtin_read_from_string,
-        1,
-        Some(3),
-    );
-    ctx.defsubr("read", super::reader::builtin_read, 0, Some(1));
-    ctx.defsubr(
-        "read-from-minibuffer",
-        super::reader::builtin_read_from_minibuffer,
-        1,
-        Some(7),
-    );
-    ctx.defsubr(
-        "read-string",
-        super::reader::builtin_read_string,
-        1,
-        Some(5),
-    );
-    ctx.defsubr(
-        "completing-read",
-        super::reader::builtin_completing_read,
-        2,
-        Some(8),
     );
     ctx.defsubr(
         "read-number",
@@ -3670,310 +1952,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(2),
     );
-    ctx.defsubr(
-        "read-buffer",
-        super::minibuffer::builtin_read_buffer,
-        1,
-        Some(4),
-    );
-    ctx.defsubr(
-        "read-command",
-        super::minibuffer::builtin_read_command,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "read-variable",
-        super::minibuffer::builtin_read_variable,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "try-completion",
-        super::minibuffer::builtin_try_completion,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "all-completions",
-        super::minibuffer::builtin_all_completions,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "test-completion",
-        super::minibuffer::builtin_test_completion,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "completion--flex-cost-gotoh",
-        super::minibuffer::builtin_flex_cost_gotoh,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "input-pending-p",
-        super::reader::builtin_input_pending_p,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "discard-input",
-        super::reader::builtin_discard_input,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "current-input-mode",
-        super::reader::builtin_current_input_mode,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-input-mode",
-        super::reader::builtin_set_input_mode,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "set-input-interrupt-mode",
-        super::reader::builtin_set_input_interrupt_mode,
-        1,
-        Some(1),
-    );
-    // Keyboard audit Finding 16: register insert-special-event
-    // (mirrors GNU `Finsert_special_event` at
-    // `src/keyboard.c:12060`). Routes to the same unread queue
-    // helper as `unread-command-events`, since neomacs treats
-    // every Lisp-side event push the same way.
-    ctx.defsubr(
-        "insert-special-event",
-        super::reader::builtin_insert_special_event,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "read-key-sequence",
-        super::reader::builtin_read_key_sequence,
-        1,
-        Some(6),
-    );
-    ctx.defsubr(
-        "read-key-sequence-vector",
-        super::reader::builtin_read_key_sequence_vector,
-        1,
-        Some(6),
-    );
-    ctx.defsubr("recent-keys", builtin_recent_keys, 0, Some(1));
-    ctx.defsubr(
-        "minibufferp",
-        super::minibuffer::builtin_minibufferp_ctx,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "minibuffer-contents",
-        super::minibuffer::builtin_minibuffer_contents_ctx,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "minibuffer-contents-no-properties",
-        super::minibuffer::builtin_minibuffer_contents_no_properties_ctx,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "minibuffer-depth",
-        super::minibuffer::builtin_minibuffer_depth_ctx,
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("princ", builtin_princ, 1, Some(2)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("prin1", builtin_prin1, 1, Some(3)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "prin1-to-string",
-            builtin_prin1_to_string,
-            1,
-            Some(3),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("print", builtin_print, 1, Some(2)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("terpri", builtin_terpri, 0, Some(2)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("write-char", builtin_write_char, 1, Some(2)),
-    );
-    ctx.defsubr(
-        "backtrace--locals",
-        super::misc::builtin_backtrace_locals,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "backtrace-debug",
-        super::misc::builtin_backtrace_debug,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "backtrace-eval",
-        super::misc::builtin_backtrace_eval,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "backtrace-frame--internal",
-        super::misc::builtin_backtrace_frame_internal,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "recursion-depth",
-        super::misc::builtin_recursion_depth,
-        0,
-        Some(0),
-    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state("kill-emacs", builtin_kill_emacs, 0, Some(2)),
-    );
-    ctx.defsubr(
-        "exit-recursive-edit",
-        super::minibuffer::builtin_exit_recursive_edit,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "abort-recursive-edit",
-        super::minibuffer::builtin_abort_recursive_edit,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "make-thread",
-        super::threads::builtin_make_thread,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "thread-join",
-        super::threads::builtin_thread_join,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "thread-yield",
-        super::threads::builtin_thread_yield,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "thread-name",
-        super::threads::builtin_thread_name,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "thread-live-p",
-        super::threads::builtin_thread_live_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("threadp", super::threads::builtin_threadp, 1, Some(1));
-    ctx.defsubr(
-        "thread-signal",
-        super::threads::builtin_thread_signal,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "current-thread",
-        super::threads::builtin_current_thread,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "all-threads",
-        super::threads::builtin_all_threads,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "thread-last-error",
-        super::threads::builtin_thread_last_error,
-        0,
-        Some(1),
-    );
-    ctx.defsubr("make-mutex", super::threads::builtin_make_mutex, 0, Some(1));
-    ctx.defsubr("mutex-name", super::threads::builtin_mutex_name, 1, Some(1));
-    ctx.defsubr("mutex-lock", super::threads::builtin_mutex_lock, 1, Some(1));
-    ctx.defsubr(
-        "mutex-unlock",
-        super::threads::builtin_mutex_unlock,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("mutexp", super::threads::builtin_mutexp, 1, Some(1));
-    ctx.defsubr(
-        "make-condition-variable",
-        super::threads::builtin_make_condition_variable,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "condition-variable-p",
-        super::threads::builtin_condition_variable_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "condition-name",
-        super::threads::builtin_condition_name,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "condition-mutex",
-        super::threads::builtin_condition_mutex,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "condition-wait",
-        super::threads::builtin_condition_wait,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "condition-notify",
-        super::threads::builtin_condition_notify,
-        1,
-        Some(2),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "undo-boundary",
-            super::undo::builtin_undo_boundary,
-            0,
-            Some(0),
-        ),
     );
     ctx.defsubr(
         "primitive-undo",
@@ -3988,12 +1969,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr("maphash", super::hashtab::builtin_maphash, 2, Some(2));
-    ctx.defsubr("mapatoms", super::hashtab::builtin_mapatoms, 1, Some(2));
-    // GNU `Sunintern` is `2, 2, 0`: the OBARRAY argument is mandatory (it may
-    // be nil to default to `obarray`, but it must be supplied).
-    ctx.defsubr("unintern", super::hashtab::builtin_unintern, 2, Some(2));
-    ctx.defsubr("set-marker", super::marker::builtin_set_marker, 2, Some(3));
     ctx.defsubr(
         "move-marker",
         super::marker::builtin_move_marker,
@@ -4001,267 +1976,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
-        "marker-position",
-        super::marker::builtin_marker_position,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "marker-buffer",
-        super::marker::builtin_marker_buffer,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "copy-marker",
-        super::marker::builtin_copy_marker,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "point-marker",
-        super::marker::builtin_point_marker,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "point-min-marker",
-        super::marker::builtin_point_min_marker,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "point-max-marker",
-        super::marker::builtin_point_max_marker,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "current-case-table",
-        super::casetab::builtin_current_case_table,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "standard-case-table",
-        super::casetab::builtin_standard_case_table,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-case-table",
-        super::casetab::builtin_set_case_table,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "define-category",
-        super::category::builtin_define_category,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "category-docstring",
-        super::category::builtin_category_docstring,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "modify-category-entry",
-        super::category::builtin_modify_category_entry,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "char-category-set",
-        super::category::builtin_char_category_set,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "category-table",
-        super::category::builtin_category_table,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-category-table",
-        super::category::builtin_set_category_table,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "map-char-table",
-        super::chartable::builtin_map_char_table,
-        2,
-        Some(2),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("assoc", builtin_assoc, 2, Some(3)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("plist-member", builtin_plist_member, 2, Some(3)),
-    );
-    ctx.defsubr(
-        "json-parse-buffer",
-        super::json::builtin_json_parse_buffer,
-        0,
-        None,
-    );
-    ctx.defsubr("json-insert", super::json::builtin_json_insert, 1, None);
-    ctx.defsubr(
-        "documentation",
-        super::doc::builtin_documentation,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "documentation-property",
-        super::doc::builtin_documentation_property,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "current-indentation",
-        super::indent::builtin_current_indentation,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "current-column",
-        super::indent::builtin_current_column,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "move-to-column",
-        super::indent::builtin_move_to_column,
-        1,
-        Some(2),
-    );
-    ctx.defsubr("eval-buffer", super::lread::builtin_eval_buffer, 0, Some(5));
-    ctx.defsubr("eval-region", super::lread::builtin_eval_region, 2, Some(4));
-    ctx.defsubr(
-        "read-char-exclusive",
-        super::lread::builtin_read_char_exclusive,
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "insert-before-markers",
-        builtin_insert_before_markers,
-        0,
-        None,
-    );
-    ctx.defsubr(
         "delete-char",
         super::editfns::builtin_delete_char,
         1,
         Some(2),
-    );
-    ctx.defsubr_0("following-char", super::editfns::builtin_following_char_0);
-    ctx.defsubr(
-        "preceding-char",
-        |eval, args| super::editfns::builtin_preceding_char(eval, args),
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "font-at",
-            super::font::builtin_font_at,
-            1,
-            Some(3),
-        ),
-    );
-    ctx.defsubr("face-font", super::font::builtin_face_font, 1, Some(3));
-    ctx.defsubr(
-        "access-file",
-        super::fileio::builtin_access_file,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "expand-file-name",
-        super::fileio::builtin_expand_file_name,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "delete-file-internal",
-        super::fileio::builtin_delete_file_internal,
-        1,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "rename-file",
-            super::fileio::builtin_rename_file,
-            2,
-            Some(3),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "copy-file",
-            super::fileio::builtin_copy_file,
-            2,
-            Some(6),
-        ),
-    );
-    ctx.defsubr(
-        "add-name-to-file",
-        super::fileio::builtin_add_name_to_file,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "make-symbolic-link",
-        super::fileio::builtin_make_symbolic_link,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "directory-files",
-        super::fileio::builtin_directory_files,
-        1,
-        Some(5),
-    );
-    ctx.defsubr(
-        "file-attributes",
-        super::dired::builtin_file_attributes,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "file-exists-p",
-        super::fileio::builtin_file_exists_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-readable-p",
-        super::fileio::builtin_file_readable_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-writable-p",
-        super::fileio::builtin_file_writable_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("file-acl", super::fileio::builtin_file_acl, 1, Some(1));
-    ctx.defsubr(
-        "file-executable-p",
-        super::fileio::builtin_file_executable_p,
-        1,
-        Some(1),
     );
     ctx.defsubr(
         "file-locked-p",
@@ -4270,139 +1988,17 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "file-selinux-context",
-        super::fileio::builtin_file_selinux_context,
-        0,
-        None,
-    );
-    ctx.defsubr(
         "file-system-info",
         super::fileio::builtin_file_system_info,
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "file-directory-p",
-        super::fileio::builtin_file_directory_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-regular-p",
-        super::fileio::builtin_file_regular_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-symlink-p",
-        super::fileio::builtin_file_symlink_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("file-modes", super::fileio::builtin_file_modes, 1, Some(2));
-    ctx.defsubr(
-        "set-file-modes",
-        super::fileio::builtin_set_file_modes,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-file-times",
-        super::fileio::builtin_set_file_times,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "error-message-string",
-        super::errors::builtin_error_message_string,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("char-equal", builtin_char_equal, 2, Some(2));
     ctx.defsubr("macrop", super::builtins::symbols::builtin_macrop, 0, None);
-    ctx.defsubr(
-        "set-process-inherit-coding-system-flag",
-        super::process::builtin_set_process_inherit_coding_system_flag,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "compute-motion",
-        super::builtins::buffers::builtin_compute_motion,
-        7,
-        Some(7),
-    );
     ctx.defsubr(
         "frame-parameter",
         super::window_cmds::builtin_frame_parameter,
         2,
         Some(2),
-    );
-    ctx.defsubr(
-        "send-string-to-terminal",
-        super::dispnew::pure::builtin_send_string_to_terminal,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "internal-show-cursor",
-        super::dispnew::pure::builtin_internal_show_cursor,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "internal-show-cursor-p",
-        super::dispnew::pure::builtin_internal_show_cursor_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "redraw-frame",
-        super::dispnew::pure::builtin_redraw_frame,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "display-supports-face-attributes-p",
-        super::display::builtin_display_supports_face_attributes_p,
-        1,
-        Some(2),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "terminal-name",
-            super::terminal::pure::builtin_terminal_name,
-            0,
-            Some(1),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "terminal-live-p",
-            super::terminal::pure::builtin_terminal_live_p,
-            1,
-            Some(1),
-        ),
-    );
-    ctx.defsubr(
-        "terminal-parameter",
-        super::terminal::pure::builtin_terminal_parameter,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "terminal-parameters",
-        super::terminal::pure::builtin_terminal_parameters,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-terminal-parameter",
-        super::terminal::pure::builtin_set_terminal_parameter,
-        3,
-        Some(3),
     );
     ctx.defsubr(
         "tty-type",
@@ -4453,225 +2049,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "frame-terminal",
-        super::terminal::pure::builtin_frame_terminal,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
         "x-display-monitor-attributes-list",
         super::display::builtin_x_display_monitor_attributes_list,
         0,
         None,
-    );
-    ctx.defsubr("read-char", super::reader::builtin_read_char, 0, Some(3));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "minibuffer-innermost-command-loop-p",
-            super::minibuffer::builtin_minibuffer_innermost_command_loop_p_ctx,
-            0,
-            Some(1),
-        ),
-    );
-    ctx.defsubr(
-        "recursive-edit",
-        super::minibuffer::builtin_recursive_edit,
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "find-coding-systems-region-internal",
-            super::coding::builtin_find_coding_systems_region_internal,
-            2,
-            Some(3),
-        ),
-    );
-    ctx.defsubr(
-        "posix-search-forward",
-        super::builtins::search::builtin_posix_search_forward,
-        1,
-        Some(4),
-    );
-    ctx.defsubr(
-        "posix-search-backward",
-        super::builtins::search::builtin_posix_search_backward,
-        1,
-        Some(4),
-    );
-    ctx.defsubr("read-event", super::lread::builtin_read_event, 0, Some(3));
-    ctx.defsubr("run-hooks", defsubr_run_hooks, 0, None);
-    ctx.defsubr("load", defsubr_load, 1, Some(5));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("message", defsubr_message, 1, None),
-    );
-    ctx.defsubr(
-        "coding-system-aliases",
-        defsubr_coding_system_aliases,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "coding-system-plist",
-        defsubr_coding_system_plist,
-        1,
-        Some(1),
-    );
-    ctx.defsubr("coding-system-put", defsubr_coding_system_put, 3, Some(3));
-    ctx.defsubr("coding-system-base", defsubr_coding_system_base, 1, Some(1));
-    ctx.defsubr(
-        "coding-system-eol-type",
-        defsubr_coding_system_eol_type,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "detect-coding-string",
-        defsubr_detect_coding_string,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "detect-coding-region",
-        defsubr_detect_coding_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "keyboard-coding-system",
-        defsubr_keyboard_coding_system,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "terminal-coding-system",
-        defsubr_terminal_coding_system,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "coding-system-priority-list",
-        defsubr_coding_system_priority_list,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "integer-or-marker-p",
-        |_ctx, args| builtin_integer_or_marker_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "number-or-marker-p",
-        |_ctx, args| builtin_number_or_marker_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "vector-or-char-table-p",
-        |_ctx, args| builtin_vector_or_char_table_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "markerp",
-        |_ctx, args| super::marker::builtin_markerp(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "marker-insertion-type",
-        |_ctx, args| super::marker::builtin_marker_insertion_type(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "make-marker",
-        |_ctx, args| super::marker::builtin_make_marker(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "bool-vector-p",
-        |_ctx, args| super::chartable::builtin_bool_vector_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-category-set",
-        |_ctx, args| super::category::builtin_make_category_set(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "function-equal",
-        |_ctx, args| builtin_function_equal(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "module-function-p",
-        |_ctx, args| builtin_module_function_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "user-ptrp",
-        |_ctx, args| builtin_user_ptrp(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr_1("symbol-with-pos-p", builtin_symbol_with_pos_p_1, 1);
-    ctx.defsubr_1("symbol-with-pos-pos", builtin_symbol_with_pos_pos_1, 1);
-    ctx.defsubr("length<", |_ctx, args| builtin_length_lt(args), 2, Some(2));
-    ctx.defsubr("length=", |_ctx, args| builtin_length_eq(args), 2, Some(2));
-    ctx.defsubr("length>", |_ctx, args| builtin_length_gt(args), 2, Some(2));
-    ctx.defsubr(
-        "substring-no-properties",
-        |_ctx, args| builtin_substring_no_properties(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr("sqrt", |_ctx, args| builtin_sqrt(args), 1, Some(1));
-    ctx.defsubr("sin", |_ctx, args| builtin_sin(args), 1, Some(1));
-    ctx.defsubr("cos", |_ctx, args| builtin_cos(args), 1, Some(1));
-    ctx.defsubr("tan", |_ctx, args| builtin_tan(args), 1, Some(1));
-    ctx.defsubr("asin", |_ctx, args| builtin_asin(args), 1, Some(1));
-    ctx.defsubr("acos", |_ctx, args| builtin_acos(args), 1, Some(1));
-    ctx.defsubr("atan", |_ctx, args| builtin_atan(args), 1, Some(2));
-    ctx.defsubr("exp", |_ctx, args| builtin_exp(args), 1, Some(1));
-    ctx.defsubr("log", |_ctx, args| builtin_log(args), 1, Some(2));
-    ctx.defsubr("expt", |_ctx, args| builtin_expt(args), 2, Some(2));
-    ctx.defsubr("random", |_ctx, args| builtin_random(args), 0, Some(1));
-    ctx.defsubr("isnan", |_ctx, args| builtin_isnan(args), 1, Some(1));
-    ctx.defsubr(
-        "make-string",
-        |_ctx, args| builtin_make_string(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr_slice("string", |_ctx, args| builtin_string_slice(args), 0, None);
-    ctx.defsubr(
-        "string-width",
-        |ctx, args| builtin_string_width(ctx, args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr("delete", builtin_delete_with_ctx, 2, Some(2));
-    ctx.defsubr_2("delq", builtin_delq_2, 2);
-    ctx.defsubr("elt", |_ctx, args| builtin_elt(args), 2, Some(2));
-    ctx.defsubr_2("memql", builtin_memql_2, 2);
-    ctx.defsubr_slice("nconc", builtin_nconc_slice, 0, None);
-    ctx.defsubr("identity", |_ctx, args| builtin_identity(args), 1, Some(1));
-    ctx.defsubr("ngettext", |_ctx, args| builtin_ngettext(args), 3, Some(3));
-    ctx.defsubr(
-        "secure-hash-algorithms",
-        |_ctx, args| builtin_secure_hash_algorithms(args),
-        0,
-        Some(0),
     );
     ctx.defsubr(
         "prefix-numeric-value",
@@ -4679,113 +2060,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr("propertize", |_ctx, args| builtin_propertize(args), 1, None);
-    ctx.defsubr_1(
-        "bare-symbol",
-        super::builtins_extra::builtin_bare_symbol_1,
-        1,
-    );
-    ctx.defsubr(
-        "capitalize",
-        super::casefiddle::builtin_capitalize_in_state,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "charsetp",
-        |_ctx, args| super::charset::builtin_charsetp(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "charset-plist",
-        |_ctx, args| super::charset::builtin_charset_plist(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "define-charset-internal",
-        |_ctx, args| super::charset::builtin_define_charset_internal(args),
-        17,
-        None,
-    );
-    ctx.defsubr(
-        "define-charset-alias",
-        |_ctx, args| super::charset::builtin_define_charset_alias(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-lisp-face-p",
-        super::font::builtin_internal_lisp_face_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-make-lisp-face",
-        super::font::builtin_internal_make_lisp_face,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-set-lisp-face-attribute",
-        super::font::builtin_internal_set_lisp_face_attribute,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "string-to-syntax",
-        |_ctx, args| super::syntax::builtin_string_to_syntax(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "syntax-class-to-char",
-        |_ctx, args| super::syntax::builtin_syntax_class_to_char(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "copy-syntax-table",
-        |_ctx, args| super::syntax::builtin_copy_syntax_table(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "syntax-table-p",
-        |_ctx, args| super::syntax::builtin_syntax_table_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "standard-syntax-table",
-        |_ctx, args| super::syntax::builtin_standard_syntax_table(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "current-time",
-        |ctx, args| super::timefns::builtin_current_time_in_context(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "current-cpu-time",
-        |_ctx, args| builtin_current_cpu_time(args),
-        0,
-        Some(0),
-    );
     ctx.defsubr(
         "get-internal-run-time",
         |_ctx, args| builtin_get_internal_run_time(args),
         0,
         Some(0),
-    );
-    ctx.defsubr(
-        "float-time",
-        |_ctx, args| super::timefns::builtin_float_time(args),
-        0,
-        Some(1),
     );
     ctx.defsubr("daemonp", |_ctx, args| builtin_daemonp(args), 0, Some(0));
     ctx.defsubr(
@@ -4795,174 +2074,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "flush-standard-output",
-        |_ctx, args| builtin_flush_standard_output(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "force-mode-line-update",
-        |ctx, args| builtin_force_mode_line_update(ctx, args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
         "invocation-directory",
         builtin_invocation_directory,
         0,
         Some(0),
     );
     ctx.defsubr("invocation-name", builtin_invocation_name, 0, Some(0));
-    ctx.defsubr(
-        "file-name-directory",
-        |ctx, args| super::fileio::builtin_file_name_directory(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "file-name-nondirectory",
-        |ctx, args| super::fileio::builtin_file_name_nondirectory(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "file-name-as-directory",
-        |ctx, args| super::fileio::builtin_file_name_as_directory(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "directory-file-name",
-        |ctx, args| super::fileio::builtin_directory_file_name(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-name-concat",
-        |_ctx, args| super::fileio::builtin_file_name_concat(args),
-        1,
-        None,
-    );
-    ctx.defsubr(
-        "file-name-absolute-p",
-        |_ctx, args| super::fileio::builtin_file_name_absolute_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "directory-name-p",
-        |_ctx, args| super::fileio::builtin_directory_name_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "substitute-in-file-name",
-        |ctx, args| super::fileio::builtin_substitute_in_file_name(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-file-acl",
-        |_ctx, args| super::fileio::builtin_set_file_acl(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-file-selinux-context",
-        |ctx, args| super::fileio::builtin_set_file_selinux_context(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "visited-file-modtime",
-        |ctx, args| super::fileio::builtin_visited_file_modtime(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "make-temp-name",
-        |ctx, args| super::fileio::builtin_make_temp_name(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "next-read-file-uses-dialog-p",
-        |_ctx, args| super::fileio::builtin_next_read_file_uses_dialog_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "unhandled-file-name-directory",
-        |ctx, args| super::fileio::builtin_unhandled_file_name_directory_eval(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "get-truename-buffer",
-        |_ctx, args| super::fileio::builtin_get_truename_buffer(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "single-key-description",
-        |_ctx, args| builtin_single_key_description(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "key-description",
-        |_ctx, args| builtin_key_description(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "event-convert-list",
-        |_ctx, args| builtin_event_convert_list(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "text-char-description",
-        |_ctx, args| builtin_text_char_description(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-binary-mode",
-        |_ctx, args| super::process::builtin_set_binary_mode(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "group-name",
-        |_ctx, args| super::editfns::builtin_group_name(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "group-gid",
-        |_ctx, args| super::editfns::builtin_group_gid(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "group-real-gid",
-        |_ctx, args| super::editfns::builtin_group_real_gid(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "load-average",
-        |_ctx, args| super::editfns::builtin_load_average(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "logcount",
-        |_ctx, args| super::editfns::builtin_logcount(args),
-        1,
-        Some(1),
-    );
     ctx.defsubr(
         "set-frame-size-and-position-pixelwise",
         super::window_cmds::builtin_set_frame_size_and_position_pixelwise,
@@ -4972,12 +2089,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "mouse-position-in-root-frame",
         |_ctx, args| builtin_mouse_position_in_root_frame(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "x-load-color-file",
-        |_ctx, args| super::font::builtin_x_load_color_file(args),
         0,
         None,
     );
@@ -4994,67 +2105,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "display--line-is-continued-p",
-        |_ctx, args| builtin_display_line_is_continued_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "display--update-for-mouse-movement",
-        |ctx, args| builtin_display_update_for_mouse_movement(ctx, args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "do-auto-save",
-        super::fileio::builtin_do_auto_save,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
         "make-auto-save-file-name",
         super::fileio::builtin_make_auto_save_file_name,
         0,
         Some(0),
-    );
-    ctx.defsubr(
-        "external-debugging-output",
-        builtin_external_debugging_output,
-        1,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "describe-buffer-bindings",
-            keymaps::builtin_describe_buffer_bindings,
-            1,
-            Some(3),
-        ),
-    );
-    ctx.defsubr(
-        "describe-vector",
-        |ctx, args| builtin_describe_vector(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "face-attributes-as-vector",
-        |_ctx, args| super::xfaces::builtin_face_attributes_as_vector(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "font-face-attributes",
-        |_ctx, args| super::font::builtin_font_face_attributes(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-get-glyphs",
-        |_ctx, args| builtin_font_get_glyphs(args),
-        3,
-        Some(4),
     );
     ctx.defsubr(
         "font-get-system-font",
@@ -5067,54 +2121,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| builtin_font_get_system_normal_font(args),
         0,
         None,
-    );
-    ctx.defsubr(
-        "font-has-char-p",
-        |_ctx, args| builtin_font_has_char_p(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "font-match-p",
-        |_ctx, args| builtin_font_match_p(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-shape-gstring",
-        |_ctx, args| builtin_font_shape_gstring(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-variation-glyphs",
-        |_ctx, args| builtin_font_variation_glyphs(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "fontset-font",
-        |_ctx, args| builtin_fontset_font(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "fontset-info",
-        |_ctx, args| builtin_fontset_info(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "fontset-list",
-        |_ctx, args| builtin_fontset_list(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "fontset-list-all",
-        |_ctx, args| builtin_fontset_list_all(args),
-        0,
-        Some(0),
     );
     ctx.defsubr(
         "frame--set-was-invisible",
@@ -5153,12 +2159,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "frame-font-cache",
-        |_ctx, args| builtin_frame_font_cache(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
         "frame-fringe-width",
         |_ctx, args| builtin_frame_fringe_width(args),
         0,
@@ -5169,12 +2169,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::window_cmds::builtin_frame_internal_border_width,
         0,
         Some(1),
-    );
-    ctx.defsubr(
-        "frame-or-buffer-changed-p",
-        |_ctx, args| builtin_frame_or_buffer_changed_p(args),
-        0,
-        None,
     );
     ctx.defsubr(
         "frame-parent",
@@ -5225,141 +2219,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(2),
     );
     ctx.defsubr(
-        "gap-position",
-        |ctx, args| builtin_gap_position(ctx, args),
-        0,
-        Some(0),
-    );
-    record_builtin_no_eval_policy("gap-position", BuiltinNoEvalPolicy::RequiresEvalState);
-    ctx.defsubr(
-        "gap-size",
-        |ctx, args| builtin_gap_size(ctx, args),
-        0,
-        Some(0),
-    );
-    record_builtin_no_eval_policy("gap-size", BuiltinNoEvalPolicy::RequiresEvalState);
-    ctx.defsubr(
-        "garbage-collect-heapsize",
-        |_ctx, args| builtin_garbage_collect_heapsize(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "garbage-collect-maybe",
-        builtin_garbage_collect_maybe,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "get-unicode-property-internal",
-        |_ctx, args| super::chartable::builtin_get_unicode_property_internal(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "gnutls-available-p",
-        |_ctx, args| gnutls::builtin_gnutls_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "gnutls-asynchronous-parameters",
-        super::process::builtin_gnutls_asynchronous_parameters,
-        2,
-        Some(2),
-    );
-    ctx.defsubr("gnutls-bye", super::process::builtin_gnutls_bye, 2, Some(2));
-    ctx.defsubr(
-        "gnutls-ciphers",
-        |_ctx, args| gnutls::builtin_gnutls_ciphers(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "gnutls-deinit",
-        super::process::builtin_gnutls_deinit,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-digests",
-        |_ctx, args| gnutls::builtin_gnutls_digests(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "gnutls-error-fatalp",
-        gnutls::builtin_gnutls_error_fatalp_with_ctx,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-error-string",
-        gnutls::builtin_gnutls_error_string_with_ctx,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-errorp",
-        |_ctx, args| gnutls::builtin_gnutls_errorp(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-format-certificate",
-        |_ctx, args| gnutls::builtin_gnutls_format_certificate(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-get-initstage",
-        super::process::builtin_gnutls_get_initstage,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-hash-digest",
-        |_ctx, args| gnutls::builtin_gnutls_hash_digest(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "gnutls-hash-mac",
-        |_ctx, args| gnutls::builtin_gnutls_hash_mac(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "gnutls-macs",
-        |_ctx, args| gnutls::builtin_gnutls_macs(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "gnutls-peer-status",
-        super::process::builtin_gnutls_peer_status,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-peer-status-warning-describe",
-        |_ctx, args| gnutls::builtin_gnutls_peer_status_warning_describe(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "gnutls-symmetric-decrypt",
-        |_ctx, args| gnutls::builtin_gnutls_symmetric_decrypt(args),
-        4,
-        Some(5),
-    );
-    ctx.defsubr(
-        "gnutls-symmetric-encrypt",
-        |_ctx, args| gnutls::builtin_gnutls_symmetric_encrypt(args),
-        4,
-        Some(5),
-    );
-    ctx.defsubr(
         "gpm-mouse-start",
         |_ctx, args| builtin_gpm_mouse_start(args),
         0,
@@ -5380,84 +2239,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "handle-switch-frame",
         |_ctx, args| builtin_handle_switch_frame(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "help--describe-vector",
-        |_ctx, args| builtin_help_describe_vector(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "init-image-library",
-        |_ctx, args| builtin_init_image_library(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal--obarray-buckets",
-        |_ctx, args| builtin_internal_obarray_buckets(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal--set-buffer-modified-tick",
-        |ctx, args| builtin_internal_set_buffer_modified_tick(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "internal--track-mouse",
-        |ctx, args| builtin_internal_track_mouse(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-char-font",
-        |_ctx, args| builtin_internal_char_font(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "internal-complete-buffer",
-        |ctx, args| builtin_internal_complete_buffer(ctx, args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "internal-describe-syntax-value",
-        builtin_internal_describe_syntax_value,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-event-symbol-parse-modifiers",
-        |ctx, args| builtin_internal_event_symbol_parse_modifiers(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-handle-focus-in",
-        |ctx, args| builtin_internal_handle_focus_in(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-set-lisp-face-attribute-from-resource",
-        |ctx, args| builtin_internal_set_lisp_face_attribute_from_resource(ctx, args),
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "internal-stack-stats",
-        |_ctx, args| builtin_internal_stack_stats(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "internal-subr-documentation",
-        |_ctx, args| builtin_internal_subr_documentation(args),
         1,
         Some(1),
     );
@@ -5545,12 +2326,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "decode-coding-region",
-        crate::encoding::builtin_decode_coding_region,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
         "dump-emacs-portable",
         builtin_dump_emacs_portable,
         1,
@@ -5581,120 +2356,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "encode-coding-region",
-        crate::encoding::builtin_encode_coding_region,
-        3,
-        Some(4),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "find-operation-coding-system",
-            builtin_find_operation_coding_system,
-            1,
-            None,
-        ),
-    );
-    ctx.defsubr(
-        "iso-charset",
-        |_ctx, args| builtin_iso_charset(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "keymap--get-keyelt",
-        |_ctx, args| builtin_keymap_get_keyelt(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "keymap-prompt",
-        |_ctx, args| builtin_keymap_prompt(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
         "lower-frame",
         |_ctx, args| builtin_lower_frame(args),
         0,
         Some(1),
-    );
-    ctx.defsubr(
-        "lread--substitute-object-in-subtree",
-        |_ctx, args| builtin_lread_substitute_object_in_subtree(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "malloc-info",
-        |_ctx, args| builtin_malloc_info(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "malloc-trim",
-        |_ctx, args| builtin_malloc_trim(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-byte-code",
-        |_ctx, args| builtin_make_byte_code(args),
-        4,
-        None,
-    );
-    ctx.defsubr(
-        "make-char",
-        |_ctx, args| charset::builtin_make_char(args),
-        1,
-        Some(5),
-    );
-    ctx.defsubr(
-        "make-closure",
-        |_ctx, args| builtin_make_closure(args),
-        1,
-        None,
-    );
-    ctx.defsubr("make-finalizer", builtin_make_finalizer, 1, Some(1));
-    ctx.defsubr(
-        "marker-last-position",
-        |_ctx, args| builtin_marker_last_position(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-interpreted-closure",
-        |_ctx, args| builtin_make_interpreted_closure(args),
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "make-record",
-        |_ctx, args| builtin_make_record(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "make-temp-file-internal",
-        builtin_make_temp_file_internal,
-        4,
-        Some(4),
-    );
-    ctx.defsubr("map-charset-chars", builtin_map_charset_chars, 2, Some(5));
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "mapbacktrace",
-            super::misc::builtin_mapbacktrace,
-            1,
-            Some(2),
-        ),
-    );
-    ctx.defsubr(
-        "memory-info",
-        |_ctx, args| builtin_memory_info(args),
-        0,
-        Some(0),
     );
     ctx.defsubr(
         "memory-limit",
@@ -5724,155 +2389,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "module-load",
-        |ctx, args| builtin_module_load(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "newline-cache-check",
-        |_ctx, args| builtin_newline_cache_check(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "native-comp-available-p",
-        |_ctx, args| builtin_native_comp_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "native-elisp-load",
-        |_ctx, args| builtin_native_elisp_load(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "obarray-clear",
-        |_ctx, args| builtin_obarray_clear(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "obarray-make",
-        |_ctx, args| builtin_obarray_make(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "object-intervals",
-        |ctx, args| builtin_object_intervals(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("open-dribble-file", builtin_open_dribble_file, 1, Some(1));
-    ctx.defsubr(
-        "open-font",
-        |_ctx, args| builtin_open_font(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "optimize-char-table",
-        |_ctx, args| builtin_optimize_char_table(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "overlay-lists",
-        super::textprop::builtin_overlay_lists,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "overlay-recenter",
-        super::textprop::builtin_overlay_recenter,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
         "pdumper-stats",
         |_ctx, args| builtin_pdumper_stats(args),
         0,
         Some(0),
-    );
-    ctx.defsubr(
-        "play-sound-internal",
-        |_ctx, args| super::sound::builtin_play_sound_internal(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "position-symbol",
-        |ctx, args| builtin_position_symbol(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "profiler-cpu-log",
-        |ctx, args| builtin_profiler_cpu_log(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-cpu-running-p",
-        |ctx, args| builtin_profiler_cpu_running_p(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-cpu-start",
-        |ctx, args| builtin_profiler_cpu_start(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "profiler-cpu-stop",
-        |ctx, args| builtin_profiler_cpu_stop(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-memory-log",
-        |ctx, args| builtin_profiler_memory_log(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-memory-running-p",
-        |ctx, args| builtin_profiler_memory_running_p(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-memory-start",
-        |ctx, args| builtin_profiler_memory_start(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "profiler-memory-stop",
-        |ctx, args| builtin_profiler_memory_stop(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "put-unicode-property-internal",
-        |_ctx, args| super::chartable::builtin_put_unicode_property_internal(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "query-font",
-        |_ctx, args| builtin_query_font(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "query-fontset",
-        |_ctx, args| builtin_query_fontset(args),
-        1,
-        Some(2),
     );
     register_builtin(
         ctx,
@@ -5885,25 +2405,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         ),
     );
     ctx.defsubr(
-        "read-positioning-symbols",
-        |ctx, args| super::reader::builtin_read_impl(ctx, args, true),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "re--describe-compiled",
-        |_ctx, args| builtin_re_describe_compiled(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "recent-auto-save-p",
-        buffers::builtin_recent_auto_save_p,
-        0,
-        Some(0),
-    );
-    ctx.defsubr("redisplay", builtin_redisplay, 0, Some(1));
-    ctx.defsubr(
         "neomacs--frame-snapshot",
         super::xdisp::builtin_neomacs_frame_snapshot,
         0,
@@ -5915,8 +2416,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(3),
     );
-    ctx.defsubr("record", |_ctx, args| builtin_record(args), 1, None);
-    ctx.defsubr_1("recordp", builtin_recordp_1, 1);
     ctx.defsubr(
         "reconsider-frame-fonts",
         builtin_reconsider_frame_fonts,
@@ -5924,63 +2423,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "redirect-debugging-output",
-        builtin_redirect_debugging_output,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
         "redirect-frame-focus",
         super::window_cmds::builtin_redirect_frame_focus,
         1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "remove-pos-from-symbol",
-        |_ctx, args| builtin_remove_pos_from_symbol(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "resize-mini-window-internal",
-        super::window_cmds::builtin_resize_mini_window_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "restore-buffer-modified-p",
-        buffers::builtin_restore_buffer_modified_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set--this-command-keys",
-        builtin_set_this_command_keys,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-buffer-auto-saved",
-        buffers::builtin_set_buffer_auto_saved,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-buffer-major-mode",
-        builtin_set_buffer_major_mode,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-buffer-redisplay",
-        builtin_set_buffer_redisplay,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "set-charset-plist",
-        |_ctx, args| builtin_set_charset_plist(args),
-        2,
         Some(2),
     );
     ctx.defsubr(
@@ -5996,12 +2441,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(2),
     );
     ctx.defsubr(
-        "set-minibuffer-window",
-        |ctx, args| builtin_set_minibuffer_window(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
         "set-mouse-pixel-position",
         |ctx, args| builtin_set_mouse_pixel_position(ctx, args),
         3,
@@ -6014,74 +2453,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(3),
     );
     ctx.defsubr(
-        "set-window-new-normal",
-        super::window_cmds::builtin_set_window_new_normal,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-window-new-pixel",
-        super::window_cmds::builtin_set_window_new_pixel,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-window-new-total",
-        super::window_cmds::builtin_set_window_new_total,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "sort-charsets",
-        |_ctx, args| builtin_sort_charsets(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "split-char",
-        |_ctx, args| super::charset::builtin_split_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "string-distance",
-        |_ctx, args| builtin_string_distance(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "subr-native-lambda-list",
-        |_ctx, args| builtin_subr_native_lambda_list(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "subr-type",
-        |_ctx, args| builtin_subr_type(args),
-        1,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "suspend-emacs",
-            |_ctx, args| builtin_suspend_emacs(args),
-            0,
-            Some(1),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "thread--blocker",
-            super::threads::builtin_thread_blocker,
-            1,
-            Some(1),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    ctx.defsubr(
         "tool-bar-get-system-style",
         |_ctx, args| builtin_tool_bar_get_system_style(args),
         0,
@@ -6092,24 +2463,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| builtin_tool_bar_pixel_width(args),
         0,
         Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "translate-region-internal",
-            crate::emacs_core::editfns::builtin_translate_region_internal,
-            3,
-            Some(3),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "transpose-regions",
-            builtin_transpose_regions,
-            4,
-            Some(5),
-        ),
     );
     ctx.defsubr(
         "tty--output-buffer-size",
@@ -6165,37 +2518,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "tty-suppress-bold-inverse-default-colors",
-        |_ctx, args| builtin_tty_suppress_bold_inverse_default_colors(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "unencodable-char-position",
-        |ctx, args| super::coding::builtin_unencodable_char_position(ctx, args),
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "unicode-property-table-internal",
-        |ctx, args| super::chartable::builtin_unicode_property_table_internal(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "unify-charset",
-        |_ctx, args| super::charset::builtin_unify_charset(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "unix-sync",
-        |_ctx, args| builtin_unix_sync(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr("value<", builtin_value_lt, 2, Some(2));
     ctx.defsubr(
         "x-begin-drag",
         |_ctx, args| builtin_x_begin_drag(args),
@@ -6256,35 +2578,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             BuiltinNoEvalPlaceholder::Nil,
         ),
     );
-    ctx.defsubr(
-        "inotify-add-watch",
-        |_ctx, args| builtin_inotify_add_watch(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "inotify-rm-watch",
-        |_ctx, args| builtin_inotify_rm_watch(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "inotify-valid-p",
-        |_ctx, args| builtin_inotify_valid_p(args),
-        1,
-        Some(1),
-    );
     if INOTIFY_FEATURE_AVAILABLE {
         let _ = ctx.provide_value(Value::symbol("inotify"), None);
     }
     ctx.defsubr("lock-buffer", super::filelock::builtin_lock_buffer, 0, None);
     ctx.defsubr("lock-file", super::filelock::builtin_lock_file, 1, Some(1));
-    ctx.defsubr(
-        "lossage-size",
-        |_ctx, args| builtin_lossage_size(args),
-        0,
-        Some(1),
-    );
     ctx.defsubr(
         "unlock-buffer",
         super::filelock::builtin_unlock_buffer,
@@ -6298,415 +2596,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
-        "window-bottom-divider-width",
-        super::window_cmds::builtin_window_bottom_divider_width,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-lines-pixel-dimensions",
-        |_ctx, args| super::window_cmds::builtin_window_lines_pixel_dimensions(args),
-        0,
-        Some(6),
-    );
-    ctx.defsubr(
-        "window-new-normal",
-        super::window_cmds::builtin_window_new_normal,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-new-pixel",
-        super::window_cmds::builtin_window_new_pixel,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-new-total",
-        super::window_cmds::builtin_window_new_total,
-        0,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "window-old-body-pixel-height",
-            |_ctx, args| super::window_cmds::builtin_window_old_body_pixel_height(args),
-            0,
-            None,
-            BuiltinNoEvalPlaceholder::FixnumZero,
-        ),
-    );
-    ctx.defsubr(
-        "window-old-body-pixel-width",
-        |_ctx, args| super::window_cmds::builtin_window_old_body_pixel_width(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-old-pixel-height",
-        |_ctx, args| super::window_cmds::builtin_window_old_pixel_height(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-old-pixel-width",
-        |_ctx, args| super::window_cmds::builtin_window_old_pixel_width(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-right-divider-width",
-        super::window_cmds::builtin_window_right_divider_width,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-scroll-bar-height",
-        super::window_cmds::builtin_window_scroll_bar_height,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-scroll-bar-width",
-        super::window_cmds::builtin_window_scroll_bar_width,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "treesit-available-p",
-        |_ctx, args| builtin_treesit_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "treesit-compiled-query-p",
-        |_ctx, args| builtin_treesit_compiled_query_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-induce-sparse-tree",
-        |ctx, args| builtin_treesit_induce_sparse_tree(ctx, args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "treesit-language-abi-version",
-        |ctx, args| builtin_treesit_language_abi_version(ctx, args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
         "treesit-language-version",
         |ctx, args| builtin_treesit_language_version(ctx, args),
         0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-language-available-p",
-        |ctx, args| builtin_treesit_language_available_p(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-library-abi-version",
-        |_ctx, args| builtin_treesit_library_abi_version(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-check",
-        |ctx, args| builtin_treesit_node_check(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-child",
-        |ctx, args| builtin_treesit_node_child(ctx, args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit-node-child-by-field-name",
-        |ctx, args| builtin_treesit_node_child_by_field_name(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-child-count",
-        |ctx, args| builtin_treesit_node_child_count(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-descendant-for-range",
-        |ctx, args| builtin_treesit_node_descendant_for_range(ctx, args),
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "treesit-node-end",
-        |ctx, args| builtin_treesit_node_end(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-eq",
-        |ctx, args| builtin_treesit_node_eq(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-field-name-for-child",
-        |ctx, args| builtin_treesit_node_field_name_for_child(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-first-child-for-pos",
-        |ctx, args| builtin_treesit_node_first_child_for_pos(ctx, args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit-node-match-p",
-        |ctx, args| builtin_treesit_node_match_p(ctx, args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit-node-next-sibling",
-        |ctx, args| builtin_treesit_node_next_sibling(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-p",
-        |_ctx, args| builtin_treesit_node_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-parent",
-        |ctx, args| builtin_treesit_node_parent(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-parser",
-        |_ctx, args| builtin_treesit_node_parser(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-prev-sibling",
-        |ctx, args| builtin_treesit_node_prev_sibling(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-node-start",
-        |ctx, args| builtin_treesit_node_start(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-string",
-        |ctx, args| builtin_treesit_node_string(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-node-type",
-        |ctx, args| builtin_treesit_node_type(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-add-notifier",
-        |ctx, args| builtin_treesit_parser_add_notifier(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-parser-buffer",
-        |ctx, args| builtin_treesit_parser_buffer(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-create",
-        |ctx, args| builtin_treesit_parser_create(ctx, args),
-        1,
-        Some(4),
-    );
-    ctx.defsubr(
-        "treesit-parser-delete",
-        |ctx, args| builtin_treesit_parser_delete(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-included-ranges",
-        |ctx, args| builtin_treesit_parser_included_ranges(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-language",
-        |ctx, args| builtin_treesit_parser_language(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-list",
-        |ctx, args| builtin_treesit_parser_list(ctx, args),
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit-parser-notifiers",
-        |ctx, args| builtin_treesit_parser_notifiers(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-p",
-        |_ctx, args| builtin_treesit_parser_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-remove-notifier",
-        |ctx, args| builtin_treesit_parser_remove_notifier(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-parser-root-node",
-        |ctx, args| builtin_treesit_parser_root_node(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-set-included-ranges",
-        |ctx, args| builtin_treesit_parser_set_included_ranges(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-parser-tag",
-        |ctx, args| builtin_treesit_parser_tag(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-pattern-expand",
-        |_ctx, args| builtin_treesit_pattern_expand(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-query-capture",
-        |ctx, args| builtin_treesit_query_capture(ctx, args),
-        2,
-        Some(6),
-    );
-    ctx.defsubr(
-        "treesit-query-compile",
-        |ctx, args| builtin_treesit_query_compile(ctx, args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit-query-expand",
-        |_ctx, args| builtin_treesit_query_expand(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-query-language",
-        |_ctx, args| builtin_treesit_query_language(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-query-p",
-        |_ctx, args| builtin_treesit_query_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-search-forward",
-        |ctx, args| builtin_treesit_search_forward(ctx, args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "treesit-search-subtree",
-        |ctx, args| builtin_treesit_search_subtree(ctx, args),
-        2,
-        Some(5),
-    );
-    ctx.defsubr(
-        "treesit-subtree-stat",
-        |ctx, args| builtin_treesit_subtree_stat(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-grammar-location",
-        |ctx, args| builtin_treesit_grammar_location(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-tracking-line-column-p",
-        |ctx, args| builtin_treesit_tracking_line_column_p(ctx, args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-tracking-line-column-p",
-        |ctx, args| builtin_treesit_parser_tracking_line_column_p(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-query-eagerly-compiled-p",
-        |ctx, args| builtin_treesit_query_eagerly_compiled_p(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-query-source",
-        |_ctx, args| builtin_treesit_query_source(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-embed-level",
-        |ctx, args| builtin_treesit_parser_embed_level(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit-parser-set-embed-level",
-        |ctx, args| builtin_treesit_parser_set_embed_level(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-parse-string",
-        |ctx, args| builtin_treesit_parse_string(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "treesit-parser-changed-regions",
-        |ctx, args| builtin_treesit_parser_changed_regions(ctx, args),
-        1,
         Some(1),
     );
     ctx.defsubr(
@@ -6714,30 +2606,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |ctx, args| builtin_treesit_parser_changed_ranges(ctx, args),
         1,
         Some(1),
-    );
-    ctx.defsubr(
-        "treesit--linecol-at",
-        |ctx, args| builtin_treesit_linecol_at(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "treesit--linecol-cache-set",
-        |ctx, args| builtin_treesit_linecol_cache_set(ctx, args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "treesit--linecol-cache",
-        |ctx, args| builtin_treesit_linecol_cache(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "sqlite-available-p",
-        |_ctx, args| super::sqlite::builtin_sqlite_available_p(args),
-        0,
-        Some(0),
     );
     if super::sqlite::SQLITE3_LISP_API_AVAILABLE {
         ctx.defsubr(
@@ -6831,102 +2699,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(0),
         );
     }
-    ctx.defsubr(
-        "sqlitep",
-        |_ctx, args| super::sqlite::builtin_sqlitep(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "fillarray",
-        |_ctx, args| builtin_fillarray(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "define-hash-table-test",
-        |_ctx, args| builtin_define_hash_table_test(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "hash-table-test",
-        |_ctx, args| super::hashtab::builtin_hash_table_test(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "hash-table-size",
-        |_ctx, args| super::hashtab::builtin_hash_table_size(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "hash-table-rehash-size",
-        |_ctx, args| super::hashtab::builtin_hash_table_rehash_size(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "hash-table-rehash-threshold",
-        |_ctx, args| super::hashtab::builtin_hash_table_rehash_threshold(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "hash-table-weakness",
-        |_ctx, args| super::hashtab::builtin_hash_table_weakness(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "copy-hash-table",
-        |_ctx, args| super::hashtab::builtin_copy_hash_table(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sxhash-eq",
-        |_ctx, args| super::hashtab::builtin_sxhash_eq(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sxhash-eql",
-        |_ctx, args| super::hashtab::builtin_sxhash_eql(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sxhash-equal",
-        |_ctx, args| super::hashtab::builtin_sxhash_equal(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sxhash-equal-including-properties",
-        |_ctx, args| super::hashtab::builtin_sxhash_equal_including_properties(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal--hash-table-buckets",
-        |_ctx, args| super::hashtab::builtin_internal_hash_table_buckets(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal--hash-table-histogram",
-        |_ctx, args| super::hashtab::builtin_internal_hash_table_histogram(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal--hash-table-index-size",
-        |_ctx, args| super::hashtab::builtin_internal_hash_table_index_size(args),
-        0,
-        None,
-    );
     ctx.defsubr(
         "neomacs-frame-geometry",
         |_ctx, args| builtin_neomacs_frame_geometry(args),
@@ -7037,445 +2809,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "buffer-local-toplevel-value",
-        |ctx, args| super::custom::builtin_buffer_local_toplevel_value(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-buffer-local-toplevel-value",
-        |ctx, args| super::custom::builtin_set_buffer_local_toplevel_value(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "debugger-trap",
-        |_ctx, args| builtin_debugger_trap(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "internal-delete-indirect-variable",
-        |ctx, args| builtin_internal_delete_indirect_variable(ctx, args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "overlay-tree",
-        |_ctx, args| builtin_overlay_tree(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "thread-buffer-disposition",
-        super::threads::builtin_thread_buffer_disposition,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "thread-set-buffer-disposition",
-        super::threads::builtin_thread_set_buffer_disposition,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-discard-buffer-from-window",
-        super::window_cmds::builtin_window_discard_buffer_from_window,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "window-cursor-info",
-        super::window_cmds::builtin_window_cursor_info,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "combine-windows",
-        super::window_cmds::builtin_combine_windows,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "uncombine-window",
-        super::window_cmds::builtin_uncombine_window,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
         "frame-windows-min-size",
         |_ctx, args| builtin_frame_windows_min_size(args),
         0,
         None,
-    );
-    ctx.defsubr(
-        "remember-mouse-glyph",
-        builtin_remember_mouse_glyph,
-        0,
-        None,
-    );
-    ctx.defsubr("obarrayp", |_ctx, args| builtin_obarrayp(args), 1, Some(1));
-    ctx.defsubr("ntake", |_ctx, args| builtin_ntake(args), 2, Some(2));
-    ctx.defsubr(
-        "default-file-modes",
-        |_ctx, args| super::fileio::builtin_default_file_modes(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-default-file-modes",
-        |_ctx, args| super::fileio::builtin_set_default_file_modes(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "cancel-kbd-macro-events",
-        |ctx, args| builtin_cancel_kbd_macro_events(ctx, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "window-configuration-p",
-        |_ctx, args| super::window_cmds::builtin_window_configuration_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-configuration-frame",
-        |_ctx, args| super::window_cmds::builtin_window_configuration_frame(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-configuration-equal-p",
-        |_ctx, args| super::window_cmds::builtin_window_configuration_equal_p(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-input-meta-mode",
-        |_ctx, args| super::reader::builtin_set_input_meta_mode(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-output-flow-control",
-        |_ctx, args| super::reader::builtin_set_output_flow_control(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-quit-char",
-        super::reader::builtin_set_quit_char,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "top-level",
-        |_ctx, args| super::minibuffer::builtin_top_level(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "documentation-stringp",
-        |_ctx, args| builtin_documentation_stringp(args),
-        1,
-        Some(1),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "internal--define-uninitialized-variable",
-            symbols::builtin_internal_define_uninitialized_variable,
-            1,
-            Some(2),
-        ),
-    );
-    ctx.defsubr(
-        "compose-region-internal",
-        super::composite::builtin_compose_region_internal,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "window-text-pixel-size",
-        super::xdisp::builtin_window_text_pixel_size_ctx,
-        0,
-        Some(7),
-    );
-    ctx.defsubr(
-        "pos-visible-in-window-p",
-        super::xdisp::builtin_pos_visible_in_window_p_ctx,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "frame--face-hash-table",
-        super::xfaces::builtin_frame_face_hash_table,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "delete-directory-internal",
-        super::fileio::builtin_delete_directory_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-directory-internal",
-        super::fileio::builtin_make_directory_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "directory-files-and-attributes",
-        super::dired::builtin_directory_files_and_attributes,
-        1,
-        Some(6),
-    );
-    ctx.defsubr(
-        "find-file-name-handler",
-        super::fileio::builtin_find_file_name_handler,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "file-name-all-completions",
-        super::dired::builtin_file_name_all_completions,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "file-accessible-directory-p",
-        super::fileio::builtin_file_accessible_directory_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "file-name-case-insensitive-p",
-        super::fileio::builtin_file_name_case_insensitive_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "file-newer-than-file-p",
-        super::fileio::builtin_file_newer_than_file_p,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "verify-visited-file-modtime",
-        super::fileio::builtin_verify_visited_file_modtime,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-default-interrupt-process",
-        super::process::builtin_internal_default_interrupt_process,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "internal-default-process-filter",
-        super::process::builtin_internal_default_process_filter,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-default-process-sentinel",
-        super::process::builtin_internal_default_process_sentinel,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-default-signal-process",
-        super::process::builtin_internal_default_signal_process,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "network-lookup-address-info",
-        super::process::builtin_network_lookup_address_info,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-network-process-option",
-        super::process::builtin_set_network_process_option,
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "process-query-on-exit-flag",
-        super::process::builtin_process_query_on_exit_flag,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-query-on-exit-flag",
-        super::process::builtin_set_process_query_on_exit_flag,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "process-inherit-coding-system-flag",
-        super::process::builtin_process_inherit_coding_system_flag,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-process-coding-system",
-        super::process::builtin_set_process_coding_system,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "set-process-datagram-address",
-        super::process::builtin_set_process_datagram_address,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "remove-list-of-text-properties",
-        super::textprop::builtin_remove_list_of_text_properties,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "get-char-property-and-overlay",
-        super::textprop::builtin_get_char_property_and_overlay,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "next-single-property-change",
-        super::textprop::builtin_next_single_property_change,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "previous-single-property-change",
-        super::textprop::builtin_previous_single_property_change,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "line-beginning-position",
-        super::navigation::builtin_line_beginning_position,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-variable-buffer-local",
-        super::custom::builtin_make_variable_buffer_local,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "active-minibuffer-window",
-        super::window_cmds::builtin_active_minibuffer_window,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "minibuffer-selected-window",
-        super::window_cmds::builtin_minibuffer_selected_window,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "window-mode-line-height",
-        super::window_cmds::builtin_window_mode_line_height,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "window-header-line-height",
-        super::window_cmds::builtin_window_header_line_height,
-        0,
-        None,
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "window-tab-line-height",
-            super::window_cmds::builtin_window_tab_line_height,
-            0,
-            None,
-            BuiltinNoEvalPlaceholder::FixnumZero,
-        ),
-    );
-    ctx.defsubr(
-        "set-window-display-table",
-        super::window_cmds::builtin_set_window_display_table,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-window-cursor-type",
-        super::window_cmds::builtin_set_window_cursor_type,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-window-scroll-bars",
-        super::window_cmds::builtin_set_window_scroll_bars,
-        1,
-        Some(6),
-    );
-    ctx.defsubr(
-        "set-window-next-buffers",
-        super::window_cmds::builtin_set_window_next_buffers,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-window-prev-buffers",
-        super::window_cmds::builtin_set_window_prev_buffers,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-window-dedicated-p",
-        super::window_cmds::builtin_set_window_dedicated_p,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "delete-window-internal",
-        super::window_cmds::builtin_delete_window_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "delete-other-windows-internal",
-        super::window_cmds::builtin_delete_other_windows_internal,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-combination-limit",
-        super::window_cmds::builtin_window_combination_limit,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-window-combination-limit",
-        super::window_cmds::builtin_set_window_combination_limit,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-resize-apply-total",
-        super::window_cmds::builtin_window_resize_apply_total,
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "other-window-for-scrolling",
-        super::window_cmds::builtin_other_window_for_scrolling,
-        0,
-        Some(0),
     );
     ctx.defsubr(
         "select-frame-set-input-focus",
@@ -7488,30 +2825,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::window_cmds::builtin_modify_frame_parameters,
         2,
         Some(2),
-    );
-    ctx.defsubr(
-        "frame-selected-window",
-        super::window_cmds::builtin_frame_selected_window,
-        0,
-        None,
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "frame-old-selected-window",
-            super::window_cmds::builtin_frame_old_selected_window,
-            0,
-            None,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "set-frame-selected-window",
-            super::window_cmds::builtin_set_frame_selected_window,
-            2,
-            Some(3),
-        ),
     );
     ctx.defsubr(
         "x-display-pixel-width",
@@ -7567,122 +2880,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "minor-mode-key-binding",
-        super::interactive::builtin_minor_mode_key_binding,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "this-command-keys-vector",
-        super::interactive::builtin_this_command_keys_vector,
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "this-single-command-keys",
-            super::interactive::builtin_this_single_command_keys,
-            0,
-            Some(0),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::placeholder(
-            "this-single-command-raw-keys",
-            super::interactive::builtin_this_single_command_raw_keys,
-            0,
-            Some(0),
-            BuiltinNoEvalPlaceholder::Nil,
-        ),
-    );
-    ctx.defsubr(
-        "clear-this-command-keys",
-        super::interactive::builtin_clear_this_command_keys,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "waiting-for-user-input-p",
-        super::reader::builtin_waiting_for_user_input_p_ctx,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "minibuffer-prompt",
-        super::minibuffer::builtin_minibuffer_prompt_ctx,
-        0,
-        Some(0),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "minibuffer-prompt-end",
-            super::minibuffer::builtin_minibuffer_prompt_end_ctx,
-            0,
-            Some(0),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "innermost-minibuffer-p",
-            super::minibuffer::builtin_innermost_minibuffer_p_ctx,
-            0,
-            None,
-        ),
-    );
-    ctx.defsubr(
-        "backtrace--frames-from-thread",
-        super::misc::builtin_backtrace_frames_from_thread,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "abort-minibuffers",
-        super::minibuffer::builtin_abort_minibuffers_ctx,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "set-marker-insertion-type",
-        super::marker::builtin_set_marker_insertion_type,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-standard-case-table",
-        super::casetab::builtin_set_standard_case_table,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "get-unused-category",
-        super::category::builtin_get_unused_category,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "standard-category-table",
-        super::category::builtin_standard_category_table,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "upcase-initials-region",
-        super::casefiddle::builtin_upcase_initials_region,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "buffer-substring-no-properties",
-        |eval, args| super::editfns::builtin_buffer_substring_no_properties(eval, args),
-        0,
-        None,
-    );
 
     // Pure builtins from builtins_extra (previously in old match dispatch).
     // These don't need &mut Context, so we wrap them.
@@ -7701,11 +2898,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         ctx,
         "string-search",
         super::builtins_extra::builtin_string_search
-    );
-    ctx.defsubr_1(
-        "bare-symbol",
-        super::builtins_extra::builtin_bare_symbol_1,
-        1,
     );
     defsubr_pure!(
         ctx,
@@ -7729,92 +2921,21 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         "byte-code-function-p",
         super::builtins_extra::builtin_byte_code_function_p
     );
-    ctx.defsubr_1("closurep", super::builtins_extra::builtin_closurep_1, 1);
     defsubr_pure!(ctx, "natnump", super::builtins_extra::builtin_natnump);
-    // GNU defines `fixnump` and `bignump` in `lisp/subr.el` (not in C),
-    // so they must come from the loaded Lisp source — registering Rust
-    // subrs here would shadow the elisp definitions and make
-    // `(subrp (symbol-function 'fixnump))` return t instead of nil.
-    ctx.defsubr(
-        "user-login-name",
-        super::builtins_extra::builtin_user_login_name,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "user-real-login-name",
-        super::builtins_extra::builtin_user_real_login_name,
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "user-full-name",
-        super::builtins_extra::builtin_user_full_name,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "system-name",
-        super::builtins_extra::builtin_system_name,
-        0,
-        Some(0),
-    );
     defsubr_pure!(ctx, "emacs-pid", super::builtins_extra::builtin_emacs_pid);
     defsubr_pure!(
         ctx,
         "memory-use-counts",
         super::builtins_extra::builtin_memory_use_counts
     );
-
-    // -----------------------------------------------------------------------
-    // Additional builtins registered via defsubr.
-    // -----------------------------------------------------------------------
-
-    // -- Arithmetic --
-    ctx.defsubr_slice("+", super::builtins::arithmetic::builtin_add_slice, 0, None);
-    ctx.defsubr_slice("-", super::builtins::arithmetic::builtin_sub_slice, 0, None);
-    ctx.defsubr("*", |_ctx, args| builtin_mul(args), 0, None);
-    ctx.defsubr("/", |_ctx, args| builtin_div(args), 1, None);
-    ctx.defsubr("%", |_ctx, args| builtin_percent(args), 2, Some(2));
-    ctx.defsubr("mod", |_ctx, args| builtin_mod(args), 2, Some(2));
-    ctx.defsubr_1("1+", builtin_add1_1, 1);
-    ctx.defsubr_1("1-", builtin_sub1_1, 1);
-    ctx.defsubr_slice("max", builtin_max_slice, 1, None);
-    ctx.defsubr_slice("min", builtin_min_slice, 1, None);
-    ctx.defsubr("abs", |_ctx, args| builtin_abs(args), 1, Some(1));
-
-    // -- Logical / bitwise --
-    ctx.defsubr_slice("logand", |_ctx, args| builtin_logand_slice(args), 0, None);
-    ctx.defsubr_slice("logior", |_ctx, args| builtin_logior_slice(args), 0, None);
-    ctx.defsubr_slice("logxor", |_ctx, args| builtin_logxor_slice(args), 0, None);
-    ctx.defsubr("lognot", |_ctx, args| builtin_lognot(args), 1, Some(1));
-    ctx.defsubr_slice("ash", |_ctx, args| builtin_ash_slice(args), 2, Some(2));
-
-    // -- Numeric comparisons --
-    ctx.defsubr_slice("=", builtin_num_eq_slice, 1, None);
-    ctx.defsubr_slice("<", builtin_num_lt_slice, 1, None);
-    ctx.defsubr_slice("<=", builtin_num_le_slice, 1, None);
-    ctx.defsubr_slice(">", builtin_num_gt_slice, 1, None);
-    ctx.defsubr_slice(">=", builtin_num_ge_slice, 1, None);
-    ctx.defsubr_2("/=", builtin_num_ne_2, 2);
-
-    // -- Type predicates --
-    ctx.defsubr_1("null", builtin_null_1, 1);
     ctx.defsubr_1("not", builtin_not_1, 1);
-    ctx.defsubr_1("atom", builtin_atom_1, 1);
-    ctx.defsubr_1("consp", builtin_consp_1, 1);
-    ctx.defsubr_1("listp", builtin_listp_1, 1);
     ctx.defsubr(
         "list-of-strings-p",
         |_ctx, args| builtin_list_of_strings_p(args),
         0,
         None,
     );
-    ctx.defsubr_1("nlistp", builtin_nlistp_1, 1);
-    ctx.defsubr_1("symbolp", builtin_symbolp_1, 1);
     ctx.defsubr_1("booleanp", builtin_booleanp_1, 1);
-    ctx.defsubr_1("numberp", builtin_numberp_1, 1);
-    ctx.defsubr_1("integerp", builtin_integerp_1, 1);
     ctx.defsubr(
         "integer-or-null-p",
         |_ctx, args| builtin_integer_or_null_p(args),
@@ -7827,116 +2948,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr_1("floatp", builtin_floatp_1, 1);
-    ctx.defsubr_1("stringp", builtin_stringp_1, 1);
-    ctx.defsubr_1("vectorp", builtin_vectorp_1, 1);
-    ctx.defsubr(
-        "characterp",
-        |_ctx, args| builtin_characterp(args),
-        1,
-        Some(2),
-    );
     ctx.defsubr(
         "char-uppercase-p",
         |_ctx, args| builtin_char_uppercase_p(args),
         0,
         None,
     );
-    ctx.defsubr_1("keywordp", builtin_keywordp_1, 1);
-    ctx.defsubr(
-        "hash-table-p",
-        |_ctx, args| builtin_hash_table_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("bufferp", |_ctx, args| builtin_bufferp(args), 1, Some(1));
-    ctx.defsubr(
-        "type-of",
-        super::builtins::types::builtin_type_of_with_ctx,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sequencep",
-        |_ctx, args| builtin_sequencep(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("arrayp", |_ctx, args| builtin_arrayp(args), 1, Some(1));
     ctx.defsubr("ignore", |_ctx, args| builtin_ignore(args), 0, None);
-    ctx.defsubr(
-        "cl-type-of",
-        |_ctx, args| builtin_cl_type_of(args),
-        1,
-        Some(1),
-    );
-
-    // -- Equality --
-    ctx.defsubr_2("eq", builtin_eq_2, 2);
-    ctx.defsubr_2("eql", builtin_eql_2, 2);
-    ctx.defsubr_2("equal", builtin_equal_2, 2);
-
-    // -- Cons / List --
-    ctx.defsubr_2("cons", builtin_cons_2, 2);
-    ctx.defsubr_1("car", builtin_car_1, 1);
-    ctx.defsubr_1("cdr", builtin_cdr_1, 1);
-    ctx.defsubr_1("car-safe", builtin_car_safe_1, 1);
-    ctx.defsubr_1("cdr-safe", builtin_cdr_safe_1, 1);
-    ctx.defsubr_2("setcar", builtin_setcar_2, 2);
-    ctx.defsubr_2("setcdr", builtin_setcdr_2, 2);
-    ctx.defsubr_slice("list", builtin_list_slice, 0, None);
-    ctx.defsubr_1("length", builtin_length_1, 1);
-    ctx.defsubr_2("nth", builtin_nth_2, 2);
-    ctx.defsubr_2("nthcdr", builtin_nthcdr_2, 2);
-    ctx.defsubr_slice("append", builtin_append_slice, 0, None);
-    ctx.defsubr("reverse", |_ctx, args| builtin_reverse(args), 1, Some(1));
-    ctx.defsubr_1("nreverse", builtin_nreverse_1, 1);
-    ctx.defsubr_2("member", builtin_member_2, 2);
-    ctx.defsubr_2("memq", builtin_memq_2, 2);
-    ctx.defsubr_2("assq", builtin_assq_2, 2);
-    ctx.defsubr(
-        "copy-sequence",
-        |_ctx, args| builtin_copy_sequence(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("plist-get", builtin_plist_get_with_ctx, 2, Some(3));
-    ctx.defsubr("plist-put", builtin_plist_put_with_ctx, 3, Some(4));
-    ctx.defsubr(
-        "copy-alist",
-        |_ctx, args| super::misc::builtin_copy_alist(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("rassoc", super::misc::builtin_rassoc_with_ctx, 2, Some(2));
-    ctx.defsubr_2("rassq", super::misc::builtin_rassq_2, 2);
-    ctx.defsubr(
-        "make-list",
-        |_ctx, args| super::misc::builtin_make_list(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "safe-length",
-        |_ctx, args| super::misc::builtin_safe_length(args),
-        1,
-        Some(1),
-    );
-
-    // -- String --
-    ctx.defsubr(
-        "string-equal",
-        |_ctx, args| builtin_string_equal(args),
-        2,
-        Some(2),
-    );
     ctx.defsubr("string=", |_ctx, args| builtin_string_equal(args), 0, None);
-    ctx.defsubr(
-        "string-lessp",
-        |_ctx, args| builtin_string_lessp(args),
-        2,
-        Some(2),
-    );
     ctx.defsubr("string<", |_ctx, args| builtin_string_lessp(args), 0, None);
     ctx.defsubr(
         "string-greaterp",
@@ -7950,243 +2969,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr_slice(
-        "substring",
-        |_ctx, args| builtin_substring_slice(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr_slice("concat", |_ctx, args| builtin_concat_slice(args), 0, None);
-    ctx.defsubr(
-        "unibyte-string",
-        |_ctx, args| builtin_unibyte_string(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-to-number",
-        |_ctx, args| builtin_string_to_number(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "number-to-string",
-        |ctx, args| builtin_number_to_string(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr("upcase", builtin_upcase_in_state, 1, Some(1));
-    ctx.defsubr("downcase", builtin_downcase_in_state, 1, Some(1));
-    ctx.defsubr(
-        "char-to-string",
-        |_ctx, args| builtin_char_to_string(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "string-to-char",
-        |_ctx, args| builtin_string_to_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "clear-string",
-        |_ctx, args| builtin_clear_string(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "compare-strings",
-        |_ctx, args| super::fns::builtin_compare_strings(args),
-        6,
-        Some(7),
-    );
-    ctx.defsubr(
-        "string-version-lessp",
-        |_ctx, args| super::fns::builtin_string_version_lessp(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "string-collate-lessp",
-        |_ctx, args| super::fns::builtin_string_collate_lessp(args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "string-collate-equalp",
-        |_ctx, args| super::fns::builtin_string_collate_equalp(args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr_2(
-        "equal-including-properties",
-        super::fns::builtin_equal_including_properties_2,
-        2,
-    );
-    ctx.defsubr(
-        "string-make-multibyte",
-        |_ctx, args| super::fns::builtin_string_make_multibyte(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-make-unibyte",
-        |_ctx, args| super::fns::builtin_string_make_unibyte(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-to-multibyte",
-        |_ctx, args| super::misc::builtin_string_to_multibyte(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-to-unibyte",
-        |_ctx, args| super::misc::builtin_string_to_unibyte(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-as-unibyte",
-        |_ctx, args| super::misc::builtin_string_as_unibyte(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "string-as-multibyte",
-        |_ctx, args| super::misc::builtin_string_as_multibyte(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "unibyte-char-to-multibyte",
-        |_ctx, args| super::misc::builtin_unibyte_char_to_multibyte(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "multibyte-char-to-unibyte",
-        |_ctx, args| super::misc::builtin_multibyte_char_to_unibyte(args),
-        0,
-        None,
-    );
-
-    // -- Vector --
-    ctx.defsubr(
-        "make-vector",
-        |_ctx, args| builtin_make_vector(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr_slice("vector", builtin_vector_slice, 0, None);
-    ctx.defsubr_2("aref", builtin_aref_2, 2);
-    ctx.defsubr("aset", |_ctx, args| builtin_aset(args), 3, Some(3));
-    ctx.defsubr_slice("vconcat", |_ctx, args| builtin_vconcat_slice(args), 0, None);
-
-    // -- Hash table --
-    ctx.defsubr_slice(
-        "make-hash-table",
-        |_ctx, args| builtin_make_hash_table_slice(args),
-        0,
-        None,
-    );
-    ctx.defsubr_3("gethash", builtin_gethash_3, 2);
-    ctx.defsubr_3("puthash", builtin_puthash_3, 3);
-    ctx.defsubr_2("remhash", builtin_remhash_2, 2);
-    ctx.defsubr("clrhash", |_ctx, args| builtin_clrhash(args), 1, Some(1));
-    ctx.defsubr(
-        "hash-table-count",
-        |_ctx, args| builtin_hash_table_count(args),
-        1,
-        Some(1),
-    );
-
-    // -- Float / math / conversion --
-    ctx.defsubr("float", |_ctx, args| builtin_float(args), 1, Some(1));
-    ctx.defsubr("truncate", |_ctx, args| builtin_truncate(args), 1, Some(2));
-    ctx.defsubr("floor", |_ctx, args| builtin_floor(args), 1, Some(2));
-    ctx.defsubr("ceiling", |_ctx, args| builtin_ceiling(args), 1, Some(2));
-    ctx.defsubr("round", |_ctx, args| builtin_round(args), 1, Some(2));
-    ctx.defsubr(
-        "copysign",
-        |_ctx, args| super::floatfns::builtin_copysign(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "frexp",
-        |_ctx, args| super::floatfns::builtin_frexp(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "ldexp",
-        |_ctx, args| super::floatfns::builtin_ldexp(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "logb",
-        |_ctx, args| super::floatfns::builtin_logb(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "fceiling",
-        |_ctx, args| super::floatfns::builtin_fceiling(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "ffloor",
-        |_ctx, args| super::floatfns::builtin_ffloor(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "fround",
-        |_ctx, args| super::floatfns::builtin_fround(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "ftruncate",
-        |_ctx, args| super::floatfns::builtin_ftruncate(args),
-        1,
-        Some(1),
-    );
-
-    // -- Symbol --
-    ctx.defsubr_1("symbol-name", builtin_symbol_name_1, 1);
-    ctx.defsubr_1("make-symbol", builtin_make_symbol_1, 1);
-
-    // -- Misc pure --
-    ctx.defsubr(
-        "bitmap-spec-p",
-        |_ctx, args| builtin_bitmap_spec_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "byte-to-string",
-        |_ctx, args| builtin_byte_to_string(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "clear-buffer-auto-save-failure",
-        |_ctx, args| builtin_clear_buffer_auto_save_failure(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "clear-face-cache",
-        |_ctx, args| builtin_clear_face_cache(args),
-        0,
-        Some(1),
-    );
     ctx.defsubr(
         "combine-after-change-execute",
         |ctx, args| builtin_combine_after_change_execute(ctx, args),
@@ -8194,649 +2976,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "command-error-default-function",
-        |_ctx, args| builtin_command_error_default_function(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "locale-info",
-        |_ctx, args| super::misc::builtin_locale_info(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr_slice("nconc", builtin_nconc_slice, 0, None);
-
-    // -- Subr introspection --
-    ctx.defsubr(
-        "subr-name",
-        |_ctx, args| super::subr_info::builtin_subr_name(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "subr-arity",
-        super::subr_info::builtin_subr_arity,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "native-comp-function-p",
-        |_ctx, args| super::subr_info::builtin_native_comp_function_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "interpreted-function-p",
-        |_ctx, args| super::subr_info::builtin_interpreted_function_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr("func-arity", builtin_func_arity, 1, Some(1));
-
-    // -- Character encoding --
-    ctx.defsubr(
-        "char-width",
-        |ctx, args| crate::encoding::builtin_char_width_in_context(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "string-bytes",
-        |_ctx, args| crate::encoding::builtin_string_bytes(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "multibyte-string-p",
-        |_ctx, args| crate::encoding::builtin_multibyte_string_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "encode-coding-string",
-        crate::encoding::builtin_encode_coding_string_in_context,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "decode-coding-string",
-        crate::encoding::builtin_decode_coding_string_in_context,
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "char-or-string-p",
-        |_ctx, args| crate::encoding::builtin_char_or_string_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "max-char",
-        |_ctx, args| crate::encoding::builtin_max_char(args),
-        0,
-        Some(1),
-    );
-
-    // -- Search --
-    ctx.defsubr(
-        "regexp-quote",
-        |_ctx, args| super::search::builtin_regexp_quote(args),
-        1,
-        Some(1),
-    );
-
-    // -- File I/O --
-    ctx.defsubr(
-        "file-attributes-lessp",
-        |_ctx, args| super::dired::builtin_file_attributes_lessp(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "system-users",
-        |_ctx, args| super::dired::builtin_system_users(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "system-groups",
-        |_ctx, args| super::dired::builtin_system_groups(args),
-        0,
-        Some(0),
-    );
-
-    // -- User / editfns --
-    ctx.defsubr(
-        "user-uid",
-        |_ctx, args| super::editfns::builtin_user_uid(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "user-real-uid",
-        |_ctx, args| super::editfns::builtin_user_real_uid(args),
-        0,
-        Some(0),
-    );
-
-    // -- Time/date --
-    ctx.defsubr(
-        "time-add",
-        |_ctx, args| super::timefns::builtin_time_add(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "time-subtract",
-        |_ctx, args| super::timefns::builtin_time_subtract(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "time-less-p",
-        |_ctx, args| super::timefns::builtin_time_less_p(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "time-equal-p",
-        |_ctx, args| super::timefns::builtin_time_equal_p(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "current-time-string",
-        |_ctx, args| super::timefns::builtin_current_time_string(args),
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "current-time-zone",
-        |_ctx, args| super::timefns::builtin_current_time_zone(args),
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "encode-time",
-        |_ctx, args| super::timefns::builtin_encode_time(args),
-        1,
-        None,
-    );
-    ctx.defsubr(
-        "decode-time",
-        |_ctx, args| super::timefns::builtin_decode_time(args),
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "time-convert",
-        |ctx, args| super::timefns::builtin_time_convert_in_context(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-time-zone-rule",
-        |_ctx, args| super::timefns::builtin_set_time_zone_rule(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "format-time-string",
-        |_ctx, args| super::format::builtin_format_time_string(args),
-        1,
-        Some(3),
-    );
-
-    // -- Case/char --
-    ctx.defsubr(
-        "upcase-initials",
-        super::casefiddle::builtin_upcase_initials_in_state,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "char-resolve-modifiers",
-        |_ctx, args| super::casefiddle::builtin_char_resolve_modifiers(args),
-        0,
-        None,
-    );
-
-    // -- Font/face --
-    ctx.defsubr(
-        "fontp",
-        |_ctx, args| super::font::builtin_fontp(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-spec",
-        |_ctx, args| super::font::builtin_font_spec(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "font-get",
-        |_ctx, args| super::font::builtin_font_get(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "font-put",
-        |_ctx, args| super::font::builtin_font_put(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "font-xlfd-name",
-        |_ctx, args| super::font::builtin_font_xlfd_name(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "close-font",
-        |_ctx, args| super::font::builtin_close_font(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "clear-font-cache",
-        |_ctx, args| super::font::builtin_clear_font_cache(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "internal-lisp-face-attribute-values",
-        |_ctx, args| super::font::builtin_internal_lisp_face_attribute_values(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-lisp-face-equal-p",
-        |_ctx, args| super::font::builtin_internal_lisp_face_equal_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-lisp-face-empty-p",
-        |_ctx, args| super::font::builtin_internal_lisp_face_empty_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "face-attribute-relative-p",
-        |_ctx, args| super::font::builtin_face_attribute_relative_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "merge-face-attribute",
-        super::font::builtin_merge_face_attribute_with_eval,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "color-gray-p",
-        |ctx, args| super::font::builtin_color_gray_p(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "color-supported-p",
-        |_ctx, args| super::font::builtin_color_supported_p(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "color-distance",
-        |ctx, args| super::font::builtin_color_distance(ctx, args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "color-values-from-color-spec",
-        |_ctx, args| super::font::builtin_color_values_from_color_spec(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-face-x-get-resource",
-        |_ctx, args| super::font::builtin_internal_face_x_get_resource(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "internal-set-font-selection-order",
-        |_ctx, args| super::font::builtin_internal_set_font_selection_order(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-set-alternative-font-family-alist",
-        |_ctx, args| super::font::builtin_internal_set_alternative_font_family_alist(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "internal-set-alternative-font-registry-alist",
-        |_ctx, args| super::font::builtin_internal_set_alternative_font_registry_alist(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "internal-copy-lisp-face",
-        super::font::builtin_internal_copy_lisp_face,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "internal-get-lisp-face-attribute",
-        super::font::builtin_internal_get_lisp_face_attribute,
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "internal-merge-in-global-face",
-        super::font::builtin_internal_merge_in_global_face,
-        0,
-        None,
-    );
-
-    // -- Case table --
-    ctx.defsubr(
-        "case-table-p",
-        |_ctx, args| super::casetab::builtin_case_table_p(args),
-        1,
-        Some(1),
-    );
-
-    // -- Category --
-    ctx.defsubr(
-        "category-table-p",
-        |_ctx, args| super::category::builtin_category_table_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "copy-category-table",
-        |_ctx, args| super::category::builtin_copy_category_table(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "make-category-table",
-        |_ctx, args| super::category::builtin_make_category_table(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "category-set-mnemonics",
-        |_ctx, args| super::category::builtin_category_set_mnemonics(args),
-        0,
-        None,
-    );
-
-    // -- Char-table / bool-vector --
-    ctx.defsubr(
-        "char-table-p",
-        |_ctx, args| super::chartable::builtin_char_table_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-char-table-range",
-        |ctx, args| super::chartable::builtin_set_char_table_range(args, Some(&ctx.obarray)),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "char-table-range",
-        |ctx, args| super::chartable::builtin_char_table_range(args, Some(&ctx.obarray)),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "char-table-parent",
-        |_ctx, args| super::chartable::builtin_char_table_parent(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-char-table-parent",
-        |_ctx, args| super::chartable::builtin_set_char_table_parent(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "char-table-extra-slot",
-        |_ctx, args| super::chartable::builtin_char_table_extra_slot(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-char-table-extra-slot",
-        |_ctx, args| super::chartable::builtin_set_char_table_extra_slot(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "char-table-subtype",
-        |_ctx, args| super::chartable::builtin_char_table_subtype(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "bool-vector",
-        |_ctx, args| super::chartable::builtin_bool_vector(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "make-bool-vector",
-        |_ctx, args| super::chartable::builtin_make_bool_vector(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "bool-vector-count-population",
-        |_ctx, args| super::chartable::builtin_bool_vector_count_population(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "bool-vector-count-consecutive",
-        |_ctx, args| super::chartable::builtin_bool_vector_count_consecutive(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "bool-vector-intersection",
-        |_ctx, args| super::chartable::builtin_bool_vector_intersection(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "bool-vector-not",
-        |_ctx, args| super::chartable::builtin_bool_vector_not(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "bool-vector-set-difference",
-        |_ctx, args| super::chartable::builtin_bool_vector_set_difference(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "bool-vector-union",
-        |_ctx, args| super::chartable::builtin_bool_vector_union(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "bool-vector-exclusive-or",
-        |_ctx, args| super::chartable::builtin_bool_vector_exclusive_or(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "bool-vector-subsetp",
-        |_ctx, args| super::chartable::builtin_bool_vector_subsetp(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "make-char-table",
-        super::chartable::builtin_make_char_table,
-        1,
-        Some(2),
-    );
-
-    // -- Charset --
-    ctx.defsubr(
-        "charset-priority-list",
-        |_ctx, args| super::charset::builtin_charset_priority_list(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-charset-priority",
-        |_ctx, args| super::charset::builtin_set_charset_priority(args),
-        1,
-        None,
-    );
-    ctx.defsubr(
-        "char-charset",
-        |_ctx, args| super::charset::builtin_char_charset(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "charset-id-internal",
-        |_ctx, args| super::charset::builtin_charset_id_internal(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "declare-equiv-charset",
-        |_ctx, args| super::charset::builtin_declare_equiv_charset(args),
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "find-charset-string",
-        |_ctx, args| super::charset::builtin_find_charset_string(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "decode-big5-char",
-        |_ctx, args| super::charset::builtin_decode_big5_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "decode-char",
-        |_ctx, args| super::charset::builtin_decode_char(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "decode-sjis-char",
-        |_ctx, args| super::charset::builtin_decode_sjis_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "encode-big5-char",
-        |_ctx, args| super::charset::builtin_encode_big5_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "encode-char",
-        |_ctx, args| super::charset::builtin_encode_char(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "encode-sjis-char",
-        |_ctx, args| super::charset::builtin_encode_sjis_char(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "get-unused-iso-final-char",
-        |_ctx, args| super::charset::builtin_get_unused_iso_final_char(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "clear-charset-maps",
-        |_ctx, args| super::charset::builtin_clear_charset_maps(args),
-        0,
-        None,
-    );
-
-    // -- Coding system (eval-dependent via coding_systems field) --
-    ctx.defsubr("coding-system-p", defsubr_coding_system_p, 1, Some(1));
-    ctx.defsubr("check-coding-system", defsubr_check_coding_system, 0, None);
-    ctx.defsubr(
-        "check-coding-systems-region",
-        defsubr_check_coding_systems_region,
-        3,
-        Some(3),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "define-coding-system-internal",
-            defsubr_define_coding_system_internal,
-            13,
-            None,
-        ),
-    );
-    ctx.defsubr(
-        "define-coding-system-alias",
-        defsubr_define_coding_system_alias,
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-coding-system-priority",
-        defsubr_set_coding_system_priority,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "set-keyboard-coding-system-internal",
-        defsubr_set_keyboard_coding_system_internal,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "set-safe-terminal-coding-system-internal",
-        defsubr_set_safe_terminal_coding_system_internal,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "set-terminal-coding-system-internal",
-        defsubr_set_terminal_coding_system_internal,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
         "set-text-conversion-style",
         |_ctx, args| super::coding::builtin_set_text_conversion_style(args),
         0,
         None,
-    );
-    ctx.defsubr(
-        "text-quoting-style",
-        |ctx, args| super::coding::builtin_text_quoting_style(ctx, args),
-        0,
-        Some(0),
     );
     ctx.defsubr(
         "set-buffer-file-coding-system",
@@ -8865,60 +3008,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         builtin_register_code_conversion_map,
         0,
         None,
-    );
-
-    // -- Eval builtins (eval-dependent) --
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("defconst-1", builtin_defconst_1, 2, Some(3)),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state("defvar-1", builtin_defvar_1, 2, Some(3)),
-    );
-    ctx.defsubr(
-        "yes-or-no-p",
-        super::reader::builtin_yes_or_no_p,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "locate-file-internal",
-        super::lread::builtin_locate_file_internal,
-        2,
-        Some(4),
-    );
-
-    // -- Dispnew --
-    ctx.defsubr(
-        "redraw-display",
-        |_ctx, args| super::dispnew::pure::builtin_redraw_display(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "open-termscript",
-        |_ctx, args| super::dispnew::pure::builtin_open_termscript(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "ding",
-        |_ctx, args| super::dispnew::pure::builtin_ding(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "frame--z-order-lessp",
-        |_ctx, args| super::dispnew::pure::builtin_frame_z_order_lessp(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "force-window-update",
-        |ctx, args| super::dispnew::pure::builtin_force_window_update(ctx, args),
-        0,
-        Some(1),
     );
 
     // -- Display/terminal --
@@ -9005,12 +3094,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| super::display::builtin_x_frame_restack(args),
         2,
         Some(3),
-    );
-    ctx.defsubr(
-        "x-family-fonts",
-        |_ctx, args| super::display::builtin_x_family_fonts(args),
-        0,
-        Some(2),
     );
     ctx.defsubr(
         "x-get-atom-name",
@@ -9132,18 +3215,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "terminal-list",
-        |_ctx, args| super::terminal::pure::builtin_terminal_list(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "delete-terminal",
-        |ctx, args| super::terminal::pure::builtin_delete_terminal(ctx, args),
-        0,
-        Some(2),
-    );
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(
@@ -9152,355 +3223,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             1,
             Some(1),
         ),
-    );
-
-    // -- Image --
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "image-size",
-            super::image::builtin_image_size_in_context,
-            1,
-            Some(3),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "image-mask-p",
-            super::image::builtin_image_mask_p_in_context,
-            1,
-            Some(2),
-        ),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "image-flush",
-            super::image::builtin_image_flush_in_context,
-            1,
-            Some(2),
-        ),
-    );
-    ctx.defsubr(
-        "clear-image-cache",
-        |_ctx, args| super::image::builtin_clear_image_cache(args),
-        0,
-        Some(2),
-    );
-    ctx.defsubr(
-        "image-cache-size",
-        |_ctx, args| super::image::builtin_image_cache_size(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "image-metadata",
-        |_ctx, args| super::image::builtin_image_metadata(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "imagep",
-        |_ctx, args| super::image::builtin_imagep(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "image-transforms-p",
-        |_ctx, args| super::image::builtin_image_transforms_p(args),
-        0,
-        Some(1),
-    );
-
-    // -- Display engine (xdisp) --
-    ctx.defsubr(
-        "invisible-p",
-        |ctx, args| super::xdisp::builtin_invisible_p(ctx, args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "line-pixel-height",
-        |_ctx, args| super::xdisp::builtin_line_pixel_height(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "move-point-visually",
-        |_ctx, args| super::xdisp::builtin_move_point_visually(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "lookup-image-map",
-        |_ctx, args| super::xdisp::builtin_lookup_image_map(args),
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "current-bidi-paragraph-direction",
-        |ctx, args| super::xdisp::builtin_current_bidi_paragraph_direction(ctx, args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "bidi-resolved-levels",
-        |_ctx, args| super::xdisp::builtin_bidi_resolved_levels(args),
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "bidi-find-overridden-directionality",
-        |_ctx, args| super::xdisp::builtin_bidi_find_overridden_directionality(args),
-        3,
-        Some(4),
-    );
-    ctx.defsubr(
-        "move-to-window-line",
-        super::xdisp::builtin_move_to_window_line,
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "line-number-display-width",
-        super::xdisp::builtin_line_number_display_width,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "long-line-optimizations-p",
-        |_ctx, args| super::xdisp::builtin_long_line_optimizations_p(args),
-        0,
-        Some(0),
-    );
-
-    // -- XML/decompress --
-    ctx.defsubr(
-        "libxml-parse-html-region",
-        |ctx, args| super::xml::builtin_libxml_parse_html_region(ctx, args),
-        0,
-        Some(4),
-    );
-    ctx.defsubr(
-        "libxml-parse-xml-region",
-        |ctx, args| super::xml::builtin_libxml_parse_xml_region(ctx, args),
-        0,
-        Some(4),
-    );
-    ctx.defsubr(
-        "libxml-available-p",
-        |_ctx, args| super::xml::builtin_libxml_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "zlib-available-p",
-        |_ctx, args| super::zlib::builtin_zlib_available_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "zlib-decompress-region",
-        |ctx, args| super::zlib::builtin_zlib_decompress_region(ctx, args),
-        2,
-        Some(3),
-    );
-
-    // -- Native compilation compatibility --
-    ctx.defsubr(
-        "comp--compile-ctxt-to-file0",
-        |_ctx, args| super::comp::builtin_comp_compile_ctxt_to_file0(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp--init-ctxt",
-        |_ctx, args| super::comp::builtin_comp_init_ctxt(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp--install-trampoline",
-        |_ctx, args| super::comp::builtin_comp_install_trampoline(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "comp--late-register-subr",
-        |_ctx, args| super::comp::builtin_comp_late_register_subr(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--register-lambda",
-        |_ctx, args| super::comp::builtin_comp_register_lambda(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--register-subr",
-        |_ctx, args| super::comp::builtin_comp_register_subr(args),
-        7,
-        Some(7),
-    );
-    ctx.defsubr(
-        "comp--release-ctxt",
-        |_ctx, args| super::comp::builtin_comp_release_ctxt(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp--subr-signature",
-        |_ctx, args| super::comp::builtin_comp_subr_signature(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp-el-to-eln-filename",
-        |_ctx, args| super::comp::builtin_comp_el_to_eln_filename(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "comp-el-to-eln-rel-filename",
-        |_ctx, args| super::comp::builtin_comp_el_to_eln_rel_filename(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "comp-native-compiler-options-effective-p",
-        |_ctx, args| super::comp::builtin_comp_native_compiler_options_effective_p(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "comp-native-driver-options-effective-p",
-        |_ctx, args| super::comp::builtin_comp_native_driver_options_effective_p(args),
-        0,
-        Some(0),
-    );
-
-    // -- DBus compatibility --
-    ctx.defsubr(
-        "dbus--init-bus",
-        |_ctx, args| super::dbus::builtin_dbus_init_bus(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "dbus-get-unique-name",
-        |_ctx, args| super::dbus::builtin_dbus_get_unique_name(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "dbus-message-internal",
-        |ctx, args| super::dbus::builtin_dbus_message_internal(ctx, args),
-        0,
-        None,
-    );
-
-    // -- Documentation/help --
-    ctx.defsubr(
-        "Snarf-documentation",
-        |_ctx, args| super::doc::builtin_snarf_documentation(args),
-        1,
-        Some(1),
-    );
-
-    // -- JSON --
-    ctx.defsubr(
-        "json-serialize",
-        |_ctx, args| super::json::builtin_json_serialize(args),
-        1,
-        None,
-    );
-    ctx.defsubr(
-        "json-parse-string",
-        |_ctx, args| super::json::builtin_json_parse_string(args),
-        1,
-        None,
-    );
-
-    // -- Composite --
-    ctx.defsubr(
-        "compose-string-internal",
-        |_ctx, args| super::composite::builtin_compose_string_internal(args),
-        3,
-        Some(5),
-    );
-    ctx.defsubr(
-        "find-composition-internal",
-        super::composite::builtin_find_composition_internal,
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "composition-get-gstring",
-        |ctx, args| super::composite::builtin_composition_get_gstring(ctx, args),
-        4,
-        Some(4),
-    );
-    ctx.defsubr(
-        "clear-composition-cache",
-        |_ctx, args| super::composite::builtin_clear_composition_cache(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "composition-sort-rules",
-        |_ctx, args| super::composite::builtin_composition_sort_rules(args),
-        1,
-        Some(1),
-    );
-
-    // -- Marker --
-    ctx.defsubr(
-        "markerp",
-        |_ctx, args| super::marker::builtin_markerp(args),
-        1,
-        Some(1),
-    );
-
-    // -- Lread --
-    ctx.defsubr(
-        "get-load-suffixes",
-        |ctx, args| super::lread::builtin_get_load_suffixes(&ctx.obarray, args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "read-coding-system",
-        |ctx, args| super::lread::builtin_read_coding_system(ctx, args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "read-non-nil-coding-system",
-        |ctx, args| super::lread::builtin_read_non_nil_coding_system(ctx, args),
-        1,
-        Some(1),
-    );
-
-    // -- Base64/hash --
-    ctx.defsubr(
-        "base64-encode-string",
-        |_ctx, args| super::fns::builtin_base64_encode_string(args),
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "base64-decode-string",
-        |_ctx, args| super::fns::builtin_base64_decode_string(args),
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "base64url-encode-string",
-        |_ctx, args| super::fns::builtin_base64url_encode_string(args),
-        1,
-        Some(2),
     );
 
     // -- Window builtins: display-buffer, switch-to-buffer, pop-to-buffer --

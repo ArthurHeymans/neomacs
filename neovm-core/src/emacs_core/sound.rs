@@ -429,3 +429,14 @@ mod tests {
         assert_eq!(spec.device.as_deref(), Some("default"));
     }
 }
+
+/// Register this module's subrs. GNU: `syms_of_sound` in `src/sound.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_sound(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "play-sound-internal",
+        |_ctx, args| super::sound::builtin_play_sound_internal(args),
+        1,
+        Some(1),
+    );
+}

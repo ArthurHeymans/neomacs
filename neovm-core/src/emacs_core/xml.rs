@@ -577,3 +577,27 @@ pub(crate) fn builtin_libxml_parse_xml_region(
 #[cfg(test)]
 #[path = "xml_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_xml` in `src/xml.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_xml(ctx: &mut crate::emacs_core::eval::Context) {
+    // -- XML/decompress --
+    ctx.defsubr(
+        "libxml-parse-html-region",
+        |ctx, args| super::xml::builtin_libxml_parse_html_region(ctx, args),
+        0,
+        Some(4),
+    );
+    ctx.defsubr(
+        "libxml-parse-xml-region",
+        |ctx, args| super::xml::builtin_libxml_parse_xml_region(ctx, args),
+        0,
+        Some(4),
+    );
+    ctx.defsubr(
+        "libxml-available-p",
+        |_ctx, args| super::xml::builtin_libxml_available_p(args),
+        0,
+        Some(0),
+    );
+}

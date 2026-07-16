@@ -912,3 +912,40 @@ pub fn is_case_table(v: &Value) -> bool {
 #[cfg(test)]
 #[path = "casetab_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_casetab` in `src/casetab.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_casetab(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "current-case-table",
+        super::casetab::builtin_current_case_table,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "standard-case-table",
+        super::casetab::builtin_standard_case_table,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "set-case-table",
+        super::casetab::builtin_set_case_table,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "set-standard-case-table",
+        super::casetab::builtin_set_standard_case_table,
+        0,
+        None,
+    );
+
+    // -- Case table --
+    ctx.defsubr(
+        "case-table-p",
+        |_ctx, args| super::casetab::builtin_case_table_p(args),
+        1,
+        Some(1),
+    );
+}

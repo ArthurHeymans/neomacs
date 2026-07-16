@@ -811,3 +811,64 @@ mod tests {
         ctx.eval_str("(profiler-report)").unwrap();
     }
 }
+
+/// Register this module's subrs. GNU: `syms_of_profiler` in `src/profiler.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_profiler(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "function-equal",
+        |_ctx, args| crate::emacs_core::builtins::types::builtin_function_equal(args),
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "profiler-cpu-log",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_cpu_log(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-cpu-running-p",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_cpu_running_p(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-cpu-start",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_cpu_start(ctx, args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "profiler-cpu-stop",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_cpu_stop(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-memory-log",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_memory_log(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-memory-running-p",
+        |ctx, args| {
+            crate::emacs_core::builtins::symbols::builtin_profiler_memory_running_p(ctx, args)
+        },
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-memory-start",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_memory_start(ctx, args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "profiler-memory-stop",
+        |ctx, args| crate::emacs_core::builtins::symbols::builtin_profiler_memory_stop(ctx, args),
+        0,
+        Some(0),
+    );
+}

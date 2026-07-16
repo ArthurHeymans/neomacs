@@ -5247,3 +5247,124 @@ pub(crate) fn builtin_skip_syntax_backward_in_buffers(
 #[cfg(test)]
 #[path = "syntax_test.rs"]
 mod tests;
+
+/// Register this module's subrs. GNU: `syms_of_syntax` in `src/syntax.c`.
+/// Extracted verbatim from the former flat `builtins::init_builtins`.
+pub(crate) fn syms_of_syntax(ctx: &mut crate::emacs_core::eval::Context) {
+    ctx.defsubr(
+        "modify-syntax-entry",
+        super::syntax::builtin_modify_syntax_entry,
+        2,
+        Some(3),
+    );
+    ctx.defsubr(
+        "syntax-table",
+        super::syntax::builtin_syntax_table,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "set-syntax-table",
+        super::syntax::builtin_set_syntax_table,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "char-syntax",
+        super::syntax::builtin_char_syntax,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "matching-paren",
+        super::syntax::builtin_matching_paren,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "forward-comment",
+        super::syntax::builtin_forward_comment,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "backward-prefix-chars",
+        super::syntax::builtin_backward_prefix_chars,
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "forward-word",
+        super::syntax::builtin_forward_word,
+        0,
+        Some(1),
+    );
+    ctx.defsubr("scan-lists", super::syntax::builtin_scan_lists, 3, Some(3));
+    ctx.defsubr("scan-sexps", super::syntax::builtin_scan_sexps, 2, Some(2));
+    ctx.defsubr(
+        "parse-partial-sexp",
+        super::syntax::builtin_parse_partial_sexp,
+        2,
+        Some(6),
+    );
+    ctx.defsubr(
+        "skip-syntax-forward",
+        super::syntax::builtin_skip_syntax_forward,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "skip-syntax-backward",
+        super::syntax::builtin_skip_syntax_backward,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "skip-chars-forward",
+        super::navigation::builtin_skip_chars_forward,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "skip-chars-backward",
+        super::navigation::builtin_skip_chars_backward,
+        1,
+        Some(2),
+    );
+    ctx.defsubr(
+        "string-to-syntax",
+        |_ctx, args| super::syntax::builtin_string_to_syntax(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "syntax-class-to-char",
+        |_ctx, args| super::syntax::builtin_syntax_class_to_char(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "copy-syntax-table",
+        |_ctx, args| super::syntax::builtin_copy_syntax_table(args),
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
+        "syntax-table-p",
+        |_ctx, args| super::syntax::builtin_syntax_table_p(args),
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "standard-syntax-table",
+        |_ctx, args| super::syntax::builtin_standard_syntax_table(args),
+        0,
+        None,
+    );
+    ctx.defsubr(
+        "internal-describe-syntax-value",
+        crate::emacs_core::builtins::symbols::builtin_internal_describe_syntax_value,
+        1,
+        Some(1),
+    );
+}
