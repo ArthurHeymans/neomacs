@@ -23005,6 +23005,21 @@ Optional COLS, ROWS set the terminal size.
 (register-definition-prefixes "neomacs-shader-playground" '("neomacs-shader-playground-"))
 
 
+;;; Generated autoloads from neomacs-shaders.el
+
+(autoload 'neomacs-shaders-gallery "neomacs-shaders"
+"Pop a buffer showing the shader showcase; killing it frees the surfaces." t)
+(autoload 'neomacs-shaders-crt "neomacs-shaders"
+"Apply the CRT frame shader to the whole editor." t)
+(autoload 'neomacs-shaders-glow "neomacs-shaders"
+"Apply the bloom frame shader to the whole editor." t)
+(autoload 'neomacs-shaders-matrix "neomacs-shaders"
+"Apply the digital-rain frame shader to the whole editor." t)
+(autoload 'neomacs-shaders-off "neomacs-shaders"
+"Remove the frame shader." t)
+(register-definition-prefixes "neomacs-shaders" '("neomacs-shaders--"))
+
+
 ;;; Generated autoloads from neomacs-surface.el
 
 (register-definition-prefixes "neomacs-surface" '("neomacs-surface-"))
