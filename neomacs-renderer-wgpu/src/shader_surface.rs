@@ -91,7 +91,9 @@ pub fn compose_surface_wgsl(user_source: &str, uniforms: &[(String, u8)]) -> Str
          \x20   iResolution: vec4<f32>,\n\
          \x20   // xy: hover position in physical px (origin bottom-left, y-up);\n\
          \x20   // persists at the last hover position when the pointer leaves.\n\
-         \x20   // zw: reserved for click state, currently 0.\n\
+         \x20   // zw: click state — the press position (same mapping as xy),\n\
+         \x20   // positive while a button is held over the surface, negated\n\
+         \x20   // after release, 0 until the first click ever.\n\
          \x20   iMouse: vec4<f32>,\n\
          \x20   iTime: f32,\n\
          \x20   iTimeDelta: f32,\n\

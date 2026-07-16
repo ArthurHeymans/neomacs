@@ -125,9 +125,11 @@ pub struct CachedShaderSurface {
     uniform_slots: HashMap<String, (usize, u8)>,
     custom: [[f32; 4]; SURFACE_USER_UNIFORM_SLOTS],
     /// `iMouse` uniform: xy = last hover position in physical pixels
-    /// (Shadertoy convention: origin bottom-left, y-up), zw reserved for
-    /// click state. Updated by `set_mouse_uv` while the pointer is over the
-    /// composited quad; persists when it leaves.
+    /// (Shadertoy convention: origin bottom-left, y-up), updated by
+    /// `set_mouse_uv` while the pointer is over the composited quad and
+    /// persisting when it leaves. zw = click state (`set_mouse_press_uv` /
+    /// `set_mouse_release`): the press position, positive while a button is
+    /// held, negated after release, 0 until the first click ever.
     mouse: [f32; 4],
     elapsed: f32,
     frame_index: u32,
@@ -150,6 +152,9 @@ pub struct ShaderSurfaceCache {
     /// wgpu zero-initializes textures, so it samples transparent black
     /// (Shadertoy's unbound-channel behavior).
     fallback_channel_view: wgpu::TextureView,
+    /// Surface whose `iMouse.zw` is currently held positive by a button
+    /// press; `set_mouse_release` negates it and clears this.
+    pressed: Option<u32>,
     last_tick: Option<Instant>,
 }
 
@@ -202,6 +207,7 @@ impl ShaderSurfaceCache {
             uniform_bind_group_layout,
             channel_sampler,
             fallback_channel_view,
+            pressed: None,
             last_tick: None,
         }
     }
@@ -465,7 +471,7 @@ impl ShaderSurfaceCache {
     /// Route a hover position into `iMouse.xy`. `u`/`v` are the pointer's
     /// normalized position inside the composited quad (top-left origin, as
     /// drawn); they map to physical pixels in Shadertoy's bottom-left y-up
-    /// convention. zw stay 0 (reserved for click state). Sub-half-pixel moves
+    /// convention. zw (click state) are left untouched. Sub-half-pixel moves
     /// neither rewrite nor dirty, so a static surface re-renders on real
     /// hover movement, not every frame the pointer rests on it.
     pub fn set_mouse_uv(&mut self, id: u32, u: f32, v: f32) {
@@ -486,7 +492,51 @@ impl ShaderSurfaceCache {
         surface.dirty = true;
     }
 
+    /// Route a button press into `iMouse.zw` (Shadertoy click state). `u`/`v`
+    /// map exactly like `set_mouse_uv` — normalized position inside the
+    /// composited quad (top-left origin) to physical pixels, bottom-left y-up.
+    /// zw stay positive while the button is held; `set_mouse_release` negates
+    /// them. No dirty threshold: even a press at the previous position must
+    /// re-render, because the sign flip is the signal.
+    pub fn set_mouse_press_uv(&mut self, id: u32, u: f32, v: f32) {
+        if self.pressed.is_some_and(|p| p != id) {
+            // A new press landed on a different surface while another was
+            // still held (multi-button corner) — release the old one so its
+            // zw doesn't stay positive forever.
+            self.set_mouse_release();
+        }
+        let Some(surface) = self.surfaces.get_mut(&id) else {
+            return;
+        };
+        if surface.pipeline.is_none() {
+            // Pixel-upload surfaces have no uniforms to route.
+            return;
+        }
+        surface.mouse[2] = u * surface.width_px as f32;
+        surface.mouse[3] = (1.0 - v) * surface.height_px as f32;
+        surface.dirty = true;
+        self.pressed = Some(id);
+    }
+
+    /// End the click on whichever surface is pressed: negate `iMouse.zw`
+    /// (Shadertoy "not pressed; last click was here"). No-op when nothing is
+    /// pressed, so callers may invoke it on every button release.
+    pub fn set_mouse_release(&mut self) {
+        let Some(id) = self.pressed.take() else {
+            return;
+        };
+        let Some(surface) = self.surfaces.get_mut(&id) else {
+            return;
+        };
+        surface.mouse[2] = -surface.mouse[2].abs();
+        surface.mouse[3] = -surface.mouse[3].abs();
+        surface.dirty = true;
+    }
+
     pub fn free(&mut self, id: u32) {
+        if self.pressed == Some(id) {
+            self.pressed = None;
+        }
         if self.surfaces.remove(&id).is_some() {
             tracing::info!("shader surface {id} freed");
         }

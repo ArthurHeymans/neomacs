@@ -324,6 +324,20 @@ impl WgpuRenderer {
         self.caches.surface.set_uniform(id, name, value);
     }
 
+    /// Route a button press over a surface glyph into its `iMouse.zw`
+    /// (Shadertoy click state). `u`/`v` are the press position normalized
+    /// inside the composited quad (top-left origin), mapped like hover's
+    /// `set_mouse_uv`; zw stay positive until `surface_mouse_release`.
+    pub fn surface_mouse_press(&mut self, id: u32, u: f32, v: f32) {
+        self.caches.surface.set_mouse_press_uv(id, u, v);
+    }
+
+    /// End the click on whichever surface is pressed (negates its
+    /// `iMouse.zw`). Safe to call on every button release.
+    pub fn surface_mouse_release(&mut self) {
+        self.caches.surface.set_mouse_release();
+    }
+
     /// Free a shader surface's GPU objects.
     pub fn free_surface(&mut self, id: u32) {
         self.caches.surface.free(id);

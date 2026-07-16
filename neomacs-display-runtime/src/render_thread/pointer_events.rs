@@ -63,6 +63,31 @@ fn webkit_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, 
     None
 }
 
+/// Search a glyph buffer for an inline shader surface at the given local
+/// coordinates (the `webkit_glyph_hit_test` mirror for `iMouse` click state).
+/// Returns `(surface_id, u, v)` — the pointer's normalized position inside
+/// the glyph rect (top-left origin) — if found.
+fn surface_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32, f32, f32)> {
+    for glyph in glyphs.iter().rev() {
+        if let FrameGlyph::Surface {
+            surface_id,
+            x: sx,
+            y: sy,
+            width,
+            height,
+            ..
+        } = glyph
+            && x >= *sx
+            && x < *sx + *width
+            && y >= *sy
+            && y < *sy + *height
+        {
+            return Some((surface_id.get(), (x - *sx) / *width, (y - *sy) / *height));
+        }
+    }
+    None
+}
+
 impl RenderApp {
     fn presented_region_input_event(
         render: &super::frame_windows::GuiFrameRenderState,
@@ -479,6 +504,15 @@ impl RenderApp {
         button: MouseButton,
     ) {
         self.record_idle_dim_activity(window_id);
+        if state == ElementState::Released
+            && let Some(renderer) = self.renderer.as_mut()
+        {
+            // iMouse click state: any button release ends the pressed-surface
+            // click (negates its iMouse.zw). Render-thread internal, like
+            // hover — no-op when no surface is pressed, so it runs before any
+            // chrome capture can swallow the release.
+            renderer.surface_mouse_release();
+        }
         if self.frame_windows.get_by_winit(window_id).is_some() {
             let mut event = None;
             let mut captured_events = Vec::new();
@@ -903,6 +937,19 @@ impl RenderApp {
                     } else {
                         (0, 0, 0)
                     };
+                    // iMouse click state (doc/display-engine/SHADER_SURFACES.md):
+                    // a press over a shader-surface glyph routes the press
+                    // position into that surface's iMouse.zw — the Surface
+                    // mirror of the Xwidget search above. Render-thread
+                    // internal, like hover; the Lisp event below is unchanged.
+                    if state == ElementState::Pressed
+                        && let Some((surface_id, u, v)) =
+                            Self::glyphs_for_frame_window_pointer_target(window_state, target_fid)
+                                .and_then(|glyphs| surface_glyph_hit_test(glyphs, ev_x, ev_y))
+                        && let Some(renderer) = self.renderer.as_mut()
+                    {
+                        renderer.surface_mouse_press(surface_id, u, v);
+                    }
                     let raw = InputEvent::MouseButton {
                         button: btn,
                         x: ev_x,

@@ -92,7 +92,16 @@ The renderer prepends a generated prelude and compiles the concatenation
   - `u.iMouse: vec4<f32>` — xy = hover position in *physical* pixels
     (origin bottom-left, y-up, matching `fragCoord`) while the pointer is
     over the surface; persists at the last hover position when the pointer
-    leaves. zw reserved for click state, currently 0.
+    leaves. zw = click state (Shadertoy semantics): while a mouse button is
+    held after pressing over the surface, zw = the press position (same
+    mapping as xy) with positive values; after release, zw keeps that
+    position negated ("not pressed; last click was here"); zw = 0 until the
+    first click ever. Deliberate difference from Shadertoy: Shadertoy
+    freezes xy while no button is pressed (xy only tracks drags), whereas
+    NeoMacs keeps updating xy on hover — drag detection (`iMouse.z > 0`)
+    and click positions (`abs(iMouse.zw)`) port unchanged, but shaders that
+    relied on xy standing still between clicks will see it follow the
+    pointer.
   - 8 user `vec4<f32>` slots
 - One accessor function per user uniform, generated from the `:uniforms`
   alist: `(speed . 2.0)` ⇒ `fn u_speed() -> f32`, `(tint . [r g b])` ⇒
@@ -229,9 +238,10 @@ offscreen pass and runtime WGSL compilation.
 2. **DONE (this change)** — animated WGSL fragment surfaces: prelude,
    compositor clock, named uniforms, sync errors, visibility-scoped demand.
 3. **PARTIALLY DONE** — `:channel0` surface-to-surface inputs landed (pixel
-   sources + multipass chains); hover-only `iMouse` routing landed.
+   sources + multipass chains); `iMouse` routing landed (hover xy + click
+   state zw from render-thread hit tests).
    Remaining: image/video/webkit ids as channel
-   sources (cross-cache binding), click-state `iMouse.zw`, GLSL-in via naga
+   sources (cross-cache binding), GLSL-in via naga
    (imports the Ghostty/Shadertoy shader corpus), full-frame post pass
    (librashader runs on wgpu — RetroArch preset ecosystem nearly free).
 4. Optional 3D mesh API — raymarching already covers most demand inside
@@ -255,7 +265,6 @@ offscreen pass and runtime WGSL compilation.
   order), and shader bytes are really physical (scale-factor squared) —
   full parity is future work.
 - DPI captured at create; no rescale on monitor change.
-- `iMouse` is hover-only: zw (click/drag state) not yet routed.
 - Failed *render-thread* compiles (naga-accepts/wgpu-rejects edge) log and
   blank the quad instead of surfacing to Lisp.
 - TTY backend ignores surfaces (like image/video/xwidget).
