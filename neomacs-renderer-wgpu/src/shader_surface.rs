@@ -73,7 +73,11 @@ pub fn compose_surface_wgsl(user_source: &str, uniforms: &[(String, u8)]) -> Str
          \x20   _neo_pad0: f32,\n\
          \x20   custom: array<vec4<f32>, 8>,\n\
          }\n\
-         @group(0) @binding(0) var<uniform> u: NeoUniforms;\n",
+         @group(0) @binding(0) var<uniform> u: NeoUniforms;\n\
+         // Channel input (Shadertoy-style): another surface's texture bound\n\
+         // via `:channel0 ID`; unbound channels sample transparent black.\n\
+         @group(0) @binding(1) var iChannel0: texture_2d<f32>;\n\
+         @group(0) @binding(2) var iChannel0Sampler: sampler;\n",
     );
     for (slot, (name, components)) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS)
     {

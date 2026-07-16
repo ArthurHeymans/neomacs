@@ -446,8 +446,13 @@ impl RenderApp {
             } => {
                 if let Some(ref mut renderer) = self.renderer {
                     let result = match &source {
-                        crate::thread_comm::SurfaceSource::Wgsl { source, uniforms } => renderer
-                            .create_shader_surface(id, source, uniforms, width, height, animate),
+                        crate::thread_comm::SurfaceSource::Wgsl {
+                            source,
+                            uniforms,
+                            channel0,
+                        } => renderer.create_shader_surface(
+                            id, source, uniforms, width, height, animate, *channel0,
+                        ),
                         crate::thread_comm::SurfaceSource::Pixels { data } => {
                             renderer.create_pixel_surface(id, data, width, height)
                         }

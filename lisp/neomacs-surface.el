@@ -108,6 +108,19 @@ Returns the surface id."
                               :shader neomacs-surface--demo-shader
                               :uniforms '((speed . 4.0))
                               :width 200 :height 80)))
+    (insert "\n\nChannel input: a shader warping the pixel surface above (:channel0):\n\n  ")
+    (let ((source (neomacs-surface-create
+                   :width 96 :height 96
+                   :pixels (neomacs-surface--demo-checkerboard 96 12))))
+      (neomacs-surface-create-and-insert
+       :width 240 :height 96
+       :channel0 source
+       :shader "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
+    var uv = fragCoord / u.iResolution.xy;
+    uv.x += 0.06 * sin(u.iTime * 2.0 + uv.y * 12.0);
+    uv.y += 0.06 * cos(u.iTime * 1.7 + uv.x * 12.0);
+    return textureSample(iChannel0, iChannel0Sampler, uv);
+}"))
     (insert "\n")
     (goto-char (point-min))
     (pop-to-buffer (current-buffer))))

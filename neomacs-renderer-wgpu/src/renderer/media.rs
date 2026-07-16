@@ -273,6 +273,7 @@ impl WgpuRenderer {
     /// the image cache's layout/sampler so the inline-media phase can draw it
     /// with the shared image pipeline. Texture is allocated at physical
     /// resolution (logical size x current scale factor).
+    #[allow(clippy::too_many_arguments)]
     pub fn create_shader_surface(
         &mut self,
         id: u32,
@@ -281,6 +282,7 @@ impl WgpuRenderer {
         width: u32,
         height: u32,
         animate: bool,
+        channel0: Option<u32>,
     ) -> Result<(), String> {
         let layout = self.caches.image.bind_group_layout();
         let sampler = self.caches.image.sampler();
@@ -296,6 +298,7 @@ impl WgpuRenderer {
             height,
             self.scale_factor,
             animate,
+            channel0,
         )
     }
 

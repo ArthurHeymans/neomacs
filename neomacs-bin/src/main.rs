@@ -1706,6 +1706,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                         source: SurfaceSource::Wgsl {
                             source: request.source.clone(),
                             uniforms,
+                            channel0: request.channel0,
                         },
                         width: request.width,
                         height: request.height,
@@ -1771,7 +1772,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     fn create_shader_surface(&self, request: ShaderSurfaceCreateRequest) -> Result<u32, String> {
         let source = match request.content {
-            ShaderSurfaceContent::Wgsl { source, uniforms } => {
+            ShaderSurfaceContent::Wgsl {
+                source,
+                uniforms,
+                channel0,
+            } => {
                 let uniforms: Vec<SurfaceUniformInit> = uniforms
                     .into_iter()
                     .map(|u| SurfaceUniformInit {
@@ -1787,7 +1792,11 @@ impl DisplayHost for PrimaryWindowDisplayHost {
                     .map(|u| (u.name.clone(), u.components))
                     .collect();
                 validate_surface_wgsl(&source, &names)?;
-                SurfaceSource::Wgsl { source, uniforms }
+                SurfaceSource::Wgsl {
+                    source,
+                    uniforms,
+                    channel0,
+                }
             }
             ShaderSurfaceContent::Pixels { data } => SurfaceSource::Pixels { data },
         };

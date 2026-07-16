@@ -37,7 +37,9 @@ pub struct CachedShaderSurface {
     /// User render pipeline; `None` for pixel-upload surfaces.
     pipeline: Option<wgpu::RenderPipeline>,
     uniform_buffer: Option<wgpu::Buffer>,
-    uniform_bind_group: Option<wgpu::BindGroup>,
+    /// Another surface sampled as `iChannel0` (resolved per pass so late
+    /// creation/re-upload of the source is picked up automatically).
+    channel0: Option<u32>,
     /// name -> (slot, components) for `set_uniform` by Lisp name.
     uniform_slots: HashMap<String, (usize, u8)>,
     custom: [[f32; 4]; SURFACE_USER_UNIFORM_SLOTS],
@@ -56,6 +58,12 @@ pub struct CachedShaderSurface {
 pub struct ShaderSurfaceCache {
     surfaces: HashMap<u32, CachedShaderSurface>,
     uniform_bind_group_layout: wgpu::BindGroupLayout,
+    /// Filtering sampler for `iChannel0`.
+    channel_sampler: wgpu::Sampler,
+    /// 1x1 texture bound when a channel is unbound or missing. Never written:
+    /// wgpu zero-initializes textures, so it samples transparent black
+    /// (Shadertoy's unbound-channel behavior).
+    fallback_channel_view: wgpu::TextureView,
     last_tick: Option<Instant>,
 }
 
@@ -64,20 +72,50 @@ impl ShaderSurfaceCache {
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Shader Surface Uniforms"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
             });
+        let channel_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Shader Surface Channel Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let (_, fallback_channel_view) =
+            Self::make_texture(device, 1, 1, wgpu::TextureFormat::Rgba8UnormSrgb, false);
         Self {
             surfaces: HashMap::new(),
             uniform_bind_group_layout,
+            channel_sampler,
+            fallback_channel_view,
             last_tick: None,
         }
     }
@@ -165,6 +203,7 @@ impl ShaderSurfaceCache {
         height: u32,
         scale: f32,
         animate: bool,
+        channel0: Option<u32>,
     ) -> Result<(), String> {
         let (width_px, height_px) = Self::clamp_size(width, height, scale);
         let names: Vec<(String, u8)> = uniforms
@@ -222,14 +261,16 @@ impl ShaderSurfaceCache {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Shader Surface Uniform Bind Group"),
-            layout: &self.uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-        });
+
+        // Sampling the texture a pass renders into is a wgpu validation error;
+        // treat self-reference as unbound (transparent black).
+        let channel0 = match channel0 {
+            Some(channel) if channel == id => {
+                tracing::warn!("shader surface {id}: :channel0 cannot reference itself; ignored");
+                None
+            }
+            other => other,
+        };
 
         let mut uniform_slots = HashMap::new();
         let mut custom = [[0.0f32; 4]; SURFACE_USER_UNIFORM_SLOTS];
@@ -246,7 +287,7 @@ impl ShaderSurfaceCache {
                 composite_bind_group,
                 pipeline: Some(pipeline),
                 uniform_buffer: Some(uniform_buffer),
-                uniform_bind_group: Some(uniform_bind_group),
+                channel0,
                 uniform_slots,
                 custom,
                 elapsed: 0.0,
@@ -264,7 +305,7 @@ impl ShaderSurfaceCache {
             },
         );
         tracing::info!(
-            "shader surface {id} created: {width_px}x{height_px}px animate={animate}"
+            "shader surface {id} created: {width_px}x{height_px}px animate={animate} channel0={channel0:?}"
         );
         Ok(())
     }
@@ -323,7 +364,7 @@ impl ShaderSurfaceCache {
                 composite_bind_group,
                 pipeline: None,
                 uniform_buffer: None,
-                uniform_bind_group: None,
+                channel0: None,
                 uniform_slots: HashMap::new(),
                 custom: [[0.0; 4]; SURFACE_USER_UNIFORM_SLOTS],
                 elapsed: 0.0,
@@ -385,6 +426,12 @@ impl ShaderSurfaceCache {
     /// Render every surface that needs a new frame (dirty, or animated and
     /// recently composited). One encoder for all passes, submitted before the
     /// main frame pass samples the textures. Returns how many passes ran.
+    ///
+    /// Two phases: advance clocks + write uniform buffers while collecting the
+    /// render list (with each target's `iChannel0` view resolved — possibly
+    /// another entry in the map, hence the split), then encode the passes. A
+    /// chain A→B may therefore see B's previous frame (Shadertoy multipass
+    /// buffers have the same one-frame semantics).
     pub fn render_pending(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> usize {
         let now = Instant::now();
         let dt = self
@@ -393,14 +440,11 @@ impl ShaderSurfaceCache {
             .unwrap_or(0.0);
         self.last_tick = Some(now);
 
-        let mut rendered = 0usize;
-        let mut encoder: Option<wgpu::CommandEncoder> = None;
+        let mut pending: Vec<u32> = Vec::new();
         for (id, surface) in &mut self.surfaces {
-            let (Some(pipeline), Some(buffer), Some(bind_group)) = (
-                surface.pipeline.as_ref(),
-                surface.uniform_buffer.as_ref(),
-                surface.uniform_bind_group.as_ref(),
-            ) else {
+            let (Some(_), Some(buffer)) =
+                (surface.pipeline.as_ref(), surface.uniform_buffer.as_ref())
+            else {
                 continue;
             };
             let animating = surface.animate && surface.is_active(now);
@@ -425,11 +469,49 @@ impl ShaderSurfaceCache {
                 uniforms[12 + slot * 4..12 + slot * 4 + 4].copy_from_slice(value);
             }
             queue.write_buffer(buffer, 0, bytemuck::cast_slice(&uniforms));
+            pending.push(*id);
+        }
 
-            let encoder = encoder.get_or_insert_with(|| {
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Shader Surface Passes"),
-                })
+        if pending.is_empty() {
+            return 0;
+        }
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Shader Surface Passes"),
+        });
+        for id in &pending {
+            let channel_view = self
+                .surfaces
+                .get(id)
+                .and_then(|surface| surface.channel0)
+                .and_then(|channel| self.surfaces.get(&channel))
+                .map(|source| source.view.clone())
+                .unwrap_or_else(|| self.fallback_channel_view.clone());
+            let Some(surface) = self.surfaces.get(id) else {
+                continue;
+            };
+            let (Some(pipeline), Some(buffer)) =
+                (surface.pipeline.as_ref(), surface.uniform_buffer.as_ref())
+            else {
+                continue;
+            };
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Shader Surface Uniform Bind Group"),
+                layout: &self.uniform_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&channel_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.channel_sampler),
+                    },
+                ],
             });
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -449,16 +531,13 @@ impl ShaderSurfaceCache {
                     occlusion_query_set: None,
                 });
                 pass.set_pipeline(pipeline);
-                pass.set_bind_group(0, bind_group, &[]);
+                pass.set_bind_group(0, &bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
-            rendered += 1;
             tracing::trace!("shader surface {id} rendered (t={:.3})", surface.elapsed);
         }
-        if let Some(encoder) = encoder {
-            queue.submit(std::iter::once(encoder.finish()));
-        }
-        rendered
+        queue.submit(std::iter::once(encoder.finish()));
+        pending.len()
     }
 }
 

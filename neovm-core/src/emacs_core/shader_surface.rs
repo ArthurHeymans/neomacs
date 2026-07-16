@@ -138,7 +138,25 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
                     uniforms.push(parse_uniform_entry(entry)?);
                 }
             }
-            ShaderSurfaceContent::Wgsl { source, uniforms }
+            let channel0 = match plist_get(&args, ":channel0").filter(|value| !value.is_nil()) {
+                Some(value) => Some(
+                    value
+                        .as_int()
+                        .filter(|id| *id >= 0)
+                        .map(|id| id as u32)
+                        .ok_or_else(|| {
+                            surface_error(
+                                "neomacs-surface-create: :channel0 must be a surface id",
+                            )
+                        })?,
+                ),
+                None => None,
+            };
+            ShaderSurfaceContent::Wgsl {
+                source,
+                uniforms,
+                channel0,
+            }
         }
         (None, Some(pixels)) => {
             let data = pixels

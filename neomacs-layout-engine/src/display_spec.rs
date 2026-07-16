@@ -50,6 +50,7 @@ enum DisplayMediaKey {
     Shader,
     Uniforms,
     Animate,
+    Channel0,
 }
 
 impl DisplayMediaKey {
@@ -507,6 +508,7 @@ pub(crate) fn parse_display_surface_source_layout(
     let mut width = fallback_width.max(1.0);
     let mut height = fallback_height.max(1.0);
     let mut animate = true;
+    let mut channel0 = None;
 
     let mut i = 1usize;
     while i + 1 < items.len() {
@@ -524,6 +526,9 @@ pub(crate) fn parse_display_surface_source_layout(
             }
             Some(DisplayMediaKey::Animate) => {
                 animate = parse_boolish(value);
+            }
+            Some(DisplayMediaKey::Channel0) => {
+                channel0 = value.as_int().filter(|id| *id >= 0).map(|id| id as u32);
             }
             Some(DisplayMediaKey::Width) => {
                 if let Some(parsed) = parse_image_dimension(value) {
@@ -547,6 +552,7 @@ pub(crate) fn parse_display_surface_source_layout(
             width: width.round().max(1.0) as u32,
             height: height.round().max(1.0) as u32,
             animate,
+            channel0,
         },
         width,
         height,

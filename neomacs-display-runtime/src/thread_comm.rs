@@ -333,10 +333,12 @@ impl MediaSource {
 pub enum SurfaceSource {
     /// User WGSL defining `fn mainImage(fragCoord: vec2<f32>) -> vec4<f32>`;
     /// the render thread composes it with the generated prelude. `uniforms`
-    /// carries the named user uniforms in slot order with initial values.
+    /// carries the named user uniforms in slot order with initial values;
+    /// `channel0` optionally names another surface sampled as `iChannel0`.
     Wgsl {
         source: String,
         uniforms: Vec<neomacs_renderer_wgpu::SurfaceUniformInit>,
+        channel0: Option<u32>,
     },
     /// Raw RGBA8 pixels, row-major, tightly packed.
     Pixels { data: Vec<u8> },

@@ -1524,6 +1524,8 @@ pub enum ShaderSurfaceContent {
     Wgsl {
         source: String,
         uniforms: Vec<ShaderSurfaceUniformInit>,
+        /// Another surface sampled as `iChannel0` in the shader.
+        channel0: Option<u32>,
     },
     Pixels {
         data: Vec<u8>,
@@ -1551,6 +1553,8 @@ pub struct SurfaceResolveRequest {
     pub width: u32,
     pub height: u32,
     pub animate: bool,
+    /// Another surface sampled as `iChannel0`.
+    pub channel0: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -73,6 +73,17 @@ fn lisp_style_uniform_names_compose_into_valid_wgsl() {
 }
 
 #[test]
+fn channel0_sampling_validates() {
+    let source = "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {
+        let uv = fragCoord / u.iResolution.xy;
+        return textureSample(iChannel0, iChannel0Sampler, uv);
+    }";
+    let composed = validate_surface_wgsl(source, &[]).expect("channel sampling validates");
+    assert!(composed.contains("var iChannel0: texture_2d<f32>"));
+    assert!(composed.contains("var iChannel0Sampler: sampler"));
+}
+
+#[test]
 fn compose_is_deterministic() {
     let uniforms = vec![("a".to_owned(), 2u8)];
     assert_eq!(
