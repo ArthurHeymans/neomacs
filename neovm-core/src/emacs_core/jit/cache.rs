@@ -40,9 +40,74 @@ enum CacheEntry {
     NotCompilable,
 }
 
+/// Dense per-thread compiled-leaf store indexed by `compiled_id`. Ids are
+/// small sequential process-uniques (`Runtime::compiled_id_or_assign`
+/// fetch_adds from 1), so the id IS the index: the per-call cache probe on the
+/// JIT dispatch seam becomes a bounds-checked vector load instead of a std
+/// `HashMap` probe — whose SipHash alone was ~13% of a call-heavy benchmark's
+/// CPU (every generic-shim call re-enters the seam and probes this cache).
+#[derive(Default)]
+struct DenseCache {
+    slots: Vec<Option<CacheEntry>>,
+}
+
+impl DenseCache {
+    fn get(&self, id: u64) -> Option<&CacheEntry> {
+        self.slots.get(id as usize).and_then(|s| s.as_ref())
+    }
+
+    fn remove(&mut self, id: u64) {
+        if let Some(slot) = self.slots.get_mut(id as usize) {
+            *slot = None;
+        }
+    }
+
+    fn insert(&mut self, id: u64, entry: CacheEntry) {
+        let idx = id as usize;
+        if self.slots.len() <= idx {
+            self.slots.resize_with(idx + 1, || None);
+        }
+        self.slots[idx] = Some(entry);
+    }
+
+    /// `entry(id).or_insert_with(f)` equivalent.
+    fn get_or_insert_with(&mut self, id: u64, f: impl FnOnce() -> CacheEntry) -> &mut CacheEntry {
+        let idx = id as usize;
+        if self.slots.len() <= idx {
+            self.slots.resize_with(idx + 1, || None);
+        }
+        let slot = &mut self.slots[idx];
+        if slot.is_none() {
+            *slot = Some(f());
+        }
+        slot.as_mut().expect("slot just filled")
+    }
+
+    /// Occupied entries (id, entry) — skips empty slots.
+    fn iter(&self) -> impl Iterator<Item = (u64, &CacheEntry)> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| s.as_ref().map(|e| (i as u64, e)))
+    }
+
+    fn values(&self) -> impl Iterator<Item = &CacheEntry> {
+        self.slots.iter().filter_map(|s| s.as_ref())
+    }
+
+    /// Occupied-entry count (the HashMap `len()` this replaced).
+    fn len(&self) -> usize {
+        self.slots.iter().filter(|s| s.is_some()).count()
+    }
+
+    fn clear(&mut self) {
+        self.slots.clear();
+    }
+}
+
 thread_local! {
     /// `compiled_id` -> compiled state, owned by and private to this thread.
-    static COMPILED: RefCell<HashMap<u64, CacheEntry>> = RefCell::new(HashMap::new());
+    static COMPILED: RefCell<DenseCache> = RefCell::new(DenseCache::default());
 
     /// Precise inline-dependency REVERSE map: callee `SymId` -> the set of caller
     /// `compiled_id`s that INLINED it. Populated at compile-miss (the `or_insert_with`
@@ -112,10 +177,10 @@ pub(crate) fn evict_inline_dependents(sym: SymId) {
             // cache an inlined leaf's pointer in a spec slot — so evicting one here
             // can never dangle a baked SpecSlot.leaf raw pointer.
             debug_assert!(
-                !matches!(cache.get(&id), Some(CacheEntry::Compiled(l)) if l.inline_epoch().is_none()),
+                !matches!(cache.get(id), Some(CacheEntry::Compiled(l)) if l.inline_epoch().is_none()),
                 "precise eviction must only touch inlined leaves (spec-slot pointer safety)"
             );
-            cache.remove(&id);
+            cache.remove(id);
         }
     });
 }
@@ -123,14 +188,14 @@ pub(crate) fn evict_inline_dependents(sym: SymId) {
 /// Test-only: is a compiled leaf currently cached for `id` on this thread?
 #[cfg(test)]
 pub(crate) fn is_compiled_for_test(id: u64) -> bool {
-    COMPILED.with(|c| matches!(c.borrow().get(&id), Some(CacheEntry::Compiled(_))))
+    COMPILED.with(|c| matches!(c.borrow().get(id), Some(CacheEntry::Compiled(_))))
 }
 
 /// Test-only: whether the cached leaf for `id` is AOT-backed (served from a
 /// loaded `.so`, NOT JIT-compiled). Proves the AOT cache consult engaged.
 #[cfg(test)]
 pub(crate) fn cached_leaf_is_aot_for_test(id: u64) -> Option<bool> {
-    COMPILED.with(|c| match c.borrow().get(&id) {
+    COMPILED.with(|c| match c.borrow().get(id) {
         Some(CacheEntry::Compiled(leaf)) => Some(leaf.is_aot_backed()),
         _ => None,
     })
@@ -142,7 +207,7 @@ pub(crate) fn cached_leaf_is_aot_for_test(id: u64) -> Option<bool> {
 /// has no cached `Compiled` leaf.
 pub(crate) fn cached_leaf_is_aot_for_func(func: &ByteCodeFunction) -> Option<bool> {
     let id = func.runtime.compiled_id_or_assign();
-    COMPILED.with(|c| match c.borrow().get(&id) {
+    COMPILED.with(|c| match c.borrow().get(id) {
         Some(CacheEntry::Compiled(leaf)) => Some(leaf.is_aot_backed()),
         _ => None,
     })
@@ -165,7 +230,7 @@ pub(crate) fn jit_compiled_ids() -> HashSet<u64> {
     COMPILED.with(|c| {
         c.borrow()
             .iter()
-            .filter_map(|(&id, e)| match e {
+            .filter_map(|(id, e)| match e {
                 CacheEntry::Compiled(leaf) if !leaf.is_aot_backed() => Some(id),
                 _ => None,
             })
@@ -301,8 +366,8 @@ pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize 
             // hook compiled may be spec-slot-referenced + INLINE_DEPS-registered).
             // AOT leaves never inline → no inline deps to register; their reloc
             // consts are rooted via the COMPILED walk in collect_jit_reloc_gc_roots.
-            if let std::collections::hash_map::Entry::Vacant(slot) = cache.entry(id) {
-                slot.insert(CacheEntry::Compiled(Rc::new(leaf)));
+            if cache.get(id).is_none() {
+                cache.insert(id, CacheEntry::Compiled(Rc::new(leaf)));
                 inserted += 1;
             }
         }
@@ -399,15 +464,15 @@ pub fn try_run_compiled(
         // function_epoch has since moved, a callee it inlined may have been
         // redefined — drop the entry so it recompiles below (no stale inline runs).
         let stale = matches!(
-            cache.get(&id),
+            cache.get(id),
             Some(CacheEntry::Compiled(l))
                 if l.inline_epoch().is_some()
                     && l.inline_epoch() != obarray.map(|ob| ob.function_epoch())
         );
         if stale {
-            cache.remove(&id);
+            cache.remove(id);
         }
-        match cache.entry(id).or_insert_with(|| {
+        match cache.get_or_insert_with(id, || {
             // R1c-6: consult AOT FIRST (additive — a miss/error falls through to
             // the JIT below, leaving JIT behavior unchanged). An AOT hit is a
             // PRE-WARMED leaf: native code already on disk, no JIT compile. Only
@@ -467,7 +532,7 @@ pub(crate) fn resolve_compiled_leaf_ptr(
     }
     COMPILED.with(|cache| {
         let mut cache = cache.borrow_mut();
-        match cache.entry(id).or_insert_with(|| {
+        match cache.get_or_insert_with(id, || {
             // SAFETY: same dormant-Context contract as try_run_compiled.
             let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
             compile_cache_entry(id, func, obarray)
