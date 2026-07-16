@@ -55,6 +55,12 @@ fn install_c_block_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
         .expect("install C star comment syntax");
 }
 
+fn install_c_line_and_block_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    install_c_block_comment_syntax(eval);
+    builtin_modify_syntax_entry(eval, vec![Value::fixnum('\n' as i64), Value::string("> b")])
+        .expect("install C++ line-comment end syntax");
+}
+
 fn install_nestable_c_block_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
     builtin_modify_syntax_entry(
         eval,
@@ -66,6 +72,15 @@ fn install_nestable_c_block_comment_syntax(eval: &mut crate::emacs_core::eval::C
         vec![Value::fixnum('*' as i64), Value::string(". 23n")],
     )
     .expect("install nestable C star comment syntax");
+}
+
+fn install_single_character_style_c_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    builtin_modify_syntax_entry(eval, vec![Value::fixnum('@' as i64), Value::string("< c")])
+        .expect("install style-c comment start");
+    builtin_modify_syntax_entry(eval, vec![Value::fixnum('!' as i64), Value::string("> c")])
+        .expect("install style-c comment end");
+    builtin_modify_syntax_entry(eval, vec![Value::fixnum('\n' as i64), Value::string(">")])
+        .expect("install style-a comment end");
 }
 
 // -----------------------------------------------------------------------
@@ -1724,6 +1739,44 @@ fn forward_comment_backward_single_line_comments() {
     );
 }
 
+#[test]
+fn forward_comment_keeps_style_c_distinct_from_style_a() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "@first\nsecond!code");
+    install_single_character_style_c_comment_syntax(&mut eval);
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(
+        current_point_lisp_pos(&eval),
+        15,
+        "the style-a newline must not terminate a style-c comment"
+    );
+}
+
+#[test]
+fn backward_comment_keeps_style_c_distinct_from_style_a() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "code@first\nsecond!");
+    install_single_character_style_c_comment_syntax(&mut eval);
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.goto_emacs_byte_pos(buf.point_max_emacs_byte_pos());
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(
+        current_point_lisp_pos(&eval),
+        5,
+        "the style-a newline must not hide the matching style-c opener"
+    );
+}
+
 /// Backward comment traversal stops on non-comment text.
 ///
 /// Buffer: "code\n;; c1\n;; c2\n;; c3\n"
@@ -2589,6 +2642,150 @@ fn parse_partial_sexp_commentstop_syntax_table_moves_point_across_comment() {
             + 1,
         6
     );
+}
+
+#[test]
+fn parse_partial_sexp_preserves_generic_comment_fence_across_stops() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "!abc!");
+    builtin_modify_syntax_entry(
+        &mut eval,
+        vec![Value::fixnum('!' as i64), Value::string("!")],
+    )
+    .expect("install generic comment fence");
+
+    let first = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(6),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(current_point_lisp_pos(&eval), 2);
+    assert_eq!(
+        nth_value(&first, 4),
+        Value::T,
+        "generic comment fences are non-nestable"
+    );
+    assert_eq!(nth_value(&first, 7), Value::symbol("syntax-table"));
+
+    let second = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(2),
+            Value::fixnum(6),
+            Value::NIL,
+            Value::NIL,
+            first,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(current_point_lisp_pos(&eval), 6);
+    assert_eq!(nth_value(&second, 4), Value::NIL);
+    assert_eq!(nth_value(&second, 7), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_preserves_c_line_comment_style_across_stops() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "// header\n#define VALUE 1\n");
+    install_c_line_and_block_comment_syntax(&mut eval);
+
+    let first = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(27),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(current_point_lisp_pos(&eval), 3);
+    assert_eq!(nth_value(&first, 4), Value::T);
+    assert_eq!(
+        nth_value(&first, 7),
+        Value::fixnum(1),
+        "GNU serializes C line-comment style b in parse-state element 7"
+    );
+
+    let second = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(27),
+            Value::NIL,
+            Value::NIL,
+            first,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        current_point_lisp_pos(&eval),
+        11,
+        "continued parsing must stop immediately after the style-b newline terminator"
+    );
+    assert_eq!(nth_value(&second, 4), Value::NIL);
+    assert_eq!(nth_value(&second, 7), Value::NIL);
+}
+
+#[test]
+fn parse_partial_sexp_uses_the_main_character_style_for_c_block_comment_end() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "/* header */\n#define VALUE 1\n");
+    install_c_line_and_block_comment_syntax(&mut eval);
+
+    let first = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(30),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(current_point_lisp_pos(&eval), 3);
+    assert_eq!(nth_value(&first, 4), Value::T);
+    assert_eq!(
+        nth_value(&first, 7),
+        Value::NIL,
+        "GNU serializes C block comments as style a"
+    );
+
+    let second = builtin_parse_partial_sexp(
+        &mut eval,
+        vec![
+            Value::fixnum(3),
+            Value::fixnum(30),
+            Value::NIL,
+            Value::NIL,
+            first,
+            Value::symbol("syntax-table"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        current_point_lisp_pos(&eval),
+        13,
+        "continued parsing must stop immediately after the style-a */ terminator"
+    );
+    assert_eq!(nth_value(&second, 4), Value::NIL);
+    assert_eq!(nth_value(&second, 7), Value::NIL);
 }
 
 // -----------------------------------------------------------------------

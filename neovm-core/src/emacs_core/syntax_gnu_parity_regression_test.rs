@@ -367,3 +367,31 @@ fn parse_partial_sexp_honors_syntax_table_string_fence_property() {
     );
     assert_eq!(result, "OK (t nil)");
 }
+
+#[test]
+fn c_mode_font_lock_ends_leading_comments_before_preprocessor_directives() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r##"
+        (with-temp-buffer
+          (insert "// SPDX-License-Identifier: GPL-2.0-only\n")
+          (insert "/*\n * Header comment.\n */\n\n")
+          (insert "#define pr_fmt(fmt) KBUILD_MODNAME \": \" fmt\n")
+          (insert "#include <linux/kernel.h>\n")
+          (c-mode)
+          (font-lock-mode 1)
+          (font-lock-ensure)
+          (goto-char (point-min))
+          (search-forward "#define")
+          (let ((define-face
+                 (get-char-property (match-beginning 0) 'face)))
+            (search-forward "#include")
+            (list define-face
+                  (get-char-property (match-beginning 0) 'face))))
+        "##,
+    );
+    assert_eq!(
+        result,
+        "OK (font-lock-preprocessor-face font-lock-preprocessor-face)"
+    );
+}

@@ -3173,10 +3173,10 @@ fn forward_comment_forward(
 
         // Single-char comment start (class `<`).
         if class == SyntaxClass::Comment {
-            let style_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
+            let style = CommentStyle::from_main_flags(flags);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
             buf.goto_emacs_byte_pos(unit.end);
-            if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
+            if !scan_forward_comment_body(buf, style, nested, honor_properties) {
                 return false;
             }
             remaining -= 1;
@@ -3209,11 +3209,11 @@ fn forward_comment_forward(
                     );
                     let flags2 = entry2.flags;
                     if flags2.contains(SyntaxFlags::COMMENT_START_SECOND) {
-                        let style_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
+                        let style = CommentStyle::from_start_flags(flags, flags2);
                         let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                             || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
                         buf.goto_emacs_byte_pos(unit2.end);
-                        if !scan_forward_comment_body(buf, style_b, nested, honor_properties) {
+                        if !scan_forward_comment_body(buf, style, nested, honor_properties) {
                             return false;
                         }
                         remaining -= 1;
@@ -3235,7 +3235,7 @@ fn forward_comment_forward(
 /// Returns true if comment end was found.
 fn scan_forward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
-    style_b: bool,
+    style: CommentStyle,
     nested: bool,
     honor_properties: bool,
 ) -> bool {
@@ -3277,8 +3277,7 @@ fn scan_forward_comment_body(
         // Nested comment start (only if nested flag is set).
         if nested {
             if class == SyntaxClass::Comment {
-                let sf_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-                if sf_b == style_b {
+                if CommentStyle::from_main_flags(flags) == style {
                     nesting += 1;
                     buf.goto_emacs_byte_pos(unit.end);
                     continue;
@@ -3297,13 +3296,12 @@ fn scan_forward_comment_body(
                             honor_properties,
                         );
                         let flags2 = entry2.flags;
-                        if flags2.contains(SyntaxFlags::COMMENT_START_SECOND) {
-                            let sf_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
-                            if sf_b == style_b {
-                                nesting += 1;
-                                buf.goto_emacs_byte_pos(unit2.end);
-                                continue;
-                            }
+                        if flags2.contains(SyntaxFlags::COMMENT_START_SECOND)
+                            && CommentStyle::from_start_flags(flags, flags2) == style
+                        {
+                            nesting += 1;
+                            buf.goto_emacs_byte_pos(unit2.end);
+                            continue;
                         }
                     }
                 }
@@ -3311,16 +3309,13 @@ fn scan_forward_comment_body(
         }
 
         // Single-char comment end (class `>`).
-        if class == SyntaxClass::EndComment {
-            let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-            if se_b == style_b {
-                buf.goto_emacs_byte_pos(unit.end);
-                nesting -= 1;
-                if nesting <= 0 {
-                    return true;
-                }
-                continue;
+        if class == SyntaxClass::EndComment && CommentStyle::from_main_flags(flags) == style {
+            buf.goto_emacs_byte_pos(unit.end);
+            nesting -= 1;
+            if nesting <= 0 {
+                return true;
             }
+            continue;
         }
 
         // Comment fence end.
@@ -3346,16 +3341,15 @@ fn scan_forward_comment_body(
                         honor_properties,
                     );
                     let flags2 = entry2.flags;
-                    if flags2.contains(SyntaxFlags::COMMENT_END_SECOND) {
-                        let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-                        if se_b == style_b {
-                            buf.goto_emacs_byte_pos(unit2.end);
-                            nesting -= 1;
-                            if nesting <= 0 {
-                                return true;
-                            }
-                            continue;
+                    if flags2.contains(SyntaxFlags::COMMENT_END_SECOND)
+                        && CommentStyle::from_end_flags(flags, flags2) == style
+                    {
+                        buf.goto_emacs_byte_pos(unit2.end);
+                        nesting -= 1;
+                        if nesting <= 0 {
+                            return true;
                         }
+                        continue;
                     }
                 }
             }
@@ -3444,12 +3438,12 @@ fn forward_comment_backward(
             let flags = entry.flags;
 
             let mut code = class;
-            let mut comstyle_b = false;
+            let mut comment_style = CommentStyle::A;
             let mut nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
             let mut two_char_end_restore_pos = None;
 
             if class == SyntaxClass::EndComment {
-                comstyle_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
+                comment_style = CommentStyle::from_main_flags(flags);
             }
 
             // Check for two-char comment end: current char has
@@ -3469,7 +3463,7 @@ fn forward_comment_backward(
                         let flags2 = entry2.flags;
                         if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
                             code = SyntaxClass::EndComment;
-                            comstyle_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
+                            comment_style = CommentStyle::from_end_flags(flags2, flags);
                             nested = nested || flags2.contains(SyntaxFlags::COMMENT_NESTABLE);
                             two_char_end_restore_pos = Some(unit2.end);
                             // Move past both chars of the two-char end.
@@ -3497,7 +3491,7 @@ fn forward_comment_backward(
                     buf.goto_emacs_byte_pos(unit.start);
                 }
                 let saved = buf.point_emacs_byte_pos();
-                if scan_backward_comment_body(buf, comstyle_b, nested, honor_properties) {
+                if scan_backward_comment_body(buf, comment_style, nested, honor_properties) {
                     // Successfully scanned back through the comment body.
                     break;
                 }
@@ -3553,7 +3547,7 @@ fn forward_comment_backward(
 /// search.  At the end, point is set to the recorded position.
 fn scan_backward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
-    style_b: bool,
+    style: CommentStyle,
     nested: bool,
     honor_properties: bool,
 ) -> bool {
@@ -3588,19 +3582,16 @@ fn scan_backward_comment_body(
         // For nested: increases nesting.
         // For non-nested: means our comment can't extend past this,
         //   so stop scanning.
-        if class == SyntaxClass::EndComment {
-            let se_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-            if se_b == style_b {
-                if nested {
-                    nesting += 1;
-                    buf.goto_emacs_byte_pos(unit.start);
-                    continue;
-                } else {
-                    // Non-nested: this is a same-style comment ender.
-                    // Anything before this can't be our comment start
-                    // because it would match this ender instead.
-                    break;
-                }
+        if class == SyntaxClass::EndComment && CommentStyle::from_main_flags(flags) == style {
+            if nested {
+                nesting += 1;
+                buf.goto_emacs_byte_pos(unit.start);
+                continue;
+            } else {
+                // Non-nested: this is a same-style comment ender.
+                // Anything before this can't be our comment start
+                // because it would match this ender instead.
+                break;
             }
         }
 
@@ -3618,16 +3609,15 @@ fn scan_backward_comment_body(
                         honor_properties,
                     );
                     let flags2 = entry2.flags;
-                    if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
-                        let se_b = flags2.contains(SyntaxFlags::COMMENT_STYLE_B);
-                        if se_b == style_b {
-                            if nested {
-                                nesting += 1;
-                                buf.goto_emacs_byte_pos(unit2.start);
-                                continue;
-                            } else {
-                                break;
-                            }
+                    if flags2.contains(SyntaxFlags::COMMENT_END_FIRST)
+                        && CommentStyle::from_end_flags(flags2, flags) == style
+                    {
+                        if nested {
+                            nesting += 1;
+                            buf.goto_emacs_byte_pos(unit2.start);
+                            continue;
+                        } else {
+                            break;
                         }
                     }
                 }
@@ -3635,24 +3625,21 @@ fn scan_backward_comment_body(
         }
 
         // ── Single-char comment start (class `<`) ────────────────
-        if class == SyntaxClass::Comment {
-            let sc_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-            if sc_b == style_b {
-                let new_pos = unit.start;
-                if nested {
-                    buf.goto_emacs_byte_pos(new_pos);
-                    nesting -= 1;
-                    if nesting <= 0 {
-                        return true;
-                    }
-                    continue;
-                } else {
-                    // Non-nested: record this as the best (earliest)
-                    // comment-start candidate and keep scanning.
-                    comstart_pos = Some(new_pos);
-                    buf.goto_emacs_byte_pos(new_pos);
-                    continue;
+        if class == SyntaxClass::Comment && CommentStyle::from_main_flags(flags) == style {
+            let new_pos = unit.start;
+            if nested {
+                buf.goto_emacs_byte_pos(new_pos);
+                nesting -= 1;
+                if nesting <= 0 {
+                    return true;
                 }
+                continue;
+            } else {
+                // Non-nested: record this as the best (earliest)
+                // comment-start candidate and keep scanning.
+                comstart_pos = Some(new_pos);
+                buf.goto_emacs_byte_pos(new_pos);
+                continue;
             }
         }
 
@@ -3687,22 +3674,21 @@ fn scan_backward_comment_body(
                         honor_properties,
                     );
                     let flags2 = entry2.flags;
-                    if flags2.contains(SyntaxFlags::COMMENT_START_FIRST) {
-                        let sc_b = flags.contains(SyntaxFlags::COMMENT_STYLE_B);
-                        if sc_b == style_b {
-                            let new_pos = unit2.start;
-                            if nested {
-                                buf.goto_emacs_byte_pos(new_pos);
-                                nesting -= 1;
-                                if nesting <= 0 {
-                                    return true;
-                                }
-                                continue;
-                            } else {
-                                comstart_pos = Some(new_pos);
-                                buf.goto_emacs_byte_pos(new_pos);
-                                continue;
+                    if flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
+                        && CommentStyle::from_start_flags(flags2, flags) == style
+                    {
+                        let new_pos = unit2.start;
+                        if nested {
+                            buf.goto_emacs_byte_pos(new_pos);
+                            nesting -= 1;
+                            if nesting <= 0 {
+                                return true;
                             }
+                            continue;
+                        } else {
+                            comstart_pos = Some(new_pos);
+                            buf.goto_emacs_byte_pos(new_pos);
+                            continue;
                         }
                     }
                 }
@@ -4192,16 +4178,128 @@ enum ParseStringState {
     Fence,
 }
 
+/// The syntax-table comment style identity carried by GNU's parse state.
+///
+/// The b/c delimiter flags form identities a (0), b (1), c (2), or bc (3);
+/// the separate n flag controls nesting.  Keep the identity as an opaque
+/// numeric value because `parse-partial-sexp` accepts an externally supplied
+/// old state and GNU preserves numeric style values.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct CommentStyle(i64);
+
+impl CommentStyle {
+    const A: Self = Self(0);
+    const GENERIC_FENCE_SENTINEL: i64 = 257;
+
+    fn from_main_flags(flags: SyntaxFlags) -> Self {
+        Self(
+            i64::from(flags.contains(SyntaxFlags::COMMENT_STYLE_B))
+                | (i64::from(flags.contains(SyntaxFlags::COMMENT_STYLE_C)) << 1),
+        )
+    }
+
+    /// GNU uses the second character as the main character of a two-character
+    /// comment opener.  Style c, unlike style b, may be present on either.
+    fn from_start_flags(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        Self(
+            i64::from(second.contains(SyntaxFlags::COMMENT_STYLE_B))
+                | (i64::from(
+                    first.contains(SyntaxFlags::COMMENT_STYLE_C)
+                        || second.contains(SyntaxFlags::COMMENT_STYLE_C),
+                ) << 1),
+        )
+    }
+
+    /// GNU uses the first character as the main character of a two-character
+    /// comment ender.  Style c, unlike style b, may be present on either.
+    fn from_end_flags(first: SyntaxFlags, second: SyntaxFlags) -> Self {
+        Self(
+            i64::from(first.contains(SyntaxFlags::COMMENT_STYLE_B))
+                | (i64::from(
+                    first.contains(SyntaxFlags::COMMENT_STYLE_C)
+                        || second.contains(SyntaxFlags::COMMENT_STYLE_C),
+                ) << 1),
+        )
+    }
+
+    fn to_parse_state_value(self) -> Value {
+        if self == Self::A {
+            Value::NIL
+        } else {
+            Value::fixnum(self.0)
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ParseCommentState {
     Syntax {
         depth: i64,
-        style_b: bool,
+        style: CommentStyle,
         nestable: bool,
     },
-    Fence {
-        depth: i64,
-    },
+    Fence,
+}
+
+impl ParseCommentState {
+    /// Decode GNU parse-state elements 4 (comment state) and 7 (style).
+    ///
+    /// GNU uses non-numeric element 7 values, including `syntax-table`, as
+    /// the generic comment-fence sentinel.  Keeping that representation at
+    /// this boundary prevents parser callers from confusing it with style a.
+    fn from_oldstate(comment: &Value, style: Option<&Value>) -> Option<Self> {
+        if comment.is_nil() {
+            return None;
+        }
+
+        let syntax_style = match style {
+            None => Some(CommentStyle::A),
+            Some(value) if value.is_nil() => Some(CommentStyle::A),
+            Some(value) => match value.as_fixnum() {
+                Some(style) if (0..CommentStyle::GENERIC_FENCE_SENTINEL).contains(&style) => {
+                    Some(CommentStyle(style))
+                }
+                _ => None,
+            },
+        };
+
+        let Some(style) = syntax_style else {
+            return Some(Self::Fence);
+        };
+
+        match comment.kind() {
+            ValueKind::Fixnum(depth) => Some(Self::Syntax {
+                depth,
+                style,
+                nestable: true,
+            }),
+            _ => Some(Self::Syntax {
+                depth: 1,
+                style,
+                nestable: false,
+            }),
+        }
+    }
+
+    /// Encode GNU parse-state elements 4 (comment state) and 7 (style).
+    fn to_parse_state_values(self) -> (Value, Value) {
+        match self {
+            Self::Syntax {
+                depth: comment_depth,
+                style,
+                nestable: false,
+            } => {
+                debug_assert_eq!(comment_depth, 1);
+                (Value::T, style.to_parse_state_value())
+            }
+            Self::Syntax {
+                depth: comment_depth,
+                style,
+                nestable: true,
+            } => (Value::fixnum(comment_depth), style.to_parse_state_value()),
+            Self::Fence => (Value::T, Value::symbol("syntax-table")),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -4301,20 +4399,7 @@ impl PartialParseState {
         }
 
         if let Some(item) = items.get(4) {
-            state.in_comment = match item.kind() {
-                ValueKind::Nil => None,
-                ValueKind::T => Some(ParseCommentState::Syntax {
-                    depth: 1,
-                    style_b: false,
-                    nestable: false,
-                }),
-                ValueKind::Fixnum(n) => Some(ParseCommentState::Syntax {
-                    depth: n,
-                    style_b: false,
-                    nestable: true,
-                }),
-                _ => None,
-            };
+            state.in_comment = ParseCommentState::from_oldstate(item, items.get(7));
         }
 
         // GNU `internalize_parse_state`:
@@ -4458,24 +4543,9 @@ impl PartialParseState {
             None => Value::NIL,
         };
 
-        let comment_value = match self.in_comment {
-            Some(ParseCommentState::Syntax {
-                depth: comment_depth,
-                nestable: false,
-                ..
-            }) => {
-                debug_assert_eq!(comment_depth, 1);
-                Value::T
-            }
-            Some(ParseCommentState::Syntax {
-                depth: comment_depth,
-                nestable: true,
-                ..
-            }) => Value::fixnum(comment_depth),
-            Some(ParseCommentState::Fence {
-                depth: comment_depth,
-            }) => Value::fixnum(comment_depth),
-            None => Value::NIL,
+        let (comment_value, comment_style_value) = match self.in_comment {
+            Some(comment_state) => comment_state.to_parse_state_values(),
+            None => (Value::NIL, Value::NIL),
         };
 
         Value::list(vec![
@@ -4486,7 +4556,7 @@ impl PartialParseState {
             comment_value,
             if self.quoted { Value::T } else { Value::NIL },
             Value::fixnum(self.mindepth),
-            Value::NIL,
+            comment_style_value,
             self.comment_or_string_start
                 .map_or(Value::NIL, Value::fixnum),
             stack_value,
@@ -4621,18 +4691,11 @@ fn parse_state_from_range_with_options(
 
         if let Some(comment_state) = state.in_comment {
             match comment_state {
-                ParseCommentState::Fence {
-                    depth: comment_depth,
-                } => {
+                ParseCommentState::Fence => {
                     if class == SyntaxClass::CommentFence {
-                        let next_depth = comment_depth - 1;
                         idx += 1;
-                        if next_depth <= 0 {
-                            state.in_comment = None;
-                            state.comment_or_string_start = None;
-                        } else {
-                            state.in_comment = Some(ParseCommentState::Fence { depth: next_depth });
-                        }
+                        state.in_comment = None;
+                        state.comment_or_string_start = None;
                         if commentstop == CommentStopMode::SyntaxTable {
                             break;
                         }
@@ -4652,7 +4715,7 @@ fn parse_state_from_range_with_options(
                 }
                 ParseCommentState::Syntax {
                     depth: comment_depth,
-                    style_b,
+                    style,
                     nestable,
                 } => {
                     if matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
@@ -4667,11 +4730,11 @@ fn parse_state_from_range_with_options(
 
                     if nestable {
                         if class == SyntaxClass::Comment
-                            && flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
+                            && CommentStyle::from_main_flags(flags) == style
                         {
                             state.in_comment = Some(ParseCommentState::Syntax {
                                 depth: comment_depth + 1,
-                                style_b,
+                                style,
                                 nestable,
                             });
                             idx += 1;
@@ -4688,11 +4751,11 @@ fn parse_state_from_range_with_options(
                                 &prop_cache,
                             );
                             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND)
-                                && next_flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
+                                && CommentStyle::from_start_flags(flags, next_flags) == style
                             {
                                 state.in_comment = Some(ParseCommentState::Syntax {
                                     depth: comment_depth + 1,
-                                    style_b,
+                                    style,
                                     nestable,
                                 });
                                 idx += 2;
@@ -4702,7 +4765,7 @@ fn parse_state_from_range_with_options(
                     }
 
                     if class == SyntaxClass::EndComment
-                        && flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
+                        && CommentStyle::from_main_flags(flags) == style
                     {
                         let next_depth = comment_depth - 1;
                         idx += 1;
@@ -4712,7 +4775,7 @@ fn parse_state_from_range_with_options(
                         } else {
                             state.in_comment = Some(ParseCommentState::Syntax {
                                 depth: next_depth,
-                                style_b,
+                                style,
                                 nestable,
                             });
                         }
@@ -4732,7 +4795,7 @@ fn parse_state_from_range_with_options(
                             &prop_cache,
                         );
                         if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
-                            && next_flags.contains(SyntaxFlags::COMMENT_STYLE_B) == style_b
+                            && CommentStyle::from_end_flags(flags, next_flags) == style
                         {
                             let next_depth = comment_depth - 1;
                             idx += 2;
@@ -4742,7 +4805,7 @@ fn parse_state_from_range_with_options(
                             } else {
                                 state.in_comment = Some(ParseCommentState::Syntax {
                                     depth: next_depth,
-                                    style_b,
+                                    style,
                                     nestable,
                                 });
                             }
@@ -4803,7 +4866,7 @@ fn parse_state_from_range_with_options(
             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
                 state.in_comment = Some(ParseCommentState::Syntax {
                     depth: 1,
-                    style_b: next_flags.contains(SyntaxFlags::COMMENT_STYLE_B),
+                    style: CommentStyle::from_start_flags(flags, next_flags),
                     nestable: flags.contains(SyntaxFlags::COMMENT_NESTABLE)
                         || next_flags.contains(SyntaxFlags::COMMENT_NESTABLE),
                 });
@@ -4860,7 +4923,7 @@ fn parse_state_from_range_with_options(
             SyntaxClass::Comment => {
                 state.in_comment = Some(ParseCommentState::Syntax {
                     depth: 1,
-                    style_b: flags.contains(SyntaxFlags::COMMENT_STYLE_B),
+                    style: CommentStyle::from_main_flags(flags),
                     nestable: flags.contains(SyntaxFlags::COMMENT_NESTABLE),
                 });
                 state.comment_or_string_start = Some(pos1);
@@ -4871,7 +4934,7 @@ fn parse_state_from_range_with_options(
                 continue;
             }
             SyntaxClass::CommentFence => {
-                state.in_comment = Some(ParseCommentState::Fence { depth: 1 });
+                state.in_comment = Some(ParseCommentState::Fence);
                 state.comment_or_string_start = Some(pos1);
                 idx += 1;
                 if commentstop != CommentStopMode::None {
