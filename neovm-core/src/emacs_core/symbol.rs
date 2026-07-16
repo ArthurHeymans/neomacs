@@ -511,8 +511,8 @@ pub enum MakeAliasError {
 impl LispSymbol {
     /// A fully-initialized EMPTY obarray slot: `name == `[`SYMBOL_NAME_SENTINEL`]
     /// with the arm defaults GNU gives a freshly-interned symbol (Plainval /
-    /// UNBOUND / NIL / NIL). The chunk store is
-    /// `std::array::from_fn(|_| LispSymbol::empty())`; a slot is later published
+    /// UNBOUND / NIL / NIL). Chunks are built heap-direct from this value in
+    /// [`SymbolChunks::grow_for`]; a slot is later published
     /// by [`Self::publish_fill`], which flips the name off the sentinel LAST.
     fn empty() -> Self {
         let mut flags = SymbolFlags::default();
@@ -751,15 +751,38 @@ impl SymbolChunks {
     /// range, returning a mutable reference to its (possibly EMPTY) slot. New
     /// chunks are filled with [`LispSymbol::empty`]; a fresh slot is published
     /// by [`LispSymbol::publish_fill`].
+    #[inline(always)]
     fn ensure(&mut self, idx: usize) -> &mut LispSymbol {
+        if self.len <= idx {
+            self.grow_for(idx);
+        }
+        &mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)]
+    }
+
+    /// Cold growth path, split out of [`SymbolChunks::ensure`] so the hot
+    /// per-store path keeps a tiny stack frame. The chunk is built DIRECTLY on
+    /// the heap (`Vec::collect` writes into the final allocation): the old
+    /// `Box::new(std::array::from_fn(..))` materialized the 128 KiB
+    /// `[LispSymbol; 4096]` array in `ensure`'s own stack frame (256 KiB with
+    /// the extra move temp), which forced rustc's inline stack probing —
+    /// a 64-page probe loop executed on EVERY call, growth or not. That probe
+    /// loop alone was ~53% of a dynamic-binding setq benchmark's CPU.
+    #[cold]
+    #[inline(never)]
+    fn grow_for(&mut self, idx: usize) {
         while self.len <= idx {
-            self.chunks
-                .push(Box::new(std::array::from_fn(|_| LispSymbol::empty())));
+            let chunk: Box<[LispSymbol]> = (0..OBARRAY_CHUNK)
+                .map(|_| LispSymbol::empty())
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            let chunk: Box<[LispSymbol; OBARRAY_CHUNK]> = chunk
+                .try_into()
+                .unwrap_or_else(|_| unreachable!("chunk built with OBARRAY_CHUNK elements"));
+            self.chunks.push(chunk);
             self.seqs
                 .push(Box::new(std::sync::atomic::AtomicU32::new(0)));
             self.len += OBARRAY_CHUNK;
         }
-        &mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)]
     }
 
     #[inline(always)]
@@ -1092,14 +1115,23 @@ impl Obarray {
         let idx = Self::slot_index(id);
         let slot = self.symbols.ensure(idx);
         if !slot.is_present() {
-            // Fresh fill (None -> Some): publish arms-then-name via a terminal
-            // `Release` store so the concurrent GC obarray scan never reads a
-            // half-written slot's arms (see `LispSymbol::publish_fill`). Matches
-            // the old `get_or_insert_with(|| LispSymbol::new(id))` semantics —
-            // only an empty slot is written.
-            slot.publish_fill(LispSymbol::new(id));
+            Self::publish_fresh_slot(slot, id);
         }
         slot
+    }
+
+    /// Cold miss path of [`Obarray::ensure_slot`], outlined so the per-store
+    /// hit path (bounds check + index + presence check) stays a handful of
+    /// instructions — the write side now has the same shape as the read side
+    /// (`slot_mut`). Fresh fill (None -> Some): publish arms-then-name via a
+    /// terminal `Release` store so the concurrent GC obarray scan never reads
+    /// a half-written slot's arms (see [`LispSymbol::publish_fill`]). Matches
+    /// the old `get_or_insert_with(|| LispSymbol::new(id))` semantics — only
+    /// an empty slot is written.
+    #[cold]
+    #[inline(never)]
+    fn publish_fresh_slot(slot: &mut LispSymbol, id: SymId) {
+        slot.publish_fill(LispSymbol::new(id));
     }
 
     /// Returns a seqlock guard for the chunk holding `id`'s slot, armed only while a
@@ -1165,6 +1197,17 @@ impl Obarray {
     }
 
     fn mark_global_member(&mut self, id: SymId) {
+        // Fast path: already a member. Read-only — no ensure_slot, no growth
+        // machinery — so the per-store caller (set_symbol_value_id ->
+        // ensure_global_member_if_canonical) pays one presence-checked slot
+        // read in steady state. Mirrors GNU, where obarray membership is a
+        // read-time event (lread.c intern) that set_internal never re-checks.
+        // The predicate must stay slot()-based (presence-checked): slots can
+        // exist unmarked via ensure_symbol_id/function-cell paths, and those
+        // must still fall through to the marking slow path below.
+        if self.slot(id).is_some_and(|s| s.interned_global) {
+            return;
+        }
         let added = {
             let sym = self.ensure_slot(id);
             if sym.interned_global {

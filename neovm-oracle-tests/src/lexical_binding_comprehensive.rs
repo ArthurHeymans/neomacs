@@ -455,3 +455,58 @@ fn oracle_prop_lexical_binding_loop_independent_closures() {
     let expect = expect_test::expect![[r#""OK ((16 9 4 1 0) (0 1 4 9 16))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
+
+// ---------------------------------------------------------------------------
+// Bytecode frames push no lexenv specpdl entry when the function captures no
+// environment (GNU bytecode.c setup_frame is specpdl-free). The observable
+// surface is the lexbound scan behind internal--define-uninitialized-variable:
+// declaring a variable dynamic from inside a compiled env-less function while
+// the name is lexically bound in the interpreted caller must match GNU both
+// in whether it signals and in what the surrounding scope sees afterwards.
+// Regression for the env==None LexicalEnv-push removal in Vm::run_frame.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn oracle_prop_defvar_declare_from_compiled_frame_under_interpreted_lexical_let() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(progn
+  (defun neovm--oracle-dv-declare ()
+    (internal--define-uninitialized-variable 'neovm--oracle-dv-foo))
+  (byte-compile 'neovm--oracle-dv-declare)
+  (unwind-protect
+      (let ((neovm--oracle-dv-foo 1))
+        (list
+         (condition-case err
+             (progn (neovm--oracle-dv-declare) 'no-signal)
+           (error (car err)))
+         neovm--oracle-dv-foo
+         (special-variable-p 'neovm--oracle-dv-foo)
+         ;; a closure over the same name still sees the lexical binding
+         (funcall (lambda () neovm--oracle-dv-foo))))
+    (fmakunbound 'neovm--oracle-dv-declare)
+    (when (boundp 'neovm--oracle-dv-foo)
+      (makunbound 'neovm--oracle-dv-foo))))"#;
+    crate::common::assert_oracle_parity(form);
+}
+
+#[test]
+fn oracle_prop_defvar_declare_from_interpreted_frame_under_lexical_let() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // Interpreted-caller control for the compiled-frame case above: the
+    // interpreter's own LexicalEnv entries (eval/lambda scopes) are untouched
+    // by the bytecode-frame change and must keep GNU's behavior.
+    let form = r#"(unwind-protect
+    (let ((neovm--oracle-dv-bar 2))
+      (list
+       (condition-case err
+           (progn (internal--define-uninitialized-variable 'neovm--oracle-dv-bar)
+                  'no-signal)
+         (error (car err)))
+       neovm--oracle-dv-bar
+       (special-variable-p 'neovm--oracle-dv-bar)))
+  (when (boundp 'neovm--oracle-dv-bar)
+    (makunbound 'neovm--oracle-dv-bar)))"#;
+    crate::common::assert_oracle_parity(form);
+}

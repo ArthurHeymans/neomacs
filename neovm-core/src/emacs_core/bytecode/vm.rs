@@ -495,6 +495,29 @@ impl DirectSubrCallee {
     }
 }
 
+/// Debug check for env-less bytecode frames: after the frame body runs,
+/// `ctx.lexenv` must be the entry lexenv, possibly EXTENDED by value-less
+/// `(defvar x)` markers consed on by the tree interpreter (sf_defvar reached
+/// through opcodes that eval forms). Those markers legitimately persist past
+/// the frame boundary (GNU behavior: the symbol stays special for the rest of
+/// the enclosing scope), so the invariant is tail-reachability, not equality.
+#[cfg(debug_assertions)]
+fn lexenv_tail_reachable(current: Value, entry: Value) -> bool {
+    let mut cursor = current;
+    // Bounded walk: defvar markers within one frame are few; a long walk
+    // means the invariant is broken anyway.
+    for _ in 0..10_000 {
+        if cursor.bits() == entry.bits() {
+            return true;
+        }
+        if !cursor.is_cons() {
+            return false;
+        }
+        cursor = cursor.cons_cdr();
+    }
+    false
+}
+
 #[inline(always)]
 fn fixnum_tagged_i64(value: Value) -> i64 {
     debug_assert!(value.is_fixnum());
@@ -814,26 +837,44 @@ impl<'a> Vm<'a> {
         let args = args.into();
 
         // Root the executing function across nested calls that can GC. A heap
-        // func_value is the frame-held function object (GNU-style): every caller
-        // derives `func` by dereferencing this same ByteCode object, so rooting
-        // func_value keeps its constants vector marked transitively — the GC
-        // traces ByteCodeObj.data.constants, and post-publish bytecode is
-        // immutable, so those constants stay reachable for the whole
-        // invocation. This mirrors the JIT Plan::Compiled path, which roots only
-        // the function and relies on the identical transitive marking. Only the
-        // direct/manual path (func_value == NIL, e.g. `execute()`) holds nothing
-        // else alive, so it still roots each constant individually.
+        // func_value is the frame-held function object (GNU fp->fun,
+        // bytecode.c setup_frame): run_frame's own BcFrame { base, fun } push
+        // — visited by trace_roots — is the sole root, transitively marking
+        // the constants vector (the GC traces ByteCodeObj.data.constants, and
+        // post-publish bytecode is immutable). Every caller derives `func` by
+        // dereferencing this same ByteCode object, so no separate per-call
+        // root scope is needed at all.
+        //
+        // WINDOW INVARIANT (load-bearing): nothing between this function's
+        // entry and run_frame's bc_frames.push may allocate a Lisp object or
+        // hit a GC safe point — today that window is only the LispArgVec
+        // move, the stacker probe (native mmap, not Lisp alloc), and
+        // run_frame's two len reads. The debug assertion below enforces it.
+        //
+        // Only the direct/manual path (func_value == NIL/non-heap, e.g.
+        // `execute()`) holds nothing else alive, so it keeps a vm-root scope
+        // rooting each constant individually (trace_roots skips non-heap
+        // BcFrame.fun).
+        #[cfg(debug_assertions)]
+        let gc_cycles_at_entry = crate::emacs_core::gc_stats::snapshot().collections;
         let result = self.maybe_grow_vm_stack(|vm| {
-            vm.with_dynamic_vm_roots(|vm| {
-                if func_value.is_heap_object() {
-                    vm.push_dynamic_vm_root(func_value);
-                } else {
+            if func_value.is_heap_object() {
+                #[cfg(debug_assertions)]
+                debug_assert_eq!(
+                    crate::emacs_core::gc_stats::snapshot().collections,
+                    gc_cycles_at_entry,
+                    "GC ran between execute_with_func_value entry and run_frame \
+                     — the BcFrame.fun rooting window invariant is broken"
+                );
+                vm.run_frame(func, args, func_value)
+            } else {
+                vm.with_dynamic_vm_roots(|vm| {
                     for value in func.constants.iter().copied() {
                         vm.push_dynamic_vm_root(value);
                     }
-                }
-                vm.run_frame(func, args, func_value)
-            })
+                    vm.run_frame(func, args, func_value)
+                })
+            }
         });
         result
     }
@@ -1042,18 +1083,28 @@ impl<'a> Vm<'a> {
         if has_named_params {
             if params_on_stack {
                 // Lexical bytecode functions: params live on bc_buf at the
-                // bottom of the frame.  Just install the captured closure
-                // env (if any) and run; the body's stack-ref opcodes find
-                // the params via frame_base.
+                // bottom of the frame.  Install the captured closure env (if
+                // any) and run; the body's stack-ref opcodes find the params
+                // via frame_base.
                 //
-                // Save/restore lexenv via specpdl (matching GNU's specbind
-                // pattern), not direct save/restore. This ensures unbind_to
-                // handles all LexicalEnv entries consistently.
+                // The lexenv save/restore (specpdl LexicalEnv entry, popped by
+                // cleanup's unbind_to) happens ONLY when this frame actually
+                // switches the environment (func.env = Some). An env-less
+                // function runs in the caller's lexenv untouched: GNU pushes
+                // no specpdl entry for any bytecode frame (bytecode.c
+                // setup_frame / Breturn are specpdl-free), and the old
+                // unconditional no-op save/restore forced every lexical frame
+                // return down cleanup_bytecode_frame's slow path.
                 use crate::emacs_core::eval::SpecBinding;
-                self.ctx.specpdl.push(SpecBinding::LexicalEnv {
-                    old_lexenv: self.ctx.lexenv,
-                });
+                #[cfg(debug_assertions)]
+                let entry_lexenv = self.ctx.lexenv;
                 if let Some(env) = func.env {
+                    // Push BEFORE assigning: the entry keeps the caller's
+                    // lexenv alist GC-traced while ctx.lexenv points at the
+                    // closure env.
+                    self.ctx.specpdl.push(SpecBinding::LexicalEnv {
+                        old_lexenv: self.ctx.lexenv,
+                    });
                     self.ctx.lexenv = env;
                 }
                 let result = self.run_loop(
@@ -1064,6 +1115,13 @@ impl<'a> Vm<'a> {
                     &mut handlers,
                     &mut bind_stack,
                 );
+                #[cfg(debug_assertions)]
+                if func.env.is_none() {
+                    debug_assert!(
+                        lexenv_tail_reachable(self.ctx.lexenv, entry_lexenv),
+                        "env-less bytecode frame changed ctx.lexenv beyond defvar markers"
+                    );
+                }
                 return self.cleanup_bytecode_frame(
                     result,
                     condition_stack_base,
@@ -1135,17 +1193,22 @@ impl<'a> Vm<'a> {
             );
         }
 
-        // No params: set up lexenv for lexical closures/functions, then run.
-        // Save/restore via specpdl, matching GNU's specbind pattern.
+        // No params: install the captured closure env (if any), then run.
+        // Same discipline as the params_on_stack branch above: the specpdl
+        // LexicalEnv save/restore exists only for frames that switch the
+        // environment; env-less frames (whether or not func.lexical) leave
+        // the caller's lexenv untouched and exit via cleanup's fast path,
+        // matching GNU's specpdl-free bytecode frames.
+        #[cfg(debug_assertions)]
+        let entry_lexenv = self.ctx.lexenv;
         {
             use crate::emacs_core::eval::SpecBinding;
-            if func.env.is_some() || func.lexical {
+            if let Some(env) = func.env {
+                // Push BEFORE assigning (see the params_on_stack branch).
                 self.ctx.specpdl.push(SpecBinding::LexicalEnv {
                     old_lexenv: self.ctx.lexenv,
                 });
-                if let Some(env) = func.env {
-                    self.ctx.lexenv = env;
-                }
+                self.ctx.lexenv = env;
             }
         }
 
@@ -1157,6 +1220,13 @@ impl<'a> Vm<'a> {
             &mut handlers,
             &mut bind_stack,
         );
+        #[cfg(debug_assertions)]
+        if func.env.is_none() {
+            debug_assert!(
+                lexenv_tail_reachable(self.ctx.lexenv, entry_lexenv),
+                "env-less bytecode frame changed ctx.lexenv beyond defvar markers"
+            );
+        }
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
@@ -3581,7 +3651,10 @@ impl<'a> Vm<'a> {
         self.ctx.push_backtrace_frame(func_val, &args);
         let result = self.call_function_untraced_owned(func_val, args);
         let result = self.ctx.dispatch_signal_result_if_needed(result);
-        self.ctx.unbind_to_with_result(bt_count, result)
+        // Same GNU Bcall/Breturn single-entry pop as
+        // call_function_from_stack_args; falls back inside on imbalance.
+        self.ctx
+            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
     }
 
     /// Read a (dynamic/global) variable for JIT code with the interpreter's
@@ -4059,7 +4132,11 @@ impl<'a> Vm<'a> {
         self.ctx.push_backtrace_frame(func_val, &args);
         let result = self.call_function_untraced_owned(func_val, args);
         let result = self.ctx.dispatch_signal_result_if_needed(result);
-        self.ctx.unbind_to_with_result(bt_count, result)
+        // GNU Bcall/Breturn exit: pop this call's own backtrace entry with a
+        // single-entry pop (specpdl_ptr-- shape); imbalanced/debug-on-exit
+        // cases fall back to the general unwinder inside.
+        self.ctx
+            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
     }
 
     fn call_function_untraced_owned(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {

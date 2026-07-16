@@ -13037,6 +13037,12 @@ impl Context {
         count: usize,
         result: EvalResult,
     ) -> EvalResult {
+        // GNU Ffuncall/Breturn exit protocol: a balanced call whose only
+        // outstanding entry is its own non-debug Backtrace frame pops it with
+        // a pointer decrement (eval.c "specpdl_ptr--"). debug_on_exit: false
+        // is load-bearing — a future real backtrace-debug implementation
+        // (GNU calls call_debugger(list2(Qexit, val)) first) must land in the
+        // unbind_to_with_result fallback below.
         let can_pop = self.specpdl.len() == count + 1
             && matches!(
                 self.specpdl.last(),
@@ -13044,7 +13050,8 @@ impl Context {
                     args: BacktraceArgs::Evaluated0
                         | BacktraceArgs::Evaluated1(_)
                         | BacktraceArgs::Evaluated2(_, _)
-                        | BacktraceArgs::EvaluatedBcStack { .. },
+                        | BacktraceArgs::EvaluatedBcStack { .. }
+                        | BacktraceArgs::Evaluated(_),
                     debug_on_exit: false,
                     ..
                 })
@@ -13052,7 +13059,13 @@ impl Context {
 
         if can_pop {
             self.profiler_poll();
-            self.specpdl.pop();
+            let binding = self.specpdl.pop().expect("can_pop checked len");
+            if let SpecBinding::Backtrace { args, .. } = &binding {
+                // Out-of-line args (Evaluated(_)) hold a backtrace_args_stack
+                // slot that must unwind LIFO; release no-ops for the inline
+                // variants.
+                self.release_backtrace_args(args);
+            }
             return result;
         }
 
