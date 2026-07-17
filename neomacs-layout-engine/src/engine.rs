@@ -1764,6 +1764,48 @@ impl LayoutEngine {
                     false,
                 );
             }
+            BufferSourceRenderAttemptOutcome::RetryPointIntoWindow { point_charpos } => {
+                // GNU redisplay_window force_start branch: the explicitly set
+                // window start stays, and POINT moves into the window (we use
+                // the last fully-visible position of the attempt just laid
+                // out). Update the real buffer point + window point marker so
+                // the Lisp-visible state matches what the retry lays out.
+                let point_lisp = neovm_core::buffer::LispCharPos1::new(point_charpos + 1);
+                let window_id = neovm_core::window::WindowId(params.window_id as u64);
+                let buffer_id = neovm_core::buffer::BufferId(params.buffer_id);
+                let window_selected = evaluator
+                    .frame_manager()
+                    .get(frame_id)
+                    .is_some_and(|frame| frame.selected_window == window_id);
+                if window_selected {
+                    let byte_pos = evaluator
+                        .buffer_manager()
+                        .get(buffer_id)
+                        .map(|buffer| buffer.lisp_pos_to_emacs_byte_pos(point_lisp));
+                    if let Some(byte_pos) = byte_pos {
+                        let _ = evaluator
+                            .buffer_manager_mut()
+                            .goto_buffer_emacs_byte_pos(buffer_id, byte_pos);
+                    }
+                }
+                evaluator.set_window_point_for_redisplay(frame_id, window_id, point_lisp);
+                let mut retry_params = params.clone();
+                retry_params.point = point_charpos;
+                retry_params.window_end = 0;
+                return self.layout_window_rust(
+                    evaluator,
+                    frame_id,
+                    &retry_params,
+                    frame_params,
+                    layout_box,
+                    face_resolver,
+                    reserve_right_border_col,
+                    remaining_visibility_retries.saturating_sub(1),
+                    None,
+                    None,
+                    false,
+                );
+            }
             BufferSourceRenderAttemptOutcome::Finished {
                 redisplay_positions,
                 cursor_only,

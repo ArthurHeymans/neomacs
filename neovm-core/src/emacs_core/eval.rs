@@ -9223,6 +9223,29 @@ impl Context {
         &mut self.frames
     }
 
+    /// Move a window's point marker during redisplay (GNU force_start branch
+    /// moving point into the window). The buffer point for the selected
+    /// window is the caller's responsibility.
+    pub fn set_window_point_for_redisplay(
+        &mut self,
+        frame_id: crate::window::FrameId,
+        window_id: crate::window::WindowId,
+        point_lisp: LispCharPos1,
+    ) {
+        let buffers = &mut self.buffers;
+        if let Some(window) = self
+            .frames
+            .get_mut(frame_id)
+            .and_then(|frame| frame.find_window_mut(window_id))
+        {
+            crate::window::window_markers::set_window_point_with_marker(
+                buffers,
+                window,
+                point_lisp,
+            );
+        }
+    }
+
     pub fn publish_redisplay_window_positions(
         &mut self,
         frame_id: crate::window::FrameId,
@@ -9253,6 +9276,11 @@ impl Context {
                 window_end_byte,
                 window_end_vpos,
             );
+            // GNU clears `w->force_start` once redisplay has consumed it
+            // (redisplay_window force_start branch) — one-shot semantics.
+            if let crate::window::Window::Leaf { force_start, .. } = window {
+                *force_start = false;
+            }
         };
 
         if let Some(window) = frame.root_window.find_mut(window_id) {

@@ -2145,6 +2145,10 @@ pub(crate) fn builtin_set_window_start(
         let (fid, wid) =
             resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
         let pos = parse_integer_or_marker_arg(&args[1])?;
+        // GNU Fset_window_start: w->force_start = !NILP (noforce) ? 0 : 1 —
+        // an explicit start is honored by the next redisplay (point moves
+        // into the window if needed) unless NOFORCE asks for the soft mode.
+        let force_start_p = args.get(2).map_or(true, |noforce| noforce.is_nil());
         let is_minibuffer = frames
             .get(fid)
             .is_some_and(|frame| frame.minibuffer_window == Some(wid));
@@ -2161,6 +2165,7 @@ pub(crate) fn builtin_set_window_start(
                             crate::window::window_markers::set_window_start_with_marker(
                                 buffers, window, clamped,
                             );
+                            set_window_force_start(window, force_start_p);
                         }
                     }
                 }
@@ -2179,6 +2184,7 @@ pub(crate) fn builtin_set_window_start(
                                 crate::window::window_markers::set_window_start_with_marker(
                                     buffers, window, clamped,
                                 );
+                                set_window_force_start(window, force_start_p);
                             }
                         }
                     }
@@ -2189,6 +2195,20 @@ pub(crate) fn builtin_set_window_start(
     };
     Ok(result)
 }
+fn set_window_force_start(window: &mut Window, force: bool) {
+    if let Window::Leaf {
+        force_start,
+        window_end_valid,
+        ..
+    } = window
+    {
+        *force_start = force;
+        if force {
+            *window_end_valid = false;
+        }
+    }
+}
+
 /// `(set-window-point WINDOW POS)` -> POS.
 pub(crate) fn builtin_set_window_point(
     eval: &mut super::eval::Context,
@@ -5981,12 +6001,17 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
             window_end_valid,
             vscroll,
             preserve_vscroll_p,
+            force_start,
             ..
         } = window
         {
             *window_end_valid = false;
             *vscroll = 0;
             *preserve_vscroll_p = false;
+            // GNU window_scroll sets w->force_start: the next redisplay must
+            // display from this start and move point into the window if it
+            // ended up outside, never recompute the start around point.
+            *force_start = true;
         }
     }
     Ok(Value::NIL)

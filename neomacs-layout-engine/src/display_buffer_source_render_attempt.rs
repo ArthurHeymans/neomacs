@@ -48,6 +48,14 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
     Retry {
         window_start: i64,
     },
+    /// The window start is forced (GNU `w->force_start`): keep it and re-lay
+    /// with POINT moved to the last fully-visible position instead of
+    /// recomputing the start around point (GNU redisplay_window's
+    /// force_start branch moves point when the cursor row is off-window).
+    RetryPointIntoWindow {
+        /// Layout 0-based charpos point should move to.
+        point_charpos: i64,
+    },
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
         /// Whether this window took the Phase 1 cursor-only fast path (body rows
@@ -275,6 +283,16 @@ impl BufferSourceRetryPlan {
 
     pub(crate) fn retry_window_start(self) -> Option<i64> {
         self.retry.retry_window_start()
+    }
+
+    /// Target for GNU's force_start point move: the last fully-visible
+    /// buffer position of the attempt just laid out (layout 0-based), i.e.
+    /// point lands on the final visible row of the kept window start.
+    pub(crate) fn forced_start_point_target(self) -> Option<i64> {
+        self.retry
+            .visible_end_lisp()
+            .map(|pos| pos.as_i64() - 1)
+            .filter(|charpos| *charpos >= 0)
     }
 
     pub(crate) fn should_retry(self, remaining_visibility_retries: usize) -> Option<i64> {

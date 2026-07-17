@@ -901,10 +901,26 @@ impl BufferSourceOutputSetup {
         retry_plan.log_visibility_adjustments();
 
         if let Some(window_start) = retry_plan.should_retry(remaining_visibility_retries) {
-            retry_plan.log_retry(window_start, remaining_visibility_retries);
-            output.restore_retry_checkpoint(retry_checkpoint);
-            *frame_face_id_counter = face_ids.finish();
-            return BufferSourceRenderAttemptOutcome::Retry { window_start };
+            // GNU `w->force_start` (redisplay_window force_start branch): an
+            // explicitly scrolled/set start is kept, and POINT moves into the
+            // window instead of the start moving back to point.
+            if params.force_start {
+                if let Some(point_charpos) = retry_plan
+                    .forced_start_point_target()
+                    .filter(|target| *target != tail_context.params.point_charpos().get())
+                {
+                    output.restore_retry_checkpoint(retry_checkpoint);
+                    *frame_face_id_counter = face_ids.finish();
+                    return BufferSourceRenderAttemptOutcome::RetryPointIntoWindow {
+                        point_charpos,
+                    };
+                }
+            } else {
+                retry_plan.log_retry(window_start, remaining_visibility_retries);
+                output.restore_retry_checkpoint(retry_checkpoint);
+                *frame_face_id_counter = face_ids.finish();
+                return BufferSourceRenderAttemptOutcome::Retry { window_start };
+            }
         }
 
         let (mut output, evaluator) = output.into_parts();

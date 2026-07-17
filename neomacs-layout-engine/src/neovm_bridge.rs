@@ -1321,6 +1321,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         _buf_id,
         bounds,
         window_start,
+        force_start,
         window_end_pos,
         window_end_valid,
         point,
@@ -1335,6 +1336,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             buffer_id,
             bounds,
             window_start,
+            force_start,
             window_end_pos,
             window_end_valid,
             point,
@@ -1348,6 +1350,7 @@ pub fn window_params_from_neovm_with_font_sizing(
             *buffer_id,
             bounds,
             *window_start,
+            *force_start,
             *window_end_pos,
             *window_end_valid,
             *point,
@@ -1542,6 +1545,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         // Window::window_start tracks GNU marker positions (1-based).
         // Normalize to the layout engine's internal 0-based char positions.
         window_start: lisp_char_pos_to_layout_i64(window_start),
+        force_start,
         // Previous visible end converted back to the layout engine's internal
         // 0-based char position space.  GNU stores this as an offset from Z.
         window_end: if window_end_valid {

@@ -548,6 +548,12 @@ pub enum Window {
         vscroll: i32,
         /// Mirrors GNU `w->preserve_vscroll_p`.
         preserve_vscroll_p: bool,
+        /// Mirrors GNU `w->force_start`: the window start was set explicitly
+        /// (window_scroll / set-window-start), so the next redisplay must
+        /// honor it and move POINT into the window if it ended up outside,
+        /// instead of recomputing the start around point. One-shot: cleared
+        /// when redisplay publishes the window's positions.
+        force_start: bool,
         /// Window margins in columns.
         margins: WindowMargins,
         /// Window-local display settings mirrored from GNU `struct window`.
@@ -651,6 +657,7 @@ impl Window {
             suspend_auto_hscroll: false,
             vscroll: 0,
             preserve_vscroll_p: false,
+            force_start: false,
             margins: WindowMargins::ZERO,
             display: WindowDisplayState::default(),
             new_pixel: None,

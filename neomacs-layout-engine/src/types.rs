@@ -71,6 +71,11 @@ pub struct WindowParams {
     /// First visible buffer position in layout 0-based char coordinates.
     /// Derived from GNU `marker_position (w->start)`.
     pub window_start: i64,
+    /// GNU `w->force_start`: `window_start` was set explicitly (scroll /
+    /// set-window-start), so layout must display from it and move POINT into
+    /// the window when point ended up outside — never recompute the start
+    /// around point.
+    pub force_start: bool,
     /// Last visible buffer position from previous frame in layout 0-based
     /// char coordinates.  0 means unknown for this legacy raw field.
     pub window_end: i64,

@@ -13,6 +13,7 @@ fn window_params() -> WindowParams {
         left_col: 0,
         top_line: 0,
         window_start: 17,
+        force_start: false,
         window_end: 29,
         point: 21,
         buffer_size: 80,
