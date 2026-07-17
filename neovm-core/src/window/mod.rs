@@ -1457,24 +1457,35 @@ impl WindowDisplaySnapshot {
         window_relative_row.saturating_sub(self.top_chrome_rows())
     }
 
+    /// Resolve the published body-row entry for an output row.
+    ///
+    /// `body_rows` is sorted by `output_row` and deduplicated at
+    /// construction (window_output.rs seals every snapshot through the same
+    /// sort+dedup), so a binary search is exact. Hit-test compilation calls
+    /// this once per glyph point — a linear scan here was O(points x rows)
+    /// per window per frame.
+    pub fn body_row_for_output_row(&self, output_row: i64) -> Option<&PresentedBodyRowSnapshot> {
+        self.body_rows
+            .binary_search_by_key(&output_row, |row| row.output_row)
+            .ok()
+            .map(|idx| &self.body_rows[idx])
+    }
+
     /// Resolve the body-local coordinates published for an output row.
     ///
     /// New redisplay producers publish this mapping directly.  The chrome
     /// subtraction is retained only for snapshots from producers that do not
     /// yet materialize body rows (notably the synchronous TTY path).
     pub fn text_body_position(&self, output_row: i64, window_y: i64) -> (i64, i64) {
-        self.body_rows
-            .iter()
-            .find(|row| row.output_row == output_row)
-            .map_or_else(
-                || {
-                    (
-                        self.text_area_relative_row(output_row),
-                        self.text_area_relative_y(window_y),
-                    )
-                },
-                |row| (row.body_row, row.body_y),
-            )
+        self.body_row_for_output_row(output_row).map_or_else(
+            || {
+                (
+                    self.text_area_relative_row(output_row),
+                    self.text_area_relative_y(window_y),
+                )
+            },
+            |row| (row.body_row, row.body_y),
+        )
     }
 
     pub fn logical_cursor_pos(&self) -> Option<WindowCursorPos> {

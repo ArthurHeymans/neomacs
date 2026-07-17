@@ -124,15 +124,25 @@ impl PresentationSpatialPlan {
                 }
             }
 
+            // Points are ordered by buffer position, so consecutive points
+            // almost always share a row: memoize the last hit in front of
+            // the (sorted body_rows) binary search. The previous per-point
+            // linear scan was O(points x rows) per window per frame.
+            let mut last_body_row: Option<&neovm_core::window::PresentedBodyRowSnapshot> = None;
             for point in &snapshot.points {
-                let body_row = snapshot
-                    .body_rows
-                    .iter()
-                    .find(|row| row.output_row == point.row)
-                    .ok_or(PresentedHitError::MissingBodyRow {
-                        window: info.window_id,
-                        output_row: point.row,
-                    })?;
+                let body_row = match last_body_row.filter(|row| row.output_row == point.row) {
+                    Some(row) => row,
+                    None => {
+                        let row = snapshot.body_row_for_output_row(point.row).ok_or(
+                            PresentedHitError::MissingBodyRow {
+                                window: info.window_id,
+                                output_row: point.row,
+                            },
+                        )?;
+                        last_body_row = Some(row);
+                        row
+                    }
+                };
                 let raw_x = window_regions.text_body.x + point.x as f32;
                 let raw_y = window_regions.text_body.y + body_row.body_y as f32;
                 let left = raw_x.max(window_regions.text_body.x);
@@ -232,6 +242,20 @@ fn push_row_fallback_positions(
     let body_left = text_body.x;
     let body_right = text_body.x + text_body.width;
 
+    // Group the window's points by output row ONCE. The previous per-row
+    // `points.iter().filter(...)` re-scanned every point for every row —
+    // O(rows x points) per window per frame.
+    let mut points_by_row: std::collections::HashMap<
+        i64,
+        Vec<&neovm_core::window::DisplayPointSnapshot>,
+    > = std::collections::HashMap::new();
+    for point in &snapshot.points {
+        points_by_row.entry(point.row).or_default().push(point);
+    }
+    for row_points in points_by_row.values_mut() {
+        row_points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
+    }
+
     for row in &snapshot.rows {
         let Some(row_anchor) = row.start_buffer_pos.or(row.end_buffer_pos) else {
             continue;
@@ -244,16 +268,14 @@ fn push_row_fallback_positions(
             continue;
         }
 
-        let mut row_points = snapshot
-            .points
-            .iter()
-            .filter(|point| point.row == row.row)
-            .collect::<Vec<_>>();
-        row_points.sort_by_key(|point| (point.x, point.col, point.buffer_pos));
+        let row_points = points_by_row
+            .get(&row.row)
+            .map(|points| points.as_slice())
+            .unwrap_or(&[]);
 
         let mut covered_right = body_left;
         let mut preceding = None;
-        for point in row_points {
+        for &point in row_points {
             let point_left = (text_body.x + point.x as f32).clamp(body_left, body_right);
             let point_right = (text_body.x + point.x as f32 + point.width.max(1) as f32)
                 .clamp(body_left, body_right);
