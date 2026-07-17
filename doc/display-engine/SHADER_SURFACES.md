@@ -322,11 +322,19 @@ offscreen pass and runtime WGSL compilation.
    `display_spec_head_starts_list` and `display_single_spec_replacing_p`
    (`neovm-core xdisp.rs`). Symptom: the end-to-end layout test emits no
    glyph while the parse unit test passes.
-2. **Media must survive incremental replays.** Media items live beside the
-   rows in `FrameDisplayState` (not inside them, unlike GNU's in-matrix media
-   glyphs), and the frame state is rebuilt from scratch each frame. Fast-path
-   replays reinstall retained rows + faces; `RetainedWindowMedia` now carries
-   the window's media the same way (re-installed verbatim on cursor-only
-   replay; scroll/edit escalate to a full rebuild for media windows until
-   media coordinate shifting lands). Without this, a surface went blank one
-   redisplay after creation. Long-term fix: attach media to rows (GNU model).
+2. **Media must survive incremental replays.** Solved structurally: media are
+   typed GLYPHS inside the row's glyph array (`GlyphType::Surface`, exactly
+   GNU's IMAGE_GLYPH model — layout geometry and drawable identity travel in
+   the one primitive that reserves the space), and materialization emits the
+   wire `FrameGlyph::Surface` from the row walk. Any fast path that reuses or
+   `pixel_y`-shifts a retained row therefore carries its media with zero
+   media-specific code. The historical bug this guards: media used to live in
+   flat vecs BESIDE the rows in `FrameDisplayState`, the frame state was
+   rebuilt each frame, and a cursor-only replay reinstalled rows + faces but
+   not media — a surface went blank one redisplay after creation (then needed
+   an explicit `RetainedWindowMedia` carry, since deleted with the whole side
+   channel). A new media kind now needs: a `GlyphType` variant (+ kind /
+   width / hash / fallback-width arms), the materialize arm in
+   `glyph_matrix.rs`, a `DisplayMediaReplacementKind` variant consumed by
+   `push_media` (`display_row_builder.rs`), the `FrameGlyph` wire variant,
+   and the renderer draw that matches it.
