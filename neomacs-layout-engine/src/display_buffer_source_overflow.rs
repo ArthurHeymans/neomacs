@@ -359,6 +359,18 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     row_geometry,
                     context.row_visibility_limit,
                 );
+                if !matches!(continuation, DisplayRowTransitionContinuation::Exhausted) {
+                    // Same stale-pending-remainder hazard as the word-wrap
+                    // branch above: when the overflowing char's text run was
+                    // split per-char at the window edge, the run remainder
+                    // (char + 1) is already queued. `source_position` was just
+                    // rewound to the char's start by the transition; without
+                    // clearing the queue and reseating the cursor to the same
+                    // position, the stale remainder replays first and the
+                    // overflowing char never appears on the continuation row
+                    // (it is silently dropped from the layout output).
+                    source_walk.rewind_source_consumption_to(source_position);
+                }
                 // GNU `maybe_produce_line_number`: each wrapped continuation row
                 // reserves a blank (no-number) line-number gutter so its text
                 // aligns with the first row's text column. Re-arm the loop's
