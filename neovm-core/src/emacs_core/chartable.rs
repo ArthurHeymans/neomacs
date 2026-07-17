@@ -1689,14 +1689,18 @@ fn ct_local_atomic_runs(
 ) -> (Vec<LocalAtomicRun>, Value, Value) {
     if table.is_char_table() {
         let obj = table.as_char_table_obj().unwrap();
-        let runs = clipped_runs(ct_local_direct_runs(table), requested_start, requested_end)
-            .into_iter()
-            .map(|run| LocalAtomicRun {
-                value: Some(run.value),
-                start: run.start,
-                end: run.end,
-            })
-            .collect();
+        let runs = clipped_runs(
+            ct_local_direct_runs_in_range(table, requested_start, requested_end),
+            requested_start,
+            requested_end,
+        )
+        .into_iter()
+        .map(|run| LocalAtomicRun {
+            value: Some(run.value),
+            start: run.start,
+            end: run.end,
+        })
+        .collect();
         return (runs, obj.defalt, obj.parent);
     }
     let vec = table.as_vector_data().unwrap();
@@ -1980,9 +1984,18 @@ fn ct_resolved_entries(table: &Value) -> Vec<(Value, Value)> {
 }
 
 fn ct_local_direct_runs(table: &Value) -> Vec<EffectiveRun> {
+    ct_local_direct_runs_in_range(table, 0, MAX_CHAR)
+}
+
+/// Ranged variant of ct_local_direct_runs: for real char-tables only the
+/// slots intersecting [win_start, win_end] are enumerated (the returned runs
+/// may extend past the window at both edges; callers clip). Legacy vector
+/// tables fall back to the full enumeration — they are 128-slot structures
+/// where pruning buys nothing.
+fn ct_local_direct_runs_in_range(table: &Value, win_start: i64, win_end: i64) -> Vec<EffectiveRun> {
     if table.is_char_table() {
         let obj = table.as_char_table_obj().unwrap();
-        let raws = ct_collect_raw_entries_for_table(*table, true);
+        let raws = ct_collect_raw_entries_for_table_in_range(*table, true, win_start, win_end);
         let mut runs = Vec::new();
         for raw in raws {
             let value = if raw.value.is_nil() && !obj.defalt.is_nil() {
@@ -2144,7 +2157,7 @@ fn push_parent_direct_span_runs(
     to: i64,
     next_local_value: Value,
 ) -> bool {
-    let parent_runs = clipped_runs(ct_local_direct_runs(&parent), from, to);
+    let parent_runs = clipped_runs(ct_local_direct_runs_in_range(&parent, from, to), from, to);
     let Some(last) = parent_runs.last().copied() else {
         return true;
     };
@@ -2275,7 +2288,18 @@ fn ct_collect_raw_entries(vec: &[Value], is_uniprop: bool) -> Vec<RawEntry> {
     raws
 }
 
-fn collect_sub_char_table_raw_entries(out: &mut Vec<RawEntry>, table: Value, is_uniprop: bool) {
+/// Ranged sub-char-table walk: descends only into slots whose
+/// character span intersects [win_start, win_end]. Mirrors GNU
+/// map_sub_char_table's from/to pruning (chartab.c) — a narrow query must not
+/// enumerate the whole table. Entries straddling the window edges are emitted
+/// whole (callers clip), preserving ascending order.
+fn collect_sub_char_table_raw_entries_in_range(
+    out: &mut Vec<RawEntry>,
+    table: Value,
+    is_uniprop: bool,
+    win_start: i64,
+    win_end: i64,
+) {
     let Some(obj) = table.as_sub_char_table_obj() else {
         return;
     };
@@ -2285,6 +2309,9 @@ fn collect_sub_char_table_raw_entries(out: &mut Vec<RawEntry>, table: Value, is_
     for (idx, mut value) in obj.contents.iter().copied().enumerate() {
         let start = min_char + idx as i64 * span;
         let end = (start + span - 1).min(MAX_CHAR);
+        if end < win_start || start > win_end {
+            continue;
+        }
         if is_uniprop
             && uniprop_compressed_string(value).is_some()
             && let Some(child) = uniprop_table_uncompress(table, idx)
@@ -2292,7 +2319,7 @@ fn collect_sub_char_table_raw_entries(out: &mut Vec<RawEntry>, table: Value, is_
             value = child;
         }
         if is_sub_char_table(value) {
-            collect_sub_char_table_raw_entries(out, value, is_uniprop);
+            collect_sub_char_table_raw_entries_in_range(out, value, is_uniprop, win_start, win_end);
         } else {
             out.push(RawEntry { start, end, value });
         }
@@ -2300,6 +2327,17 @@ fn collect_sub_char_table_raw_entries(out: &mut Vec<RawEntry>, table: Value, is_
 }
 
 fn ct_collect_raw_entries_for_table(table: Value, include_nil: bool) -> Vec<RawEntry> {
+    ct_collect_raw_entries_for_table_in_range(table, include_nil, 0, MAX_CHAR)
+}
+
+/// Ranged variant of the top-level raw-entry collection; see
+/// collect_sub_char_table_raw_entries_in_range for the pruning contract.
+fn ct_collect_raw_entries_for_table_in_range(
+    table: Value,
+    include_nil: bool,
+    win_start: i64,
+    win_end: i64,
+) -> Vec<RawEntry> {
     let Some(obj) = table.as_char_table_obj() else {
         return Vec::new();
     };
@@ -2308,8 +2346,13 @@ fn ct_collect_raw_entries_for_table(table: Value, include_nil: bool) -> Vec<RawE
     for (idx, value) in obj.contents.iter().copied().enumerate() {
         let start = idx as i64 * GNU_CHARTAB_CHARS[0];
         let end = (start + GNU_CHARTAB_CHARS[0] - 1).min(MAX_CHAR);
+        if end < win_start || start > win_end {
+            continue;
+        }
         if is_sub_char_table(value) {
-            collect_sub_char_table_raw_entries(&mut out, value, is_uniprop);
+            collect_sub_char_table_raw_entries_in_range(
+                &mut out, value, is_uniprop, win_start, win_end,
+            );
         } else if include_nil || !value.is_nil() {
             out.push(RawEntry { start, end, value });
         }
