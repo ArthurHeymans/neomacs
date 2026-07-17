@@ -595,6 +595,17 @@ pub(super) fn builtin_describe_buffer_bindings(
     let minor_maps =
         collect_minor_mode_map_entries_in_state(&eval.obarray, &[], &eval.buffers, Some(buffer_id));
 
+    // Every keymap and shadow cons below is held in a Rust local across
+    // help--describe-map-tree (arbitrary Lisp, can GC); root them, or a
+    // collection mid-describe frees them and the later passes walk freed
+    // keymaps. GNU's C locals survive via conservative stack scanning. The
+    // scope unwinds with the specpdl on nonlocal exit.
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(local_map);
+    for (_, keymap) in &minor_maps {
+        eval.push_specpdl_root(*keymap);
+    }
+
     let mut shadow = Value::NIL;
 
     if let Some(key_translation_map) = eval.obarray.symbol_value("key-translation-map").copied() {
@@ -612,6 +623,7 @@ pub(super) fn builtin_describe_buffer_bindings(
             buffer,
         )?;
         shadow = Value::cons(key_translation_map, shadow);
+        eval.push_specpdl_root(shadow);
     }
 
     for (mode, keymap) in minor_maps {
@@ -633,6 +645,7 @@ pub(super) fn builtin_describe_buffer_bindings(
             buffer,
         )?;
         shadow = Value::cons(keymap, shadow);
+        eval.push_specpdl_root(shadow);
     }
 
     if !local_map.is_nil() {
@@ -651,6 +664,7 @@ pub(super) fn builtin_describe_buffer_bindings(
             buffer,
         )?;
         shadow = Value::cons(local_map, shadow);
+        eval.push_specpdl_root(shadow);
     }
 
     let global_map = ensure_global_keymap(eval);
@@ -668,6 +682,7 @@ pub(super) fn builtin_describe_buffer_bindings(
         buffer,
     )?;
 
+    eval.restore_specpdl_roots(root_scope);
     Ok(Value::NIL)
 }
 
@@ -842,7 +857,26 @@ fn map_keymap_internal_impl(
     keymap: Value,
 ) -> EvalResult {
     let plan = plan_keymap_iteration(keymap);
-    execute_keymap_iteration_callbacks(eval, function, &plan.bindings)?;
+    // The planned (event, binding) pairs and the parent keymap live in a
+    // Rust Vec while FUNCTION runs per entry — arbitrary Lisp that can GC.
+    // Unrooted, the first callback's collection frees the remaining
+    // entries and the iteration walks freed objects. GNU's map_keymap
+    // keeps everything on the conservatively-scanned C stack (keymap.c).
+    // Keep every planned value alive under a SINGLE root by threading the
+    // pairs onto a heap list — the GC marks the list transitively as part
+    // of the ordinary heap walk. (Per-entry specpdl roots would add
+    // O(bindings) root-seed work to EVERY collection, which exact-GC
+    // stress mode turns into minutes.) No safe point can run inside the
+    // build loop, so the partially-built list needs no interim rooting.
+    let mut entry_holder = plan.parent;
+    for (event, binding) in &plan.bindings {
+        entry_holder = Value::cons(Value::cons(*event, *binding), entry_holder);
+    }
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(entry_holder);
+    let result = execute_keymap_iteration_callbacks(eval, function, &plan.bindings);
+    eval.restore_specpdl_roots(root_scope);
+    result?;
     Ok(plan.parent)
 }
 
