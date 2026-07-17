@@ -9239,9 +9239,7 @@ impl Context {
             .and_then(|frame| frame.find_window_mut(window_id))
         {
             crate::window::window_markers::set_window_point_with_marker(
-                buffers,
-                window,
-                point_lisp,
+                buffers, window, point_lisp,
             );
         }
     }

@@ -53,9 +53,8 @@ pub(crate) fn surface_id_from_value(value: Value) -> Option<u32> {
 }
 
 fn dimension(value: Option<Value>, key: &str) -> Result<u32, super::error::Flow> {
-    let value = value.ok_or_else(|| {
-        surface_error(format!("neomacs-surface-create: {key} is required"))
-    })?;
+    let value =
+        value.ok_or_else(|| surface_error(format!("neomacs-surface-create: {key} is required")))?;
     let px = number_to_f32(value)
         .filter(|px| px.is_finite() && *px >= 1.0)
         .ok_or_else(|| {
@@ -138,10 +137,9 @@ fn resolve_channel_value(
         .and_then(|car| car.as_symbol_name().map(str::to_owned));
     match head.as_deref() {
         Some("image") => {
-            let environment =
-                image_scale_environment_for_frame(eval, None).unwrap_or_default();
-            let request = image_resolve_request_from_spec(&value, environment)
-                .ok_or_else(|| {
+            let environment = image_scale_environment_for_frame(eval, None).unwrap_or_default();
+            let request =
+                image_resolve_request_from_spec(&value, environment).ok_or_else(|| {
                     surface_error("neomacs-surface-create: invalid image spec in :channel0")
                 })?;
             let catalog = eval
@@ -166,7 +164,10 @@ fn resolve_channel_value(
                 let entry = items[i + 1];
                 match items[i].as_symbol_name() {
                     Some(":file") => {
-                        source = entry.as_lisp_string().cloned().map(VideoResolveSource::File);
+                        source = entry
+                            .as_lisp_string()
+                            .cloned()
+                            .map(VideoResolveSource::File);
                     }
                     Some(":uri") => {
                         source = entry.as_lisp_string().cloned().map(VideoResolveSource::Uri);
@@ -311,9 +312,7 @@ pub(crate) fn builtin_neomacs_surface_create(eval: &mut Context, args: Vec<Value
     let host = eval.display_host.as_ref().ok_or_else(|| {
         surface_error("neomacs-surface-create: no GUI display host in this session")
     })?;
-    let id = host
-        .create_shader_surface(request)
-        .map_err(surface_error)?;
+    let id = host.create_shader_surface(request).map_err(surface_error)?;
     Ok(Value::make_surface_handle(id))
 }
 
@@ -392,14 +391,11 @@ pub(crate) fn builtin_neomacs_frame_shader(eval: &mut Context, args: Vec<Value>)
         let text = args[0]
             .as_lisp_string()
             .and_then(|s| s.as_utf8_str().map(str::to_owned))
-            .ok_or_else(|| {
-                surface_error("neomacs-frame-shader: SOURCE must be a string or nil")
-            })?;
+            .ok_or_else(|| surface_error("neomacs-frame-shader: SOURCE must be a string or nil"))?;
         let mut uniforms = Vec::new();
         if let Some(list) = args.get(2).copied().filter(|value| !value.is_nil()) {
-            let entries = list_to_vec(&list).ok_or_else(|| {
-                surface_error("neomacs-frame-shader: UNIFORMS must be an alist")
-            })?;
+            let entries = list_to_vec(&list)
+                .ok_or_else(|| surface_error("neomacs-frame-shader: UNIFORMS must be an alist"))?;
             for entry in entries {
                 uniforms.push(parse_uniform_entry(entry)?);
             }

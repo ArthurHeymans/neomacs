@@ -107,8 +107,7 @@ pub fn compose_surface_wgsl(user_source: &str, uniforms: &[(String, u8)]) -> Str
          @group(0) @binding(1) var iChannel0: texture_2d<f32>;\n\
          @group(0) @binding(2) var iChannel0Sampler: sampler;\n",
     );
-    for (slot, (name, components)) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS)
-    {
+    for (slot, (name, components)) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS) {
         let (ret, swizzle) = accessor_return(*components);
         let ident = uniform_accessor_name(name);
         src.push_str(&format!(
@@ -215,8 +214,7 @@ pub fn compose_surface_glsl(user_source: &str, uniforms: &[(String, u8)]) -> Str
          #define iFrame int(iFrameF)\n\
          #define iChannel0 sampler2D(iChannel0Tex, iChannel0Sampler)\n",
     );
-    for (slot, (name, components)) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS)
-    {
+    for (slot, (name, components)) in uniforms.iter().enumerate().take(SURFACE_USER_UNIFORM_SLOTS) {
         let (ret, swizzle) = glsl_accessor_return(*components);
         let ident = uniform_accessor_name(name);
         src.push_str(&format!(

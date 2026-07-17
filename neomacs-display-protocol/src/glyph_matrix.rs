@@ -16,7 +16,9 @@ use super::frame_glyphs::{
     GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
     WindowInfo, WindowTransitionHint,
 };
-use super::types::{Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId};
+use super::types::{
+    Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId,
+};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
 
@@ -528,9 +530,7 @@ impl GlyphRow {
                     GlyphType::Surface {
                         surface_id,
                         width_cols,
-                    } => {
-                        0x7000_0000 ^ (*surface_id as u64) ^ u64::from(*width_cols).rotate_left(5)
-                    }
+                    } => 0x7000_0000 ^ (*surface_id as u64) ^ u64::from(*width_cols).rotate_left(5),
                     GlyphType::Glyphless { ch } => 0x2000_0000 | (*ch as u64),
                 };
                 hash ^= ch_val;

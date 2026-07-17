@@ -9261,9 +9261,9 @@ fn layout_frame_rust_emits_inline_surface_glyphs_for_declarative_shader_specs() 
         );
     }
 
-    let frame_id = eval
-        .frame_manager_mut()
-        .create_frame("layout-declarative-surface", 320, 120, buf_id);
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-declarative-surface", 320, 120, buf_id);
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
@@ -9377,9 +9377,9 @@ fn declarative_surface_channel0_resolves_image_and_video_sources() {
         );
     }
 
-    let frame_id = eval
-        .frame_manager_mut()
-        .create_frame("layout-surface-channels", 320, 120, buf_id);
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-surface-channels", 320, 120, buf_id);
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
 

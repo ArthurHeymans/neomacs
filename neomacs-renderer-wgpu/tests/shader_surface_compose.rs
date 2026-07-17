@@ -2,8 +2,8 @@
 //! validation (no GPU device needed).
 
 use neomacs_renderer_wgpu::shader_surface::{
-    compose_surface_glsl, compose_surface_wgsl, uniform_accessor_name, validate_surface_glsl,
-    validate_surface_wgsl, SurfaceShaderLanguage,
+    SurfaceShaderLanguage, compose_surface_glsl, compose_surface_wgsl, uniform_accessor_name,
+    validate_surface_glsl, validate_surface_wgsl,
 };
 
 const PLASMA: &str = "fn mainImage(fragCoord: vec2<f32>) -> vec4<f32> {

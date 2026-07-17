@@ -651,7 +651,6 @@ pub(super) struct RenderApp {
 
     /// Shared media memory accounting. Fed from the asset-command choke
     /// point (`asset_commands.rs`); shader surfaces only so far — see the
-
     pub(super) faces: HashMap<neomacs_display_protocol::types::FaceId, Face>,
     /// Sorted (frame_id, ingest_seq) fingerprint of the frames the current
     /// `faces` map was aggregated from; unchanged fingerprint skips the

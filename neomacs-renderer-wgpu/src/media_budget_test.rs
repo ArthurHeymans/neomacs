@@ -831,5 +831,8 @@ fn test_driver_scenario_giant_create_offers_itself_last() {
     // itself → the driver breaks.
     budget.unregister(MediaType::Surface, 1);
     assert!(budget.is_over_budget());
-    assert_eq!(budget.get_eviction_candidates(0), vec![(MediaType::Surface, 2)]);
+    assert_eq!(
+        budget.get_eviction_candidates(0),
+        vec![(MediaType::Surface, 2)]
+    );
 }

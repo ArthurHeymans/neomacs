@@ -338,7 +338,13 @@ impl WgpuRenderer {
     /// (declarative specs re-resolve on the next redisplay walk). One victim
     /// per iteration so the shrinking shortfall requeries the candidate
     /// prefix; never the surface just created.
-    fn register_surface_bytes(&mut self, id: u32, width_px: u32, height_px: u32, recreatable: bool) {
+    fn register_surface_bytes(
+        &mut self,
+        id: u32,
+        width_px: u32,
+        height_px: u32,
+        recreatable: bool,
+    ) {
         use crate::media_budget::MediaType;
         let bytes = width_px as usize * height_px as usize * 4;
         self.media_budget.register(MediaType::Surface, id, bytes);

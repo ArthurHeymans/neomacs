@@ -32,8 +32,8 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::{DisplayHost, SurfaceChannelKind};
-use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
+use neovm_core::emacs_core::value::list_to_vec;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
@@ -895,7 +895,11 @@ fn resolve_surface_channel(
         {
             spec.request.autoplay = true;
         }
-        let resolved = params.display_host.request_video(spec.request).ok().flatten()?;
+        let resolved = params
+            .display_host
+            .request_video(spec.request)
+            .ok()
+            .flatten()?;
         return Some((SurfaceChannelKind::Video, resolved.video_id));
     }
     None

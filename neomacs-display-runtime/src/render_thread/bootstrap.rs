@@ -293,9 +293,7 @@ impl RenderApp {
             .and_then(|window_state| window_state.window())
             .cloned()
         else {
-            tracing::error!(
-                "device-loss recovery: no active primary window, cannot rebuild wgpu"
-            );
+            tracing::error!("device-loss recovery: no active primary window, cannot rebuild wgpu");
             return;
         };
 

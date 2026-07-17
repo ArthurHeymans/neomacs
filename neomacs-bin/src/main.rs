@@ -43,9 +43,8 @@ use neomacs_display_runtime::render_thread::{
     build_render_event_loop, run_render_loop_current_thread,
 };
 use neomacs_display_runtime::shader_surface::{
-    SurfaceChannelSource as RendererChannelSource,
-    SurfaceShaderLanguage as RendererShaderLanguage, SurfaceUniformInit, validate_surface_glsl,
-    validate_surface_wgsl,
+    SurfaceChannelSource as RendererChannelSource, SurfaceShaderLanguage as RendererShaderLanguage,
+    SurfaceUniformInit, validate_surface_glsl, validate_surface_wgsl,
 };
 use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
@@ -932,8 +931,7 @@ struct PrimaryWindowDisplayHost {
     /// COMPOSED module + language + uniform declarations the renderer
     /// received. Re-sent on `display_reset` so the frame shader survives a
     /// GPU device loss (it is Lisp-visible state, not a re-creatable cache).
-    last_frame_shader:
-        Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
+    last_frame_shader: Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

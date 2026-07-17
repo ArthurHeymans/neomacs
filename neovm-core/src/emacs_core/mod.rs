@@ -102,6 +102,9 @@ pub(crate) mod runtime_identity;
 #[cfg(test)]
 mod runtime_string_guard_test;
 pub mod search;
+pub mod shader_surface;
+#[cfg(test)]
+mod shader_surface_test;
 pub(crate) mod sound;
 pub(crate) mod sqlite;
 pub(crate) mod string_escape;
@@ -136,9 +139,6 @@ pub(crate) mod windows;
 pub mod xdisp;
 pub mod xfaces;
 pub mod xml;
-pub mod shader_surface;
-#[cfg(test)]
-mod shader_surface_test;
 pub mod xwidget;
 #[cfg(test)]
 mod xwidget_test;

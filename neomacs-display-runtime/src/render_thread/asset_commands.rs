@@ -503,8 +503,7 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     match composed {
                         Some((source, language, uniforms)) => {
-                            if let Err(err) =
-                                renderer.set_frame_post(language, &source, &uniforms)
+                            if let Err(err) = renderer.set_frame_post(language, &source, &uniforms)
                             {
                                 tracing::warn!("frame shader install failed: {err}");
                             }

@@ -45,14 +45,14 @@ pub use image_cache::{
     CachedImage, ImageCache, ImageDecodeOutcome, ImageDimensions, ImageMetadata, ImageState,
 };
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
-pub use shader_surface::{
-    SURFACE_USER_UNIFORM_SLOTS, SurfaceUniformInit, compose_surface_wgsl, validate_surface_wgsl,
-};
-pub use shader_surface_cache::{MAX_SURFACE_SIZE, ShaderSurfaceCache};
 pub use renderer::{
     FrameRowDamage, RendererFrameEffects, RowDamageInfo, RowReuseStats, WgpuRenderer,
     WindowRowDamage,
 };
+pub use shader_surface::{
+    SURFACE_USER_UNIFORM_SLOTS, SurfaceUniformInit, compose_surface_wgsl, validate_surface_wgsl,
+};
+pub use shader_surface_cache::{MAX_SURFACE_SIZE, ShaderSurfaceCache};
 pub use vertex::{GlyphVertex, RectVertex, RoundedRectVertex, TextureVertex, Uniforms};
 #[cfg(feature = "video")]
 pub use video_cache::{CachedVideo, DecodedFrame, VideoCache, VideoState};
