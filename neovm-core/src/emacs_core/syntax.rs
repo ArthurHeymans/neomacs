@@ -1438,7 +1438,6 @@ fn maybe_skip_comment_forward(
     honor_properties: bool,
     class: SyntaxClass,
     flags: SyntaxFlags,
-    prop_cache: &SyntaxPropRange,
 ) -> Option<CommentSkip> {
     if !(class == SyntaxClass::Comment
         || class == SyntaxClass::CommentFence
@@ -1469,7 +1468,6 @@ fn maybe_skip_comment_backward(
     honor_properties: bool,
     class: SyntaxClass,
     flags: SyntaxFlags,
-    prop_cache: &SyntaxPropRange,
 ) -> Option<usize> {
     if !(class == SyntaxClass::EndComment
         || class == SyntaxClass::CommentFence
@@ -1508,14 +1506,8 @@ fn skip_sexp_ignored_forward(
             effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache);
         let class = entry.class;
         if ignore_comments
-            && let Some(skip) = maybe_skip_comment_forward(
-                buf,
-                idx,
-                honor_properties,
-                class,
-                entry.flags,
-                prop_cache,
-            )
+            && let Some(skip) =
+                maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
         {
             skipped_unterminated_comment |= matches!(skip, CommentSkip::Unterminated(_));
             idx = skip.next();
@@ -1551,14 +1543,8 @@ fn skip_sexp_ignored_backward(
             effective_syntax_entry_for_abs_char(buf, table, c, prev, honor_properties, prop_cache);
         let class = entry.class;
         if ignore_comments
-            && let Some(next) = maybe_skip_comment_backward(
-                buf,
-                idx,
-                honor_properties,
-                class,
-                entry.flags,
-                prop_cache,
-            )
+            && let Some(next) =
+                maybe_skip_comment_backward(buf, idx, honor_properties, class, entry.flags)
         {
             idx = next;
             continue;
@@ -1671,14 +1657,8 @@ fn scan_lists_with_options(
                     last_good = idx;
                 }
                 if ignore_comments
-                    && let Some(skip) = maybe_skip_comment_forward(
-                        buf,
-                        idx,
-                        honor_properties,
-                        class,
-                        entry.flags,
-                        prop_cache,
-                    )
+                    && let Some(skip) =
+                        maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
                 {
                     idx = skip.next();
                     if matches!(skip, CommentSkip::Unterminated(_)) && depth == 0 {
@@ -1766,7 +1746,6 @@ fn scan_lists_with_options(
                         honor_properties,
                         class,
                         entry.flags,
-                        prop_cache,
                     )
                 {
                     idx = next;
@@ -1937,14 +1916,8 @@ fn scan_sexp_forward(
                 );
                 let s = entry.class;
                 if ignore_comments
-                    && let Some(skip) = maybe_skip_comment_forward(
-                        buf,
-                        idx,
-                        honor_properties,
-                        s,
-                        entry.flags,
-                        prop_cache,
-                    )
+                    && let Some(skip) =
+                        maybe_skip_comment_forward(buf, idx, honor_properties, s, entry.flags)
                 {
                     idx = skip.next();
                     continue;
@@ -2152,14 +2125,8 @@ fn scan_sexp_backward(
                 );
                 let s = entry.class;
                 if ignore_comments
-                    && let Some(next) = maybe_skip_comment_backward(
-                        buf,
-                        idx + 1,
-                        honor_properties,
-                        s,
-                        entry.flags,
-                        prop_cache,
-                    )
+                    && let Some(next) =
+                        maybe_skip_comment_backward(buf, idx + 1, honor_properties, s, entry.flags)
                 {
                     idx = next;
                     continue;

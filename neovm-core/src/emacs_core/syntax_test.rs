@@ -1107,14 +1107,7 @@ fn backward_comment_skip_requires_matching_comment_start() {
     assert_eq!(entry.class, SyntaxClass::Word);
     assert!(entry.flags.contains(SyntaxFlags::COMMENT_END_SECOND));
     assert_eq!(
-        maybe_skip_comment_backward(
-            buf,
-            2,
-            false,
-            entry.class,
-            entry.flags,
-            &SyntaxPropRange::new(),
-        ),
+        maybe_skip_comment_backward(buf, 2, false, entry.class, entry.flags,),
         None
     );
 }
