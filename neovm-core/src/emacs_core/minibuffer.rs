@@ -2271,6 +2271,28 @@ fn completion_string_matches_regexps(
     Ok(true)
 }
 
+/// Thread every heap Value a completion-candidate set holds (original string
+/// objects, predicate args) onto one heap list: a SINGLE root keeps the set
+/// alive while the completion PREDICATE runs arbitrary Lisp that can unlink
+/// candidates from the (rooted) collection they were copied from.
+fn completion_candidates_root_holder(candidates: &[CompletionCandidate]) -> Value {
+    let mut holder = Value::NIL;
+    for candidate in candidates.iter().rev() {
+        if let CompletionText::OriginalString { value, .. } = &candidate.completion {
+            holder = Value::cons(*value, holder);
+        }
+        if candidate.predicate_arg.is_heap_object() {
+            holder = Value::cons(candidate.predicate_arg, holder);
+        }
+        if let Some(extra) = candidate.predicate_extra_arg
+            && extra.is_heap_object()
+        {
+            holder = Value::cons(extra, holder);
+        }
+    }
+    holder
+}
+
 pub(crate) fn builtin_try_completion(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2278,13 +2300,20 @@ pub(crate) fn builtin_try_completion(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
-    builtin_try_completion_with_candidates(
+    // Root the candidate set across the predicate calls (see the holder doc).
+    let root_scope = eval.save_specpdl_roots();
+    if let Some(candidates) = &candidates {
+        eval.push_specpdl_root(completion_candidates_root_holder(candidates));
+    }
+    let result = builtin_try_completion_with_candidates(
         &args,
         candidates,
         ignore_case,
         &regexps,
         |function, call_args| eval.apply(function, call_args),
-    )
+    );
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 pub(crate) fn builtin_all_completions(
@@ -2294,13 +2323,20 @@ pub(crate) fn builtin_all_completions(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
-    builtin_all_completions_with_candidates(
+    // Root the candidate set across the predicate calls (see the holder doc).
+    let root_scope = eval.save_specpdl_roots();
+    if let Some(candidates) = &candidates {
+        eval.push_specpdl_root(completion_candidates_root_holder(candidates));
+    }
+    let result = builtin_all_completions_with_candidates(
         &args,
         candidates,
         ignore_case,
         &regexps,
         |function, call_args| eval.apply(function, call_args),
-    )
+    );
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 pub(crate) fn builtin_test_completion(
@@ -2310,13 +2346,20 @@ pub(crate) fn builtin_test_completion(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
-    builtin_test_completion_with_candidates(
+    // Root the candidate set across the predicate calls (see the holder doc).
+    let root_scope = eval.save_specpdl_roots();
+    if let Some(candidates) = &candidates {
+        eval.push_specpdl_root(completion_candidates_root_holder(candidates));
+    }
+    let result = builtin_test_completion_with_candidates(
         &args,
         candidates,
         ignore_case,
         &regexps,
         |function, call_args| eval.apply(function, call_args),
-    )
+    );
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 /// `(completion--flex-cost-gotoh PAT STR)`

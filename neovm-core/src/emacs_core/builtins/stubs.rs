@@ -1293,10 +1293,27 @@ pub(crate) fn builtin_describe_vector(
         .unwrap_or_else(|| Value::symbol("princ"));
 
     if is_char_table {
-        let mut first = true;
-        for (key, value) in describe_vector_char_table_entries(&args[0])? {
-            describe_vector_insert_entry(eval, formatter, key, value, &mut first)?;
+        // The collected (key . value) pairs hold fresh range conses and the
+        // char-table's values in a Rust Vec while the FORMATTER runs
+        // arbitrary Lisp per entry; thread them onto one rooted holder so a
+        // formatter that mutates the char-table (or just triggers GC) cannot
+        // free later entries mid-loop.
+        let entries = describe_vector_char_table_entries(&args[0])?;
+        let mut holder = Value::NIL;
+        for (key, value) in entries.iter().rev() {
+            holder = Value::cons(*key, Value::cons(*value, holder));
         }
+        let root_scope = eval.save_specpdl_roots();
+        eval.push_specpdl_root(holder);
+        let result = (|| -> Result<(), Flow> {
+            let mut first = true;
+            for (key, value) in entries {
+                describe_vector_insert_entry(eval, formatter, key, value, &mut first)?;
+            }
+            Ok(())
+        })();
+        eval.restore_specpdl_roots(root_scope);
+        result?;
     } else if let Some(items) = args[0].as_vector_data() {
         let mut first = true;
         for (index, value) in items.iter().enumerate() {

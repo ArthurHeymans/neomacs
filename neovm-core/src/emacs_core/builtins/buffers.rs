@@ -1679,6 +1679,12 @@ pub(crate) fn builtin_replace_region_contents(
 
     let source_value =
         replace_region_source_value_in_state(&mut eval.buffers, &source, current_id)?;
+    // When SOURCE is a buffer, source_value is a FRESH substring held only
+    // in this Rust local while modification hooks run arbitrary Lisp during
+    // the replacement below; root it for the rest of the function. Normal
+    // exits restore explicitly; error unwinds pop the GcRoot with the frame.
+    let source_root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(source_value);
 
     let read_only_buffer_name = eval.buffers.current_buffer().and_then(|buf| {
         if super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
@@ -1771,6 +1777,7 @@ pub(crate) fn builtin_replace_region_contents(
             inherit,
         )?;
         super::editfns::signal_after_text_change(eval, change)?;
+        eval.restore_specpdl_roots(source_root_scope);
         return Ok(Value::T);
     }
 
@@ -1779,6 +1786,7 @@ pub(crate) fn builtin_replace_region_contents(
     if runs.is_empty() {
         // Buffers already identical within the region: nothing to do, and no
         // markers/point are disturbed.  GNU returns t in this case.
+        eval.restore_specpdl_roots(source_root_scope);
         return Ok(Value::T);
     }
 
@@ -1831,6 +1839,7 @@ pub(crate) fn builtin_replace_region_contents(
 
     super::editfns::signal_after_text_change(eval, change)?;
 
+    eval.restore_specpdl_roots(source_root_scope);
     Ok(Value::T)
 }
 
@@ -3541,6 +3550,25 @@ pub(crate) fn apply_inherited_text_properties(
     }
 }
 
+/// Thread every interval plist an insert-piece set holds onto one heap list.
+/// The pieces' TextPropertyTable clones SHARE the source strings' plist cons
+/// spines; a before-change hook that set-text-properties the source strings
+/// unlinks those spines from their rooted homes, and a GC would free the
+/// plists the insert then writes into the buffer.
+fn insert_pieces_root_holder(pieces: &[InsertPiece]) -> Value {
+    let mut holder = Value::NIL;
+    for piece in pieces {
+        if let Some(props) = &piece.text_props {
+            props.for_each_root(|plist| {
+                if plist.is_heap_object() {
+                    holder = Value::cons(plist, holder);
+                }
+            });
+        }
+    }
+    holder
+}
+
 pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
     let pieces = collect_insert_pieces(&args, target_multibyte)?;
@@ -3563,9 +3591,12 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
         insert_pos,
         insert_extent,
     )?;
+    let piece_root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, false, false)?;
     super::editfns::signal_after_text_change(eval, change)?;
+    eval.restore_specpdl_roots(piece_root_scope);
     Ok(Value::NIL)
 }
 
@@ -3594,9 +3625,12 @@ pub(crate) fn builtin_insert_before_markers(
         insert_pos,
         insert_extent,
     )?;
+    let piece_root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
     super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(&eval.obarray, &[], &mut eval.buffers, pieces, true, false)?;
     super::editfns::signal_after_text_change(eval, change)?;
+    eval.restore_specpdl_roots(piece_root_scope);
     Ok(Value::NIL)
 }
 

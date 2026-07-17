@@ -2304,17 +2304,34 @@ pub(crate) fn resolve_active_key_binding(
     position: Option<&Value>,
 ) -> Result<ActiveKeyBindingResolution, Flow> {
     let active_maps = current_active_maps_for_position(ctx, true, position)?;
-    let lookup =
-        lookup_key_in_keymaps_in_obarray_runtime(ctx, &active_maps, events, accept_default)?;
-    let binding = if !lookup.is_nil() && !lookup.is_fixnum() {
-        key_binding_apply_remap_in_active_maps(ctx, &active_maps, lookup, no_remap)?
-    } else if events.len() == 1 && is_plain_printable_emacs_event(&events[0]) {
-        Value::symbol("self-insert-command")
-    } else {
-        Value::NIL
-    };
+    // The collected active maps (and any heap event conses, e.g. mouse
+    // events) live only in Rust storage across the lookup and the remap
+    // pass, both of which can run Lisp; a keymap swapped out of its buffer
+    // or symbol mid-lookup would be freed while later entries are probed.
+    // One rooted holder spans both calls.
+    let mut holder = Value::NIL;
+    for value in active_maps.iter().chain(events.iter()).rev() {
+        if value.is_heap_object() {
+            holder = Value::cons(*value, holder);
+        }
+    }
+    let root_scope = ctx.save_specpdl_roots();
+    ctx.push_specpdl_root(holder);
+    let result = (|| -> Result<ActiveKeyBindingResolution, Flow> {
+        let lookup =
+            lookup_key_in_keymaps_in_obarray_runtime(ctx, &active_maps, events, accept_default)?;
+        let binding = if !lookup.is_nil() && !lookup.is_fixnum() {
+            key_binding_apply_remap_in_active_maps(ctx, &active_maps, lookup, no_remap)?
+        } else if events.len() == 1 && is_plain_printable_emacs_event(&events[0]) {
+            Value::symbol("self-insert-command")
+        } else {
+            Value::NIL
+        };
 
-    Ok(ActiveKeyBindingResolution { lookup, binding })
+        Ok(ActiveKeyBindingResolution { lookup, binding })
+    })();
+    ctx.restore_specpdl_roots(root_scope);
+    result
 }
 
 fn lookup_minor_mode_binding_in_alist_in_obarray(

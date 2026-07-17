@@ -911,6 +911,15 @@ pub(crate) fn builtin_replace_regexp_in_string(
     let gc_roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(func);
     let saved_match_data = eval.match_data.clone();
+    // The saved match data's searched string is a heap object held only in
+    // this Rust local while REP runs arbitrary Lisp; a new string-match in
+    // REP replaces its previous root and a GC frees it before the restore.
+    if let Some(crate::emacs_core::regex::MatchSource::String {
+        searched: Some(crate::emacs_core::regex::SearchedString::Heap(searched)),
+    }) = saved_match_data.as_ref().map(|md| &md.source)
+    {
+        eval.push_specpdl_root(*searched);
+    }
 
     let result = (|| -> EvalResult {
         replace_regexp_in_string_lisp(&args, case_fold, |match_span, translated_md| {

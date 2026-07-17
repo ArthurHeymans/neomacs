@@ -2537,7 +2537,21 @@ fn interactive_args_from_string_code(
 
         let mut args = Vec::new();
         let mut visible_args = Vec::new();
+        // Args collected by EARLIER spec letters (fresh minibuffer strings,
+        // key-sequence vectors, up-event conses) live only in these Rust
+        // Vecs while LATER letters run arbitrary Lisp in the minibuffer.
+        // Re-thread everything collected so far onto a single rooted holder
+        // slot at each iteration (spec entries are few, so the rebuild is
+        // trivially cheap).
+        let args_root_slot = eval.push_specpdl_root_slot(Value::NIL);
         for (letter, prompt) in parsed.entries {
+            let mut holder = Value::NIL;
+            for value in args.iter().chain(context.pending_up_event.iter()) {
+                if value.is_heap_object() {
+                    holder = Value::cons(*value, holder);
+                }
+            }
+            eval.set_specpdl_root_slot(&args_root_slot, holder);
             let prompt = interactive_prompt_with_visible_args(eval, &prompt, &visible_args)?;
             let args_before = args.len();
             let control = InteractiveControlLetter::from_char(letter)

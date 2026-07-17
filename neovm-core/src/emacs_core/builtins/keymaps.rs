@@ -354,7 +354,21 @@ pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Valu
         return Ok(keymaps.first().copied().unwrap_or(Value::NIL));
     }
 
-    lookup_key_with_menu_compat_runtime(eval, &keymaps, &events, t_ok)
+    // The resolved keymaps (possibly read from function cells, not the
+    // rooted KEYMAP argument) and heap event conses live only in Rust Vecs
+    // across the lookups, which can run Lisp (keymap autoloads, translation
+    // functions); thread them onto one rooted holder for the span.
+    let mut holder = Value::NIL;
+    for value in keymaps.iter().chain(events.iter()).rev() {
+        if value.is_heap_object() {
+            holder = Value::cons(*value, holder);
+        }
+    }
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(holder);
+    let result = lookup_key_with_menu_compat_runtime(eval, &keymaps, &events, t_ok);
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 fn lookup_key_with_menu_compat_runtime(

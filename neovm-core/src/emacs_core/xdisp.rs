@@ -1046,7 +1046,19 @@ pub fn format_mode_line_for_display(
         );
         pctx.target_width = Some(target_cols);
         let mut rendered = ModeLineRendered::default();
-        format_mode_line_recursive(eval, &pctx, &format_val, &mut rendered, 0, false);
+        {
+            // pctx caches heap Values (frame name, eol indicator) captured
+            // before the walk; an :eval that renames the frame would orphan
+            // them mid-walk. Root them for the walk's span.
+            let pctx_root_scope = eval.save_specpdl_roots();
+            for value in [pctx.frame_name, pctx.eol_indicator].into_iter().flatten() {
+                if value.is_heap_object() {
+                    eval.push_specpdl_root(value);
+                }
+            }
+            format_mode_line_recursive(eval, &pctx, &format_val, &mut rendered, 0, false);
+            eval.restore_specpdl_roots(pctx_root_scope);
+        }
         rendered.into_value(face_spec)
     };
 
@@ -1086,7 +1098,19 @@ pub(crate) fn finish_format_mode_line_in_eval(
             args.get(2),
         );
         let mut result = ModeLineRendered::default();
-        format_mode_line_recursive(eval, &pctx, &format_val, &mut result, 0, false);
+        {
+            // pctx caches heap Values (frame name, eol indicator) captured
+            // before the walk; an :eval that renames the frame would orphan
+            // them mid-walk. Root them for the walk's span.
+            let pctx_root_scope = eval.save_specpdl_roots();
+            for value in [pctx.frame_name, pctx.eol_indicator].into_iter().flatten() {
+                if value.is_heap_object() {
+                    eval.push_specpdl_root(value);
+                }
+            }
+            format_mode_line_recursive(eval, &pctx, &format_val, &mut result, 0, false);
+            eval.restore_specpdl_roots(pctx_root_scope);
+        }
         result.into_value(face_spec)
     };
 
@@ -2045,7 +2069,15 @@ fn format_mode_line_recursive(
                 if cdr.is_cons() {
                     let form_val = cdr.cons_car();
                     if let Ok(val) = eval.eval_value(&form_val) {
+                        // val is a FRESH structure held only in this Rust
+                        // local; a nested :eval inside the recursion runs
+                        // Lisp whose GC would free it mid-walk. Root it for
+                        // the recursion span (mode lines contain few :evals,
+                        // so the push/pop pair is negligible).
+                        let root_scope = eval.save_specpdl_roots();
+                        eval.push_specpdl_root(val);
                         format_mode_line_recursive(eval, pctx, &val, result, depth + 1, risky);
+                        eval.restore_specpdl_roots(root_scope);
                     }
                 }
                 return;
