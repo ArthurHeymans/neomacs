@@ -283,7 +283,70 @@ impl ProfilerState {
     }
 }
 
+/// Wall-clock sample-due flag, set by the watchdog timer armed while a
+/// profiler runs and consumed on the Lisp thread at the `maybe_quit` safe
+/// point ([`Context::profiler_sample_tick`]). GNU's CPU profiler is a SIGPROF
+/// handler with ZERO cost when off; SIGPROF is taken here by the native
+/// profiler (pprof-rs), so the Lisp profiler samples via this flag instead —
+/// one `'static` relaxed load on the quit-poll fast path replaces the two to
+/// three `profiler_poll` calls every Lisp call used to pay (the poll walked
+/// `is_active()` per push/pop even with the profiler off). Sample COUNTS stay
+/// exact regardless of tick timing: `Profiler::poll` self-corrects on thread
+/// CPU time (samples = elapsed / interval since the last poll), so the tick
+/// only decides which backtrace the accumulated samples attribute to — the
+/// same quantization GNU gets from signal delivery.
+static PROFILER_SAMPLE_DUE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Generation counter for the watchdog: arming bumps it and spawns a thread
+/// pinned to the new generation; disarming (or re-arming) bumps it again and
+/// the stale thread exits at its next tick. At most one live watchdog, no
+/// join handles to plumb, and a stale `SAMPLE_DUE` is harmless (the consumer
+/// re-checks `is_active`).
+static PROFILER_TIMER_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[inline]
+pub(crate) fn profiler_sample_due() -> bool {
+    PROFILER_SAMPLE_DUE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn arm_profiler_sample_timer(interval_ns: u64) {
+    use std::sync::atomic::Ordering;
+    let generation = PROFILER_TIMER_GEN.fetch_add(1, Ordering::Relaxed) + 1;
+    // Floor the tick at 100µs: the flag is a wall-clock attribution pulse,
+    // not the sample clock (poll() meters samples on thread CPU time).
+    let tick = std::time::Duration::from_nanos(interval_ns.max(100_000));
+    std::thread::Builder::new()
+        .name("neovm-profiler-tick".into())
+        .spawn(move || {
+            while PROFILER_TIMER_GEN.load(Ordering::Relaxed) == generation {
+                std::thread::sleep(tick);
+                PROFILER_SAMPLE_DUE.store(true, Ordering::Relaxed);
+            }
+        })
+        .expect("profiler tick thread should spawn");
+}
+
+fn disarm_profiler_sample_timer() {
+    use std::sync::atomic::Ordering;
+    PROFILER_TIMER_GEN.fetch_add(1, Ordering::Relaxed);
+    PROFILER_SAMPLE_DUE.store(false, Ordering::Relaxed);
+}
+
 impl Context {
+    /// Consume a pending sample tick: swap the flag off and take one poll
+    /// (which attributes every CPU sample / allocated byte accumulated since
+    /// the previous poll to the current backtrace). Called from the
+    /// `maybe_quit` fast path; a race that loses the swap just defers the
+    /// attribution to the next tick, and a stale flag with no profiler
+    /// running falls into `profiler_poll`'s `is_active` early-return.
+    #[inline]
+    pub(crate) fn profiler_sample_tick(&mut self) {
+        if PROFILER_SAMPLE_DUE.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            self.profiler_poll();
+        }
+    }
+
     #[inline]
     pub(crate) fn profiler_poll(&mut self) {
         if !self.profiler.is_active() {
@@ -317,6 +380,7 @@ impl Context {
         self.profiler.cpu_last_ns = thread_cpu_time_ns();
         self.profiler.cpu_remainder_ns = 0;
         self.profiler.cpu_running = true;
+        arm_profiler_sample_timer(interval_ns);
         true
     }
 
@@ -337,6 +401,9 @@ impl Context {
         }
         self.profiler_poll();
         self.profiler.cpu_running = false;
+        if !self.profiler.memory_running {
+            disarm_profiler_sample_timer();
+        }
         true
     }
 
@@ -465,6 +532,11 @@ impl Context {
         }
         self.profiler.memory_last_allocated = self.tagged_heap.total_allocated_bytes();
         self.profiler.memory_running = true;
+        if !self.profiler.cpu_running {
+            // Allocation attribution rides the same tick; 1ms default when no
+            // CPU interval is armed.
+            arm_profiler_sample_timer(1_000_000);
+        }
         true
     }
 
@@ -474,6 +546,9 @@ impl Context {
         }
         self.profiler_poll();
         self.profiler.memory_running = false;
+        if !self.profiler.cpu_running {
+            disarm_profiler_sample_timer();
+        }
         true
     }
 

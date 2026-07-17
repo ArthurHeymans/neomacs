@@ -8249,6 +8249,15 @@ impl Context {
     /// binding; the normal `maybe_quit` hot path remains a flag/atomic check.
     #[inline(always)]
     pub(crate) fn maybe_quit(&mut self) -> Result<(), Flow> {
+        // Profiler sampling rides the quit poll (GNU samples in a SIGPROF
+        // handler; SIGPROF belongs to the native profiler here, so the Lisp
+        // profiler's watchdog raises a flag that this — the canonical safe
+        // point every engine polls — consumes). One 'static relaxed load
+        // when no profiler runs, replacing the per-call profiler_poll the
+        // backtrace push/pop helpers used to pay.
+        if crate::emacs_core::profiler::profiler_sample_due() {
+            self.profiler_sample_tick();
+        }
         if self.quit_flag.is_nil()
             && !self
                 .quit_requested
@@ -12436,7 +12445,6 @@ impl Context {
     }
 
     pub(crate) fn push_backtrace_frame(&mut self, function: Value, args: &[Value]) {
-        self.profiler_poll();
         let args = self.backtrace_args_from_slice(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -12447,7 +12455,6 @@ impl Context {
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
-        self.profiler_poll();
         let args = self.backtrace_args_from_owned(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -12462,7 +12469,6 @@ impl Context {
         args_start: usize,
         nargs: usize,
     ) {
-        self.profiler_poll();
         let args = match nargs {
             0 => BacktraceArgs::Evaluated0,
             1 => BacktraceArgs::Evaluated1(self.bc_buf[args_start]),
@@ -12484,7 +12490,6 @@ impl Context {
     /// argument forms — XCDR of the original form. The walker emits
     /// `(nil FUNC FORMS FLAGS)` for these frames.
     pub(crate) fn push_unevalled_backtrace_frame(&mut self, function: Value, original_args: Value) {
-        self.profiler_poll();
         self.specpdl.push(SpecBinding::Backtrace {
             function,
             args: BacktraceArgs::Unevalled(original_args),
@@ -12964,7 +12969,6 @@ impl Context {
     }
 
     pub(crate) fn unbind_to_with_result(&mut self, count: usize, result: EvalResult) -> EvalResult {
-        self.profiler_poll();
         let specpdl_len = self.specpdl.len();
         if specpdl_len == count {
             return result;
@@ -13037,7 +13041,6 @@ impl Context {
             );
 
         if can_pop {
-            self.profiler_poll();
             let binding = self.specpdl.pop().expect("can_pop checked len");
             if let SpecBinding::Backtrace { args, .. } = &binding {
                 // Out-of-line args (Evaluated(_)) hold a backtrace_args_stack
@@ -13068,7 +13071,6 @@ impl Context {
                 ),
             "fast bytecode subr call should only pop its own trivial backtrace frame"
         );
-        self.profiler_poll();
         self.specpdl.pop();
     }
 
@@ -15083,7 +15085,6 @@ impl Context {
     }
 
     pub(crate) fn unbind_to_result(&mut self, count: usize) -> Result<(), Flow> {
-        self.profiler_poll();
         // Mirrors GNU `unbind_to` in `eval.c:3907-3930`: suppress a
         // pending quit during cleanup so `unwind-protect` cleanup forms
         // run to completion, then restore the pending state on exit if
