@@ -164,7 +164,13 @@ impl RenderedDisplayRow {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RenderedDisplayRowMedia {
     pub(crate) kind: RenderedDisplayRowMediaKind,
+    /// Horizontal position in the render request's coordinate space.  Window
+    /// chrome requests start at row-local X zero; body-row requests can start
+    /// at their already placed text surface.
     pub(crate) x: f32,
+    /// Vertical position in the render attempt's coordinate space.  A measured
+    /// row normalizes this against `RenderedDisplayRow::progress().y()` before
+    /// placing the medium at the row's final owner-selected origin.
     pub(crate) y: f32,
     pub(crate) col: u16,
     pub(crate) width: f32,

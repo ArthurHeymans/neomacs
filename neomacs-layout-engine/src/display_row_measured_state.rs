@@ -1,4 +1,6 @@
-use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
+use crate::display_row_render_state::{
+    DisplayRowOutputProgress, RenderedDisplayRow, RenderedDisplayRowMedia,
+};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::Rect;
 
@@ -47,6 +49,29 @@ pub(crate) struct MeasuredDisplayRow {
     row_index: u32,
     bounds: Rect,
     rendered: RenderedDisplayRow,
+}
+
+/// The two coordinate-space views of media embedded in a measured display row.
+///
+/// Display-row shaping starts at a row-local horizontal origin, while its
+/// vertical baseline is expressed in the render attempt's coordinate space.
+/// Row owners can subsequently move the measured row (most notably a tall,
+/// bottom-anchored mode line).  Keeping this conversion here makes the measured
+/// row the single authority for placing both its glyph row and its media.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct MeasuredDisplayRowMediaPlacement {
+    row_local_bounds: Rect,
+    frame_bounds: Rect,
+}
+
+impl MeasuredDisplayRowMediaPlacement {
+    pub(crate) fn row_local_bounds(self) -> Rect {
+        self.row_local_bounds
+    }
+
+    pub(crate) fn frame_bounds(self) -> Rect {
+        self.frame_bounds
+    }
 }
 
 fn stable_pixel_ceil(px: f32) -> f32 {
@@ -175,6 +200,35 @@ impl MeasuredDisplayRow {
         &self.rendered
     }
 
+    /// Place rendered media using this row's final measured bounds.
+    ///
+    /// `RenderedDisplayRowMedia::x` is relative to the display-row start.
+    /// Its `y` is based on the provisional render baseline, so first normalize
+    /// it against the rendered row's origin and then translate both axes by the
+    /// final measured-row origin.  This also follows a mode line when intrinsic
+    /// measurement re-anchors it at the bottom of its window.
+    pub(crate) fn place_media(
+        &self,
+        medium: &RenderedDisplayRowMedia,
+    ) -> MeasuredDisplayRowMediaPlacement {
+        let row_local_bounds = Rect::new(
+            medium.x,
+            medium.y - self.rendered.progress().y(),
+            medium.width,
+            medium.height,
+        );
+        let frame_bounds = Rect::new(
+            self.bounds.x + row_local_bounds.x,
+            self.bounds.y + row_local_bounds.y,
+            row_local_bounds.width,
+            row_local_bounds.height,
+        );
+        MeasuredDisplayRowMediaPlacement {
+            row_local_bounds,
+            frame_bounds,
+        }
+    }
+
     pub(crate) fn row_height(&self) -> f32 {
         self.bounds.height.max(1.0)
     }
@@ -211,6 +265,7 @@ impl MeasuredDisplayRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display_row_render_state::{RenderedDisplayRowMedia, RenderedDisplayRowMediaKind};
     use neomacs_display_protocol::face::Face;
     use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
     use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea};
@@ -244,5 +299,50 @@ mod tests {
         );
 
         assert_eq!(rendered_display_row_content_height(&rendered), 12.0);
+    }
+
+    #[test]
+    fn media_placement_uses_final_row_origin_on_both_axes() {
+        let mut row = GlyphRow::new(GlyphRowRole::ModeLine);
+        row.enabled = true;
+        row.height_px = 24.0;
+        row.ascent_px = 18.0;
+        let medium = RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 91 },
+            x: 8.0,
+            y: 45.0,
+            col: 1,
+            width: 32.0,
+            height: 18.0,
+        };
+        let measured = MeasuredDisplayRow::new(
+            DisplayRowOwner::WindowChrome {
+                window_id: 7,
+                kind: WindowChromeKind::ModeLine,
+            },
+            9,
+            // The owner moved the final row away from both the horizontal
+            // origin and the provisional render Y (40).
+            Rect::new(320.0, 100.0, 280.0, 24.0),
+            RenderedDisplayRow::new(
+                row,
+                DisplayRowOutputProgress::new(40.0, 2, 40.0, 24.0),
+                Vec::new(),
+                Vec::new(),
+                vec![medium.clone()],
+            ),
+            DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+        );
+
+        let placement = measured.place_media(&medium);
+
+        assert_eq!(
+            placement.row_local_bounds(),
+            Rect::new(8.0, 5.0, 32.0, 18.0)
+        );
+        assert_eq!(
+            placement.frame_bounds(),
+            Rect::new(328.0, 105.0, 32.0, 18.0)
+        );
     }
 }

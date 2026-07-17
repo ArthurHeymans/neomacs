@@ -12468,6 +12468,109 @@ fn layout_frame_rust_renders_header_line_text_for_non_nil_header_line_format() {
 }
 
 #[test]
+fn layout_frame_rust_places_window_chrome_images_inside_each_window_clip() {
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let image_format = Value::string_with_text_properties(
+        "I",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("png"),
+                    Value::keyword("file"),
+                    Value::string("./tmp/neomacs-window-chrome-image.png"),
+                    Value::keyword("max-width"),
+                    Value::fixnum(32),
+                    Value::keyword("max-height"),
+                    Value::fixnum(24),
+                ]),
+            ]),
+        }],
+    );
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("buffer");
+        buffer.insert("body line\n");
+        buffer.set_buffer_local("tab-line-format", image_format);
+        buffer.set_buffer_local("header-line-format", image_format);
+        buffer.set_buffer_local("mode-line-format", image_format);
+    }
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "window-chrome-image-coordinates",
+        640,
+        220,
+        buffer_id,
+    );
+    let left_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            left_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buffer_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("right window");
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let chrome_images = state
+        .images
+        .iter()
+        .filter(|image| image.row_role.is_chrome())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        chrome_images.len(),
+        6,
+        "tab/header/mode line should each emit an image for both windows"
+    );
+    assert!(chrome_images.iter().any(|image| {
+        image.window_id.get() == right_window.0 as i64 && image.row_role == GlyphRowRole::HeaderLine
+    }));
+    for image in chrome_images {
+        let clip = image.clip_rect.expect("window chrome image clip");
+        assert!(
+            image.x >= clip.x && image.x + image.width <= clip.x + clip.width,
+            "window chrome media must be in frame coordinates and contained by its window clip: \
+             role={:?} window={} image=({:.1}..{:.1}) clip=({:.1}..{:.1})",
+            image.row_role,
+            image.window_id.get(),
+            image.x,
+            image.x + image.width,
+            clip.x,
+            clip.x + clip.width,
+        );
+    }
+}
+
+#[test]
 fn layout_frame_rust_uses_full_window_row_space_for_header_text_and_mode_line() {
     let mut eval = Context::new();
     let buf_id = eval

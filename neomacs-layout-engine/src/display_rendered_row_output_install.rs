@@ -41,13 +41,10 @@ pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeD
         .media()
         .iter()
         .map(|medium| {
-            let local_bounds = BandRect::new(
-                medium.x,
-                medium.y - measured.bounds().y,
-                medium.width,
-                medium.height,
-            )
-            .expect("rendered frame chrome media must have valid local bounds");
+            let placement = measured.place_media(medium);
+            let bounds = placement.row_local_bounds();
+            let local_bounds = BandRect::new(bounds.x, bounds.y, bounds.width, bounds.height)
+                .expect("rendered frame chrome media must have valid local bounds");
             let slot_id = Some(DisplaySlotId {
                 window_id,
                 row: measured.row_index(),
@@ -109,12 +106,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
             WindowChromeKind::TabLine | WindowChromeKind::HeaderLine | WindowChromeKind::ModeLine
         ));
         let display_row_index = measured.row_index() as usize;
-        RenderedDisplayRowAssetsInstall::window_row(
-            measured.rendered(),
-            measured.row_index(),
-            measured.bounds(),
-        )
-        .install(builder);
+        RenderedDisplayRowAssetsInstall::window_row(measured).install(builder);
         let row = measured.window_relative_output_row(builder.current_window_pixel_bounds());
         builder.install_output_row_lifecycle(
             crate::display_output_row_request::OutputRowLifecycleRequest::complete(
@@ -148,16 +140,19 @@ impl MeasuredFrameChromeAssetsInstallRequest<'_> {
 }
 
 #[derive(Clone, Copy)]
-enum RenderedDisplayRowAssetInstallTarget {
+enum RenderedDisplayRowAssetInstallTarget<'a> {
     CurrentWindowRow(usize),
-    WindowRow { row_index: u32, bounds: Rect },
+    WindowRow {
+        row_index: u32,
+        measured: &'a MeasuredDisplayRow,
+    },
 }
 
 struct RenderedDisplayRowAssetsInstall<'a> {
     role: GlyphRowRole,
     faces: &'a [Face],
     media: &'a [RenderedDisplayRowMedia],
-    target: RenderedDisplayRowAssetInstallTarget,
+    target: RenderedDisplayRowAssetInstallTarget<'a>,
 }
 
 impl<'a> RenderedDisplayRowAssetsInstall<'a> {
@@ -177,7 +172,7 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
 
     fn from_rendered(
         rendered: &'a RenderedDisplayRow,
-        target: RenderedDisplayRowAssetInstallTarget,
+        target: RenderedDisplayRowAssetInstallTarget<'a>,
     ) -> Self {
         Self {
             role: rendered.row().role,
@@ -187,10 +182,13 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
         }
     }
 
-    fn window_row(rendered: &'a RenderedDisplayRow, row_index: u32, bounds: Rect) -> Self {
+    fn window_row(measured: &'a MeasuredDisplayRow) -> Self {
         Self::from_rendered(
-            rendered,
-            RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds },
+            measured.rendered(),
+            RenderedDisplayRowAssetInstallTarget::WindowRow {
+                row_index: measured.row_index(),
+                measured,
+            },
         )
     }
 
@@ -207,7 +205,8 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
     }
 
     fn install_medium(&self, builder: &mut DisplayOutputBuilder, medium: &RenderedDisplayRowMedia) {
-        let target = DisplayRowMediaInstallTarget::resolve(builder, medium.col, self.target);
+        let target = DisplayRowMediaInstallTarget::resolve(builder, medium, self.target);
+        let bounds = target.bounds;
         let target = ResolvedOutputMediaInstallTarget::new(
             target.window_id,
             self.role,
@@ -219,10 +218,10 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
                 builder.install_output_media(OutputMediaInstallRequest::image(
                     target,
                     ImageId::new(image_id),
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                 ));
             }
             RenderedDisplayRowMediaKind::Video {
@@ -235,20 +234,20 @@ impl<'a> RenderedDisplayRowAssetsInstall<'a> {
                     VideoId::new(video_id),
                     loop_count,
                     autoplay,
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                 ));
             }
             RenderedDisplayRowMediaKind::Xwidget { xwidget_id } => {
                 builder.install_output_media(OutputMediaInstallRequest::xwidget(
                     target,
                     XwidgetId::new(xwidget_id),
-                    medium.x,
-                    medium.y,
-                    medium.width,
-                    medium.height,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
                 ));
             }
         }
@@ -260,13 +259,14 @@ struct DisplayRowMediaInstallTarget {
     window_id: DisplayWindowId,
     clip: Option<Rect>,
     slot_id: DisplaySlotId,
+    bounds: Rect,
 }
 
 impl DisplayRowMediaInstallTarget {
     fn resolve(
         builder: &DisplayOutputBuilder,
-        col: u16,
-        target: RenderedDisplayRowAssetInstallTarget,
+        medium: &RenderedDisplayRowMedia,
+        target: RenderedDisplayRowAssetInstallTarget<'_>,
     ) -> Self {
         match target {
             RenderedDisplayRowAssetInstallTarget::CurrentWindowRow(display_row_index) => {
@@ -279,20 +279,26 @@ impl DisplayRowMediaInstallTarget {
                     slot_id: DisplaySlotId {
                         window_id,
                         row,
-                        col,
+                        col: medium.col,
                     },
+                    bounds: Rect::new(medium.x, medium.y, medium.width, medium.height),
                 }
             }
-            RenderedDisplayRowAssetInstallTarget::WindowRow { row_index, bounds } => {
+            RenderedDisplayRowAssetInstallTarget::WindowRow {
+                row_index,
+                measured,
+            } => {
+                let media_bounds = measured.place_media(medium).frame_bounds();
                 let window_id = DisplayWindowId::new(builder.current_window_id_i64());
                 Self {
                     window_id,
-                    clip: Some(bounds),
+                    clip: Some(measured.bounds()),
                     slot_id: DisplaySlotId {
                         window_id,
                         row: row_index,
-                        col,
+                        col: medium.col,
                     },
+                    bounds: media_bounds,
                 }
             }
         }
