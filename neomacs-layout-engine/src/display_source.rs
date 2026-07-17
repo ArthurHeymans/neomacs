@@ -1834,7 +1834,7 @@ impl DisplayReplacementMediaSourceItem {
         let (cursor_face_height, cursor_face_ascent) = if uses_xwidget_cursor_extents {
             (media.height.max(face_height), media.height.max(face_ascent))
         } else {
-            (media.height, media.height)
+            (media.height, media.ascent)
         };
         Self {
             media,
@@ -1856,7 +1856,7 @@ impl DisplayReplacementMediaSourceItem {
     }
 
     pub(crate) fn display_ascent_px(self) -> f32 {
-        self.media.height
+        self.media.ascent
     }
 
     pub(crate) fn cursor_face_height_px(self) -> f32 {

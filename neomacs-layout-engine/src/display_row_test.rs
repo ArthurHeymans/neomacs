@@ -2695,7 +2695,7 @@ fn display_text_run_measurement_plan_builds_from_shaped_glyphs() {
 }
 
 #[test]
-fn display_row_glyph_measurer_builds_measured_text_run_plan() {
+fn display_row_glyph_measurer_builds_measured_complex_text_run_plan() {
     let mut base = base_face();
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
@@ -2704,7 +2704,7 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
     let mut font_metrics = FontMetricsService::new();
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, Some(&mut font_metrics), 8.0);
 
-    let measurement = measurer.text_run_advances_px("abc", FaceId::new(8), 8.0);
+    let measurement = measurer.text_run_advances_px("سلام", FaceId::new(8), 8.0);
 
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         measurement
@@ -2716,11 +2716,37 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
             .iter()
             .map(|advance| (advance.char_offset, advance.byte_offset))
             .collect::<Vec<_>>(),
-        vec![(0, 0), (1, 1), (2, 2)]
+        vec![(0, 0), (1, 2), (2, 4), (3, 6)]
     );
     assert!(
-        advances.iter().all(|advance| advance.advance_px >= 8.0),
-        "measured advances should respect the frame cell minimum: {advances:?}"
+        advances.iter().all(|advance| advance.advance_px > 0.0),
+        "contextually shaped advances should remain positive: {advances:?}"
+    );
+}
+
+#[test]
+fn display_row_glyph_measurer_measures_every_plain_latin_character_independently() {
+    let mut base = base_face();
+    base.font_family = "Noto Sans".to_string();
+    base.font_size = 14.0;
+    base.set_measured_char_width_px(8.0);
+    let faces = vec![DisplayRowFace::from_resolved(FaceId::new(8), &base)];
+    let mut font_metrics = FontMetricsService::new();
+    let mut measurer = DisplayRowGlyphMeasurer::new(&faces, Some(&mut font_metrics), 8.0);
+
+    let measurement = measurer.text_run_advances_px("flake.nix", FaceId::new(8), 8.0);
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
+    else {
+        panic!("font-backed ordinary text should retain exact per-character lookahead");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| (advance.char_offset, advance.byte_offset))
+            .collect::<Vec<_>>(),
+        (0..9).map(|offset| (offset, offset)).collect::<Vec<_>>(),
+        "ordinary Latin text must be measured the same way it is emitted; shaping `fl` as one ligature cluster drops the independent `l` advance",
     );
 }
 

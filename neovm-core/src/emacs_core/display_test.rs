@@ -33,6 +33,37 @@ impl DisplayHost for ImageCapableDisplayHost {
     }
 }
 
+struct ItalicCapableDisplayHost;
+
+impl DisplayHost for ItalicCapableDisplayHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resolve_frame_font(
+        &mut self,
+        _frame_id: crate::window::FrameId,
+        face: crate::face::Face,
+    ) -> Result<Option<crate::emacs_core::eval::ResolvedFrameFont>, String> {
+        Ok(Some(crate::emacs_core::eval::ResolvedFrameFont {
+            family: crate::heap_types::LispString::from_utf8("Noto Sans"),
+            foundry: None,
+            weight: face.weight.unwrap_or(crate::face::FontWeight::NORMAL),
+            slant: face.slant.unwrap_or(crate::face::FontSlant::Normal),
+            width: face.width.unwrap_or(crate::face::FontWidth::Normal),
+            postscript_name: None,
+            height_tenths: 100,
+            font_size_px: 14.0,
+            char_width: 8.0,
+            line_height: 16.0,
+        }))
+    }
+}
+
 struct FailingClipboardDisplayHost;
 
 impl DisplayHost for FailingClipboardDisplayHost {
@@ -3519,6 +3550,25 @@ fn display_supports_face_attributes_p_arity_and_nil_result() {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments, got {other:?}"),
     }
+}
+
+#[test]
+fn display_supports_face_attributes_p_uses_live_gui_font_capabilities() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval
+        .frames
+        .create_frame("gui-face-support", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
+    eval.set_display_host(Box::new(ItalicCapableDisplayHost));
+
+    let attrs = Value::list(vec![Value::keyword("slant"), Value::symbol("italic")]);
+    assert_eq!(
+        builtin_display_supports_face_attributes_p(&mut eval, vec![attrs]).unwrap(),
+        Value::T,
+        "a GUI host that realizes the requested italic font must report the face spec as supported",
+    );
 }
 
 #[test]

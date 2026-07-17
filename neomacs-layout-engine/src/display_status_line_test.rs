@@ -1180,3 +1180,20 @@ fn display_row_face_preserves_gnu_box_type_codes() {
         assert_eq!(row_face.render_face().box_type, box_type);
     }
 }
+
+#[test]
+fn display_row_face_preserves_explicit_black_box_color() {
+    let mut resolved = ResolvedFace::default();
+    resolved.box_type = 1;
+    resolved.box_color = 0x00000000;
+    resolved.fg = 0x00ff_ffff;
+
+    let row_face = DisplayRowFace::from_resolved(FaceId::new(1), &resolved);
+
+    assert_eq!(row_face.box_type, BoxType::Line);
+    assert_eq!(
+        row_face.box_color,
+        Some(Color::BLACK),
+        "pixel value zero is a valid explicit black color, not an absence sentinel",
+    );
+}

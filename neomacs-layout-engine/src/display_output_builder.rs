@@ -515,8 +515,18 @@ impl DisplayOutputBuilder {
         window_id: i64,
         fallback_row_height: f32,
     ) -> Option<f32> {
-        self.window_state
-            .window_content_height_px(window_id, fallback_row_height)
+        let window_id_typed = DisplayWindowId::new(window_id);
+        match (
+            self.window_state
+                .window_content_height_px(window_id, fallback_row_height),
+            self.frame_state
+                .window_text_media_height_px(window_id_typed),
+        ) {
+            (Some(rows), Some(media)) => Some(rows.max(media)),
+            (Some(rows), None) => Some(rows),
+            (None, Some(media)) => Some(media),
+            (None, None) => None,
+        }
     }
 
     #[cfg(test)]

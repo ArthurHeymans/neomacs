@@ -2735,23 +2735,22 @@ fn phase0a_layout_stats_reports_full_rebuild_baseline() {
 }
 
 /// One incremental-relayout measurement: the instrumentation of the SECOND
-/// layout pass (the one an interactive keystroke pays), plus that pass's
-/// shaping-call delta and the body/chrome row totals present in the final
-/// matrix. Produced by [`measure_incremental_relayout`].
+/// layout pass (the one an interactive keystroke pays), plus the body/chrome
+/// row totals present in the final matrix. Produced by
+/// [`measure_incremental_relayout`].
 #[derive(Debug, Clone)]
 struct IncrCaseMeasurement {
     stats: crate::incremental_layout::LayoutStats,
     total_body_rows: usize,
     total_chrome_rows: usize,
-    shape_calls_delta: usize,
 }
 
 /// The incremental-layout bench harness. Warm the engine on `frame_id` (which
-/// establishes the retained matrices), record the shaping-call count, apply
-/// `perturb`, lay out again, and capture the instrumentation of that second
-/// pass. The second pass is what a keystroke pays, so its relaid-row-count is
-/// the number each fast path (Phases 1-3) must drive down — and the metric a
-/// silent regression to full-rebuild would expose (spec §5, §7).
+/// establishes the retained matrices), apply `perturb`, lay out again, and
+/// capture the instrumentation of that second pass. The second pass is what a
+/// keystroke pays, so its relaid-row-count is the number each fast path (Phases
+/// 1-3) must drive down — and the metric a silent regression to full-rebuild
+/// would expose (spec §5, §7).
 fn measure_incremental_relayout(
     engine: &mut LayoutEngine,
     eval: &mut Context,
@@ -2759,18 +2758,8 @@ fn measure_incremental_relayout(
     perturb: impl FnOnce(&mut Context),
 ) -> IncrCaseMeasurement {
     engine.layout_frame_rust(eval, frame_id); // warm: builds retained matrices
-    let shape_before = engine
-        .font_metrics
-        .as_ref()
-        .map(|m| m.shape_calls())
-        .unwrap_or(0);
     perturb(eval);
     engine.layout_frame_rust(eval, frame_id); // the measured (keystroke) pass
-    let shape_after = engine
-        .font_metrics
-        .as_ref()
-        .map(|m| m.shape_calls())
-        .unwrap_or(0);
     let stats = engine.last_layout_stats().clone();
     let (mut total_body_rows, mut total_chrome_rows) = (0usize, 0usize);
     for entry in &engine
@@ -2794,7 +2783,6 @@ fn measure_incremental_relayout(
         stats,
         total_body_rows,
         total_chrome_rows,
-        shape_calls_delta: shape_after.saturating_sub(shape_before),
     }
 }
 
@@ -3384,8 +3372,7 @@ fn phase2_partial_row_scroll_bails_to_full() {
 /// `fontification-functions` hook re-applies `font-lock-face` over the edited
 /// region during layout (a `put-text-property` that bumps NO tick today — the
 /// soundness hazard of spec §3). Phase 0a relays everything; Phase 3 (gated on
-/// per-span fontify reporting, §0b) is what narrows this — and `shape_calls`
-/// rising here is exactly the re-shaping a font-locked edit pays.
+/// per-span fontify reporting, §0b) is what narrows this.
 #[test]
 fn phase0a_baseline_fontlocked_edit_is_full_rebuild() {
     let text = "alpha beta gamma delta epsilon zeta\n".repeat(30);
@@ -3415,14 +3402,9 @@ fn phase0a_baseline_fontlocked_edit_is_full_rebuild() {
         m.stats
     );
     assert_eq!(m.stats.edit_windows, 0, "no localized-edit fast path yet");
-    // The inserted glyph forces at least one new shaping call on the measured
-    // pass; the warm-cache rest is reused. This is the n_shape_calls delta the
-    // harness tracks so Phase 3 can prove its diff-cost ≪ relayout-cost.
-    assert!(
-        m.shape_calls_delta >= 1,
-        "expected the inserted glyph to shape at least once (delta {})",
-        m.shape_calls_delta
-    );
+    // Ordinary characters are measured independently, matching GNU's
+    // IT_CHARACTER path, so a full redisplay need not invoke the contextual
+    // run shaper when the concrete character advances are already cached.
 }
 
 /// Phase 0a baseline — MULTI-WINDOW SAME BUFFER. Two windows on one buffer; an
@@ -5686,6 +5668,87 @@ fn layout_frame_rust_preserves_propertized_echo_message_faces() {
             .filter(|glyph| !glyph.padding)
             .all(|glyph| glyph.pixel_width > 0.0),
         "echo glyphs should carry real pixel widths: {echo_glyphs:?}"
+    );
+}
+
+#[test]
+fn inactive_echo_area_grows_to_contain_tall_display_image() {
+    let mut eval = Context::new();
+    eval.obarray_mut()
+        .set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    eval.obarray_mut()
+        .set_symbol_value("max-mini-window-height", Value::fixnum(10));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::clone(&requests),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
+    }));
+    let root = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("tall-echo-image", 320, 120, root);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 8.0;
+        frame.char_height = 18.0;
+        frame.shrink_mini_window();
+    }
+    let image_spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("./tmp/tall-echo-image.png"),
+        Value::keyword("max-width"),
+        Value::fixnum(32),
+        Value::keyword("max-height"),
+        Value::fixnum(24),
+        Value::keyword("ascent"),
+        Value::fixnum(60),
+    ]);
+    let echo = Value::string_with_text_properties(
+        "I",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![Value::symbol("display"), image_spec]),
+        }],
+    );
+    eval.set_current_message(echo.as_lisp_string().cloned());
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let materialized = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state")
+        .materialize();
+    let image = materialized
+        .glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(
+                glyph,
+                FrameGlyph::Image {
+                    row_role: GlyphRowRole::Text,
+                    image_id,
+                    ..
+                } if image_id.get() == 77
+            )
+        })
+        .expect("echo image glyph");
+    let geometry = image.geometry().expect("image geometry");
+    let clip = image.clip_rect().expect("echo-area clip");
+
+    assert!(
+        geometry.y >= clip.y && geometry.y + geometry.height <= clip.y + clip.height,
+        "GNU sizes the mini-window from displayed pixel ascent/descent; the echo image must fit its clip: image={geometry:?} clip={clip:?}",
     );
 }
 
@@ -15779,37 +15842,6 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
     assert_ne!(
         child_cols, parent_cols,
         "child width (200px) must derive its own ncols, not inherit the parent (800px): child={child_cols} parent={parent_cols}"
-    );
-}
-
-#[test]
-fn echo_content_rows_measures_displayed_message_height() {
-    // The inactive mini-window's auto-resize measures the echo buffer's
-    // CONTENT (this helper), not a cached glyph matrix. This is what makes the
-    // echo area shrink back to one line after `M-x`/`C-g` (empty or "Quit")
-    // while still growing for a genuine multi-line message.
-    assert_eq!(echo_content_rows("", 80), 1, "empty echo is one line");
-    assert_eq!(
-        echo_content_rows("Quit", 80),
-        1,
-        "a one-line message is one line"
-    );
-    assert_eq!(
-        echo_content_rows("AAAA\nBBBB\nCCCC", 80),
-        3,
-        "a three-line message occupies three rows"
-    );
-    // Wrapping: a single logical line wider than the window wraps.
-    assert_eq!(
-        echo_content_rows(&"x".repeat(170), 80),
-        3,
-        "170 columns at width 80 wraps to three rows"
-    );
-    // Wrapping combines with explicit newlines.
-    assert_eq!(
-        echo_content_rows(&format!("{}\nshort", "y".repeat(85)), 80),
-        3,
-        "an 85-col line (2 rows) plus a short line (1 row) is three rows"
     );
 }
 

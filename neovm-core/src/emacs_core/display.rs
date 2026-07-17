@@ -942,11 +942,60 @@ pub(crate) fn builtin_display_images_p(
 /// Emacs accepts broad argument shapes here in batch mode and still returns
 /// nil as long as arity is valid.
 pub(crate) fn builtin_display_supports_face_attributes_p(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("display-supports-face-attributes-p", &args, 1, 2)?;
-    Ok(Value::NIL)
+    let Some(attributes) = super::value::list_to_vec(&args[0]) else {
+        return Ok(Value::NIL);
+    };
+    let Some(frame_id) = args
+        .get(1)
+        .filter(|display| !display.is_nil())
+        .and_then(|display| display.as_frame_id())
+        .map(FrameId)
+        .or_else(|| eval.frames.selected_frame().map(|frame| frame.id))
+    else {
+        return Ok(Value::NIL);
+    };
+    if eval.frames.get(frame_id).is_none() {
+        return Ok(Value::NIL);
+    }
+
+    // GNU realizes the requested attributes over the frame's default face,
+    // then verifies that the selected font both differs from the default and
+    // reasonably matches the request (`gui_supports_face_attributes_p`,
+    // xfaces.c).  Keep font selection behind DisplayHost: core owns GNU face
+    // semantics while the GUI host owns the platform font database.
+    let default_face = eval.face_table().resolve("default");
+    let requested_attributes = crate::face::Face::from_plist("anonymous", &attributes);
+    let requested_face = default_face.merge(&requested_attributes);
+    let Some(host) = eval.display_host.as_mut() else {
+        return Ok(Value::NIL);
+    };
+    let default_font = host
+        .resolve_frame_font(frame_id, default_face)
+        .ok()
+        .flatten();
+    let requested_font = host
+        .resolve_frame_font(frame_id, requested_face)
+        .ok()
+        .flatten();
+    let supported = match (default_font, requested_font) {
+        (Some(default), Some(requested)) if default != requested => {
+            requested_attributes
+                .slant
+                .is_none_or(|slant| requested.slant.is_italic() == slant.is_italic())
+                && requested_attributes
+                    .weight
+                    .is_none_or(|weight| requested.weight == weight)
+                && requested_attributes
+                    .width
+                    .is_none_or(|width| requested.width == width)
+        }
+        _ => false,
+    };
+    Ok(Value::bool_val(supported))
 }
 
 // ---------------------------------------------------------------------------

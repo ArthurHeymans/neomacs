@@ -7,7 +7,7 @@ use crate::display_output_install_request::{
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ImageItem,
@@ -269,6 +269,41 @@ impl OutputFrameBuildState {
                 height: request.height,
             }),
         }
+    }
+
+    /// Pixel height occupied by inline media in one text window, measured in
+    /// the same clip-local coordinate space as its row grid.
+    pub(crate) fn window_text_media_height_px(&self, window_id: DisplayWindowId) -> Option<f32> {
+        self.images
+            .iter()
+            .filter(|item| item.window_id == window_id && item.row_role == GlyphRowRole::Text)
+            .filter_map(|item| {
+                item.clip_rect
+                    .map(|clip| item.height.max(item.y + item.height - clip.y))
+            })
+            .chain(
+                self.videos
+                    .iter()
+                    .filter(|item| {
+                        item.window_id == window_id && item.row_role == GlyphRowRole::Text
+                    })
+                    .filter_map(|item| {
+                        item.clip_rect
+                            .map(|clip| item.height.max(item.y + item.height - clip.y))
+                    }),
+            )
+            .chain(
+                self.xwidgets
+                    .iter()
+                    .filter(|item| {
+                        item.window_id == window_id && item.row_role == GlyphRowRole::Text
+                    })
+                    .filter_map(|item| {
+                        item.clip_rect
+                            .map(|clip| item.height.max(item.y + item.height - clip.y))
+                    }),
+            )
+            .reduce(f32::max)
     }
 
     pub(crate) fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {

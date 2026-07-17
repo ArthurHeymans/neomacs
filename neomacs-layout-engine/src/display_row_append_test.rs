@@ -10382,8 +10382,8 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
     let media = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 42,
         width: 64.0,
-        height: 10.0,
-        ascent: 10.0,
+        height: 18.0,
+        ascent: 14.0,
         horizontal_margin: 0.0,
         vertical_margin: 0.0,
         opaque_background: None,
@@ -10396,13 +10396,22 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
         false,
     );
     assert_eq!(ordinary.width_px(), 64.0);
-    assert_eq!(ordinary.display_height_px(), 10.0);
-    assert_eq!(ordinary.display_ascent_px(), 10.0);
-    assert_eq!(ordinary.cursor_face_height_px(), 10.0);
-    assert_eq!(ordinary.cursor_face_ascent_px(), 10.0);
+    assert_eq!(ordinary.display_height_px(), 18.0);
+    assert_eq!(ordinary.display_ascent_px(), 14.0);
+    assert_eq!(ordinary.cursor_face_height_px(), 18.0);
+    assert_eq!(ordinary.cursor_face_ascent_px(), 14.0);
 
+    let xwidget_media = DisplayMediaReplacement::image(DisplayImageItem {
+        image_id: 43,
+        width: 64.0,
+        height: 10.0,
+        ascent: 10.0,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    });
     let xwidget_cursor = DisplayReplacementMediaSourceItem::new(
-        media,
+        xwidget_media,
         active_face.metrics().row_height(),
         active_face.metrics().ascent(),
         true,

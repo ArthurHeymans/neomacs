@@ -205,6 +205,35 @@ fn shared_clone_observes_backend_conversion_and_semantic_edits() {
 }
 
 #[test]
+fn bounded_text_property_scan_rounds_up_a_multibyte_limit_to_a_character_boundary() {
+    crate::test_utils::init_test_tracing();
+    for kind in BufferTextBackendKind::implemented_variants() {
+        let text = BufferText::try_from_str_with_backend_kind("a好bc", kind)
+            .expect("implemented text backend");
+        let name = Value::symbol("invisible");
+        let hidden = Value::symbol("hidden");
+        let property_start = text.char_pos_to_emacs_byte_pos(CharPos0::new(2));
+        let property_end = text.char_pos_to_emacs_byte_pos(CharPos0::new(3));
+        assert!(text.text_props_put_property_in_emacs_byte_range(
+            EmacsByteRange::new(property_start, property_end),
+            name,
+            hidden,
+        ));
+
+        let inside_multibyte_character = EmacsBytePos::new(2);
+        assert_eq!(
+            text.text_props_next_single_change_after_emacs_byte_pos_bounded(
+                EmacsBytePos::ZERO,
+                name,
+                inside_multibyte_character,
+            ),
+            Some(text.char_pos_to_emacs_byte_pos(CharPos0::new(2))),
+            "{kind:?} must publish a soft scan boundary at a valid character boundary",
+        );
+    }
+}
+
+#[test]
 fn non_gap_backends_preserve_virtual_gap_compatibility_state() {
     crate::test_utils::init_test_tracing();
     let non_gap = BufferTextBackendKind::non_gap_implemented_variants().collect::<Vec<_>>();

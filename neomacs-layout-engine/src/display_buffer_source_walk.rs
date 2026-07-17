@@ -141,9 +141,8 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.source_consumption.prepend_pending_render_items(items);
     }
 
-    /// Rewind the source consumption + cursor state to a word-wrap break
-    /// candidate so the candidate char (the word boundary) is re-produced on the
-    /// continuation row.
+    /// Rewind source consumption and its cursor to a row-wrap retry position so
+    /// the current character is re-produced on the continuation row.
     ///
     /// During the overflow attempt the candidate char was already consumed: when
     /// its text run was split per-character, the remainder of the run was queued
@@ -154,12 +153,12 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
     /// skipping the candidate char entirely (it stays drawn once on the previous
     /// row and is never re-rendered on the continuation row).
     ///
-    /// This mirrors GNU's word-wrap rewind (`it = it_before_word`, RESTORE_IT in
+    /// This applies to both a word-wrap break candidate and character-wrap at a
+    /// full row. It mirrors GNU's iterator restore (`RESTORE_IT` in
     /// `display_line`/`move_it_in_display_line_to`), which reseats the whole
-    /// iterator — not just its buffer position — back to the word boundary.
-    /// Clearing the pending queue drops the stale remainder; reseating the cursor
-    /// to the candidate's char position makes the next consumption re-read the
-    /// candidate char from the buffer.
+    /// iterator — not just its published buffer position — at the retry point.
+    /// Clearing the pending queue drops the stale run remainder; reseating the
+    /// cursor makes the next consumption re-read the rejected character.
     pub(crate) fn rewind_source_consumption_to(
         &mut self,
         source_position: DisplaySourceTextPosition,

@@ -172,8 +172,10 @@ impl DisplayRowFace {
                 .overline
                 .then(|| Color::from_pixel(face.overline_color)),
             box_type,
-            box_color: (box_type != BoxType::None && face.box_color != 0)
-                .then(|| Color::from_pixel(face.box_color)),
+            // `ResolvedFace` has already resolved GNU's unspecified box
+            // color to the face foreground.  Pixel zero is therefore an
+            // explicit black color, not an absence sentinel.
+            box_color: (box_type != BoxType::None).then(|| Color::from_pixel(face.box_color)),
             box_line_width: face.box_line_width,
             box_corner_radius: 0,
             box_border_style: BoxBorderStyle::Solid,
@@ -595,22 +597,25 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         let Some(face) = self.face(face_id).cloned() else {
             return DisplayTextRunMeasurement::PerChar;
         };
-        let Some(font_metrics) = self.font_metrics.as_mut() else {
+        if self.font_metrics.is_none() {
             return DisplayTextRunMeasurement::PerChar;
-        };
+        }
 
         // GNU resolves the concrete font range before asking the font driver
         // for its advance.  A one-character display-string run (the common
         // shape of Nerd Font icons) therefore must use the per-character
-        // fontset resolver rather than shaping an unresolved compatibility
-        // family name directly.  Keep contextual and multi-character runs on
-        // the run shaper, where ligatures and joining require shared context.
+        // fontset resolver rather than the requested compatibility family's
+        // cell width.
         let mut chars = text.chars();
         if let Some(ch) = chars.next()
             && chars.next().is_none()
             && !ch.is_ascii()
             && crate::composition::complex_script(ch).is_none()
         {
+            let font_metrics = self
+                .font_metrics
+                .as_mut()
+                .expect("font metrics availability checked above");
             let advance = font_metrics.char_width(
                 ch,
                 &face.font_family,
@@ -620,6 +625,56 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             );
             return DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, advance);
         }
+
+        // GNU emits ordinary Latin/CJK text as individual character glyphs;
+        // only an actual composition is shaped as a run.  Measure each
+        // ordinary character through the same concrete-font resolver used by
+        // emission, while retaining a complete plan for word-wrap lookahead.
+        // Otherwise a font ligature such as `fl` produces one shaped cluster
+        // advance for `f`, after which the row emitter still draws both `f`
+        // and `l` and double-counts its width.
+        if text.chars().all(|ch| {
+            crate::composition::complex_script(ch).is_none()
+                && !crate::unicode::is_cluster_extender(ch)
+        }) {
+            let face_char_width = face.char_width_px(self.fallback_char_width);
+            let cell_floor = !self.allow_proportional_advances
+                || crate::fontconfig::family_prefers_monospace(&face.font_family);
+            let font_metrics = self
+                .font_metrics
+                .as_mut()
+                .expect("font metrics availability checked above");
+            let advances = text
+                .char_indices()
+                .enumerate()
+                .map(|(char_offset, (byte_offset, ch))| {
+                    let columns = crate::composition::base_width_cols(ch).max(1);
+                    let column_advance = f32::from(columns) * face_char_width;
+                    let measured = font_metrics.char_width(
+                        ch,
+                        &face.font_family,
+                        face.font_weight,
+                        face.italic,
+                        face.font_size.max(1.0),
+                    );
+                    let minimum = if cell_floor { column_advance } else { 1.0 };
+                    DisplayTextRunAdvance::new(
+                        char_offset,
+                        byte_offset,
+                        self.quantization.resolve(
+                            Some(measured),
+                            fallback_char_width_px.max(column_advance),
+                            minimum,
+                        ),
+                    )
+                })
+                .collect();
+            return DisplayTextRunMeasurement::Measured(advances);
+        }
+
+        let Some(font_metrics) = self.font_metrics.as_mut() else {
+            unreachable!("font metrics availability checked above");
+        };
 
         let shaped = font_metrics.shape_run(
             text,

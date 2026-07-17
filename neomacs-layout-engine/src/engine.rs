@@ -118,21 +118,44 @@ fn cursor_width_for_style(
         .width_px(face_char_w)
 }
 
-/// Wrapping-aware display-row count of echo-area `text` at `cols` columns,
-/// approximating GNU `resize_mini_window`'s `move_it_to (ZV)` content
-/// measurement. Empty text is one line; each logical line contributes at
-/// least one row plus any wrapped continuation rows.
-fn echo_content_rows(text: &str, cols: usize) -> usize {
-    let cols = cols.max(1);
-    if text.is_empty() {
-        return 1;
+/// Resolve the buffer and range that this window actually displays.
+///
+/// GNU's `with_echo_area_buffer` temporarily installs ` *Echo Area 0*` in an
+/// inactive mini-window before redisplay measures or walks it.  Resolve that
+/// semantic source once, before fontification and incremental-key creation,
+/// so every phase observes the same buffer identity, ticks, range, and point.
+fn resolve_window_display_source_params(
+    evaluator: &mut neovm_core::emacs_core::Context,
+    params: &WindowParams,
+) -> WindowParams {
+    let window_id = neovm_core::window::WindowId(params.window_id as u64);
+    if !params.is_minibuffer() || evaluator.minibuffer_window_is_active(window_id) {
+        return params.clone();
     }
-    let mut rows = 0usize;
-    for line in text.split('\n') {
-        let width = line.chars().count();
-        rows += width.div_ceil(cols).max(1);
-    }
-    rows.max(1)
+
+    evaluator.ensure_echo_area_buffers();
+    let Some(buf_id) = evaluator
+        .buffer_manager()
+        .find_buffer_by_name(" *Echo Area 0*")
+    else {
+        return params.clone();
+    };
+    let Some(buffer_size) = evaluator
+        .buffer_manager()
+        .get(buf_id)
+        .map(|buffer| buffer.point_max_char_pos().get() as i64)
+    else {
+        return params.clone();
+    };
+
+    let mut resolved = params.clone();
+    resolved.buffer_id = buf_id.0;
+    resolved.window_start = 0;
+    resolved.window_end = 0;
+    resolved.point = 0;
+    resolved.buffer_begv = 0;
+    resolved.buffer_size = buffer_size;
+    resolved
 }
 
 fn max_mini_window_lines_for_window(
@@ -656,6 +679,11 @@ impl LayoutEngine {
                 }
             }
 
+            window_params_list = window_params_list
+                .iter()
+                .map(|params| resolve_window_display_source_params(evaluator, params))
+                .collect();
+
             // --- Fontification pass ---
             // Run fontification for each window's visible region BEFORE the
             // read-only layout pass.  This triggers jit-lock / font-lock to set
@@ -984,61 +1012,17 @@ impl LayoutEngine {
                 // (exact_p || BEGV == ZV)` (xdisp.c:13395). An empty
                 // mini/echo buffer is exactly one line.
                 //
-                // We measure the glyph matrix's content pixel extent instead,
-                // which can
-                // be STALE: after find-file the mini-window is laid out
-                // with zero text height and SKIPPED, so its matrix keeps
-                // the vertico candidate row count and the echo area never
-                // shrinks back (it stays ~9 rows tall and empty). Mirror
-                // GNU's content measurement for the empty case: when the
-                // buffer the window actually displays is empty (BEGV == ZV)
-                // the used height is 1, regardless of the stale matrix.
-                //
-                // `buf_id` is that displayed buffer: the swapped
-                // ` *Echo Area 0*` for an inactive mini-window (GNU
-                // `with_echo_area_buffer`), or the window's own buffer when
-                // the minibuffer is active.
-                let mini_window_id = neovm_core::window::WindowId(mini_params.window_id as u64);
-                let minibuffer_active = evaluator.minibuffer_window_is_active(mini_window_id);
-                let buf_id = if !minibuffer_active {
-                    evaluator.ensure_echo_area_buffers();
-                    evaluator
-                        .buffer_manager()
-                        .find_buffer_by_name(" *Echo Area 0*")
-                        .unwrap_or(neovm_core::buffer::BufferId(mini_params.buffer_id))
-                } else {
-                    neovm_core::buffer::BufferId(mini_params.buffer_id)
-                };
+                // The source was resolved before incremental classification,
+                // so this height and emptiness check refer to the same buffer
+                // that produced the current glyph rows.  This makes emitted
+                // pixel geometry (including images, overlays, font height and
+                // line spacing) authoritative, like GNU's display iterator.
+                let buf_id = neovm_core::buffer::BufferId(mini_params.buffer_id);
                 let visible_region_empty = evaluator
                     .buffer_manager()
                     .get(buf_id)
                     .map(|b| b.accessible_emacs_byte_range().is_empty())
                     .unwrap_or(true);
-                // For an INACTIVE mini-window, measure the displayed echo
-                // buffer's content height directly (GNU `resize_mini_window`
-                // measures `w->contents` via `move_it_to (ZV)`) rather than
-                // the engine's cached enabled-row count. That matrix goes
-                // STALE: the inactive mini-window is laid out with ~zero text
-                // height and skipped, so it keeps the active minibuffer's
-                // candidate-overlay row count (e.g. 35). With the stale
-                // matrix, the instant any echo message ("Quit" after C-g)
-                // makes the buffer non-empty, the window re-grows to that
-                // stale height. Content measurement keeps "Quit"/empty one
-                // line. When the minibuffer is ACTIVE the matrix is fresh and
-                // includes the candidate overlay, so keep using it there.
-                let mini_rows_used = if !minibuffer_active {
-                    let cols = (mini_params.bounds.width / frame_params.char_width.max(1.0))
-                        .floor()
-                        .max(1.0) as usize;
-                    let text = evaluator
-                        .buffer_manager()
-                        .get(buf_id)
-                        .map(|b| b.full_text_string())
-                        .unwrap_or_default();
-                    echo_content_rows(&text, cols)
-                } else {
-                    mini_rows_used
-                };
 
                 if let Some(required_rows) =
                     minibuffer_growth_target(mini_rows_used, allocated_rows, max_mini_lines)
@@ -1708,27 +1692,9 @@ impl LayoutEngine {
             .as_ref()
             .map(|replay| replay.dvpos)
             .unwrap_or(0.0);
-        // GNU `with_echo_area_buffer` (xdisp.c:12904): an inactive mini-window
-        // displays the echo-area buffer (whose contents `set_message_1` mirrored
-        // the current message into), NOT the ordinary buffer attached to the
-        // window record. Resolve the echo buffer for layout only — GNU does the
-        // same temporary `wset_buffer` for display without a full
-        // set-window-buffer; `params.buffer_id` (the window record) is untouched.
-        let buf_id = if params.is_minibuffer() && !evaluator.minibuffer_window_is_active(window_id)
-        {
-            // GNU `with_echo_area_buffer` `ensure_echo_area_buffers ()` first, so
-            // ` *Echo Area 0*` always exists here — empty when there is no current
-            // message. This is what makes an idle echo area blank instead of
-            // re-displaying the buffer the mini-window record happens to point at
-            // (which is the frame's root buffer, window/mod.rs).
-            evaluator.ensure_echo_area_buffers();
-            evaluator
-                .buffer_manager()
-                .find_buffer_by_name(" *Echo Area 0*")
-                .unwrap_or(neovm_core::buffer::BufferId(params.buffer_id))
-        } else {
-            neovm_core::buffer::BufferId(params.buffer_id)
-        };
+        // `params` already names the semantic display source chosen before
+        // fontification and incremental classification.
+        let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
         let layout_buffer = match evaluator.buffer_manager().get(buf_id) {
             Some(buffer) => super::neovm_bridge::LayoutBufferSnapshot::from_buffer_with_obarray(
                 buffer,
@@ -1751,28 +1717,6 @@ impl LayoutEngine {
             }
         };
         let buffer = &layout_buffer;
-
-        // When swapped to the echo buffer (above), the window record's position
-        // markers still point into the minibuffer's own buffer, so the source
-        // read would use that stale (short) accessible range and truncate the
-        // echo message. GNU `with_echo_area_buffer` moves `pointm`/`old_pointm`
-        // to BEG and lets the echo buffer's BEGV/ZV bound the display; mirror
-        // that by resetting the position params to the echo buffer's full range.
-        let echo_swapped_params;
-        let params: &WindowParams = if buf_id.0 != params.buffer_id {
-            use super::neovm_bridge::LayoutBufferView;
-            let mut swapped = params.clone();
-            swapped.buffer_id = buf_id.0;
-            swapped.window_start = 0;
-            swapped.window_end = 0;
-            swapped.point = 0;
-            swapped.buffer_begv = 0;
-            swapped.buffer_size = buffer.layout_point_max_char_pos().get() as i64;
-            echo_swapped_params = swapped;
-            &echo_swapped_params
-        } else {
-            params
-        };
 
         // Capture buffer name as owned String for use in mode-line fallback.
         // This avoids holding a borrow on `evaluator` through eval calls.
