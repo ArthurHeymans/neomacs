@@ -10,7 +10,7 @@
 
 use super::effect_config::EffectsConfig;
 use super::face::{Face, FaceAttributes, UnderlineStyle};
-use super::frame_chrome::{ChromeMedia, FrameChrome, FrameChromeContent, PresentationId};
+use super::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
     GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor, WindowEffectHint,
@@ -890,50 +890,6 @@ pub struct CursorItem {
     pub color: Color,
 }
 
-/// An inline image.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct ImageItem {
-    pub window_id: DisplayWindowId,
-    pub row_role: GlyphRowRole,
-    pub clip_rect: Option<Rect>,
-    pub slot_id: Option<DisplaySlotId>,
-    pub image_id: ImageId,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
-/// An inline video.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct VideoItem {
-    pub window_id: DisplayWindowId,
-    pub row_role: GlyphRowRole,
-    pub clip_rect: Option<Rect>,
-    pub slot_id: Option<DisplaySlotId>,
-    pub video_id: VideoId,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub loop_count: i32,
-    pub autoplay: bool,
-}
-
-/// An inline xwidget.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct XwidgetItem {
-    pub window_id: DisplayWindowId,
-    pub row_role: GlyphRowRole,
-    pub clip_rect: Option<Rect>,
-    pub slot_id: Option<DisplaySlotId>,
-    pub xwidget_id: XwidgetId,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-}
-
 /// A scroll bar.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ScrollBarItem {
@@ -1008,12 +964,6 @@ pub struct FrameDisplayState {
     pub cursors: Vec<CursorItem>,
     /// Per-window cursor effect profiles.
     pub cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
-    /// Inline images (non-grid, pixel-positioned).
-    pub images: Vec<ImageItem>,
-    /// Inline videos.
-    pub videos: Vec<VideoItem>,
-    /// Inline xwidgets.
-    pub xwidgets: Vec<XwidgetItem>,
     /// Scroll bars.
     pub scroll_bars: Vec<ScrollBarItem>,
     /// Authoritative active cursor for the frame.
@@ -1382,9 +1332,6 @@ impl FrameDisplayState {
             borders: Vec::new(),
             cursors: Vec::new(),
             cursor_effects_by_window: HashMap::new(),
-            images: Vec::new(),
-            videos: Vec::new(),
-            xwidgets: Vec::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
             stipple_patterns: HashMap::new(),
@@ -1395,9 +1342,9 @@ impl FrameDisplayState {
 
     /// Create a `FrameDisplayState` from an existing `FrameGlyphBuffer`.
     ///
-    /// Decomposes the flat glyph list into structured non-grid item
-    /// vectors (backgrounds, borders, cursors, images, videos, xwidgets,
-    /// scroll bars) and copies metadata (faces, window_infos, hints).
+    /// Copies transport metadata and the remaining non-row primitives
+    /// (backgrounds, borders, cursors, and scroll bars). Row-owned glyphs are
+    /// intentionally not reconstructed from their lossy flat projection.
     pub fn from_frame_glyph_buffer(buf: &FrameGlyphBuffer) -> Self {
         let frame_cols = (buf.width / buf.char_width.max(1.0)) as usize;
         let frame_rows = (buf.height / buf.char_height.max(1.0)) as usize;
@@ -1460,7 +1407,7 @@ impl FrameDisplayState {
                 }),
         );
 
-        // Decompose glyphs into structured non-grid item vectors
+        // Decompose only primitives that are not owned by a glyph row.
         for glyph in &buf.glyphs {
             match glyph {
                 FrameGlyph::Background { bounds, color } => {
@@ -1487,79 +1434,9 @@ impl FrameDisplayState {
                         color: *color,
                     });
                 }
-                FrameGlyph::Image {
-                    window_id,
-                    row_role,
-                    clip_rect,
-                    slot_id,
-                    image_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                } => {
-                    state.images.push(ImageItem {
-                        window_id: *window_id,
-                        row_role: *row_role,
-                        clip_rect: *clip_rect,
-                        slot_id: *slot_id,
-                        image_id: *image_id,
-                        x: *x,
-                        y: *y,
-                        width: *width,
-                        height: *height,
-                    });
-                }
-                FrameGlyph::Video {
-                    window_id,
-                    row_role,
-                    clip_rect,
-                    slot_id,
-                    video_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                    loop_count,
-                    autoplay,
-                } => {
-                    state.videos.push(VideoItem {
-                        window_id: *window_id,
-                        row_role: *row_role,
-                        clip_rect: *clip_rect,
-                        slot_id: *slot_id,
-                        video_id: *video_id,
-                        x: *x,
-                        y: *y,
-                        width: *width,
-                        height: *height,
-                        loop_count: *loop_count,
-                        autoplay: *autoplay,
-                    });
-                }
-                FrameGlyph::Xwidget {
-                    window_id,
-                    row_role,
-                    clip_rect,
-                    slot_id,
-                    xwidget_id,
-                    x,
-                    y,
-                    width,
-                    height,
-                } => {
-                    state.xwidgets.push(XwidgetItem {
-                        window_id: *window_id,
-                        row_role: *row_role,
-                        clip_rect: *clip_rect,
-                        slot_id: *slot_id,
-                        xwidget_id: *xwidget_id,
-                        x: *x,
-                        y: *y,
-                        width: *width,
-                        height: *height,
-                    });
-                }
+                FrameGlyph::Image { .. }
+                | FrameGlyph::Video { .. }
+                | FrameGlyph::Xwidget { .. } => {}
                 FrameGlyph::ScrollBar {
                     window_id,
                     row_role,
@@ -1656,8 +1533,7 @@ impl FrameDisplayState {
         buf.transition_hints = self.transition_hints.clone();
         buf.frame_chrome = self.frame_chrome.clone();
 
-        // --- Materialize all glyphs (backgrounds, grid, borders, images,
-        // videos, xwidgets, scroll bars) in the canonical order ---
+        // --- Materialize all glyphs in canonical row/overlay order ---
         self.for_each_glyph(|g| buf.glyphs.push(g));
 
         // --- Materialize cursors ---
@@ -1713,9 +1589,9 @@ impl FrameDisplayState {
     /// This is the glyph-production half of [`Self::materialize`], factored out
     /// so callers can iterate the matrix directly without building the flat
     /// `Vec<FrameGlyph>`. It emits, in order: backgrounds, frame-chrome grid
-    /// rows, window-matrix grid rows, borders, images, videos, xwidgets, and
-    /// scroll bars. It does NOT emit cursors or write any `FrameGlyphBuffer`
-    /// metadata.
+    /// rows, window-matrix grid rows, borders, and scroll bars. Images, videos,
+    /// and xwidgets are emitted by their owning rows. It does NOT emit cursors
+    /// or write any `FrameGlyphBuffer` metadata.
     pub fn for_each_glyph(&self, mut push: impl FnMut(FrameGlyph)) {
         // --- Materialize backgrounds ---
         for bg in &self.backgrounds {
@@ -1756,15 +1632,6 @@ impl FrameDisplayState {
                 self.char_height,
                 &mut push,
             );
-            for medium in content.media() {
-                self.materialize_frame_chrome_medium(
-                    band.bounds(),
-                    row_index,
-                    content.row().role,
-                    medium,
-                    &mut push,
-                );
-            }
         }
         for entry in &self.window_matrices {
             // Body (`Text`) rows clip to the text-area band so a vscroll's
@@ -1892,77 +1759,6 @@ impl FrameDisplayState {
             });
         }
 
-        // --- Materialize standalone images ---
-        for img in &self.images {
-            if img.row_role == GlyphRowRole::TabBar
-                && self
-                    .frame_chrome
-                    .band(super::frame_chrome::FrameChromeKind::TabBar)
-                    .is_some()
-            {
-                continue;
-            }
-            push(FrameGlyph::Image {
-                window_id: img.window_id,
-                row_role: img.row_role,
-                clip_rect: img.clip_rect,
-                slot_id: img.slot_id,
-                image_id: img.image_id,
-                x: img.x,
-                y: img.y,
-                width: img.width,
-                height: img.height,
-            });
-        }
-
-        // --- Materialize videos ---
-        for vid in &self.videos {
-            if vid.row_role == GlyphRowRole::TabBar
-                && self
-                    .frame_chrome
-                    .band(super::frame_chrome::FrameChromeKind::TabBar)
-                    .is_some()
-            {
-                continue;
-            }
-            push(FrameGlyph::Video {
-                window_id: vid.window_id,
-                row_role: vid.row_role,
-                clip_rect: vid.clip_rect,
-                slot_id: vid.slot_id,
-                video_id: vid.video_id,
-                x: vid.x,
-                y: vid.y,
-                width: vid.width,
-                height: vid.height,
-                loop_count: vid.loop_count,
-                autoplay: vid.autoplay,
-            });
-        }
-
-        // --- Materialize xwidgets ---
-        for xwidget in &self.xwidgets {
-            if xwidget.row_role == GlyphRowRole::TabBar
-                && self
-                    .frame_chrome
-                    .band(super::frame_chrome::FrameChromeKind::TabBar)
-                    .is_some()
-            {
-                continue;
-            }
-            push(FrameGlyph::Xwidget {
-                window_id: xwidget.window_id,
-                row_role: xwidget.row_role,
-                clip_rect: xwidget.clip_rect,
-                slot_id: xwidget.slot_id,
-                xwidget_id: xwidget.xwidget_id,
-                x: xwidget.x,
-                y: xwidget.y,
-                width: xwidget.width,
-                height: xwidget.height,
-            });
-        }
-
         // --- Materialize scroll bars ---
         for sb in &self.scroll_bars {
             push(FrameGlyph::ScrollBar {
@@ -1982,76 +1778,6 @@ impl FrameDisplayState {
                 track_color: sb.track_color,
                 thumb_color: sb.thumb_color,
             });
-        }
-    }
-
-    fn materialize_frame_chrome_medium(
-        &self,
-        band_bounds: super::frame_chrome::FrameRect,
-        canonical_row: u32,
-        row_role: GlyphRowRole,
-        medium: &ChromeMedia,
-        push: &mut impl FnMut(FrameGlyph),
-    ) {
-        let frame_bounds = band_bounds
-            .place(medium.local_bounds())
-            .expect("frame chrome validates media bounds before publication")
-            .raw();
-        let clip_rect = Some(band_bounds.raw());
-        let canonical_slot = |slot_id: Option<DisplaySlotId>| {
-            slot_id.map(|slot| DisplaySlotId {
-                row: canonical_row,
-                ..slot
-            })
-        };
-        match medium {
-            ChromeMedia::Image {
-                image_id, slot_id, ..
-            } => push(FrameGlyph::Image {
-                window_id: DisplayWindowId::new(0),
-                row_role,
-                clip_rect,
-                slot_id: canonical_slot(*slot_id),
-                image_id: *image_id,
-                x: frame_bounds.x,
-                y: frame_bounds.y,
-                width: frame_bounds.width,
-                height: frame_bounds.height,
-            }),
-            ChromeMedia::Video {
-                video_id,
-                slot_id,
-                loop_count,
-                autoplay,
-                ..
-            } => push(FrameGlyph::Video {
-                window_id: DisplayWindowId::new(0),
-                row_role,
-                clip_rect,
-                slot_id: canonical_slot(*slot_id),
-                video_id: *video_id,
-                x: frame_bounds.x,
-                y: frame_bounds.y,
-                width: frame_bounds.width,
-                height: frame_bounds.height,
-                loop_count: *loop_count,
-                autoplay: *autoplay,
-            }),
-            ChromeMedia::Xwidget {
-                xwidget_id,
-                slot_id,
-                ..
-            } => push(FrameGlyph::Xwidget {
-                window_id: DisplayWindowId::new(0),
-                row_role,
-                clip_rect,
-                slot_id: canonical_slot(*slot_id),
-                xwidget_id: *xwidget_id,
-                x: frame_bounds.x,
-                y: frame_bounds.y,
-                width: frame_bounds.width,
-                height: frame_bounds.height,
-            }),
         }
     }
 

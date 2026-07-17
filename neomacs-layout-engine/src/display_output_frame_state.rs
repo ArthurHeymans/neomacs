@@ -283,9 +283,6 @@ impl OutputFrameBuildState {
         state.face_fills = self.face_fills;
         state.borders = self.borders;
         state.cursors = self.cursors;
-        state.images.clear();
-        state.videos.clear();
-        state.xwidgets.clear();
         state.scroll_bars = self.scroll_bars;
         state.phys_cursor = self.phys_cursor;
         state.cursor_effects_by_window = self.cursor_effects_by_window;

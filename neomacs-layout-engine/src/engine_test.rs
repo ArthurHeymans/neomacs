@@ -8877,7 +8877,6 @@ fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_buil
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    assert!(state.images.is_empty());
     let entry = state
         .window_matrices
         .iter()

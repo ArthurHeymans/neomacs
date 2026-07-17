@@ -30,7 +30,7 @@ pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeD
     .finalize_row(&mut row, 0, None);
     // Media is embedded in the authoritative GlyphRow and materializes through
     // the same row walk as text.  Chrome no longer owns a second placement list.
-    ChromeDisplayRow::new(row, Vec::new())
+    ChromeDisplayRow::new(row)
 }
 
 pub(crate) fn install_rendered_display_row_fragment_assets(

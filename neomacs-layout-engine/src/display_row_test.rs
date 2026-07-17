@@ -3732,10 +3732,6 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
-    assert!(
-        state.xwidgets.is_empty(),
-        "row media must not use a side list"
-    );
     let materialized = state.materialize();
     let xwidget = materialized
         .glyphs

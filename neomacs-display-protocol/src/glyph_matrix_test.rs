@@ -1928,9 +1928,6 @@ fn materialize_new_fields_default_to_empty() {
     assert!(state.backgrounds.is_empty());
     assert!(state.borders.is_empty());
     assert!(state.cursors.is_empty());
-    assert!(state.images.is_empty());
-    assert!(state.videos.is_empty());
-    assert!(state.xwidgets.is_empty());
     assert!(state.scroll_bars.is_empty());
     assert!(state.stipple_patterns.is_empty());
     assert!(state.effect_hints.is_empty());
@@ -1939,9 +1936,8 @@ fn materialize_new_fields_default_to_empty() {
 #[test]
 fn frame_chrome_materializes_nonzero_tab_origin_once() {
     use crate::frame_chrome::{
-        BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion, ChromeMedia,
-        FrameChrome, FrameChromeContent, FrameChromeKind, FrameSize, MenuBarContent,
-        ToolBarContent,
+        BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion, FrameChrome,
+        FrameChromeContent, FrameChromeKind, FrameSize, MenuBarContent, ToolBarContent,
     };
 
     let mut state = FrameDisplayState::new(80, 36, 7.8, 18.0);
@@ -1957,15 +1953,17 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
         .push(Glyph::char('T', FaceId::new(0), 0).with_pixel_width(7.8));
     tab_row.glyphs[GlyphArea::Text.index()]
         .push(Glyph::stretch(2, FaceId::new(0)).with_pixel_geometry(16.0, 18.0, 14.0));
+    let mut image = Glyph::char(' ', FaceId::new(0), 1);
+    image.glyph_type = GlyphType::Image {
+        image_id: 77,
+        width_cols: 2,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    };
+    tab_row.glyphs[GlyphArea::Text.index()].push(image.with_pixel_geometry(16.0, 16.0, 14.0));
 
-    let tab_content = ChromeDisplayRow::new(
-        tab_row,
-        vec![ChromeMedia::Image {
-            local_bounds: BandRect::new(24.0, 0.0, 16.0, 16.0).expect("local image bounds"),
-            image_id: ImageId::new(77),
-            slot_id: None,
-        }],
-    );
+    let tab_content = ChromeDisplayRow::new(tab_row);
     assert_eq!(tab_content.row().pixel_y, 0.0);
 
     state.frame_chrome = FrameChrome::layout(
@@ -2081,7 +2079,7 @@ fn frame_tab_bar_materialization_does_not_invent_a_trailing_face() {
         vec![ChromeBandRequest::new(
             FrameChromeKind::TabBar,
             16.0,
-            FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row, Vec::new())),
+            FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row)),
         )],
     )
     .expect("valid chrome");

@@ -4,10 +4,10 @@
 //! the band is band-local and can be translated to frame coordinates only via
 //! [`FrameRect::place`].
 
-use crate::frame_glyphs::{DisplaySlotId, GlyphRowRole};
+use crate::frame_glyphs::GlyphRowRole;
 use crate::geometry::{BandSpace, FrameSpace, LayoutRect, SpaceTranslation};
 use crate::glyph_matrix::GlyphRow;
-use crate::types::{Color, ImageId, Rect, VideoId, XwidgetId};
+use crate::types::{Color, Rect};
 use crate::ui_types::{MenuBarItem, ToolBarItem};
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -432,58 +432,22 @@ impl CompactBarContent {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum ChromeMedia {
-    Image {
-        local_bounds: BandRect,
-        image_id: ImageId,
-        slot_id: Option<DisplaySlotId>,
-    },
-    Video {
-        local_bounds: BandRect,
-        video_id: VideoId,
-        slot_id: Option<DisplaySlotId>,
-        loop_count: i32,
-        autoplay: bool,
-    },
-    Xwidget {
-        local_bounds: BandRect,
-        xwidget_id: XwidgetId,
-        slot_id: Option<DisplaySlotId>,
-    },
-}
-
-impl ChromeMedia {
-    pub fn local_bounds(&self) -> BandRect {
-        match self {
-            Self::Image { local_bounds, .. }
-            | Self::Video { local_bounds, .. }
-            | Self::Xwidget { local_bounds, .. } => *local_bounds,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ChromeDisplayRow {
     row: GlyphRow,
-    media: Vec<ChromeMedia>,
 }
 
 impl ChromeDisplayRow {
-    pub fn new(mut row: GlyphRow, media: Vec<ChromeMedia>) -> Self {
+    pub fn new(mut row: GlyphRow) -> Self {
         row.pixel_y = 0.0;
-        Self { row, media }
+        Self { row }
     }
 
     pub fn empty_tab_bar() -> Self {
-        Self::new(GlyphRow::new(GlyphRowRole::TabBar), Vec::new())
+        Self::new(GlyphRow::new(GlyphRowRole::TabBar))
     }
 
     pub fn row(&self) -> &GlyphRow {
         &self.row
-    }
-
-    pub fn media(&self) -> &[ChromeMedia] {
-        &self.media
     }
 }
 
@@ -524,11 +488,7 @@ impl FrameChromeContent {
 
     fn validate_in(&self, bounds: FrameRect) -> Result<(), ChromeLayoutError> {
         match self {
-            Self::DisplayRow(content) => {
-                for medium in content.media() {
-                    bounds.place(medium.local_bounds())?;
-                }
-            }
+            Self::DisplayRow(_) => {}
             Self::MenuBar(content) => {
                 for item in content.items() {
                     bounds.place(item.local_bounds())?;

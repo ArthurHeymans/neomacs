@@ -753,7 +753,7 @@ fn tty_frame_chrome_rasterizes_menu_and_tab_bands_in_order() {
             ChromeBandRequest::new(
                 FrameChromeKind::TabBar,
                 1.0,
-                FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row, Vec::new())),
+                FrameChromeContent::DisplayRow(ChromeDisplayRow::new(row)),
             ),
         ],
     )

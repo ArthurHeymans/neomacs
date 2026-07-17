@@ -1,11 +1,7 @@
 use crate::frame_chrome::{
-    BandRect, ChromeAction, ChromeBandRequest, ChromeDisplayRow, ChromeHitRegion,
-    ChromeLayoutError, ChromeMedia, FrameChrome, FrameChromeContent, FrameChromeKind, FrameRect,
-    FrameSize, InteractionId, MenuBarContent,
+    BandRect, ChromeAction, ChromeBandRequest, ChromeHitRegion, ChromeLayoutError, FrameChrome,
+    FrameChromeContent, FrameChromeKind, FrameRect, FrameSize, InteractionId, MenuBarContent,
 };
-use crate::frame_glyphs::GlyphRowRole;
-use crate::glyph_matrix::GlyphRow;
-use crate::types::ImageId;
 use crate::types::Rect;
 use proptest::prelude::*;
 
@@ -215,29 +211,6 @@ fn tab_bar_hit_regions_publish_only_snapshot_scoped_interaction_references() {
         .hit_regions()[0]
         .action();
     assert_eq!(published, &action);
-}
-
-#[test]
-fn frame_chrome_layout_rejects_media_outside_its_band() {
-    let content = ChromeDisplayRow::new(
-        GlyphRow::new(GlyphRowRole::TabBar),
-        vec![ChromeMedia::Image {
-            local_bounds: BandRect::new(620.0, 0.0, 16.0, 16.0).expect("local image bounds"),
-            image_id: ImageId::new(7),
-            slot_id: None,
-        }],
-    );
-    let error = FrameChrome::layout(
-        FrameSize::new(624.0, 648.0).expect("valid frame"),
-        vec![ChromeBandRequest::new(
-            FrameChromeKind::TabBar,
-            18.0,
-            FrameChromeContent::DisplayRow(content),
-        )],
-    )
-    .expect_err("media exceeds its band");
-
-    assert_eq!(error, ChromeLayoutError::ContentExceedsBand);
 }
 
 #[test]

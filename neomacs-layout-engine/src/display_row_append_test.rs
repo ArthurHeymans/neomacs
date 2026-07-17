@@ -9415,10 +9415,6 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    assert!(
-        state.images.is_empty(),
-        "row media must not use a side list"
-    );
     let frame = state.materialize();
     let image = frame
         .glyphs
@@ -11049,10 +11045,6 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    assert!(
-        state.xwidgets.is_empty(),
-        "row media must not use a side list"
-    );
     let frame = state.materialize();
     let xwidget = frame
         .glyphs
@@ -11215,10 +11207,6 @@ fn display_replacement_append_context_installs_image_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    assert!(
-        state.images.is_empty(),
-        "row media must not use a side list"
-    );
     let frame = state.materialize();
     let image = frame
         .glyphs
@@ -11372,10 +11360,6 @@ fn display_replacement_append_context_installs_video_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    assert!(
-        state.videos.is_empty(),
-        "row media must not use a side list"
-    );
     let frame = state.materialize();
     let video = frame
         .glyphs
