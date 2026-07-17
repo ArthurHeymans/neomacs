@@ -1564,16 +1564,109 @@ pub(crate) fn maybe_unify_char(c: i64, val: &Value) -> i64 {
     c
 }
 
+/// The deepest PLAIN (non-sub-table) cell of `table`'s local tree containing
+/// `ch`: the raw slot value (before defalt/parent resolution) and the cell's
+/// INCLUSIVE character span. O(tree depth); never materializes runs.
+fn ct_local_plain_cell_at(table: &Value, ch: i64) -> (Value, i64, i64) {
+    let Some(obj) = table.as_char_table_obj() else {
+        return (Value::NIL, 0, MAX_CHAR);
+    };
+    let is_uniprop = is_char_code_property_table(table);
+    let idx = (ch / GNU_CHARTAB_CHARS[0]) as usize;
+    let mut start = idx as i64 * GNU_CHARTAB_CHARS[0];
+    let mut end = (start + GNU_CHARTAB_CHARS[0] - 1).min(MAX_CHAR);
+    let Some(slot) = obj.contents.get(idx).copied() else {
+        return (Value::NIL, start, end);
+    };
+    let mut containing = *table;
+    let mut containing_idx = idx;
+    let mut current = slot;
+    loop {
+        if is_uniprop && uniprop_compressed_string(current).is_some() {
+            current = uniprop_table_uncompress(containing, containing_idx).unwrap_or(current);
+        }
+        let Some(sub) = current.as_sub_char_table_obj() else {
+            return (current, start, end);
+        };
+        let depth = sub.depth as usize;
+        let min_char = sub.min_char as i64;
+        let span = GNU_CHARTAB_CHARS[depth];
+        let sub_idx = chartab_idx(ch, depth, min_char);
+        start = min_char + sub_idx as i64 * span;
+        end = (start + span - 1).min(MAX_CHAR);
+        let Some(next) = sub.contents.get(sub_idx).copied() else {
+            return (Value::NIL, start, end);
+        };
+        containing = current;
+        containing_idx = sub_idx;
+        current = next;
+    }
+}
+
+/// Effective value at `ch` (local, else defalt, else parent — same resolution
+/// order as `ct_lookup`) together with the INCLUSIVE span over which this
+/// resolution is uniform. A nil local cell that resolves through the parent
+/// intersects the local span with the parent's, mirroring GNU
+/// `char_table_ref_and_range`'s per-level from/to narrowing (chartab.c).
+fn ct_effective_value_span_at(table: &Value, ch: i64) -> (Value, i64, i64) {
+    let Some(obj) = table.as_char_table_obj() else {
+        return (Value::NIL, 0, MAX_CHAR);
+    };
+    let (value, start, end) = ct_local_plain_cell_at(table, ch);
+    let resolved = if value.is_nil() && !obj.defalt.is_nil() {
+        obj.defalt
+    } else {
+        value
+    };
+    if !resolved.is_nil() || !obj.parent.is_char_table() {
+        return (resolved, start, end);
+    }
+    let (parent_value, parent_start, parent_end) = ct_effective_value_span_at(&obj.parent, ch);
+    (parent_value, start.max(parent_start), end.min(parent_end))
+}
+
 fn ct_lookup_and_range(table: &Value, ch: i64) -> Result<(Value, i64, i64), Flow> {
     if !is_char_table(table) {
         return Err(wrong_type("char-table-p", table));
     }
-    for run in ct_effective_runs(table) {
-        if ch >= run.start && ch <= run.end {
-            return Ok((run.value, run.start, run.end));
+    if !table.is_char_table() {
+        // Legacy vector representation: tiny fixed layout, the run
+        // materialization is cheap and keeps the old semantics exactly.
+        for run in ct_effective_runs(table) {
+            if ch >= run.start && ch <= run.end {
+                return Ok((run.value, run.start, run.end));
+            }
+        }
+        return Ok((Value::NIL, 0, MAX_CHAR));
+    }
+    // GNU char_table_ref_and_range shape: resolve the value at ch by tree
+    // descent, then extend the range outward by WHOLE plain cells while the
+    // effective value stays eq (the same merge predicate the run
+    // materializer used). A point query is O(depth); the extent costs one
+    // descent per DISTINCT cell in the run — a uniform table extends by
+    // 65536-char top cells, never by materializing every entry. The previous
+    // implementation enumerated the ENTIRE table (all sub-tables plus the
+    // parent chain) per query, which made subword-mode word motion — five
+    // queries per word against its whole-range boundary table — unusably
+    // slow.
+    let (value, mut from, mut to) = ct_effective_value_span_at(table, ch);
+    while from > 0 {
+        let (left_value, left_start, _) = ct_effective_value_span_at(table, from - 1);
+        if eq_value(&left_value, &value) {
+            from = left_start;
+        } else {
+            break;
         }
     }
-    Ok((Value::NIL, 0, MAX_CHAR))
+    while to < MAX_CHAR {
+        let (right_value, _, right_end) = ct_effective_value_span_at(table, to + 1);
+        if eq_value(&right_value, &value) {
+            to = right_end;
+        } else {
+            break;
+        }
+    }
+    Ok((value, from, to))
 }
 
 fn key_span(key: Value) -> Option<(i64, i64)> {
