@@ -3739,8 +3739,8 @@ fn bootstrap_batch_startup_error_exits_nonzero_like_gnu() {
         .map(|buffer| buffer.buffer_string())
         .unwrap_or_default();
     assert!(
-        messages.contains("error") && messages.contains("boom"),
-        "startup error should be logged before nonzero shutdown; messages={messages:?}"
+        messages.lines().any(|line| line == "boom"),
+        "GNU prints `(error STRING)` as STRING before nonzero shutdown; messages={messages:?}"
     );
 }
 
