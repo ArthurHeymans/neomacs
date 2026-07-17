@@ -828,6 +828,11 @@ fn forward_word_with_options(
     count: i64,
     honor_properties: bool,
 ) -> (EmacsBytePos, bool) {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     if count < 0 {
         return backward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -850,6 +855,7 @@ fn forward_word_with_options(
                     chars.char_at(idx),
                     accessible_char_start + idx,
                     honor_properties,
+                    prop_cache
                 )
                 .class,
                 SyntaxClass::Word
@@ -870,6 +876,7 @@ fn forward_word_with_options(
                     chars.char_at(idx),
                     accessible_char_start + idx,
                     honor_properties,
+                    prop_cache
                 )
                 .class,
                 SyntaxClass::Word
@@ -919,6 +926,11 @@ fn word_motion_with_table(
     honor_properties: bool,
     wbtable: Value,
 ) -> (EmacsBytePos, bool) {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     let forward = count > 0;
     let n = count.unsigned_abs();
     let mut completed = true;
@@ -950,6 +962,7 @@ fn word_motion_with_table(
                         chars.char_at(i),
                         acc_start + i,
                         honor_properties,
+                        prop_cache
                     )
                     .class,
                     SyntaxClass::Word
@@ -1083,6 +1096,11 @@ fn backward_word_with_options(
     count: i64,
     honor_properties: bool,
 ) -> (EmacsBytePos, bool) {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     if count < 0 {
         return forward_word_with_options(buf, table, -count, honor_properties);
     }
@@ -1104,6 +1122,7 @@ fn backward_word_with_options(
                     chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
                     honor_properties,
+                    prop_cache
                 )
                 .class,
                 SyntaxClass::Word
@@ -1124,6 +1143,7 @@ fn backward_word_with_options(
                     chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
                     honor_properties,
+                    prop_cache
                 )
                 .class,
                 SyntaxClass::Word
@@ -1156,6 +1176,11 @@ fn skip_syntax_forward_with_options(
     limit: Option<usize>,
     honor_properties: bool,
 ) -> usize {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
@@ -1180,6 +1205,7 @@ fn skip_syntax_forward_with_options(
             chars.char_at(idx),
             accessible_char_start + idx,
             honor_properties,
+            prop_cache,
         )
         .class;
         if classes.contains(&syn) == negate {
@@ -1210,6 +1236,11 @@ fn skip_syntax_backward_with_options(
     limit: Option<usize>,
     honor_properties: bool,
 ) -> usize {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
@@ -1233,6 +1264,7 @@ fn skip_syntax_backward_with_options(
             chars.char_at(idx - 1),
             accessible_char_start + idx - 1,
             honor_properties,
+            prop_cache,
         )
         .class;
         if classes.contains(&syn) == negate {
@@ -1282,6 +1314,11 @@ fn scan_sexps_with_options(
     honor_properties: bool,
     ignore_comments: bool,
 ) -> Result<Option<usize>, ScanListError> {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     if count == 0 {
         return Ok(Some(from));
     }
@@ -1305,6 +1342,7 @@ fn scan_sexps_with_options(
                 table,
                 honor_properties,
                 ignore_comments,
+                prop_cache,
             );
             idx = skipped.position();
             if matches!(skipped, IgnoredSkip::UnterminatedComment(_)) {
@@ -1321,6 +1359,7 @@ fn scan_sexps_with_options(
                 table,
                 honor_properties,
                 ignore_comments,
+                prop_cache,
             )?;
         }
     } else {
@@ -1333,6 +1372,7 @@ fn scan_sexps_with_options(
                 table,
                 honor_properties,
                 ignore_comments,
+                prop_cache,
             );
             if idx <= start_bound {
                 return Ok(None);
@@ -1345,6 +1385,7 @@ fn scan_sexps_with_options(
                 table,
                 honor_properties,
                 ignore_comments,
+                prop_cache,
             )?;
         }
     }
@@ -1398,6 +1439,7 @@ fn maybe_skip_comment_forward(
     honor_properties: bool,
     class: SyntaxClass,
     flags: SyntaxFlags,
+    prop_cache: &SyntaxPropRange,
 ) -> Option<CommentSkip> {
     if !(class == SyntaxClass::Comment
         || class == SyntaxClass::CommentFence
@@ -1428,6 +1470,7 @@ fn maybe_skip_comment_backward(
     honor_properties: bool,
     class: SyntaxClass,
     flags: SyntaxFlags,
+    prop_cache: &SyntaxPropRange,
 ) -> Option<usize> {
     if !(class == SyntaxClass::EndComment
         || class == SyntaxClass::CommentFence
@@ -1457,15 +1500,23 @@ fn skip_sexp_ignored_forward(
     table: &SyntaxTable,
     honor_properties: bool,
     ignore_comments: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> IgnoredSkip {
     let mut skipped_unterminated_comment = false;
     while idx < stop {
         let c = chars.char_at(idx);
-        let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties);
+        let entry =
+            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache);
         let class = entry.class;
         if ignore_comments
-            && let Some(skip) =
-                maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
+            && let Some(skip) = maybe_skip_comment_forward(
+                buf,
+                idx,
+                honor_properties,
+                class,
+                entry.flags,
+                prop_cache,
+            )
         {
             skipped_unterminated_comment |= matches!(skip, CommentSkip::Unterminated(_));
             idx = skip.next();
@@ -1492,15 +1543,23 @@ fn skip_sexp_ignored_backward(
     table: &SyntaxTable,
     honor_properties: bool,
     ignore_comments: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> usize {
     while idx > start {
         let prev = idx - 1;
         let c = chars.char_at(prev);
-        let entry = effective_syntax_entry_for_abs_char(buf, table, c, prev, honor_properties);
+        let entry =
+            effective_syntax_entry_for_abs_char(buf, table, c, prev, honor_properties, prop_cache);
         let class = entry.class;
         if ignore_comments
-            && let Some(next) =
-                maybe_skip_comment_backward(buf, idx, honor_properties, class, entry.flags)
+            && let Some(next) = maybe_skip_comment_backward(
+                buf,
+                idx,
+                honor_properties,
+                class,
+                entry.flags,
+                prop_cache,
+            )
         {
             idx = next;
             continue;
@@ -1523,10 +1582,13 @@ fn skip_string_forward(
     honor_properties: bool,
     delimiter: char,
     delimiter_class: SyntaxClass,
+    prop_cache: &SyntaxPropRange,
 ) -> Result<usize, String> {
     while idx < stop {
         let c = chars.char_at(idx);
-        let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+        let class =
+            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache)
+                .class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
         {
@@ -1550,11 +1612,14 @@ fn skip_string_backward(
     honor_properties: bool,
     delimiter: char,
     delimiter_class: SyntaxClass,
+    prop_cache: &SyntaxPropRange,
 ) -> Result<usize, String> {
     while idx > stop {
         idx -= 1;
         let c = chars.char_at(idx);
-        let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+        let class =
+            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache)
+                .class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
         {
@@ -1574,6 +1639,11 @@ fn scan_lists_with_options(
     honor_properties: bool,
     ignore_comments: bool,
 ) -> Result<Option<usize>, ScanListError> {
+    // Per-scan syntax-table property cache (GNU gl_state); one
+    // interval lookup per property RUN instead of per character.
+    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = &prop_cache;
+
     let chars = BufferChars::new(buf, CharPos0::ZERO);
     let mut idx = from;
     let accessible_chars = buf.accessible_char_region();
@@ -1589,15 +1659,27 @@ fn scan_lists_with_options(
             let mut found = false;
             while idx < stop {
                 let ch = chars.char_at(idx);
-                let entry =
-                    effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
+                let entry = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    ch,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                );
                 let class = entry.class;
                 if depth == min_depth {
                     last_good = idx;
                 }
                 if ignore_comments
-                    && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
+                    && let Some(skip) = maybe_skip_comment_forward(
+                        buf,
+                        idx,
+                        honor_properties,
+                        class,
+                        entry.flags,
+                        prop_cache,
+                    )
                 {
                     idx = skip.next();
                     if matches!(skip, CommentSkip::Unterminated(_)) && depth == 0 {
@@ -1636,6 +1718,7 @@ fn scan_lists_with_options(
                             honor_properties,
                             ch,
                             class,
+                            prop_cache,
                         )
                         .map_err(|_| ScanListError::unbalanced(last_good, stop))?;
                     }
@@ -1665,8 +1748,14 @@ fn scan_lists_with_options(
             while idx > start {
                 idx -= 1;
                 let ch = chars.char_at(idx);
-                let entry =
-                    effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
+                let entry = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    ch,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                );
                 let class = entry.class;
                 if depth == min_depth {
                     last_good = idx;
@@ -1678,6 +1767,7 @@ fn scan_lists_with_options(
                         honor_properties,
                         class,
                         entry.flags,
+                        prop_cache,
                     )
                 {
                     idx = next;
@@ -1712,6 +1802,7 @@ fn scan_lists_with_options(
                             honor_properties,
                             ch,
                             class,
+                            prop_cache,
                         )
                         .map_err(|_| ScanListError::unbalanced(last_good, start))?;
                     }
@@ -1776,13 +1867,16 @@ fn char_quoted_at(
     start_bound: usize,
     table: &SyntaxTable,
     honor_properties: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> bool {
     let mut pos = idx;
     let mut quoted = false;
     while pos > start_bound {
         pos -= 1;
         let c = chars.char_at(pos);
-        let class = effective_syntax_entry_for_abs_char(buf, table, c, pos, honor_properties).class;
+        let class =
+            effective_syntax_entry_for_abs_char(buf, table, c, pos, honor_properties, prop_cache)
+                .class;
         if !matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
             break;
         }
@@ -1800,6 +1894,7 @@ fn scan_sexp_forward(
     table: &SyntaxTable,
     honor_properties: bool,
     ignore_comments: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> Result<usize, ScanListError> {
     let skipped = skip_sexp_ignored_forward(
         buf,
@@ -1809,6 +1904,7 @@ fn scan_sexp_forward(
         table,
         honor_properties,
         ignore_comments,
+        prop_cache,
     );
     let mut idx = skipped.position();
 
@@ -1821,7 +1917,8 @@ fn scan_sexp_forward(
     }
 
     let ch = chars.char_at(idx);
-    let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
+    let syn_entry =
+        effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties, prop_cache);
     let syn = syn_entry.class;
 
     match syn {
@@ -1831,12 +1928,24 @@ fn scan_sexp_forward(
             idx += 1;
             while idx < len && depth > 0 {
                 let c = chars.char_at(idx);
-                let entry =
-                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties);
+                let entry = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                );
                 let s = entry.class;
                 if ignore_comments
-                    && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, honor_properties, s, entry.flags)
+                    && let Some(skip) = maybe_skip_comment_forward(
+                        buf,
+                        idx,
+                        honor_properties,
+                        s,
+                        entry.flags,
+                        prop_cache,
+                    )
                 {
                     idx = skip.next();
                     continue;
@@ -1859,6 +1968,7 @@ fn scan_sexp_forward(
                                 chars.char_at(idx),
                                 idx,
                                 honor_properties,
+                                prop_cache,
                             )
                             .class;
                             if sc == delim_class
@@ -1893,8 +2003,15 @@ fn scan_sexp_forward(
             idx += 1;
             while idx < len {
                 let c = chars.char_at(idx);
-                let s =
-                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+                let s = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                )
+                .class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
                     break;
                 }
@@ -1926,8 +2043,15 @@ fn scan_sexp_forward(
             // Continue absorbing the rest of the word/symbol, honoring escapes.
             while idx < len {
                 let c = chars.char_at(idx);
-                let s =
-                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+                let s = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                )
+                .class;
                 match s {
                     SyntaxClass::Escape | SyntaxClass::CharQuote => {
                         // Skip the escape char, then the quoted char below.
@@ -1971,6 +2095,7 @@ fn scan_sexp_backward(
     table: &SyntaxTable,
     honor_properties: bool,
     ignore_comments: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> Result<usize, ScanListError> {
     let mut idx = skip_sexp_ignored_backward(
         buf,
@@ -1980,6 +2105,7 @@ fn scan_sexp_backward(
         table,
         honor_properties,
         ignore_comments,
+        prop_cache,
     );
 
     if idx == start_bound {
@@ -1988,14 +2114,23 @@ fn scan_sexp_backward(
 
     idx -= 1; // move to the character we're examining
     let ch = chars.char_at(idx);
-    let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties);
+    let syn_entry =
+        effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties, prop_cache);
     let mut syn = syn_entry.class;
 
     // Quoting turns anything except a comment-ender into a word character.
     // Mirrors GNU scan_lists: if the char we landed on is quoted (preceded by
     // an escape), step back past the escape and treat the pair as a word.
     if syn != SyntaxClass::EndComment
-        && char_quoted_at(buf, chars, idx, start_bound, table, honor_properties)
+        && char_quoted_at(
+            buf,
+            chars,
+            idx,
+            start_bound,
+            table,
+            honor_properties,
+            prop_cache,
+        )
     {
         idx -= 1;
         syn = SyntaxClass::Word;
@@ -2008,12 +2143,24 @@ fn scan_sexp_backward(
             while idx > start_bound && depth > 0 {
                 idx -= 1;
                 let c = chars.char_at(idx);
-                let entry =
-                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties);
+                let entry = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                );
                 let s = entry.class;
                 if ignore_comments
-                    && let Some(next) =
-                        maybe_skip_comment_backward(buf, idx + 1, honor_properties, s, entry.flags)
+                    && let Some(next) = maybe_skip_comment_backward(
+                        buf,
+                        idx + 1,
+                        honor_properties,
+                        s,
+                        entry.flags,
+                        prop_cache,
+                    )
                 {
                     idx = next;
                     continue;
@@ -2037,6 +2184,7 @@ fn scan_sexp_backward(
                                     chars.char_at(idx),
                                     idx,
                                     honor_properties,
+                                    prop_cache,
                                 )
                                 .class;
                                 if sc == delim_class
@@ -2067,15 +2215,30 @@ fn scan_sexp_backward(
             idx -= 1;
             while idx > start_bound {
                 let c = chars.char_at(idx);
-                let s =
-                    effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+                let s = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c,
+                    idx,
+                    honor_properties,
+                    prop_cache,
+                )
+                .class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
                     break;
                 }
                 idx -= 1;
             }
             let c = chars.char_at(idx);
-            let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties).class;
+            let s = effective_syntax_entry_for_abs_char(
+                buf,
+                table,
+                c,
+                idx,
+                honor_properties,
+                prop_cache,
+            )
+            .class;
             if !(s == delim_class && (syn == SyntaxClass::StringFence || c == ch)) {
                 return Err(ScanListError::unbalanced(idx, start));
             }
@@ -2088,14 +2251,28 @@ fn scan_sexp_backward(
             while idx > start_bound {
                 let prev = idx - 1;
                 let c1 = chars.char_at(prev);
-                let c1_class =
-                    effective_syntax_entry_for_abs_char(buf, table, c1, prev, honor_properties)
-                        .class;
+                let c1_class = effective_syntax_entry_for_abs_char(
+                    buf,
+                    table,
+                    c1,
+                    prev,
+                    honor_properties,
+                    prop_cache,
+                )
+                .class;
                 // Don't allow a comment-end to be quoted.
                 if c1_class == SyntaxClass::EndComment {
                     break;
                 }
-                let quoted = char_quoted_at(buf, chars, prev, start_bound, table, honor_properties);
+                let quoted = char_quoted_at(
+                    buf,
+                    chars,
+                    prev,
+                    start_bound,
+                    table,
+                    honor_properties,
+                    prop_cache,
+                );
                 if quoted {
                     // The previous char is escaped: step back past it now, so the
                     // following `idx -= 1` lands on the escape character.
@@ -2550,9 +2727,16 @@ fn effective_syntax_entry_for_abs_char(
     ch: char,
     abs_char: usize,
     honor_properties: bool,
+    prop_cache: &SyntaxPropRange,
 ) -> SyntaxEntry {
-    let byte_pos = buffer_char_to_emacs_byte_pos(buf, offset_char_pos(CharPos0::ZERO, abs_char));
-    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties)
+    effective_syntax_entry_for_abs_char_cached(
+        buf,
+        table,
+        ch,
+        abs_char,
+        honor_properties,
+        prop_cache,
+    )
 }
 
 pub(crate) fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
