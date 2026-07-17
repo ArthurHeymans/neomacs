@@ -1740,6 +1740,14 @@ fn resolved_font_for_face_preserves_platform_named_instance() {
         tracing::info!("skipping: Noto Sans has no distinct bold instance");
         return;
     }
+    if platform.face_index >> 16 == 0 {
+        // The property under test is FreeType named-instance SELECTOR
+        // decoding. When a static Bold face is installed (common alongside
+        // the variable family), fontconfig legitimately prefers it and the
+        // match carries no instance selector — there is nothing to decode.
+        tracing::info!("skipping: platform Bold match is a static face, not a named instance");
+        return;
+    }
 
     let mut svc = make_svc();
     // Frame face realization currently primes the platform file before the
