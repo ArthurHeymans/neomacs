@@ -664,10 +664,26 @@ pub struct Obarray {
     global_member_count: usize,
     function_epoch: u64,
     value_epoch: u64,
+    /// Bumped whenever global-obarray MEMBERSHIP changes (mark/clear);
+    /// keys the completion bucket-order cache below.
+    members_epoch: u64,
+    /// Memoized GNU-bucket-order symbol list for completion over the
+    /// global obarray: try-completion/all-completions re-derive the same
+    /// ~30k-symbol hash+sort per call (a bootstrap hotspot). Mutex, not
+    /// RefCell — `&Obarray` is shared with the concurrent GC scan thread
+    /// (uncontended in practice: completion runs on the Lisp thread).
+    completion_order_cache: std::sync::Mutex<Option<CompletionOrderCache>>,
     /// Heap-allocated BLVs for `SYMBOL_LOCALIZED` symbols. Each entry
     /// is a `Box::into_raw` pointer; freed in [`Obarray::drop`]. The
     /// pool is append-only — we never reuse a slot.
     blvs: Vec<*mut LispBufferLocalValue>,
+}
+
+/// See [`Obarray::completion_order_cache`].
+struct CompletionOrderCache {
+    members_epoch: u64,
+    obarray_len: usize,
+    ids: Vec<SymId>,
 }
 
 /// Power-of-two slots per obarray chunk (`idx >> 12` / `idx & 4095`).
@@ -1072,6 +1088,8 @@ impl Clone for Obarray {
             global_member_count: self.global_member_count,
             function_epoch: self.function_epoch,
             value_epoch: self.value_epoch,
+            members_epoch: self.members_epoch,
+            completion_order_cache: std::sync::Mutex::new(None),
             blvs,
         }
     }
@@ -1234,6 +1252,7 @@ impl Obarray {
         };
         if added {
             self.global_member_count += 1;
+            self.members_epoch += 1;
         }
     }
 
@@ -1247,6 +1266,7 @@ impl Obarray {
         sym.interned_global = false;
         sym.flags.set_interned(SymbolInterned::Uninterned);
         self.global_member_count = self.global_member_count.saturating_sub(1);
+        self.members_epoch += 1;
         true
     }
 
@@ -1284,6 +1304,8 @@ impl Obarray {
             global_member_count: 0,
             function_epoch: 0,
             value_epoch: 0,
+            members_epoch: 0,
+            completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
         };
 
@@ -2998,6 +3020,34 @@ impl Obarray {
             .map(|(id, _)| id)
     }
 
+    /// Return the memoized completion bucket order for the current
+    /// membership epoch + obarray length, computing (and caching) it on
+    /// miss. The dump-load path resets nothing here: from_dump builds a
+    /// fresh Obarray with an empty cache.
+    pub(crate) fn completion_bucket_order_cached(
+        &self,
+        obarray_len: usize,
+        compute: impl FnOnce() -> Vec<SymId>,
+    ) -> Vec<SymId> {
+        let mut guard = self
+            .completion_order_cache
+            .lock()
+            .expect("completion order cache poisoned");
+        if let Some(cache) = guard.as_ref()
+            && cache.members_epoch == self.members_epoch
+            && cache.obarray_len == obarray_len
+        {
+            return cache.ids.clone();
+        }
+        let ids = compute();
+        *guard = Some(CompletionOrderCache {
+            members_epoch: self.members_epoch,
+            obarray_len,
+            ids: ids.clone(),
+        });
+        ids
+    }
+
     /// Iterate over fmakunbound'd symbol ids (for pdump serialization).
     pub(crate) fn function_unbound_ids(&self) -> impl Iterator<Item = SymId> + '_ {
         self.iter_symbols()
@@ -3028,6 +3078,8 @@ impl Obarray {
             global_member_count: 0,
             function_epoch,
             value_epoch: 0,
+            members_epoch: 0,
+            completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
         };
         for (id, mut sym) in symbols {
