@@ -60,7 +60,6 @@ fn golden_state() -> FrameDisplayState {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
         matrix,
-        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 128.0, 32.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 128.0, 16.0),
         text_clip_bounds: None,

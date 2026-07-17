@@ -312,6 +312,33 @@ fn damage_of(rows: &[(i64, u32, RowDamage, u64)]) -> FrameRowDamage {
     FrameRowDamage { windows }
 }
 
+#[test]
+fn frame_damage_is_derived_from_each_authoritative_row() {
+    use neomacs_display_protocol::glyph_matrix::{
+        FrameDisplayState, GlyphArea, GlyphMatrix, WindowMatrixEntry,
+    };
+    use neomacs_display_protocol::{DisplayWindowId, FaceId, Rect};
+
+    let mut matrix = GlyphMatrix::new(1, 1);
+    matrix.rows[0].glyphs[GlyphArea::Text.index()].push(
+        neomacs_display_protocol::glyph_matrix::Glyph::char('x', FaceId::new(0), 0),
+    );
+    matrix.rows[0].damage = RowDamage::Reused;
+    let mut state = FrameDisplayState::new(1, 1, 8.0, 16.0);
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(10),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 8.0, 16.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let damage = FrameRowDamage::from_display_state(&state);
+
+    assert_eq!(damage.row(10, 0).unwrap().damage, RowDamage::Reused);
+}
+
 fn hash_for(window: i64, row: u32) -> u64 {
     0x1000 + window as u64 * 16 + row as u64
 }

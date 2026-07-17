@@ -1361,20 +1361,19 @@ impl LayoutEngine {
                     next_layout_stats.record_window_class(LayoutClass::Full);
                 }
 
-                // Phase 5 (#44) per-row damage, parallel to matrix.rows. The fast
-                // paths reuse the FIRST `reused` enabled body rows (cursor-only
-                // reuses all); chrome + disabled + relaid body rows are `New`.
+                // Phase 5 (#44) per-row provenance. The fast paths reuse the
+                // FIRST `reused` enabled body rows (cursor-only reuses all);
+                // chrome + disabled + relaid body rows are `New`.
                 {
-                    let mut damage = Vec::with_capacity(entry.matrix.rows.len());
                     let mut body_seen = 0usize;
-                    for row in &entry.matrix.rows {
+                    for row in &mut entry.matrix.rows {
                         let is_chrome = if role_based {
                             RetainedWindowMatrix::is_chrome_role(row.role)
                         } else {
                             row.mode_line
                         };
                         if !row.enabled || is_chrome {
-                            damage.push(RowDamage::New);
+                            row.damage = RowDamage::New;
                             continue;
                         }
                         let d = if cursor_only {
@@ -1394,10 +1393,9 @@ impl LayoutEngine {
                         } else {
                             RowDamage::New
                         };
-                        damage.push(d);
+                        row.damage = d;
                         body_seen += 1;
                     }
-                    entry.damage = damage;
                 }
 
                 // Probe-pass exclusion: a window that laid out <=1 enabled row
@@ -1419,7 +1417,6 @@ impl LayoutEngine {
                     else {
                         continue;
                     };
-                    let damage = vec![RowDamage::New; entry.matrix.rows.len()];
                     retained.insert(
                         window_id,
                         RetainedWindowMatrix {
@@ -1441,7 +1438,6 @@ impl LayoutEngine {
                             } else {
                                 MatrixValidity::Valid
                             },
-                            damage,
                             display_snapshot,
                             presented_cursor: presented_cursor
                                 .as_ref()

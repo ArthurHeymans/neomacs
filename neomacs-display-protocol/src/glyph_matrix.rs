@@ -357,6 +357,12 @@ pub struct GlyphRow {
     pointer_runs: Vec<GlyphPointerRun>,
     /// Row hash for fast diff. 0 = not yet computed.
     pub hash: u64,
+    /// Incremental-redisplay provenance owned by this exact visual row.
+    ///
+    /// Keeping damage beside the row hash makes it impossible to shift a
+    /// parallel damage vector out of alignment with `GlyphMatrix::rows`.
+    #[serde(default)]
+    pub damage: RowDamage,
     /// Row is valid and should be displayed.
     pub enabled: bool,
     /// Semantic role: text body, mode-line, header-line, tab-line, etc.
@@ -435,6 +441,7 @@ impl GlyphRow {
             pointer_appearances: Vec::new(),
             pointer_runs: Vec::new(),
             hash: 0,
+            damage: RowDamage::New,
             enabled: true,
             role,
             cursor_col: None,
@@ -779,11 +786,9 @@ impl GlyphMatrix {
     }
 }
 
-/// Per-row layout provenance for incremental redisplay (spec §4.6). Carried as a
-/// side `Vec` parallel to `GlyphMatrix::rows` (NOT a `GlyphRow` field, to keep
-/// glyph serialization stable). The render-side damage compositor (Phase 5)
-/// reads it to skip `Reused` rows and area-blit `ReusedShifted` rows; until that
-/// lands it is informational only.
+/// Per-row layout provenance for incremental redisplay (spec §4.6).
+/// Stored directly on [`GlyphRow`] so provenance and visual identity cannot
+/// drift apart before the render-side damage compositor consumes them.
 #[derive(Clone, Copy, Debug, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub enum RowDamage {
     /// Row was laid out from scratch this cycle.
@@ -806,9 +811,6 @@ impl RowDamage {
 pub struct WindowMatrixEntry {
     pub window_id: DisplayWindowId,
     pub matrix: GlyphMatrix,
-    /// Per-row damage parallel to `matrix.rows` (spec §4.6 / Phase 5). Empty
-    /// when not computed; otherwise one entry per row.
-    pub damage: Vec<RowDamage>,
     /// Frame-relative bounds of the whole Emacs window area owned by
     /// this matrix, including margins/fringes and chrome rows.
     pub pixel_bounds: Rect,

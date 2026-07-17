@@ -1,7 +1,7 @@
 //! Per-row vertex reuse for the text tessellation pipeline.
 //!
 //! The layout engine marks rows it reused (`RowDamage::Reused` /
-//! `ReusedShifted`) on `WindowMatrixEntry`. Display-runtime summarizes that
+//! `ReusedShifted`) on each authoritative `GlyphRow`. Display-runtime summarizes that
 //! into a [`FrameRowDamage`] built from the SAME `FrameDisplayState` instance
 //! that produced the frame's `FrameGlyphBuffer`, and hands both to
 //! `render_frame_glyphs` together. When a row's damage says "reused" and every
@@ -69,7 +69,7 @@ pub struct FrameRowDamage {
     pub windows: HashMap<i64, WindowRowDamage>,
 }
 
-/// Row damage for one window, parallel to its matrix rows.
+/// Row damage for one window, indexed by matrix row.
 #[derive(Debug, Default, Clone)]
 pub struct WindowRowDamage {
     pub rows: Vec<RowDamageInfo>,
@@ -84,21 +84,18 @@ pub struct RowDamageInfo {
 }
 
 impl FrameRowDamage {
-    /// Build the summary from a display state. Windows whose damage was not
-    /// computed (empty vec) are omitted, so their rows always tessellate.
+    /// Build the summary from the same authoritative rows that materialize the
+    /// presentation. A row's hash and provenance can therefore never be
+    /// paired with different vector indices.
     pub fn from_display_state(state: &FrameDisplayState) -> Self {
         let mut windows = HashMap::new();
         for entry in &state.window_matrices {
-            if entry.damage.is_empty() {
-                continue;
-            }
             let rows = entry
                 .matrix
                 .rows
                 .iter()
-                .zip(&entry.damage)
-                .map(|(row, &damage)| RowDamageInfo {
-                    damage,
+                .map(|row| RowDamageInfo {
+                    damage: row.damage,
                     row_hash: row.hash,
                 })
                 .collect();

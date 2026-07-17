@@ -268,8 +268,6 @@ pub struct RetainedWindowMatrix {
     pub key: RetainedWindowKey,
     /// Reuse gate; only `Valid` matrices may be reused (Phases 1+).
     pub validity: MatrixValidity,
-    /// Per-row provenance, parallel to `matrix.rows`. Phase 0a: all `New`.
-    pub damage: Vec<RowDamage>,
     /// The clean pass's window display snapshot (point-independent body row
     /// snapshots + per-span display points). The cursor-only fast path (Phase 1)
     /// replays its body half verbatim, re-decorating only the cursor; the
@@ -897,7 +895,6 @@ mod scroll_classifier_tests {
             matrix,
             key: synthetic_key(base, 0),
             validity: MatrixValidity::Valid,
-            damage: Vec::new(),
             display_snapshot: WindowDisplaySnapshot {
                 window_id: WindowId(1),
                 text_area_left_offset: 0,

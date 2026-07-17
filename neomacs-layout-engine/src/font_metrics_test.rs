@@ -2029,7 +2029,6 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         matrix,
-        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_clip_bounds: None,
@@ -2188,7 +2187,6 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         matrix,
-        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
         text_clip_bounds: None,

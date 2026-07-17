@@ -530,9 +530,6 @@ impl OutputWindowGridEntry {
             text_pixel_bounds: self.text_pixel_bounds,
             text_clip_bounds: Some(self.text_clip_bounds),
             selected: self.selected,
-            // Per-row damage is filled in by the engine commit (which knows the
-            // window's fast-path class); empty here = "not yet computed".
-            damage: Vec::new(),
         }
     }
 }

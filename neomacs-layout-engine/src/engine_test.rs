@@ -16228,8 +16228,8 @@ fn edit_below_reuse_does_not_shift_trailing_placeholder_row() {
     );
 }
 
-/// Phase 5 (#44) — the fast paths emit per-row `RowDamage` parallel to the
-/// matrix rows: cursor-only reuses every body row (`Reused`), scroll marks its
+/// Phase 5 (#44) — the fast paths attach `RowDamage` to each authoritative
+/// matrix row: cursor-only reuses every body row (`Reused`), scroll marks its
 /// reused rows `ReusedShifted{dvpos}`, and a full rebuild is all `New`.
 #[test]
 fn phase5_fast_paths_emit_row_damage() {
@@ -16248,13 +16248,8 @@ fn phase5_fast_paths_emit_row_damage() {
             .iter()
             .find(|e| e.window_id.get() == win.0 as i64)
             .expect("selected window matrix");
-        assert_eq!(
-            entry.damage.len(),
-            entry.matrix.rows.len(),
-            "damage is parallel to matrix rows"
-        );
         (
-            entry.damage.clone(),
+            entry.matrix.rows.iter().map(|row| row.damage).collect(),
             entry.matrix.rows.iter().map(|r| r.role).collect(),
         )
     }
