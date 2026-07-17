@@ -1243,20 +1243,6 @@ impl LayoutEngine {
             }
         }
 
-        match crate::presentation_spatial::PresentationSpatialPlan::compile(
-            &frame_display_state,
-            &self.window_snapshots,
-        )
-        .and_then(|plan| plan.seal(&mut frame_display_state))
-        {
-            Ok(()) => {}
-            Err(error) => {
-                tracing::error!(?error, "rejecting invalid semantic hit snapshot");
-                evaluator.retire_interaction_presentation(presentation_id);
-                return;
-            }
-        }
-
         // Embed the user-defined fringe bitmaps once per frame so the renderer
         // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
         // heading fold arrows). GC-safe: copied out as plain `u16`/`u8` data.
@@ -1280,12 +1266,6 @@ impl LayoutEngine {
         // FrameGlyphBuffer no longer receives glyph output; the DisplayOutputBuilder
         // is now the sole output path.
 
-        // Commit intrinsic metrics only after the visual and spatial products
-        // have both sealed successfully.  Retry attempts never replace the GNU
-        // "current matrix" analogue used to seed future layout.
-        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
-        self.last_frame_display_state = Some(frame_display_state);
-
         // --- Incremental-layout commit (Phase 0a) ---
         //
         // Populate the relaid-row-count gate metric and retain each accepted
@@ -1293,13 +1273,11 @@ impl LayoutEngine {
         // on a resize-retry `continue`. Phase 0a always full-rebuilds: every
         // enabled row is `relaid`, every window is classified `Full`, and the
         // retained matrices are written but NOT read (no fast path exists yet).
-        {
+        let (next_layout_stats, next_retained_window_matrices, acked_buffer_ids) = {
             let key_map: std::collections::HashMap<DisplayWindowId, RetainedWindowKey> =
                 retained_keys.into_iter().collect();
-            let frame_state = self
-                .last_frame_display_state
-                .as_mut()
-                .expect("frame display state just set");
+            let frame_state = &mut frame_display_state;
+            let mut next_layout_stats = LayoutStats::default();
             let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
                 std::collections::HashMap::new();
@@ -1359,29 +1337,28 @@ impl LayoutEngine {
                         enabled_body += 1;
                     }
                 }
-                self.layout_stats.relaid_chrome_rows += enabled_chrome;
+                next_layout_stats.relaid_chrome_rows += enabled_chrome;
                 if cursor_only {
                     // Body rows were reused verbatim (0 relaid); chrome re-walked.
-                    self.layout_stats.reused_rows += enabled_body;
-                    self.layout_stats
-                        .record_window_class(LayoutClass::CursorOnly);
+                    next_layout_stats.reused_rows += enabled_body;
+                    next_layout_stats.record_window_class(LayoutClass::CursorOnly);
                 } else if let Some((reused, _dvpos)) = scroll_reused {
                     // Overlapping rows reused shifted; the rest were newly exposed
                     // and walked.
                     let reused = reused.min(enabled_body);
-                    self.layout_stats.reused_shifted_rows += reused;
-                    self.layout_stats.relaid_body_rows += enabled_body - reused;
-                    self.layout_stats.record_window_class(LayoutClass::Scroll);
+                    next_layout_stats.reused_shifted_rows += reused;
+                    next_layout_stats.relaid_body_rows += enabled_body - reused;
+                    next_layout_stats.record_window_class(LayoutClass::Scroll);
                 } else if let Some(reused) = edit_reused {
                     // Rows above the edit reused verbatim; the dirty line + below
                     // were relaid.
                     let reused = reused.min(enabled_body);
-                    self.layout_stats.reused_rows += reused;
-                    self.layout_stats.relaid_body_rows += enabled_body - reused;
-                    self.layout_stats.record_window_class(LayoutClass::Edit);
+                    next_layout_stats.reused_rows += reused;
+                    next_layout_stats.relaid_body_rows += enabled_body - reused;
+                    next_layout_stats.record_window_class(LayoutClass::Edit);
                 } else {
-                    self.layout_stats.relaid_body_rows += enabled_body;
-                    self.layout_stats.record_window_class(LayoutClass::Full);
+                    next_layout_stats.relaid_body_rows += enabled_body;
+                    next_layout_stats.record_window_class(LayoutClass::Full);
                 }
 
                 // Phase 5 (#44) per-row damage, parallel to matrix.rows. The fast
@@ -1475,23 +1452,55 @@ impl LayoutEngine {
                     );
                 }
             }
-            self.retained_window_matrices = retained;
-
             // Phase 3 redisplay ACK: reset each laid-out buffer's unchanged-region
             // accumulator at the committed (accepted) break — NEVER on a
             // retry/`continue` (which would under-invalidate, spec §6). From here
             // the accumulated dirty span is the edits the NEXT frame must relay.
-            let mut acked: std::collections::HashSet<u64> = std::collections::HashSet::new();
-            for key in key_map.values() {
-                if acked.insert(key.buffer_id)
-                    && let Some(buffer) = evaluator
-                        .buffer_manager()
-                        .get(neovm_core::buffer::BufferId(key.buffer_id))
-                {
-                    buffer.reset_unchanged_region();
-                }
+            let acked_buffer_ids: std::collections::HashSet<u64> =
+                key_map.values().map(|key| key.buffer_id).collect();
+            (next_layout_stats, retained, acked_buffer_ids)
+        };
+
+        let resolved = match crate::frame_presentation::ResolvedFrame::new(frame_display_state) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                tracing::error!(?error, "rejecting incoherent resolved frame");
+                evaluator.retire_interaction_presentation(presentation_id);
+                return;
+            }
+        };
+        let sealed = match crate::frame_presentation::PresentationComposer::compose(
+            resolved,
+            &self.window_snapshots,
+        ) {
+            Ok(sealed) => sealed,
+            Err(error) => {
+                tracing::error!(?error, "rejecting invalid frame presentation");
+                evaluator.retire_interaction_presentation(presentation_id);
+                return;
+            }
+        };
+        debug_assert_eq!(
+            sealed.revision().presentation(),
+            sealed.transport().presentation_id
+        );
+        let frame_display_state = sealed.into_transport();
+
+        // Commit retained state only after the visual, spatial, and revision
+        // invariants have sealed. A rejected presentation cannot acknowledge
+        // buffer edits or replace the GNU "current matrix" analogue.
+        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
+        self.layout_stats = next_layout_stats;
+        self.retained_window_matrices = next_retained_window_matrices;
+        for buffer_id in acked_buffer_ids {
+            if let Some(buffer) = evaluator
+                .buffer_manager()
+                .get(neovm_core::buffer::BufferId(buffer_id))
+            {
+                buffer.reset_unchanged_region();
             }
         }
+        self.last_frame_display_state = Some(frame_display_state);
 
         self.prev_window_infos = curr_window_infos;
 
