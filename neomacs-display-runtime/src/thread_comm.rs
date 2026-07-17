@@ -16,7 +16,7 @@ pub type WakeupFd = RawFd;
 pub type WakeupFd = RawHandle;
 
 use neomacs_display_protocol::ImageRealization;
-use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::SealedFramePresentation;
 pub use neomacs_display_protocol::{
     CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource,
     ToolBarItem, ToolBarItemType, TransitionPolicy,
@@ -798,8 +798,8 @@ const COMMAND_CHANNEL_CAPACITY: usize = 64;
 /// Communication channels between threads
 pub struct ThreadComms {
     /// Frame display state: Emacs → Render
-    pub frame_tx: Sender<FrameDisplayState>,
-    pub frame_rx: Receiver<FrameDisplayState>,
+    pub frame_tx: Sender<SealedFramePresentation>,
+    pub frame_rx: Receiver<SealedFramePresentation>,
 
     /// Commands: Emacs → Render
     pub cmd_tx: Sender<RenderCommand>,
@@ -855,7 +855,7 @@ impl ThreadComms {
 
 /// Emacs thread communication handle
 pub struct EmacsComms {
-    pub frame_tx: Sender<FrameDisplayState>,
+    pub frame_tx: Sender<SealedFramePresentation>,
     pub cmd_tx: Sender<RenderCommand>,
     pub input_rx: Receiver<InputEvent>,
     pub wakeup_reader: WakeupReader,
@@ -863,7 +863,7 @@ pub struct EmacsComms {
 
 /// Render thread communication handle
 pub struct RenderComms {
-    pub frame_rx: Receiver<FrameDisplayState>,
+    pub frame_rx: Receiver<SealedFramePresentation>,
     pub cmd_rx: Receiver<RenderCommand>,
     pub input_tx: Sender<InputEvent>,
     pub wakeup: WakeupWriter,

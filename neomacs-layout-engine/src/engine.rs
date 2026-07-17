@@ -261,7 +261,7 @@ pub struct LayoutEngine {
     pending_tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
     /// The last completed `FrameDisplayState`, produced by `layout_frame_rust()`.
     /// Used by the TTY redisplay path to drive `TtyRif` on the evaluator thread.
-    pub last_frame_display_state: Option<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
+    pub last_frame_display_state: Option<neomacs_display_protocol::SealedFramePresentation>,
     /// Monotonic face-id allocator, frame-scoped.
     ///
     /// Mirrors GNU's frame-wide `face_cache->used` counter in
@@ -1456,11 +1456,7 @@ impl LayoutEngine {
                 return;
             }
         };
-        debug_assert_eq!(
-            sealed.revision().presentation(),
-            sealed.transport().presentation_id
-        );
-        let frame_display_state = sealed.into_transport();
+        debug_assert_eq!(sealed.presentation(), sealed.state().presentation_id);
 
         // Commit retained state only after the visual, spatial, and revision
         // invariants have sealed. A rejected presentation cannot acknowledge
@@ -1476,7 +1472,7 @@ impl LayoutEngine {
                 buffer.reset_unchanged_region();
             }
         }
-        self.last_frame_display_state = Some(frame_display_state);
+        self.last_frame_display_state = Some(sealed);
 
         self.prev_window_infos = curr_window_infos;
 

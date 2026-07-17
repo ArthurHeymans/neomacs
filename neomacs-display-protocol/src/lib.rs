@@ -22,6 +22,7 @@ pub mod presented_frame;
 pub mod presented_pointer;
 pub mod scene;
 pub mod scroll_animation;
+pub mod sealed_frame_presentation;
 pub mod snapshot_text;
 pub mod transition_policy;
 pub mod types;
@@ -42,6 +43,7 @@ pub use presented_frame::*;
 pub use presented_pointer::*;
 pub use scene::*;
 pub use scroll_animation::*;
+pub use sealed_frame_presentation::*;
 pub use transition_policy::*;
 pub use types::*;
 pub use ui_types::*;
@@ -61,3 +63,7 @@ mod popup_placement_test;
 #[cfg(test)]
 #[path = "geometry_test.rs"]
 mod geometry_test;
+
+#[cfg(test)]
+#[path = "sealed_frame_presentation_test.rs"]
+mod sealed_frame_presentation_test;

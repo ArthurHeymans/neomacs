@@ -1,5 +1,26 @@
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+
+fn sealed_test_state(mut state: FrameDisplayState) -> SealedFramePresentation {
+    if state.presentation_id == neomacs_display_protocol::PresentationId::default() {
+        state.presentation_id = neomacs_display_protocol::PresentationId::new(1);
+    }
+    state.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+        neomacs_display_protocol::DisplayFrameId::new(1),
+        state.presentation_id,
+        None,
+        neomacs_display_protocol::FrameRect::new(0.0, 0.0, 1.0, 1.0).unwrap(),
+        0,
+    );
+    state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![],
+        vec![],
+    )
+    .unwrap();
+    SealedFramePresentation::seal(state).unwrap()
+}
 
 // ===================================================================
 // Constants
@@ -212,7 +233,7 @@ fn thread_comms_frame_channel_roundtrip() {
 
     let buf = FrameGlyphBuffer::new();
     let state = FrameDisplayState::from_frame_glyph_buffer(&buf);
-    comms.frame_tx.send(state).unwrap();
+    comms.frame_tx.send(sealed_test_state(state)).unwrap();
 
     let received = comms.frame_rx.try_recv().unwrap();
     assert_eq!(received.frame_pixel_width, 0.0);
@@ -227,7 +248,7 @@ fn thread_comms_frame_channel_is_unbounded() {
     for i in 0..100 {
         let buf = FrameGlyphBuffer::with_size(i as f32, i as f32);
         let state = FrameDisplayState::from_frame_glyph_buffer(&buf);
-        comms.frame_tx.send(state).unwrap();
+        comms.frame_tx.send(sealed_test_state(state)).unwrap();
     }
 
     // Drain and verify
@@ -360,7 +381,7 @@ fn thread_comms_split_channels_work() {
     // Emacs sends frame, render receives
     let buf = FrameGlyphBuffer::with_size(800.0, 600.0);
     let state = FrameDisplayState::from_frame_glyph_buffer(&buf);
-    emacs.frame_tx.send(state).unwrap();
+    emacs.frame_tx.send(sealed_test_state(state)).unwrap();
     let frame = render.frame_rx.try_recv().unwrap();
     assert_eq!(frame.frame_pixel_width, 800.0);
     assert_eq!(frame.frame_pixel_height, 600.0);
@@ -2025,7 +2046,7 @@ fn cross_thread_frame_delivery() {
 
     let buf = FrameGlyphBuffer::with_size(1920.0, 1080.0);
     let state = FrameDisplayState::from_frame_glyph_buffer(&buf);
-    emacs.frame_tx.send(state).unwrap();
+    emacs.frame_tx.send(sealed_test_state(state)).unwrap();
 
     handle.join().unwrap();
 }

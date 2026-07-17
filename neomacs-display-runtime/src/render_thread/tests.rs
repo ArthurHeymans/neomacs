@@ -6,8 +6,8 @@ use crate::thread_comm::FrameRef;
 use crate::thread_comm::{
     ClipboardCommand, ClipboardSelection, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
-use neomacs_display_protocol::PopupMenuItem;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::{PopupMenuItem, SealedFramePresentation};
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -29,7 +29,28 @@ fn make_test_app() -> RenderApp {
     )
 }
 
-fn presentation_state(frame_id: u64, parent_id: u64, presentation: u64) -> FrameDisplayState {
+fn seal_state(mut state: FrameDisplayState) -> SealedFramePresentation {
+    if state.presentation_id == neomacs_display_protocol::PresentationId::default() {
+        state.presentation_id = neomacs_display_protocol::PresentationId::new(1);
+        let placement = state.frame_placement;
+        state.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            placement.frame(),
+            state.presentation_id,
+            placement.parent(),
+            placement.outer_in_parent(),
+            placement.z_order(),
+        );
+    }
+    state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(
+        state.presentation_id,
+        vec![],
+        vec![],
+    )
+    .unwrap();
+    SealedFramePresentation::seal(state).unwrap()
+}
+
+fn presentation_state(frame_id: u64, parent_id: u64, presentation: u64) -> SealedFramePresentation {
     let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
     frame.presentation_id = neomacs_display_protocol::PresentationId::new(presentation);
     frame.set_frame_identity(
@@ -44,7 +65,7 @@ fn presentation_state(frame_id: u64, parent_id: u64, presentation: u64) -> Frame
         false,
         1.0,
     );
-    FrameDisplayState::from_frame_glyph_buffer(&frame)
+    seal_state(FrameDisplayState::from_frame_glyph_buffer(&frame))
 }
 
 fn make_test_device() -> Option<wgpu::Device> {
@@ -755,7 +776,9 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
     );
     emacs
         .frame_tx
-        .send(FrameDisplayState::from_frame_glyph_buffer(&secondary))
+        .send(seal_state(FrameDisplayState::from_frame_glyph_buffer(
+            &secondary,
+        )))
         .expect("queue secondary snapshot");
 
     app.poll_frame();
@@ -916,7 +939,9 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
     );
     emacs
         .frame_tx
-        .send(FrameDisplayState::from_frame_glyph_buffer(&nested))
+        .send(seal_state(FrameDisplayState::from_frame_glyph_buffer(
+            &nested,
+        )))
         .unwrap();
     app.poll_frame();
     assert_eq!(app.pending_child_frames.len(), 1);
@@ -934,7 +959,9 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
 
     emacs
         .frame_tx
-        .send(FrameDisplayState::from_frame_glyph_buffer(&parent))
+        .send(seal_state(FrameDisplayState::from_frame_glyph_buffer(
+            &parent,
+        )))
         .unwrap();
     app.poll_frame();
     assert_eq!(app.pending_child_frames.len(), 2);
@@ -942,7 +969,9 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
 
     emacs
         .frame_tx
-        .send(FrameDisplayState::from_frame_glyph_buffer(&root))
+        .send(seal_state(FrameDisplayState::from_frame_glyph_buffer(
+            &root,
+        )))
         .unwrap();
     app.poll_frame();
 
@@ -994,7 +1023,9 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
     );
     emacs
         .frame_tx
-        .send(FrameDisplayState::from_frame_glyph_buffer(&cyclic_parent))
+        .send(seal_state(FrameDisplayState::from_frame_glyph_buffer(
+            &cyclic_parent,
+        )))
         .unwrap();
     app.poll_frame();
     assert_eq!(

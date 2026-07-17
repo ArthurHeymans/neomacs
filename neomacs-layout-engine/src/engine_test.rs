@@ -1967,7 +1967,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
                 .cloned()
         })
         .collect::<Vec<_>>();
-    let mut poisoned_transport = renderer.clone();
+    let mut poisoned_transport = renderer.clone().into_state();
     let neomacs_display_protocol::PresentedWindowGeometry::Complete {
         regions: transported_regions,
         ..
@@ -13664,7 +13664,7 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
     let rows = enabled_window_row_texts(entry);
     let first_row = rows.first().cloned().unwrap_or_default();
 
-    state.materialize();
+    let _ = state.materialize();
 
     assert!(
         first_row.contains("1/1"),
@@ -16644,7 +16644,7 @@ fn cursor_only_reused_mouse_face_is_registered_in_frame_faces() {
     let mut engine = LayoutEngine::new();
 
     engine.layout_frame_rust(&mut eval, frame_id);
-    engine
+    let _ = engine
         .last_frame_display_state
         .as_ref()
         .expect("warm display state")
@@ -16664,7 +16664,7 @@ fn cursor_only_reused_mouse_face_is_registered_in_frame_faces() {
         !state.presented_pointer_source.appearances().is_empty(),
         "expected the retained mouse-face to publish a pointer appearance"
     );
-    state.materialize();
+    let _ = state.materialize();
 }
 
 #[test]
@@ -16864,7 +16864,7 @@ fn mx_tab_completion_materializes_unique_pointer_source_identities() {
         !logs_contain("layout failed to converge"),
         "the warm M-x layout must converge before materialization"
     );
-    engine
+    let _ = engine
         .last_frame_display_state
         .as_ref()
         .expect("warm M-x display state")
@@ -16894,7 +16894,7 @@ fn mx_tab_completion_materializes_unique_pointer_source_identities() {
         "test requires completion candidate mouse-face pointer metadata"
     );
 
-    state.materialize();
+    let _ = state.materialize();
 }
 
 /// REGRESSION (face-id collision audit, 2026-06-27): the incremental fast paths

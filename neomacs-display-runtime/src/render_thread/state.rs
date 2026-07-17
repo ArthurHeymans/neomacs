@@ -676,7 +676,7 @@ pub(super) struct RenderApp {
     /// Latest child snapshots whose immediate ancestry has not been presented
     /// yet. They are retried transactionally when an ancestor arrives.
     pub(super) pending_child_frames:
-        HashMap<u64, neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
+        HashMap<u64, neomacs_display_protocol::SealedFramePresentation>,
 
     pub(super) child_frame_style: ChildFrameStyle,
     pub(super) toolbar: ToolbarResources,

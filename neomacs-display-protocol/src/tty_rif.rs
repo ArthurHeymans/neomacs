@@ -282,6 +282,28 @@ impl TtyRif {
         root: &FrameDisplayState,
         children_bottom_to_top: &[FrameDisplayState],
     ) {
+        self.rasterize_frame_tree_states(root, children_bottom_to_top.iter());
+    }
+
+    /// Rasterize only frames that crossed the immutable presentation boundary.
+    /// This is the production TTY adapter; it consumes the same sealed revision
+    /// as the GUI runtime instead of accepting mutable layout state.
+    pub fn rasterize_presentations(
+        &mut self,
+        root: &crate::SealedFramePresentation,
+        children_bottom_to_top: &[crate::SealedFramePresentation],
+    ) {
+        self.rasterize_frame_tree_states(
+            root.state(),
+            children_bottom_to_top.iter().map(|child| child.state()),
+        );
+    }
+
+    fn rasterize_frame_tree_states<'a>(
+        &mut self,
+        root: &FrameDisplayState,
+        children_bottom_to_top: impl IntoIterator<Item = &'a FrameDisplayState>,
+    ) {
         self.install_state_faces(root);
         self.desired.clear(self.default_bg);
         self.cursor_visible = false;

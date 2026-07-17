@@ -201,8 +201,26 @@ fn run_gui(demo: &str) {
         pixel_w as f32,
         pixel_h as f32,
     );
-    for s in scene.iter() {
-        let _ = emacs_comms.frame_tx.send(s.clone());
+    for (index, s) in scene.iter().enumerate() {
+        let mut state = s.clone();
+        state.presentation_id = neomacs_display_protocol::PresentationId::new(index as u64 + 1);
+        let placement = state.frame_placement;
+        state.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(
+            placement.frame(),
+            state.presentation_id,
+            placement.parent(),
+            placement.outer_in_parent(),
+            placement.z_order(),
+        );
+        state.presented_hit_index = neomacs_display_protocol::PresentedHitIndex::from_parts(
+            state.presentation_id,
+            vec![],
+            vec![],
+        )
+        .expect("mock presentation has valid empty hit geometry");
+        let sealed = neomacs_display_protocol::SealedFramePresentation::seal(state)
+            .expect("mock GUI frame is a coherent presentation");
+        let _ = emacs_comms.frame_tx.send(sealed);
     }
 
     loop {

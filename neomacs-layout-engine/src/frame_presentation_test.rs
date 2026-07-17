@@ -24,10 +24,10 @@ fn composer_seals_all_spatial_products_under_one_revision() {
     let sealed = PresentationComposer::compose(resolved, PresentationInputs::new(&[]))
         .expect("valid presentation");
 
-    assert_eq!(sealed.revision().presentation(), PresentationId::new(41));
-    assert_eq!(sealed.transport().presentation_id, PresentationId::new(41));
+    assert_eq!(sealed.presentation(), PresentationId::new(41));
+    assert_eq!(sealed.state().presentation_id, PresentationId::new(41));
     assert_eq!(
-        sealed.transport().presented_hit_index.presentation(),
+        sealed.state().presented_hit_index.presentation(),
         PresentationId::new(41)
     );
 }
@@ -49,7 +49,7 @@ fn composer_replaces_any_presealed_pointer_projection() {
         .expect("valid presentation");
 
     assert!(
-        sealed.transport().presented_pointer_source.is_empty(),
+        sealed.state().presented_pointer_source.is_empty(),
         "pointer metadata must be derived while sealing, not trusted from a mutable builder"
     );
 }

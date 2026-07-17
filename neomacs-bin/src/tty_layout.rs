@@ -4,6 +4,7 @@
 //! (`combine_updates_for_frame`) and the redisplay callback wiring that
 //! normally lives in `src/xdisp.c` / `src/dispnew.c`.
 
+use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_runtime::layout::LayoutEngine;
@@ -63,25 +64,26 @@ impl PreparedPresentationTicket {
 #[must_use = "a prepared display must be submitted, activated, or discarded"]
 pub struct PreparedFrameDisplay {
     ticket: PreparedPresentationTicket,
-    state: FrameDisplayState,
+    state: SealedFramePresentation,
 }
 
 impl PreparedFrameDisplay {
-    pub fn into_submission(self) -> (PreparedPresentationTicket, FrameDisplayState) {
+    pub fn into_submission(self) -> (PreparedPresentationTicket, SealedFramePresentation) {
         (self.ticket, self.state)
     }
 
     pub fn activate(
         self,
         evaluator: &mut Context,
-    ) -> Result<FrameDisplayState, neovm_core::window::geometry::PresentationActivateError> {
+    ) -> Result<SealedFramePresentation, neovm_core::window::geometry::PresentationActivateError>
+    {
         self.ticket.activate(evaluator)?;
         Ok(self.state)
     }
 
     pub fn discard(self, evaluator: &mut Context) -> FrameDisplayState {
         self.ticket.discard(evaluator);
-        self.state
+        self.state.into_state()
     }
 }
 
@@ -89,7 +91,7 @@ impl std::ops::Deref for PreparedFrameDisplay {
     type Target = FrameDisplayState;
 
     fn deref(&self) -> &Self::Target {
-        &self.state
+        self.state.state()
     }
 }
 
@@ -219,7 +221,7 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
 
 pub fn run_tty_layout_tree(
     evaluator: &mut Context,
-) -> Option<(FrameDisplayState, Vec<FrameDisplayState>)> {
+) -> Option<(SealedFramePresentation, Vec<SealedFramePresentation>)> {
     let selected = current_layout_frame_id(evaluator)?;
     let root_id = evaluator
         .frame_manager()
@@ -253,10 +255,10 @@ pub fn run_tty_layout_tree(
 /// Rasterize the display state into a `TtyRif` and write ANSI output to stdout.
 pub fn run_tty_rif_redisplay(
     tty_rif: &mut TtyRif,
-    root: &FrameDisplayState,
-    children: &[FrameDisplayState],
+    root: &SealedFramePresentation,
+    children: &[SealedFramePresentation],
 ) {
-    tty_rif.rasterize_frame_tree(root, children);
+    tty_rif.rasterize_presentations(root, children);
     tty_rif.diff_and_render();
     let output = tty_rif.take_output();
     tracing::debug!("tty_rif: output {} bytes", output.len());

@@ -3915,7 +3915,7 @@ fn ensure_dir_string(path: &Path) -> String {
 
 fn publish_gui_frame(
     evaluator: &mut Context,
-    frame_tx: &crossbeam_channel::Sender<neomacs_display_protocol::glyph_matrix::FrameDisplayState>,
+    frame_tx: &crossbeam_channel::Sender<neomacs_display_protocol::SealedFramePresentation>,
     render_waker: Option<&GuiEventLoopWaker>,
 ) {
     evaluator.setup_thread_locals();

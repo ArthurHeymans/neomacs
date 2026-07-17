@@ -8,6 +8,7 @@
 
 use neomacs_display_protocol::{
     DisplayFrameId, FrameDisplayState, PresentationId, PresentedHitError,
+    SealFramePresentationError, SealedFramePresentation,
 };
 use neovm_core::window::WindowDisplaySnapshot;
 
@@ -49,26 +50,6 @@ impl ResolvedFrame {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct SealedFramePresentation {
-    revision: FrameRevision,
-    transport: FrameDisplayState,
-}
-
-impl SealedFramePresentation {
-    pub(crate) const fn revision(&self) -> FrameRevision {
-        self.revision
-    }
-
-    pub(crate) const fn transport(&self) -> &FrameDisplayState {
-        &self.transport
-    }
-
-    pub(crate) fn into_transport(self) -> FrameDisplayState {
-        self.transport
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PresentationComposeError {
     MissingRevision,
@@ -79,6 +60,7 @@ pub(crate) enum PresentationComposeError {
     },
     Spatial(PresentedHitError),
     Pointer(crate::presentation_pointer::PresentationPointerError),
+    Seal(SealFramePresentationError),
 }
 
 impl From<PresentedHitError> for PresentationComposeError {
@@ -90,6 +72,12 @@ impl From<PresentedHitError> for PresentationComposeError {
 impl From<crate::presentation_pointer::PresentationPointerError> for PresentationComposeError {
     fn from(error: crate::presentation_pointer::PresentationPointerError) -> Self {
         Self::Pointer(error)
+    }
+}
+
+impl From<SealFramePresentationError> for PresentationComposeError {
+    fn from(error: SealFramePresentationError) -> Self {
+        Self::Seal(error)
     }
 }
 
@@ -136,10 +124,9 @@ impl PresentationComposer {
         )?;
         spatial.seal(&mut transport)?;
         pointer.seal(&mut transport);
-        Ok(SealedFramePresentation {
-            revision,
-            transport,
-        })
+        let sealed = SealedFramePresentation::seal(transport)?;
+        debug_assert_eq!(revision.presentation(), sealed.presentation());
+        Ok(sealed)
     }
 }
 
