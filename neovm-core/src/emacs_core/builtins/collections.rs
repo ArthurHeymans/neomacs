@@ -689,21 +689,46 @@ fn builtin_gethash_user_defined(
         return Ok(None);
     };
     let ht = ht_ref.clone();
-    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(hash_snapshot_root_holder(&ht));
+    let result = (|| -> Result<Option<Value>, Flow> {
+        let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
+        for key in ht.live_hash_keys_in_slot_order() {
+            if !ht.data.contains_key(key) {
+                continue;
+            }
+            let candidate = hash_key_to_visible_value(&ht, key);
+            if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
+                continue;
+            }
+            if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?
+                .is_truthy()
+            {
+                return Ok(Some(ht.data.get(key).copied().unwrap_or(default)));
+            }
+        }
+        Ok(Some(default))
+    })();
+    eval.restore_specpdl_roots(root_scope);
+    result
+}
+
+/// Thread every live (visible-key . value) of a hash-table snapshot onto one
+/// heap list: a SINGLE root keeps the whole snapshot alive while user-defined
+/// hash/equality functions run arbitrary Lisp that may remhash entries from
+/// the live (rooted) table — after which the snapshot's copies would be
+/// unreachable and a GC would free them mid-iteration.
+fn hash_snapshot_root_holder(ht: &LispHashTable) -> Value {
+    let mut holder = Value::NIL;
     for key in ht.live_hash_keys_in_slot_order() {
-        if !ht.data.contains_key(key) {
-            continue;
-        }
-        let candidate = hash_key_to_visible_value(&ht, key);
-        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
-            continue;
-        }
-        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
-        {
-            return Ok(Some(ht.data.get(key).copied().unwrap_or(default)));
+        if let Some(value) = ht.data.get(key) {
+            holder = Value::cons(
+                hash_key_to_visible_value(ht, key),
+                Value::cons(*value, holder),
+            );
         }
     }
-    Ok(Some(default))
+    holder
 }
 
 fn builtin_gethash_values(
@@ -766,22 +791,28 @@ fn builtin_puthash_user_defined(
         return Ok(None);
     };
     let ht_snapshot = ht_ref.clone();
-    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
-    let mut existing_key = None;
-    for key in ht_snapshot.live_hash_keys_in_slot_order() {
-        if !ht_snapshot.data.contains_key(key) {
-            continue;
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(hash_snapshot_root_holder(&ht_snapshot));
+    let existing_key = (|| -> Result<Option<HashKey>, Flow> {
+        let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
+        for key in ht_snapshot.live_hash_keys_in_slot_order() {
+            if !ht_snapshot.data.contains_key(key) {
+                continue;
+            }
+            let candidate = hash_key_to_visible_value(&ht_snapshot, key);
+            if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
+                continue;
+            }
+            if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?
+                .is_truthy()
+            {
+                return Ok(Some(key.clone()));
+            }
         }
-        let candidate = hash_key_to_visible_value(&ht_snapshot, key);
-        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
-            continue;
-        }
-        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
-        {
-            existing_key = Some(key.clone());
-            break;
-        }
-    }
+        Ok(None)
+    })();
+    eval.restore_specpdl_roots(root_scope);
+    let existing_key = existing_key?;
 
     let storage_key = existing_key.unwrap_or_else(|| key_value.to_hash_key(&HashTableTest::Eq));
     let _ = table.with_hash_table_mut(|ht| {
@@ -868,22 +899,30 @@ fn builtin_remhash_user_defined(
     };
     check_mutable_hash_table(table)?;
     let ht_snapshot = ht_ref.clone();
-    let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
-    let mut existing_key = None;
-    for key in ht_snapshot.live_hash_keys_in_slot_order() {
-        if !ht_snapshot.data.contains_key(key) {
-            continue;
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(hash_snapshot_root_holder(&ht_snapshot));
+    let existing_key = (|| -> Result<Option<HashKey>, Flow> {
+        let wanted_hash = hash_table_user_hash(eval, table, hash_function, key_value)?;
+        let mut existing_key = None;
+        for key in ht_snapshot.live_hash_keys_in_slot_order() {
+            if !ht_snapshot.data.contains_key(key) {
+                continue;
+            }
+            let candidate = hash_key_to_visible_value(&ht_snapshot, key);
+            if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
+                continue;
+            }
+            if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?
+                .is_truthy()
+            {
+                existing_key = Some(key.clone());
+                break;
+            }
         }
-        let candidate = hash_key_to_visible_value(&ht_snapshot, key);
-        if hash_table_user_hash(eval, table, hash_function, candidate)? != wanted_hash {
-            continue;
-        }
-        if hash_table_user_keys_equal(eval, table, cmp_function, key_value, candidate)?.is_truthy()
-        {
-            existing_key = Some(key.clone());
-            break;
-        }
-    }
+        Ok(existing_key)
+    })();
+    eval.restore_specpdl_roots(root_scope);
+    let existing_key = existing_key?;
 
     if let Some(storage_key) = existing_key {
         let _ = table.with_hash_table_mut(|ht| {
@@ -1015,11 +1054,17 @@ pub(crate) fn builtin_plist_get_with_ctx(
     eval.push_specpdl_root(prop);
     eval.push_specpdl_root(predicate);
 
+    // The predicate can setcdr the plist mid-walk, unlinking the interior
+    // cells this cursor still points at; root the moving cursor in one
+    // updatable slot so the remainder stays alive transitively (the GNU
+    // equivalent survives via conservative C-stack scanning of the tail).
+    let cursor_slot = eval.push_specpdl_root_slot(Value::NIL);
     let mut cursor = plist;
     let mut safe_tail = crate::emacs_core::plist::SafeTailGuard::new(cursor);
     let plist_result = loop {
         match cursor.kind() {
             ValueKind::Cons => {
+                eval.set_specpdl_root_slot(&cursor_slot, cursor);
                 let pair_car = cursor.cons_car();
                 let pair_cdr = cursor.cons_cdr();
                 if !pair_cdr.is_cons() {
@@ -1083,11 +1128,18 @@ pub(crate) fn builtin_plist_put_with_ctx(
     eval.push_specpdl_root(new_val);
     eval.push_specpdl_root(predicate);
 
+    // Root the moving cursor and the trailing prev cell across the
+    // predicate calls (see plist_get above); prev is written back to on
+    // the append path, so a freed prev would be a write to swept memory.
+    let cursor_slot = eval.push_specpdl_root_slot(Value::NIL);
+    let prev_slot = eval.push_specpdl_root_slot(Value::NIL);
     let mut cursor = plist;
     let mut prev = Value::NIL;
     let plist_result = loop {
         match cursor.kind() {
             ValueKind::Cons => {
+                eval.set_specpdl_root_slot(&cursor_slot, cursor);
+                eval.set_specpdl_root_slot(&prev_slot, prev);
                 let entry_key = cursor.cons_car();
                 let entry_rest = cursor.cons_cdr();
                 if !entry_rest.is_cons() {
@@ -1216,10 +1268,13 @@ pub(crate) fn builtin_plist_member(
         eval.push_specpdl_root(p);
     }
 
+    // Root the moving cursor across the predicate calls (see plist_get).
+    let cursor_slot = eval.push_specpdl_root_slot(Value::NIL);
     let mut cursor = plist;
     let plist_result = loop {
         match cursor.kind() {
             ValueKind::Cons => {
+                eval.set_specpdl_root_slot(&cursor_slot, cursor);
                 let entry_key = cursor.cons_car();
                 let entry_rest = cursor.cons_cdr();
 

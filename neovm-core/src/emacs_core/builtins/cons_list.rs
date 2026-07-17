@@ -1270,7 +1270,12 @@ pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value
             eval.push_specpdl_root(*key);
             eval.push_specpdl_root(list);
             eval.push_specpdl_root(test_fn.unwrap());
+            // Root the moving tail across the predicate: TESTFN can setcdr
+            // the alist, unlinking the current tail from the rooted head;
+            // the slot keeps the remainder alive transitively.
+            let cursor_slot = eval.push_specpdl_root_slot(Value::NIL);
             let assoc_result = for_each_proper_list_tail(list, list, |tail| {
+                eval.set_specpdl_root_slot(&cursor_slot, tail);
                 let pair_car = tail.cons_car();
                 if let ValueKind::Cons = pair_car.kind() {
                     let entry_key = pair_car.cons_car();

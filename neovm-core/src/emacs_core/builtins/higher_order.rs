@@ -528,12 +528,6 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
         ValueKind::Nil => Ok(Value::NIL),
         ValueKind::Cons => {
             let values = super::cons_list::collect_proper_list_items(args[0])?;
-            let mut cons_cells = Vec::with_capacity(values.len());
-            let mut cursor = args[0];
-            for _ in 0..values.len() {
-                cons_cells.push(cursor);
-                cursor = cursor.cons_cdr();
-            }
 
             let roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(args[0]);
@@ -546,8 +540,18 @@ pub(crate) fn builtin_sort_slice(eval: &mut super::eval::Context, args: &[Value]
             eval.restore_specpdl_roots(roots);
             let mut sorted_values = sorted_result?;
             if in_place {
-                for (cell, value) in cons_cells.iter().zip(sorted_values.into_iter()) {
-                    cell.set_car(value);
+                // Re-walk the (rooted) chain at write-back time instead of
+                // caching interior cells across the Lisp predicate calls: a
+                // predicate that setcdr's the list would leave cached cells
+                // unrooted, and a GC during a later comparison frees them —
+                // making this write-back a store into swept memory.
+                let mut cursor = args[0];
+                for value in sorted_values.into_iter() {
+                    if !cursor.is_cons() {
+                        break;
+                    }
+                    cursor.set_car(value);
+                    cursor = cursor.cons_cdr();
                 }
                 Ok(args[0])
             } else {
