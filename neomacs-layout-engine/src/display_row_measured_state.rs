@@ -1,8 +1,11 @@
 use crate::display_row_render_state::{
     DisplayRowOutputProgress, RenderedDisplayRow, RenderedDisplayRowMedia,
 };
+use neomacs_display_protocol::geometry::{
+    FrameSpace, LayoutPoint, LayoutRect, LayoutSize, RowSpace, SpaceTranslation,
+};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{LayoutUnit, Rect};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 // The shared `Line` suffix is domain-meaningful (tab/header/mode LINES); renaming
@@ -211,17 +214,26 @@ impl MeasuredDisplayRow {
         &self,
         medium: &RenderedDisplayRowMedia,
     ) -> MeasuredDisplayRowMediaPlacement {
+        let row_local = LayoutRect::<RowSpace>::new(
+            LayoutPoint::new(
+                LayoutUnit::from_px(medium.x),
+                LayoutUnit::from_px(medium.y) - LayoutUnit::from_px(self.rendered.progress().y()),
+            ),
+            LayoutSize::from_px(medium.width, medium.height),
+        );
+        let frame = SpaceTranslation::<RowSpace, FrameSpace>::from_px(self.bounds.x, self.bounds.y)
+            .map_rect(row_local);
         let row_local_bounds = Rect::new(
-            medium.x,
-            medium.y - self.rendered.progress().y(),
-            medium.width,
-            medium.height,
+            row_local.x().to_px(),
+            row_local.y().to_px(),
+            row_local.width().to_px(),
+            row_local.height().to_px(),
         );
         let frame_bounds = Rect::new(
-            self.bounds.x + row_local_bounds.x,
-            self.bounds.y + row_local_bounds.y,
-            row_local_bounds.width,
-            row_local_bounds.height,
+            frame.x().to_px(),
+            frame.y().to_px(),
+            frame.width().to_px(),
+            frame.height().to_px(),
         );
         MeasuredDisplayRowMediaPlacement {
             row_local_bounds,
@@ -343,6 +355,52 @@ mod tests {
         assert_eq!(
             placement.frame_bounds(),
             Rect::new(328.0, 105.0, 32.0, 18.0)
+        );
+    }
+
+    #[test]
+    fn media_placement_uses_the_typed_fixed_point_transform() {
+        let mut row = GlyphRow::new(GlyphRowRole::HeaderLine);
+        row.enabled = true;
+        row.height_px = 18.0;
+        row.ascent_px = 14.0;
+        let medium = RenderedDisplayRowMedia {
+            kind: RenderedDisplayRowMediaKind::Image {
+                image_id: 7,
+                opaque_background: None,
+            },
+            x: 3.250_001,
+            y: 45.500_001,
+            col: 0,
+            width: 12.150_001,
+            height: 8.2,
+        };
+        let measured = MeasuredDisplayRow::new(
+            DisplayRowOwner::WindowChrome {
+                window_id: 7,
+                kind: WindowChromeKind::HeaderLine,
+            },
+            3,
+            Rect::new(320.1, 100.2, 280.0, 18.0),
+            RenderedDisplayRow::new(
+                row,
+                DisplayRowOutputProgress::new(40.0, 1, 40.0, 18.0),
+                Vec::new(),
+                Vec::new(),
+                vec![medium.clone()],
+            ),
+            DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
+        );
+
+        let placement = measured.place_media(&medium);
+
+        assert_eq!(
+            placement.row_local_bounds(),
+            Rect::new(3.25, 5.5, 12.15625, 8.203125)
+        );
+        assert_eq!(
+            placement.frame_bounds(),
+            Rect::new(323.34375, 105.703125, 12.15625, 8.203125)
         );
     }
 }

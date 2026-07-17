@@ -59,6 +59,17 @@ fn frame_rect_places_band_local_rect_exactly_once() {
 }
 
 #[test]
+fn frame_rect_places_band_content_through_fixed_point_space_transform() {
+    let band = FrameRect::new(0.0, 52.100_001, 100.0, 18.0).expect("valid band");
+    let local = BandRect::new(8.150_001, 0.0, 40.0, 18.0).expect("valid local rect");
+
+    assert_eq!(
+        band.place(local).expect("content fits band").raw(),
+        Rect::new(8.15625, 52.09375, 40.0, 18.0)
+    );
+}
+
+#[test]
 fn frame_chrome_layout_omits_zero_height_bands() {
     let chrome = FrameChrome::layout(
         FrameSize::new(624.0, 648.0).expect("valid frame"),

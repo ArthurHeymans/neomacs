@@ -13,6 +13,7 @@ pub mod face;
 pub mod font;
 pub mod frame_chrome;
 pub mod frame_glyphs;
+pub mod geometry;
 pub mod glyph_matrix;
 pub mod gradient;
 pub mod image;
@@ -33,6 +34,7 @@ pub use effect_config::*;
 pub use face::*;
 pub use frame_chrome::*;
 pub use frame_glyphs::*;
+pub use geometry::*;
 pub use gradient::*;
 pub use image::*;
 pub use popup_placement::*;
@@ -55,3 +57,7 @@ mod presented_pointer_test;
 #[cfg(test)]
 #[path = "popup_placement_test.rs"]
 mod popup_placement_test;
+
+#[cfg(test)]
+#[path = "geometry_test.rs"]
+mod geometry_test;

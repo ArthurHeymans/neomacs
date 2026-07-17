@@ -5,6 +5,7 @@
 //! [`FrameRect::place`].
 
 use crate::frame_glyphs::{DisplaySlotId, GlyphRowRole};
+use crate::geometry::{BandSpace, FrameSpace, LayoutRect, SpaceTranslation};
 use crate::glyph_matrix::GlyphRow;
 use crate::types::{Color, ImageId, Rect, VideoId, XwidgetId};
 use crate::ui_types::{MenuBarItem, ToolBarItem};
@@ -73,11 +74,14 @@ impl FrameRect {
         if local.x + local.width > self.width() || local.y + local.height > self.height() {
             return Err(ChromeLayoutError::ContentExceedsBand);
         }
+        let local = LayoutRect::<BandSpace>::from_px(local.x, local.y, local.width, local.height);
+        let placed =
+            SpaceTranslation::<BandSpace, FrameSpace>::from_px(self.x(), self.y()).map_rect(local);
         Self::new(
-            self.x() + local.x,
-            self.y() + local.y,
-            local.width,
-            local.height,
+            placed.x().to_px(),
+            placed.y().to_px(),
+            placed.width().to_px(),
+            placed.height().to_px(),
         )
     }
 }
