@@ -479,6 +479,121 @@ fn trace_invalid_bytecode_site(
     );
 }
 
+/// A6: register-resident operand-stack cursor for `run_loop`.
+///
+/// Holds the operand stack's base pointer and logical length in locals so
+/// per-opcode stack traffic is plain pointer arithmetic instead of a
+/// `self.ctx.bc_buf` pointer/len load chain plus a len store per op. GNU
+/// Emacs keeps `top` and `pc` in registers the same way (bytecode.c, "The
+/// interpreter can be compiled one of two ways" / exec_byte_code locals).
+///
+/// GNU can leave `top` unpublished across calls because its GC marks the
+/// whole `maxdepth` region of each bytecode frame conservatively. Our GC is
+/// precise — the roots are exactly `bc_buf[..len]` at a safe point — so this
+/// cursor imposes a publication discipline instead:
+///
+/// - `publish` (which takes `self` BY VALUE) writes the logical length back
+///   into `bc_buf` before any escape into `Context`/eval that could reach a
+///   GC safe point, run Lisp, or push/truncate `bc_buf`. Because `publish`
+///   moves the cursor, any stale use after an escape is a borrow-check error,
+///   and `acquire` must re-derive base+len afterwards (the Vec may have
+///   reallocated).
+/// - The cursor itself never grows the Vec: pushes are bounded by
+///   `frame_limit`, whose capacity `run_frame` reserved up front. Vec-growing
+///   operations (e.g. Op::Apply's list spread) run published.
+/// - In debug builds a thread-local flag turns a missed publication before GC
+///   into a deterministic panic instead of silent heap corruption; GC entry
+///   asserts it via `debug_assert_no_live_stack_cursor`.
+pub(crate) struct StackCursor {
+    base: *mut Value,
+    len: usize,
+}
+
+#[cfg(debug_assertions)]
+thread_local! {
+    static STACK_CURSOR_LIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Debug hook for GC entry points: a collection must never observe a live
+/// (unpublished) operand-stack cursor — it would mark a stale stack length.
+#[cfg(debug_assertions)]
+pub(crate) fn debug_assert_no_live_stack_cursor() {
+    STACK_CURSOR_LIVE.with(|flag| {
+        assert!(
+            !flag.get(),
+            "GC entered while a bytecode StackCursor held unpublished stack state"
+        );
+    });
+}
+
+impl StackCursor {
+    #[inline(always)]
+    fn acquire(ctx: &mut crate::emacs_core::eval::Context) -> Self {
+        #[cfg(debug_assertions)]
+        STACK_CURSOR_LIVE.with(|flag| {
+            assert!(!flag.get(), "acquired a StackCursor while another is live");
+            flag.set(true);
+        });
+        Self {
+            base: ctx.bc_buf.as_mut_ptr(),
+            len: ctx.bc_buf.len(),
+        }
+    }
+
+    #[inline(always)]
+    fn publish(self, ctx: &mut crate::emacs_core::eval::Context) {
+        #[cfg(debug_assertions)]
+        STACK_CURSOR_LIVE.with(|flag| flag.set(false));
+        debug_assert!(self.len <= ctx.bc_buf.capacity());
+        // SAFETY: every slot below `len` was either already initialized in
+        // bc_buf or written through the cursor; Value is Copy with no Drop.
+        unsafe { ctx.bc_buf.set_len(self.len) }
+    }
+
+    #[inline(always)]
+    fn pop(&mut self) -> Option<Value> {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        // SAFETY: len was > 0, so slot len-1 is initialized.
+        Some(unsafe { self.base.add(self.len).read() })
+    }
+
+    #[inline(always)]
+    fn truncate(&mut self, new_len: usize) {
+        if new_len < self.len {
+            self.len = new_len;
+        }
+    }
+
+    /// SAFETY: caller must have checked `self.len < frame_limit`, and
+    /// `frame_limit <= bc_buf.capacity()` (reserved by run_frame).
+    #[inline(always)]
+    unsafe fn push_unchecked(&mut self, value: Value) {
+        unsafe { self.base.add(self.len).write(value) };
+        self.len += 1;
+    }
+}
+
+impl std::ops::Deref for StackCursor {
+    type Target = [Value];
+    #[inline(always)]
+    fn deref(&self) -> &[Value] {
+        // SAFETY: base/len describe the initialized prefix of bc_buf, which
+        // cannot move while the cursor is live (no Vec growth unpublished).
+        unsafe { std::slice::from_raw_parts(self.base, self.len) }
+    }
+}
+
+impl std::ops::DerefMut for StackCursor {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut [Value] {
+        // SAFETY: as Deref, and the cursor has exclusive access to the frame.
+        unsafe { std::slice::from_raw_parts_mut(self.base, self.len) }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum DirectSubrCallee {
     Symbol(SymId),
@@ -1355,10 +1470,32 @@ impl<'a> Vm<'a> {
         let mut pc_local = *pc;
         let mut quitcounter: u8 = 1;
 
+        // A6: base+len of the operand stack live in registers for the whole
+        // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
+        // escape into Context/eval publishes first and reacquires after; the
+        // publish is a move, so a stale cursor use is a compile error.
+        let mut cursor = StackCursor::acquire(&mut self.ctx);
+
         macro_rules! stk {
             () => {
-                self.ctx.bc_buf
+                cursor
             };
+        }
+
+        // Resume nonlocal flow at the innermost VM handler, or propagate out
+        // of run_loop. The cursor must be PUBLISHED before this runs:
+        // resume_nonlocal truncates bc_buf to the handler's stack height and
+        // can run unwind-protect cleanup forms (arbitrary Lisp / GC).
+        macro_rules! resume_flow {
+            ($flow:expr) => {{
+                match self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, $flow) {
+                    Ok(()) => {
+                        cursor = StackCursor::acquire(&mut self.ctx);
+                        continue;
+                    }
+                    Err(flow) => return Err(flow),
+                }
+            }};
         }
 
         macro_rules! stk_push {
@@ -1378,48 +1515,58 @@ impl<'a> Vm<'a> {
                             hdr.kind,
                             pc_local.saturating_sub(1),
                             ops.get(pc_local.saturating_sub(1)),
-                            stk!().len(),
+                            cursor.len,
                             frame_base,
                         );
                     }
                 }
-                let len = self.ctx.bc_buf.len();
-                if len >= frame_limit {
+                if cursor.len >= frame_limit {
                     let invalid_pc = pc_local.saturating_sub(1);
+                    let stack_len = cursor.len;
+                    cursor.publish(&mut self.ctx);
                     trace_invalid_bytecode_site(
                         func,
                         "push-frame-limit",
                         invalid_pc,
                         frame_base,
                         frame_limit,
-                        len,
+                        stack_len,
                         ops.get(invalid_pc),
                     );
-                    self.resume_nonlocal(
-                        func,
-                        &mut pc_local,
-                        handlers,
-                        bind_stack,
-                        invalid_bytecode_flow(),
-                    )?;
-                    continue;
+                    resume_flow!(invalid_bytecode_flow())
                 }
-                let stack = &mut self.ctx.bc_buf;
-                debug_assert!(len < stack.capacity());
-                unsafe {
-                    stack.as_mut_ptr().add(len).write(v);
-                    stack.set_len(len + 1);
-                }
+                // SAFETY: len < frame_limit <= bc_buf capacity (run_frame
+                // reserved frame_limit up front).
+                unsafe { cursor.push_unchecked(v) };
             }};
         }
 
         macro_rules! vm_try {
             ($expr:expr) => {{
+                cursor.publish(&mut self.ctx);
+                let result = $expr;
+                cursor = StackCursor::acquire(&mut self.ctx);
+                match result {
+                    Ok(value) => value,
+                    Err(flow) => {
+                        cursor.publish(&mut self.ctx);
+                        resume_flow!(flow)
+                    }
+                }
+            }};
+        }
+
+        // For NON-ESCAPING fallible helpers only (no bc_buf access, no GC
+        // safe point, no Lisp): evaluates $expr with the cursor live so it
+        // may read operands straight off the stack slice; publishes only on
+        // the error path (resume_flow requires it).
+        macro_rules! vm_try_pure {
+            ($expr:expr) => {{
                 match $expr {
                     Ok(value) => value,
                     Err(flow) => {
-                        self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, flow)?;
-                        continue;
+                        cursor.publish(&mut self.ctx);
+                        resume_flow!(flow)
                     }
                 }
             }};
@@ -1442,23 +1589,18 @@ impl<'a> Vm<'a> {
         macro_rules! invalid_bytecode {
             ($reason:expr) => {{
                 let invalid_pc = pc_local.saturating_sub(1);
+                let stack_len = cursor.len;
+                cursor.publish(&mut self.ctx);
                 trace_invalid_bytecode_site(
                     func,
                     $reason,
                     invalid_pc,
                     frame_base,
                     frame_limit,
-                    self.ctx.bc_buf.len(),
+                    stack_len,
                     ops.get(invalid_pc),
                 );
-                self.resume_nonlocal(
-                    func,
-                    &mut pc_local,
-                    handlers,
-                    bind_stack,
-                    invalid_bytecode_flow(),
-                )?;
-                continue;
+                resume_flow!(invalid_bytecode_flow())
             }};
         }
 
@@ -1472,24 +1614,7 @@ impl<'a> Vm<'a> {
                 // -- Constants and stack --
                 Op::Constant(idx) => {
                     let Some(value) = constants.get(*idx as usize).copied() else {
-                        let invalid_pc = pc_local.saturating_sub(1);
-                        trace_invalid_bytecode_site(
-                            func,
-                            "constant-index-out-of-range",
-                            invalid_pc,
-                            frame_base,
-                            frame_limit,
-                            self.ctx.bc_buf.len(),
-                            ops.get(invalid_pc),
-                        );
-                        self.resume_nonlocal(
-                            func,
-                            &mut pc_local,
-                            handlers,
-                            bind_stack,
-                            invalid_bytecode_flow(),
-                        )?;
-                        continue;
+                        invalid_bytecode!("constant-index-out-of-range");
                     };
                     stk_push!(value);
                 }
@@ -1509,7 +1634,7 @@ impl<'a> Vm<'a> {
                         if let (Op::StackRef(stack_ref), Op::Lss, Op::GotoIfNil(target)) =
                             (next0, next1, next2)
                         {
-                            let len = self.ctx.bc_buf.len();
+                            let len = cursor.len;
                             if len == 0 {
                                 invalid_bytecode!("dup-lss-gotoifnil-empty-stack");
                             }
@@ -1517,16 +1642,13 @@ impl<'a> Vm<'a> {
                                 invalid_bytecode!("dup-lss-gotoifnil-stack-at-frame-limit");
                             }
 
-                            let top = unsafe { *self.ctx.bc_buf.get_unchecked(len - 1) };
+                            let top = unsafe { *cursor.get_unchecked(len - 1) };
                             let after_dup_len = len + 1;
                             let offset = 1 + *stack_ref as usize;
 
                             if offset > after_dup_len || after_dup_len >= frame_limit {
-                                let stack = &mut self.ctx.bc_buf;
-                                unsafe {
-                                    stack.as_mut_ptr().add(len).write(top);
-                                    stack.set_len(after_dup_len);
-                                }
+                                // SAFETY: len < frame_limit checked above.
+                                unsafe { cursor.push_unchecked(top) };
                                 pc_local += 1;
                                 invalid_bytecode!("dup-lss-gotoifnil-stackref-out-of-range");
                             }
@@ -1535,7 +1657,7 @@ impl<'a> Vm<'a> {
                             let ref_value = if ref_index == len {
                                 top
                             } else {
-                                unsafe { *self.ctx.bc_buf.get_unchecked(ref_index) }
+                                unsafe { *cursor.get_unchecked(ref_index) }
                             };
 
                             if top.is_fixnum() && ref_value.is_fixnum() {
@@ -1564,24 +1686,7 @@ impl<'a> Vm<'a> {
                         let val = unsafe { *stk!().get_unchecked(len - offset) };
                         stk_push!(val);
                     } else {
-                        let invalid_pc = pc_local.saturating_sub(1);
-                        trace_invalid_bytecode_site(
-                            func,
-                            "stack-ref-out-of-range",
-                            invalid_pc,
-                            frame_base,
-                            frame_limit,
-                            len,
-                            ops.get(invalid_pc),
-                        );
-                        self.resume_nonlocal(
-                            func,
-                            &mut pc_local,
-                            handlers,
-                            bind_stack,
-                            invalid_bytecode_flow(),
-                        )?;
-                        continue;
+                        invalid_bytecode!("stack-ref-out-of-range");
                     }
                 }
                 Op::StackSet(n) => {
@@ -1595,13 +1700,10 @@ impl<'a> Vm<'a> {
                         continue;
                     }
                     if n < len {
-                        let stack = &mut self.ctx.bc_buf;
-                        let val = unsafe { *stack.get_unchecked(len - 1) };
+                        let val = unsafe { *cursor.get_unchecked(len - 1) };
                         let idx = len - 1 - n;
-                        unsafe {
-                            *stack.get_unchecked_mut(idx) = val;
-                            stack.set_len(len - 1);
-                        }
+                        unsafe { *cursor.get_unchecked_mut(idx) = val };
+                        cursor.len = len - 1;
                     } else {
                         invalid_bytecode!("stack-set-out-of-range");
                     }
@@ -1616,20 +1718,15 @@ impl<'a> Vm<'a> {
                     if n > len {
                         invalid_bytecode!("discard-n-out-of-range");
                     }
-                    let stack = &mut self.ctx.bc_buf;
                     if preserve_tos {
                         if n >= len {
                             invalid_bytecode!("discard-n-preserve-tos-out-of-range");
                         }
-                        let top = unsafe { *stack.get_unchecked(len - 1) };
+                        let top = unsafe { *cursor.get_unchecked(len - 1) };
                         let target = len - 1 - n;
-                        unsafe {
-                            *stack.get_unchecked_mut(target) = top;
-                        }
+                        unsafe { *cursor.get_unchecked_mut(target) = top };
                     }
-                    unsafe {
-                        stack.set_len(len - n);
-                    }
+                    cursor.len = len - n;
                 }
 
                 // -- Variable access --
@@ -1677,7 +1774,10 @@ impl<'a> Vm<'a> {
                     let name_id = sym_id_at(constants, *idx);
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     bind_stack.push(self.ctx.specpdl.len());
+                    // specbind can run variable watchers (Lisp) — escape.
+                    cursor.publish(&mut self.ctx);
                     self.ctx.specbind(name_id, val);
+                    cursor = StackCursor::acquire(&mut self.ctx);
                 }
                 Op::Unbind(n) => {
                     let n = *n as usize;
@@ -1689,7 +1789,10 @@ impl<'a> Vm<'a> {
                         bind_stack.clear();
                         0
                     };
+                    // unbind_to can run unwind-protect cleanups — escape.
+                    cursor.publish(&mut self.ctx);
                     self.ctx.unbind_to(target);
+                    cursor = StackCursor::acquire(&mut self.ctx);
                 }
 
                 // -- Function calls --
@@ -1808,22 +1911,25 @@ impl<'a> Vm<'a> {
                         // on a nonlocal exit).
                         let last = stk!()[args_start + n - 1];
                         let spread = list_to_vec(&last).unwrap_or_default();
+                        // The spread grows bc_buf (reserve can realloc), so it
+                        // runs published; reacquire picks up the new base.
+                        cursor.publish(&mut self.ctx);
                         self.ctx.bc_buf.truncate(args_start + n - 1);
                         self.ctx.bc_buf.reserve(spread.len());
                         self.ctx.bc_buf.extend_from_slice(&spread);
+                        cursor = StackCursor::acquire(&mut self.ctx);
                         let total = n - 1 + spread.len();
                         // Writeback gate tests the first POST-spread argument
                         // (for (apply f '("str" ...)) the string comes from
                         // the spread).
-                        let writeback_names =
-                            if total > 0 && self.ctx.bc_buf[args_start].is_string() {
-                                self.writeback_mutating_callable_names(&func_val)
-                            } else {
-                                None
-                            };
+                        let writeback_names = if total > 0 && stk!()[args_start].is_string() {
+                            self.writeback_mutating_callable_names(&func_val)
+                        } else {
+                            None
+                        };
                         let writeback_args: Option<LispArgVec> =
                             writeback_names.as_ref().map(|_| {
-                                self.ctx.bc_buf[args_start..args_start + total]
+                                stk!()[args_start..args_start + total]
                                     .iter()
                                     .copied()
                                     .collect()
@@ -1866,59 +1972,47 @@ impl<'a> Vm<'a> {
                     branch_to!(*addr as usize);
                 }
                 Op::GotoIfNil(addr) => {
-                    let stack = &mut self.ctx.bc_buf;
-                    let len = stack.len();
+                    let len = cursor.len;
                     if len == 0 {
                         invalid_bytecode!("goto-if-nil-empty-stack");
                     }
-                    let val = unsafe { *stack.get_unchecked(len - 1) };
-                    unsafe {
-                        stack.set_len(len - 1);
-                    }
+                    let val = unsafe { *cursor.get_unchecked(len - 1) };
+                    cursor.len = len - 1;
                     if val.is_nil() {
                         branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNotNil(addr) => {
-                    let stack = &mut self.ctx.bc_buf;
-                    let len = stack.len();
+                    let len = cursor.len;
                     if len == 0 {
                         invalid_bytecode!("goto-if-not-nil-empty-stack");
                     }
-                    let val = unsafe { *stack.get_unchecked(len - 1) };
-                    unsafe {
-                        stack.set_len(len - 1);
-                    }
+                    let val = unsafe { *cursor.get_unchecked(len - 1) };
+                    cursor.len = len - 1;
                     if val.is_truthy() {
                         branch_to!(*addr as usize);
                     }
                 }
                 Op::GotoIfNilElsePop(addr) => {
-                    let stack = &mut self.ctx.bc_buf;
-                    let len = stack.len();
+                    let len = cursor.len;
                     if len == 0 {
                         invalid_bytecode!("goto-if-nil-else-pop-empty-stack");
                     }
-                    if unsafe { stack.get_unchecked(len - 1) }.is_nil() {
+                    if unsafe { cursor.get_unchecked(len - 1) }.is_nil() {
                         branch_to!(*addr as usize);
                     } else {
-                        unsafe {
-                            stack.set_len(len - 1);
-                        }
+                        cursor.len = len - 1;
                     }
                 }
                 Op::GotoIfNotNilElsePop(addr) => {
-                    let stack = &mut self.ctx.bc_buf;
-                    let len = stack.len();
+                    let len = cursor.len;
                     if len == 0 {
                         invalid_bytecode!("goto-if-not-nil-else-pop-empty-stack");
                     }
-                    if unsafe { stack.get_unchecked(len - 1) }.is_truthy() {
+                    if unsafe { cursor.get_unchecked(len - 1) }.is_truthy() {
                         branch_to!(*addr as usize);
                     } else {
-                        unsafe {
-                            stack.set_len(len - 1);
-                        }
+                        cursor.len = len - 1;
                     }
                 }
                 Op::Switch => {
@@ -1929,17 +2023,11 @@ impl<'a> Vm<'a> {
                         jump_table.kind(),
                         ValueKind::Veclike(VecLikeType::HashTable)
                     ) {
-                        self.resume_nonlocal(
-                            func,
-                            &mut pc_local,
-                            handlers,
-                            bind_stack,
-                            signal(
-                                LispCondition::WrongTypeArgument,
-                                vec![Value::symbol("hash-table-p"), jump_table],
-                            ),
-                        )?;
-                        continue;
+                        cursor.publish(&mut self.ctx);
+                        resume_flow!(signal(
+                            LispCondition::WrongTypeArgument,
+                            vec![Value::symbol("hash-table-p"), jump_table],
+                        ))
                     }
 
                     let ht = jump_table.as_hash_table().unwrap();
@@ -1962,7 +2050,9 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Op::Return => {
-                    return Ok(stk!().pop().unwrap_or(Value::NIL));
+                    let result = stk!().pop().unwrap_or(Value::NIL);
+                    cursor.publish(&mut self.ctx);
+                    return Ok(result);
                 }
                 Op::SaveCurrentBuffer => {
                     if let Some(buffer_id) =
@@ -2012,12 +2102,16 @@ impl<'a> Vm<'a> {
                             vec![Value::NIL],
                         )
                     );
+                    // eval_sub runs arbitrary Lisp; window-config restore can
+                    // run hooks — both escape, so bracket them together.
+                    cursor.publish(&mut self.ctx);
                     let body_result = self.ctx.eval_sub(progn_form);
                     let restore_result =
                         crate::emacs_core::window_cmds::builtin_set_window_configuration(
                             self.ctx,
                             vec![saved],
                         );
+                    cursor = StackCursor::acquire(&mut self.ctx);
 
                     match body_result {
                         Ok(result) => {
@@ -2026,8 +2120,8 @@ impl<'a> Vm<'a> {
                         }
                         Err(flow) => {
                             vm_try!(restore_result);
-                            self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, flow)?;
-                            continue;
+                            cursor.publish(&mut self.ctx);
+                            resume_flow!(flow)
                         }
                     }
                 }
@@ -2037,13 +2131,12 @@ impl<'a> Vm<'a> {
                 // the bytecode opcode IS the contract — no override check needed.
                 Op::Add => {
                     let fallback = {
-                        let stack = &mut self.ctx.bc_buf;
-                        let len = stack.len();
+                        let len = cursor.len;
                         if len < 2 {
                             invalid_bytecode!("add-stack-underflow");
                         }
-                        let b = unsafe { *stack.get_unchecked(len - 1) };
-                        let a = unsafe { *stack.get_unchecked(len - 2) };
+                        let b = unsafe { *cursor.get_unchecked(len - 1) };
+                        let a = unsafe { *cursor.get_unchecked(len - 2) };
                         if a.is_fixnum() && b.is_fixnum() {
                             let av = a.xfixnum();
                             let bv = b.xfixnum();
@@ -2052,16 +2145,16 @@ impl<'a> Vm<'a> {
                                 && res <= Value::MOST_POSITIVE_FIXNUM
                             {
                                 unsafe {
-                                    *stack.get_unchecked_mut(len - 2) = Value::fixnum(res);
-                                    stack.set_len(len - 1);
+                                    *cursor.get_unchecked_mut(len - 2) = Value::fixnum(res);
                                 }
+                                cursor.len = len - 1;
                                 None
                             } else {
-                                stack.truncate(len - 2);
+                                cursor.len = len - 2;
                                 Some((a, b))
                             }
                         } else {
-                            stack.truncate(len - 2);
+                            cursor.len = len - 2;
                             Some((a, b))
                         }
                     };
@@ -2185,29 +2278,24 @@ impl<'a> Vm<'a> {
                 }
                 Op::Add1 => {
                     let fallback = {
-                        let stack = &mut self.ctx.bc_buf;
-                        let len = stack.len();
+                        let len = cursor.len;
                         if len == 0 {
                             invalid_bytecode!("add1-empty-stack");
                         }
-                        let top = unsafe { *stack.get_unchecked(len - 1) };
+                        let top = unsafe { *cursor.get_unchecked(len - 1) };
                         if top.is_fixnum() {
                             let n = top.xfixnum();
                             if n != Value::MOST_POSITIVE_FIXNUM {
                                 unsafe {
-                                    *stack.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
+                                    *cursor.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
                                 }
                                 None
                             } else {
-                                unsafe {
-                                    stack.set_len(len - 1);
-                                }
+                                cursor.len = len - 1;
                                 Some(top)
                             }
                         } else {
-                            unsafe {
-                                stack.set_len(len - 1);
-                            }
+                            cursor.len = len - 1;
                             Some(top)
                         }
                     };
@@ -2292,25 +2380,24 @@ impl<'a> Vm<'a> {
                 }
                 Op::Lss => {
                     let fallback = {
-                        let stack = &mut self.ctx.bc_buf;
-                        let len = stack.len();
+                        let len = cursor.len;
                         if len < 2 {
                             invalid_bytecode!("lss-stack-underflow");
                         }
-                        let b = unsafe { *stack.get_unchecked(len - 1) };
-                        let a = unsafe { *stack.get_unchecked(len - 2) };
+                        let b = unsafe { *cursor.get_unchecked(len - 1) };
+                        let a = unsafe { *cursor.get_unchecked(len - 2) };
                         if a.is_fixnum() && b.is_fixnum() {
                             unsafe {
-                                *stack.get_unchecked_mut(len - 2) = if fixnum_lt(a, b) {
+                                *cursor.get_unchecked_mut(len - 2) = if fixnum_lt(a, b) {
                                     Value::T
                                 } else {
                                     Value::NIL
                                 };
-                                stack.set_len(len - 1);
                             }
+                            cursor.len = len - 1;
                             None
                         } else {
-                            stack.truncate(len - 2);
+                            cursor.len = len - 2;
                             Some((a, b))
                         }
                     };
@@ -2451,7 +2538,8 @@ impl<'a> Vm<'a> {
                 Op::Length => {
                     let len = stk!().len();
                     let val = stk!()[len - 1];
-                    stk!()[len - 1] = vm_try!(builtins::builtin_length_1(&mut *self.ctx, val));
+                    let result = vm_try!(builtins::builtin_length_1(&mut *self.ctx, val));
+                    stk!()[len - 1] = result;
                 }
                 Op::Nth => {
                     let len = stk!().len();
@@ -2495,14 +2583,16 @@ impl<'a> Vm<'a> {
                 }
                 Op::Nconc => {
                     let start = stk!().len().saturating_sub(2);
-                    let result = vm_try!(builtins::builtin_nconc_slice_values(&stk!()[start..]));
+                    let result =
+                        vm_try_pure!(builtins::builtin_nconc_slice_values(&stk!()[start..]));
                     stk!().truncate(start);
                     stk_push!(result);
                 }
                 Op::Nreverse => {
                     let len = stk!().len();
                     let value = stk!()[len - 1];
-                    stk!()[len - 1] = vm_try!(builtins::builtin_nreverse_1(&mut *self.ctx, value));
+                    let result = vm_try!(builtins::builtin_nreverse_1(&mut *self.ctx, value));
+                    stk!()[len - 1] = result;
                 }
                 Op::Member => {
                     let len = stk!().len();
@@ -2607,13 +2697,13 @@ impl<'a> Vm<'a> {
                     let start = stk!().len().saturating_sub(n);
                     // GNU bytecode.c:BconcatN passes the stack slice directly
                     // to Fconcat instead of materializing an argument vector.
-                    let result = vm_try!(builtins::builtin_concat_slice(&stk!()[start..]));
+                    let result = vm_try_pure!(builtins::builtin_concat_slice(&stk!()[start..]));
                     stk!().truncate(start);
                     stk_push!(result);
                 }
                 Op::Substring => {
                     let start = stk!().len().saturating_sub(3);
-                    let result = vm_try!(builtins::builtin_substring_slice(&stk!()[start..]));
+                    let result = vm_try_pure!(builtins::builtin_substring_slice(&stk!()[start..]));
                     stk!().truncate(start);
                     stk_push!(result);
                 }
@@ -2674,14 +2764,14 @@ impl<'a> Vm<'a> {
                 Op::SymbolValue => {
                     let len = stk!().len();
                     let sym = stk!()[len - 1];
-                    stk!()[len - 1] =
-                        vm_try!(builtins::builtin_symbol_value_1(&mut *self.ctx, sym));
+                    let result = vm_try!(builtins::builtin_symbol_value_1(&mut *self.ctx, sym));
+                    stk!()[len - 1] = result;
                 }
                 Op::SymbolFunction => {
                     let len = stk!().len();
                     let sym = stk!()[len - 1];
-                    stk!()[len - 1] =
-                        vm_try!(builtins::builtin_symbol_function_1(&mut *self.ctx, sym));
+                    let result = vm_try!(builtins::builtin_symbol_function_1(&mut *self.ctx, sym));
+                    stk!()[len - 1] = result;
                 }
                 Op::Set => {
                     let len = stk!().len();
@@ -2790,14 +2880,8 @@ impl<'a> Vm<'a> {
                 Op::Throw => {
                     let val = stk!().pop().unwrap_or(Value::NIL);
                     let tag = stk!().pop().unwrap_or(Value::NIL);
-                    self.resume_nonlocal(
-                        func,
-                        &mut pc_local,
-                        handlers,
-                        bind_stack,
-                        Flow::Throw { tag, value: val },
-                    )?;
-                    continue;
+                    cursor.publish(&mut self.ctx);
+                    resume_flow!(Flow::Throw { tag, value: val })
                 }
 
                 // -- Closure --
@@ -2900,7 +2984,9 @@ impl<'a> Vm<'a> {
 
         // Fell off the end — return TOS or nil
         *pc = pc_local;
-        Ok(stk!().pop().unwrap_or(Value::NIL))
+        let result = stk!().pop().unwrap_or(Value::NIL);
+        cursor.publish(&mut self.ctx);
+        Ok(result)
     }
 
     // -- Helper methods --

@@ -7687,6 +7687,10 @@ impl Context {
     /// termination + sweep. The first cycle and non-incremental builds take the
     /// stop-the-world path.
     fn gc_collect_from_current_roots_impl(&mut self, force_complete: bool) {
+        // A6 publication discipline: collecting while run_loop's operand-stack
+        // cursor holds an unpublished length would mark a stale bc_buf prefix.
+        #[cfg(debug_assertions)]
+        crate::emacs_core::bytecode::vm::debug_assert_no_live_stack_cursor();
         // Inline set/restore, NOT a Drop guard (see the `gc_driver_active`
         // field doc): the body is infallible, so the trailing restore runs on
         // every normal exit (including the body's early `return`s), while a
