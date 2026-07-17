@@ -926,11 +926,6 @@ fn word_motion_with_table(
     honor_properties: bool,
     wbtable: Value,
 ) -> (EmacsBytePos, bool) {
-    // Per-scan syntax-table property cache (GNU gl_state); one
-    // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
-    let prop_cache = &prop_cache;
-
     let forward = count > 0;
     let n = count.unsigned_abs();
     let mut completed = true;
@@ -941,8 +936,12 @@ fn word_motion_with_table(
 
     for _ in 0..n {
         // Locate the boundary character and its 1-based char position, plus the
-        // accessible-region limit, all from the current point.
+        // accessible-region limit, all from the current point.  Keep the
+        // syntax-property cache inside this mutation-free probe: the boundary
+        // callback below is arbitrary Lisp and may edit the buffer.
         let probe = {
+            let prop_cache = SyntaxPropRange::new();
+            let prop_cache = &prop_cache;
             let buf = match eval.buffers.get(current_id) {
                 Some(b) => b,
                 None => return (EmacsBytePos::new(0), false),

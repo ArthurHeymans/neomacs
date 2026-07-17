@@ -150,6 +150,38 @@ fn forward_word_count_two_skips_second_word() {
 }
 
 #[test]
+fn forward_word_drops_syntax_property_cache_before_boundary_callback() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (insert "aa bb cc")
+          (setq-local parse-sexp-lookup-properties t)
+          (setq-local syntax-propertize--done (point-max))
+          (goto-char (point-min))
+          (let ((table (make-char-table nil)))
+            (setq syntax-test--boundary-calls 0)
+            (fset 'syntax-test--boundary
+                  (lambda (pos limit)
+                    (setq syntax-test--boundary-calls
+                          (1+ syntax-test--boundary-calls))
+                    (when (= syntax-test--boundary-calls 1)
+                      ;; The next word becomes punctuation while the boundary
+                      ;; callback runs.  A scan cache retained across this Lisp
+                      ;; call would incorrectly continue to see the old nil run.
+                      (put-text-property 4 6 'syntax-table '(1)))
+                    (min (+ pos 2) limit)))
+            (set-char-table-range table t 'syntax-test--boundary)
+            (setq-local find-word-boundary-function-table table)
+            (forward-word 2)
+            (list (point) syntax-test--boundary-calls)))
+        "#,
+    );
+
+    assert_eq!(result, "OK (9 2)");
+}
+
+#[test]
 fn forward_word_negative_goes_backward() {
     crate::test_utils::init_test_tracing();
     // `backward-word` is defined in lisp/simple.el; the underlying primitive
