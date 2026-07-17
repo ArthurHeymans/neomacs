@@ -1137,6 +1137,15 @@ pub(crate) fn builtin_run_window_configuration_change_hook(
     let hook_name = crate::emacs_core::intern::resolve_sym(hook_sym);
     let saved = save_hook_caller_context(eval);
 
+    // The snapshot of the GLOBAL hook list is held in a Rust local across
+    // the per-window buffer-local hook runs (arbitrary Lisp); a local hook
+    // that setq-defaults or globally remove-hooks the variable unlinks the
+    // snapshot from its obarray root, and a GC frees the conses before the
+    // final global run walks them. One root for the snapshot preserves the
+    // GNU behavior of running the pre-local-hooks snapshot.
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(global_hook_value);
+
     let result = (|| -> EvalResult {
         select_frame_window_for_hook_context(eval, frame_id, selected_window);
         for window_id in &window_ids {
@@ -1166,6 +1175,7 @@ pub(crate) fn builtin_run_window_configuration_change_hook(
         Ok(Value::NIL)
     })();
 
+    eval.restore_specpdl_roots(root_scope);
     restore_hook_caller_context(eval, saved);
     result
 }

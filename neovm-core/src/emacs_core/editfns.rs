@@ -500,6 +500,13 @@ pub(crate) fn signal_after_change(
     let saved_interval_insert_in_front_hooks = ctx.interval_insert_in_front_hooks;
 
     let specpdl_count = ctx.specpdl.len();
+    // The saved hook lists live only in the Rust locals above while
+    // after-change-functions run arbitrary Lisp; if a hook clears the
+    // context fields (their previous root), a GC frees the lists before
+    // they are reinstated below. GcRoot entries unwind with the specpdl,
+    // so unbind_to(specpdl_count) pops them with the specbind.
+    ctx.push_specpdl_root(saved_interval_insert_behind_hooks);
+    ctx.push_specpdl_root(saved_interval_insert_in_front_hooks);
     ctx.specbind(intern("inhibit-modification-hooks"), Value::T);
     let result = (|| -> Result<(), Flow> {
         run_named_hook_reset_on_error(ctx, "after-change-functions", &hook_args)?;
@@ -913,22 +920,34 @@ fn call_overlay_hook_list(
     lisp_end: i64,
     lisp_old_len: Option<i64>,
 ) -> Result<(), Flow> {
-    let mut cursor = hook_list;
-    while cursor.is_cons() {
-        let func = cursor.cons_car();
-        let mut args = vec![
-            overlay,
-            after_flag,
-            Value::fixnum(lisp_beg),
-            Value::fixnum(lisp_end),
-        ];
-        if let Some(old_len) = lisp_old_len {
-            args.push(Value::fixnum(old_len));
+    // A hook can unlink its own chain from the overlay plist (the
+    // one-shot-hook idiom: overlay-put with the fn deleted) and trigger GC,
+    // freeing the conses this walk still reads. Root the moving cursor in a
+    // single updatable slot: marking is transitive, so the remaining chain
+    // survives exactly as GNU's conservatively-scanned tail local does.
+    let root_scope = ctx.save_specpdl_roots();
+    let cursor_slot = ctx.push_specpdl_root_slot(Value::NIL);
+    let result = (|| -> Result<(), Flow> {
+        let mut cursor = hook_list;
+        while cursor.is_cons() {
+            ctx.set_specpdl_root_slot(&cursor_slot, cursor);
+            let func = cursor.cons_car();
+            let mut args = vec![
+                overlay,
+                after_flag,
+                Value::fixnum(lisp_beg),
+                Value::fixnum(lisp_end),
+            ];
+            if let Some(old_len) = lisp_old_len {
+                args.push(Value::fixnum(old_len));
+            }
+            ctx.apply(func, args)?;
+            cursor = cursor.cons_cdr();
         }
-        ctx.apply(func, args)?;
-        cursor = cursor.cons_cdr();
-    }
-    Ok(())
+        Ok(())
+    })();
+    ctx.restore_specpdl_roots(root_scope);
+    result
 }
 
 fn expect_integer_or_marker_in_buffers(

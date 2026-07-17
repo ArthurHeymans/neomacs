@@ -1132,10 +1132,29 @@ fn call_text_property_hook_lists(
         super::intern::intern("inhibit-modification-hooks"),
         Value::T,
     );
+    // The collected hook chains live only in this Rust Vec, and each hook
+    // can unlink its own chain from the interval plist (the one-shot-hook
+    // idiom) and trigger GC — freeing the conses the walk still reads. Keep
+    // every chain alive under ONE root by threading the list heads onto a
+    // heap list; the moving cursor stays inside a rooted chain. GNU's C
+    // locals survive this via conservative stack scanning (textprop.c
+    // verify_interval_modification), which the precise GC does not scan.
+    let mut hook_holder = Value::NIL;
+    for hook_list in hook_lists.iter().rev() {
+        hook_holder = Value::cons(*hook_list, hook_holder);
+    }
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(hook_holder);
+    // Rooting the WALK CURSOR (updated per step) additionally keeps the
+    // remaining chain alive even if a hook setcdr's the chain mid-walk —
+    // marking is transitive from the cursor, exactly the survival GNU gets
+    // from its conservatively-scanned tail local.
+    let cursor_slot = eval.push_specpdl_root_slot(Value::NIL);
     let result = (|| -> Result<(), Flow> {
         for hook_list in hook_lists {
             let mut cursor = hook_list;
             while cursor.is_cons() {
+                eval.set_specpdl_root_slot(&cursor_slot, cursor);
                 let fn_v = cursor.cons_car();
                 eval.apply(fn_v, vec![start_v, end_v])?;
                 cursor = cursor.cons_cdr();
@@ -1143,6 +1162,7 @@ fn call_text_property_hook_lists(
         }
         Ok(())
     })();
+    eval.restore_specpdl_roots(root_scope);
     eval.unbind_to(specpdl_count);
     result
 }

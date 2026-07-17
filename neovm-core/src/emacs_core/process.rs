@@ -5638,6 +5638,20 @@ impl super::eval::Context {
         for arg in &args {
             self.push_specpdl_root(*arg);
         }
+        // The saved state below lives only in Rust locals across the
+        // callback (arbitrary Lisp): the saved match-data's searched string
+        // and the saved deactivate-mark value are heap objects whose prior
+        // roots the callback can replace (a new string-match, a plain setq).
+        // Root them for the callback span; unbind_to pops these with the
+        // specbinds. GNU parks the same state on its specpdl
+        // (record_unwind_protect restore_match_data, keyboard.c/process.c).
+        if let Some(crate::emacs_core::regex::MatchSource::String {
+            searched: Some(crate::emacs_core::regex::SearchedString::Heap(searched)),
+        }) = saved_match_data.as_ref().map(|md| &md.source)
+        {
+            self.push_specpdl_root(*searched);
+        }
+        self.push_specpdl_root(saved_deactivate_mark);
 
         self.specbind(intern("inhibit-quit"), Value::T);
         self.specbind(intern("last-nonmenu-event"), Value::T);
@@ -5648,8 +5662,11 @@ impl super::eval::Context {
             self.restore_current_buffer_if_live(buffer_id);
         }
         self.set_waiting_for_user_input(saved_waiting_for_input);
-        self.unbind_to(specpdl_count);
+        // Restore deactivate-mark BEFORE unbinding: its saved value loses
+        // its root when unbind_to pops the GcRoot above, and GNU's specpdl
+        // ordering restores it under the still-bound inhibit-quit anyway.
         self.assign("deactivate-mark", saved_deactivate_mark);
+        self.unbind_to(specpdl_count);
         self.restore_specpdl_roots(gc_roots);
 
         self.finish_callback_flow(result, label)
@@ -6076,27 +6093,46 @@ impl super::eval::Context {
             }
 
             self.sync_process_read_config_from_visible_variables();
-            for event in self.processes.accept_network_server_connections(pid) {
-                // GNU `server_accept_connection` runs inside the wait; the
-                // accept (and its "open from" sentinel) never terminates it.
-                outcome.record_serviced();
-                self.run_process_log_callback(
-                    event.log,
-                    event.server_id,
-                    event.client_id,
-                    &event.log_message,
-                )?;
-                let sentinel = self
-                    .processes
-                    .get(event.client_id)
-                    .map(|process| process.sentinel)
-                    .unwrap_or(event.sentinel);
-                self.run_process_sentinel_callback(
-                    event.client_id,
-                    sentinel,
-                    &event.sentinel_message,
-                )?;
+            let accepted = self.processes.accept_network_server_connections(pid);
+            // The events' log/sentinel closures live only in this Rust Vec
+            // while earlier callbacks run arbitrary Lisp; a log function
+            // that set-process-sentinel's or delete-process's a connection
+            // unlinks a later event's closure from the process table (its
+            // only root), and a GC frees it before its dispatch. Thread the
+            // Values onto one rooted heap list for the loop's span.
+            let mut accepted_holder = Value::NIL;
+            for event in accepted.iter().rev() {
+                accepted_holder =
+                    Value::cons(event.log, Value::cons(event.sentinel, accepted_holder));
             }
+            let accepted_root_scope = self.save_specpdl_roots();
+            self.push_specpdl_root(accepted_holder);
+            let accepted_result = (|| -> Result<(), Flow> {
+                for event in accepted {
+                    // GNU `server_accept_connection` runs inside the wait; the
+                    // accept (and its "open from" sentinel) never terminates it.
+                    outcome.record_serviced();
+                    self.run_process_log_callback(
+                        event.log,
+                        event.server_id,
+                        event.client_id,
+                        &event.log_message,
+                    )?;
+                    let sentinel = self
+                        .processes
+                        .get(event.client_id)
+                        .map(|process| process.sentinel)
+                        .unwrap_or(event.sentinel);
+                    self.run_process_sentinel_callback(
+                        event.client_id,
+                        sentinel,
+                        &event.sentinel_message,
+                    )?;
+                }
+                Ok(())
+            })();
+            self.restore_specpdl_roots(accepted_root_scope);
+            accepted_result?;
 
             let is_network = self
                 .processes

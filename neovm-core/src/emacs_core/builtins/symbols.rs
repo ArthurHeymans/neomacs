@@ -101,6 +101,19 @@ fn value_from_symbol_id(id: SymId) -> Value {
 pub(crate) trait MacroexpandRuntime {
     fn symbol_function_by_id(&self, symbol: SymId) -> Option<Value>;
     fn autoload_do_load_macro(&mut self, autoload: Value, head: Value) -> Result<(), Flow>;
+    /// As autoload_do_load_macro, but keeps `rooted_form` GC-rooted for the
+    /// load's duration: on macroexpand iterations >= 2 the in-flight
+    /// expansion is a fresh unrooted cons structure that the load's GCs
+    /// would otherwise free before the caller expands it further.
+    fn autoload_do_load_macro_rooting(
+        &mut self,
+        autoload: Value,
+        head: Value,
+        rooted_form: Value,
+    ) -> Result<(), Flow> {
+        let _ = rooted_form;
+        self.autoload_do_load_macro(autoload, head)
+    }
     fn apply_macro_function(
         &mut self,
         form: Value,
@@ -121,6 +134,19 @@ impl MacroexpandRuntime for super::eval::Context {
             vec![autoload, head, Value::symbol("macro")],
         )?;
         Ok(())
+    }
+
+    fn autoload_do_load_macro_rooting(
+        &mut self,
+        autoload: Value,
+        head: Value,
+        rooted_form: Value,
+    ) -> Result<(), Flow> {
+        let root_scope = self.save_specpdl_roots();
+        self.push_specpdl_root(rooted_form);
+        let result = self.autoload_do_load_macro(autoload, head);
+        self.restore_specpdl_roots(root_scope);
+        result
     }
 
     fn apply_macro_function(
@@ -1234,7 +1260,14 @@ fn macroexpand_once_with_environment<R: MacroexpandRuntime>(
     } else {
         let mut global = current_definition;
         if super::autoload::is_autoload_value(&global) {
-            runtime.autoload_do_load_macro(global, value_from_symbol_id(current_symbol))?;
+            // Root the in-flight expansion across the load (see the trait
+            // method doc); autoload fires at most once per symbol, so the
+            // single root is cheap.
+            runtime.autoload_do_load_macro_rooting(
+                global,
+                value_from_symbol_id(current_symbol),
+                form,
+            )?;
             global = runtime
                 .symbol_function_by_id(current_symbol)
                 .unwrap_or(Value::NIL);

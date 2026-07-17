@@ -2465,6 +2465,13 @@ pub(crate) struct SpecpdlRootScopeState {
     saved_len: usize,
 }
 
+/// Handle to an updatable specpdl GcRoot entry; see
+/// [`Context::push_specpdl_root_slot`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SpecpdlRootSlot {
+    index: usize,
+}
+
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn bind_lexical_value_rooted_in_specpdl(
     lexenv: &mut Value,
@@ -12244,16 +12251,31 @@ impl Context {
         }
         // entry is (FEATURE callback1 callback2 ...).
         // Call funcall on each callback in the cdr.
+        // A callback can delete this entry from after-load-alist (its only
+        // root) and trigger GC; root the entry for the walk, plus the moving
+        // cursor in an updatable slot so even a mid-chain setcdr cannot free
+        // the remainder we still read (marking is transitive from the
+        // cursor, matching GNU's conservatively scanned tail local).
+        let root_scope = self.save_specpdl_roots();
+        self.push_specpdl_root(entry);
+        let cursor_slot = self.push_specpdl_root_slot(Value::NIL);
         let callbacks = entry.cons_cdr();
         let mut cursor = callbacks;
-        while cursor.is_cons() {
+        let result = loop {
+            if !cursor.is_cons() {
+                break Ok(());
+            }
+            self.set_specpdl_root_slot(&cursor_slot, cursor);
             let pair_car = cursor.cons_car();
             let pair_cdr = cursor.cons_cdr();
             let callback = pair_car;
-            self.apply(callback, vec![])?;
+            if let Err(err) = self.apply(callback, vec![]) {
+                break Err(err);
+            }
             cursor = pair_cdr;
-        }
-        Ok(())
+        };
+        self.restore_specpdl_roots(root_scope);
+        result
     }
 
     #[tracing::instrument(level = "info", skip(self), err(Debug))]
@@ -12744,6 +12766,28 @@ impl Context {
 
     pub(crate) fn push_specpdl_root(&mut self, value: Value) {
         self.specpdl.push(SpecBinding::GcRoot { value });
+    }
+
+    /// Push a GcRoot whose value can be UPDATED in place: one reusable root
+    /// for traversals that must keep a moving cursor (list tail, hook chain
+    /// cons) alive across per-element Lisp callbacks. A single slot per
+    /// traversal — per-entry root pushes multiply root-seed work into every
+    /// collection, which exact-GC stress mode turns into minutes.
+    pub(crate) fn push_specpdl_root_slot(&mut self, value: Value) -> SpecpdlRootSlot {
+        let index = self.specpdl.len();
+        self.specpdl.push(SpecBinding::GcRoot { value });
+        SpecpdlRootSlot { index }
+    }
+
+    /// Re-point an updatable root slot at a new value. The slot must still
+    /// be live (not unwound); the debug assert catches misuse.
+    pub(crate) fn set_specpdl_root_slot(&mut self, slot: &SpecpdlRootSlot, value: Value) {
+        match self.specpdl.get_mut(slot.index) {
+            Some(SpecBinding::GcRoot { value: slot_value }) => *slot_value = value,
+            other => {
+                debug_assert!(false, "specpdl root slot unwound or replaced: {other:?}");
+            }
+        }
     }
 
     fn save_eval_temp_roots(&self) -> EvalTempRootScopeState {
@@ -16507,12 +16551,28 @@ impl Context {
             self.watchers
                 .notify_watchers(sym_id, new_value, old_value, operation, where_value);
         self.active_variable_watchers.insert(sym_id);
+        // The snapshotted (callback, args) pairs live only in this Rust Vec
+        // while earlier watchers run; a watcher that remove-variable-watchers
+        // a later one unlinks it from the watcher table (its only root) and a
+        // GC frees it before its call. Thread every snapshot Value onto one
+        // heap list under a single root for the loop's span.
+        let mut holder = Value::NIL;
+        for (callback, args) in calls.iter().rev() {
+            for value in args.iter().rev() {
+                holder = Value::cons(*value, holder);
+            }
+            holder = Value::cons(*callback, holder);
+        }
+        let root_scope = self.save_specpdl_roots();
+        self.push_specpdl_root(holder);
         for (callback, args) in calls {
             if let Err(err) = self.apply(callback, args) {
+                self.restore_specpdl_roots(root_scope);
                 self.active_variable_watchers.remove(&sym_id);
                 return Err(err);
             }
         }
+        self.restore_specpdl_roots(root_scope);
         self.active_variable_watchers.remove(&sym_id);
         Ok(())
     }

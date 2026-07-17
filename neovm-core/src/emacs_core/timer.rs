@@ -260,6 +260,11 @@ impl super::eval::Context {
         for arg in &args {
             self.push_specpdl_root(*arg);
         }
+        // saved_deactivate_mark is a heap Value held only in a Rust local
+        // across the callback; a plain setq in the timer function unlinks
+        // its previous root and a GC frees it before the restore below.
+        // The GcRoot is popped by unbind_to together with the specbind.
+        self.push_specpdl_root(saved_deactivate_mark);
 
         self.specbind(intern("inhibit-quit"), Value::T);
 
@@ -267,8 +272,11 @@ impl super::eval::Context {
         if let Some(buffer_id) = saved_current_buffer {
             self.restore_current_buffer_if_live(buffer_id);
         }
-        self.unbind_to(specpdl_count);
+        // Restore before unbinding — the saved value loses its root when
+        // unbind_to pops the GcRoot above (GNU restores it under the
+        // still-bound inhibit-quit via its specpdl ordering too).
         self.assign("deactivate-mark", saved_deactivate_mark);
+        self.unbind_to(specpdl_count);
         self.restore_specpdl_roots(gc_roots);
 
         self.finish_callback_flow(result, "GNU Lisp timer")
