@@ -562,7 +562,14 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
         GlyphTypeKind::Glyphless
     );
     assert_eq!(
-        GlyphType::Image { image_id: 7 }.gnu_kind(),
+        GlyphType::Image {
+            image_id: 7,
+            width_cols: 1,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
+        }
+        .gnu_kind(),
         GlyphTypeKind::Image
     );
     assert_eq!(
@@ -1805,7 +1812,8 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
         band.y
     );
 
-    // Chrome glyphs keep the full window clip.
+    // Chrome glyphs use their measured row as the authoritative clip inside
+    // the window partition, so tall content cannot bleed into adjacent bands.
     let header_clip = buf
         .glyphs
         .iter()
@@ -1818,7 +1826,7 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
             _ => None,
         })
         .expect("header glyph 'h'");
-    assert_eq!(header_clip, Some(Rect::new(0.0, 0.0, 32.0, 100.0)));
+    assert_eq!(header_clip, Some(Rect::new(0.0, 0.0, 32.0, 20.0)));
 }
 
 #[test]

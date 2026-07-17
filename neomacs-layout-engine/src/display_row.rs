@@ -22,10 +22,8 @@ pub(crate) use crate::display_row_render_policy::{
     DisplayRowRenderClipBehavior, DisplayRowRenderPolicy,
 };
 #[cfg(test)]
-pub(crate) use crate::display_row_render_state::RenderedDisplayRowMedia;
-#[cfg(test)]
 pub(crate) use crate::display_row_render_state::{
-    CurrentTextRowRenderOutcome, DisplayRowOutputProgress, RenderedDisplayRowMediaKind,
+    CurrentTextRowRenderOutcome, DisplayRowOutputProgress,
 };
 pub(crate) use crate::display_row_render_state::{
     DisplayRowRenderBounds, DisplayRowRenderIntoRowResult, DisplayRowRenderStop,
@@ -545,6 +543,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         self.render_bounds
     }
 
+    #[cfg(test)]
     pub(crate) fn role(&self) -> GlyphRowRole {
         self.role
     }
@@ -935,7 +934,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         );
         let mut position = render_bounds.start();
         let mut source_slots = Vec::new();
-        let mut pending_media = Vec::new();
         let fallback_metrics = DisplayRowFallbackMetrics::from_default_face_extents(
             char_width,
             geometry.height(),
@@ -1050,9 +1048,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             };
             position = progress.end();
             source_slots.extend(progress.slots().iter().cloned());
-            if let Some(pending) = render_item.pending_media_for_progress(&progress) {
-                pending_media.push(pending);
-            }
             match progress.status() {
                 DisplayRowAppendStatus::Complete => {}
                 DisplayRowAppendStatus::Clipped => {
@@ -1078,11 +1073,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             row_layout.height_px
         };
         let progress = display_row_progress(position, geometry.y(), progress_height);
-        let baseline_y = row.pixel_y + row.ascent_px;
-        let media = pending_media
-            .into_iter()
-            .map(|medium| medium.place_on_baseline(baseline_y))
-            .collect();
         let faces = row_faces
             .into_iter()
             .map(|face| face.render_face())
@@ -1091,7 +1081,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             progress,
             source_slots,
             faces,
-            media,
             stop,
         ))
     }

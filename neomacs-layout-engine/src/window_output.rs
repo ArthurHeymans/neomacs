@@ -29,7 +29,6 @@ use crate::display_row_builder::DisplayRowAppendProgress;
 use crate::display_row_builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
 use crate::display_row_measured_state::MeasuredDisplayRow;
-use crate::display_row_render_state::RenderedDisplayRowMedia;
 use crate::display_row_special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
@@ -287,20 +286,8 @@ impl<'a> TextWindowOutputTarget<'a> {
         install_output_resolved_face(self.builder(), face_id, face, metrics);
     }
 
-    pub(crate) fn install_rendered_fragment_assets(
-        &mut self,
-        role: GlyphRowRole,
-        display_row_index: usize,
-        faces: &[Face],
-        media: &[RenderedDisplayRowMedia],
-    ) {
-        install_rendered_display_row_fragment_assets(
-            self.builder(),
-            role,
-            display_row_index,
-            faces,
-            media,
-        );
+    pub(crate) fn install_rendered_fragment_assets(&mut self, faces: &[Face]) {
+        install_rendered_display_row_fragment_assets(self.builder(), faces);
     }
 
     pub(crate) fn install_measured_window_display_row(&mut self, measured: &MeasuredDisplayRow) {

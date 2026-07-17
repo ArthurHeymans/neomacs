@@ -2,16 +2,15 @@
 
 use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
-    OutputMediaInstallKind, OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
+    OutputWindowMetadataInstallRequest,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{
-    BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ImageItem,
-    ScrollBarItem, VideoItem, XwidgetItem,
+    BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ScrollBarItem,
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
@@ -22,9 +21,6 @@ pub(crate) struct OutputFrameBuildState {
     face_fills: Vec<FaceFillItem>,
     borders: Vec<BorderItem>,
     cursors: Vec<CursorItem>,
-    images: Vec<ImageItem>,
-    videos: Vec<VideoItem>,
-    xwidgets: Vec<XwidgetItem>,
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
     cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
@@ -54,9 +50,6 @@ impl OutputFrameBuildState {
             face_fills: Vec::new(),
             borders: Vec::new(),
             cursors: Vec::new(),
-            images: Vec::new(),
-            videos: Vec::new(),
-            xwidgets: Vec::new(),
             scroll_bars: Vec::new(),
             phys_cursor: None,
             cursor_effects_by_window: HashMap::new(),
@@ -95,9 +88,6 @@ impl OutputFrameBuildState {
         self.face_fills.clear();
         self.borders.clear();
         self.cursors.clear();
-        self.images.clear();
-        self.videos.clear();
-        self.xwidgets.clear();
         self.scroll_bars.clear();
         self.phys_cursor = None;
         self.cursor_effects_by_window.clear();
@@ -226,86 +216,6 @@ impl OutputFrameBuildState {
         self.cursors.push(request.cursor_item());
     }
 
-    pub(crate) fn install_media(&mut self, request: OutputMediaInstallRequest) {
-        let target = request.target;
-        match request.kind {
-            OutputMediaInstallKind::Image { image_id } => self.images.push(ImageItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                image_id,
-                x: request.x,
-                y: request.y,
-                width: request.width,
-                height: request.height,
-            }),
-            OutputMediaInstallKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => self.videos.push(VideoItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                video_id,
-                x: request.x,
-                y: request.y,
-                width: request.width,
-                height: request.height,
-                loop_count,
-                autoplay,
-            }),
-            OutputMediaInstallKind::Xwidget { xwidget_id } => self.xwidgets.push(XwidgetItem {
-                window_id: target.window_id,
-                row_role: target.role,
-                clip_rect: target.clip,
-                slot_id: Some(target.slot_id),
-                xwidget_id,
-                x: request.x,
-                y: request.y,
-                width: request.width,
-                height: request.height,
-            }),
-        }
-    }
-
-    /// Pixel height occupied by inline media in one text window, measured in
-    /// the same clip-local coordinate space as its row grid.
-    pub(crate) fn window_text_media_height_px(&self, window_id: DisplayWindowId) -> Option<f32> {
-        self.images
-            .iter()
-            .filter(|item| item.window_id == window_id && item.row_role == GlyphRowRole::Text)
-            .filter_map(|item| {
-                item.clip_rect
-                    .map(|clip| item.height.max(item.y + item.height - clip.y))
-            })
-            .chain(
-                self.videos
-                    .iter()
-                    .filter(|item| {
-                        item.window_id == window_id && item.row_role == GlyphRowRole::Text
-                    })
-                    .filter_map(|item| {
-                        item.clip_rect
-                            .map(|clip| item.height.max(item.y + item.height - clip.y))
-                    }),
-            )
-            .chain(
-                self.xwidgets
-                    .iter()
-                    .filter(|item| {
-                        item.window_id == window_id && item.row_role == GlyphRowRole::Text
-                    })
-                    .filter_map(|item| {
-                        item.clip_rect
-                            .map(|clip| item.height.max(item.y + item.height - clip.y))
-                    }),
-            )
-            .reduce(f32::max)
-    }
-
     pub(crate) fn install_frame_state(&mut self, request: OutputFrameStateInstallRequest) {
         match request {
             OutputFrameStateInstallRequest::Identity(identity) => {
@@ -373,9 +283,9 @@ impl OutputFrameBuildState {
         state.face_fills = self.face_fills;
         state.borders = self.borders;
         state.cursors = self.cursors;
-        state.images = self.images;
-        state.videos = self.videos;
-        state.xwidgets = self.xwidgets;
+        state.images.clear();
+        state.videos.clear();
+        state.xwidgets.clear();
         state.scroll_bars = self.scroll_bars;
         state.phys_cursor = self.phys_cursor;
         state.cursor_effects_by_window = self.cursor_effects_by_window;

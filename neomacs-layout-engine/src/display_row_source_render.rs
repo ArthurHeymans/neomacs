@@ -47,7 +47,6 @@ use crate::window_output::{
     install_text_window_row_decoration_request, transition_text_window_row,
     transition_text_window_row_with_limit,
 };
-use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
     FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
 };
@@ -101,7 +100,6 @@ struct DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
 }
 
 struct DisplayRowCurrentTextSourceStepResult {
-    role: GlyphRowRole,
     result: DisplayRowRenderIntoRowResult,
     row_height_px: f32,
     row_ascent_px: f32,
@@ -305,7 +303,6 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let role = row_request.role();
         let mutation = DisplayRowCurrentSourceStepMutation {
             row_request,
             renderer: DisplayRowRenderer::new_for_frame(self.font_metrics, self.window_system),
@@ -321,7 +318,6 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         let (result, row_height_px, row_ascent_px) =
             self.row_output.apply_current_row_mutation(mutation)??;
         Some(DisplayRowCurrentTextSourceStepResult {
-            role,
             result,
             row_height_px,
             row_ascent_px,
@@ -338,7 +334,6 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let role = row_request.role();
         let mutation = DisplayRowCurrentSourceStepMutation {
             row_request,
             renderer: DisplayRowRenderer::new_for_frame(self.font_metrics, self.window_system),
@@ -355,7 +350,6 @@ impl<'face, 'emit> DisplayRowCurrentTextSourceState<'face, 'emit> {
             .row_output
             .apply_current_row_scratch_mutation(mutation)??;
         Some(DisplayRowCurrentTextSourceStepResult {
-            role,
             result,
             row_height_px,
             row_ascent_px,
@@ -409,7 +403,7 @@ impl<'face, 'emit> DisplayRowCurrentSourceFragmentRenderState<'face, 'emit> {
 
 impl DisplayRowCurrentTextSourceStepResult {
     fn into_measure_outcome(self) -> CurrentTextRowRenderOutcome {
-        let (progress, source_slots, _faces, _media, stop) = self.result.into_current_row_parts();
+        let (progress, source_slots, _faces, stop) = self.result.into_current_row_parts();
         let end = display_row_output_end_position(progress);
         CurrentTextRowRenderOutcome::new(
             stop,
@@ -622,15 +616,13 @@ impl<'a> TextRowOutputRenderState<'a> {
         result: DisplayRowCurrentTextSourceStepResult,
     ) -> CurrentTextRowRenderOutcome {
         let DisplayRowCurrentTextSourceStepResult {
-            role,
             result,
             row_height_px,
             row_ascent_px,
         } = result;
-        let (progress, source_slots, faces, media, stop) = result.into_current_row_parts();
+        let (progress, source_slots, faces, stop) = result.into_current_row_parts();
         let end = display_row_output_end_position(progress);
-        self.output
-            .install_rendered_fragment_assets(role, output.row(), &faces, &media);
+        self.output.install_rendered_fragment_assets(&faces);
         let output_spans = output.spans_for_source_slots(&source_slots);
         self.output_emitter
             .emit_text_output_spans(self.evaluator, output, output_spans, end);

@@ -9380,7 +9380,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
         0,
         0.0,
         6.0,
-        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
+        DisplayRowAppendArea::new(text_bounds.x, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -9388,7 +9388,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
             8.0,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         ),
-        DisplayTabPolicy::every(8),
+        DisplayTabPolicy::from_tab_width_and_stops(text_bounds.x, 8, &[]),
     );
     let end = {
         let mut font_metrics = None;
@@ -9415,15 +9415,39 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    let image = state.images.first().expect("image side item");
-    assert_eq!(image.window_id.get(), 77);
-    assert_eq!(image.row_role, GlyphRowRole::Text);
-    assert_eq!(image.clip_rect, Some(text_bounds));
-    assert_eq!(image.image_id.get(), 42);
-    assert_eq!(image.x, 16.0);
-    assert_eq!(image.y, 0.0);
-    assert_eq!(image.width, 64.0);
-    assert_eq!(image.height, 32.0);
+    assert!(
+        state.images.is_empty(),
+        "row media must not use a side list"
+    );
+    let frame = state.materialize();
+    let image = frame
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Image {
+                window_id,
+                row_role,
+                clip_rect,
+                image_id,
+                x,
+                y,
+                width,
+                height,
+                ..
+            } => Some((
+                *window_id, *row_role, *clip_rect, *image_id, *x, *y, *width, *height,
+            )),
+            _ => None,
+        })
+        .expect("image materialized from its row glyph");
+    assert_eq!(image.0.get(), 77);
+    assert_eq!(image.1, GlyphRowRole::Text);
+    assert_eq!(image.2, Some(text_bounds));
+    assert_eq!(image.3.get(), 42);
+    assert_eq!(
+        (image.4, image.5, image.6, image.7),
+        (16.0, 20.0, 64.0, 32.0)
+    );
     let requests = requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].fg_color, 0x00112233);
@@ -10956,8 +10980,8 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     );
     builder.begin_row(0, GlyphRowRole::Text);
     let surface = DisplayRowAppendSurface::new(
-        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
-        DisplayTabPolicy::every(8),
+        DisplayRowAppendArea::new(text_bounds.x, 160.0, 160.0, 0.0),
+        DisplayTabPolicy::from_tab_width_and_stops(text_bounds.x, 8, &[]),
     );
     let geometry = DisplayRowGeometryState::new(0, 4.0, 0.0, 16.0, 12.0);
     let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
@@ -11014,7 +11038,10 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
             assert_eq!(glyph.pixel_ascent, 54.0);
             assert!(matches!(
                 glyph.glyph_type,
-                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 12 }
+                neomacs_display_protocol::glyph_matrix::GlyphType::Xwidget {
+                    xwidget_id: 1234,
+                    width_cols: 12,
+                }
             ));
         })
         .expect("current row");
@@ -11022,23 +11049,55 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    let xwidget = state.xwidgets.first().expect("xwidget side item");
-    assert_eq!(xwidget.window_id.get(), 77);
-    assert_eq!(xwidget.row_role, GlyphRowRole::Text);
-    assert_eq!(xwidget.clip_rect, Some(text_bounds));
+    assert!(
+        state.xwidgets.is_empty(),
+        "row media must not use a side list"
+    );
+    let frame = state.materialize();
+    let xwidget = frame
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Xwidget {
+                window_id,
+                row_role,
+                clip_rect,
+                slot_id,
+                xwidget_id,
+                x,
+                y,
+                width,
+                height,
+            } => Some((
+                *window_id,
+                *row_role,
+                *clip_rect,
+                *slot_id,
+                *xwidget_id,
+                *x,
+                *y,
+                *width,
+                *height,
+            )),
+            _ => None,
+        })
+        .expect("xwidget materialized from its row glyph");
+    assert_eq!(xwidget.0.get(), 77);
+    assert_eq!(xwidget.1, GlyphRowRole::Text);
+    assert_eq!(xwidget.2, Some(text_bounds));
     assert_eq!(
-        xwidget.slot_id,
+        xwidget.3,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
             window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(xwidget.xwidget_id.get(), 1234);
-    assert_eq!(xwidget.x, 16.0);
-    assert_eq!(xwidget.y, 4.0);
-    assert_eq!(xwidget.width, 96.0);
-    assert_eq!(xwidget.height, 54.0);
+    assert_eq!(xwidget.4.get(), 1234);
+    assert_eq!(
+        (xwidget.5, xwidget.6, xwidget.7, xwidget.8),
+        (16.0, 24.0, 96.0, 54.0)
+    );
 }
 
 #[test]
@@ -11082,7 +11141,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         0,
         4.0,
         6.0,
-        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
+        DisplayRowAppendArea::new(text_bounds.x, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -11090,7 +11149,7 @@ fn display_replacement_append_context_installs_image_replacements() {
             8.0,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         ),
-        DisplayTabPolicy::every(8),
+        DisplayTabPolicy::from_tab_width_and_stops(text_bounds.x, 8, &[]),
     );
     let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
@@ -11144,7 +11203,11 @@ fn display_replacement_append_context_installs_image_replacements() {
             assert_eq!(glyph.pixel_ascent, 32.0);
             assert!(matches!(
                 glyph.glyph_type,
-                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 8 }
+                neomacs_display_protocol::glyph_matrix::GlyphType::Image {
+                    image_id: 42,
+                    width_cols: 8,
+                    ..
+                }
             ));
         })
         .expect("current row");
@@ -11152,23 +11215,47 @@ fn display_replacement_append_context_installs_image_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    let image = state.images.first().expect("image side item");
-    assert_eq!(image.window_id.get(), 77);
-    assert_eq!(image.row_role, GlyphRowRole::Text);
-    assert_eq!(image.clip_rect, Some(text_bounds));
+    assert!(
+        state.images.is_empty(),
+        "row media must not use a side list"
+    );
+    let frame = state.materialize();
+    let image = frame
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Image {
+                window_id,
+                row_role,
+                clip_rect,
+                slot_id,
+                image_id,
+                x,
+                y,
+                width,
+                height,
+            } => Some((
+                *window_id, *row_role, *clip_rect, *slot_id, *image_id, *x, *y, *width, *height,
+            )),
+            _ => None,
+        })
+        .expect("image materialized from its row glyph");
+    assert_eq!(image.0.get(), 77);
+    assert_eq!(image.1, GlyphRowRole::Text);
+    assert_eq!(image.2, Some(text_bounds));
     assert_eq!(
-        image.slot_id,
+        image.3,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
             window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(image.image_id.get(), 42);
-    assert_eq!(image.x, 16.0);
-    assert_eq!(image.y, 4.0);
-    assert_eq!(image.width, 64.0);
-    assert_eq!(image.height, 32.0);
+    assert_eq!(image.4.get(), 42);
+    assert_eq!(
+        (image.5, image.6, image.7, image.8),
+        (16.0, 24.0, 64.0, 32.0)
+    );
 }
 
 #[test]
@@ -11212,7 +11299,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         0,
         4.0,
         6.0,
-        DisplayRowAppendArea::new(0.0, 160.0, 160.0, 0.0),
+        DisplayRowAppendArea::new(text_bounds.x, 160.0, 160.0, 0.0),
         DisplayRowAppendMetrics::new(
             16.0,
             12.0,
@@ -11220,7 +11307,7 @@ fn display_replacement_append_context_installs_video_replacements() {
             8.0,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         ),
-        DisplayTabPolicy::every(8),
+        DisplayTabPolicy::from_tab_width_and_stops(text_bounds.x, 8, &[]),
     );
     let replacement_source = crate::display_item::BufferDisplayReplacementSource::new(
         buf_id,
@@ -11272,7 +11359,12 @@ fn display_replacement_append_context_installs_video_replacements() {
             assert_eq!(glyph.pixel_ascent, 45.0);
             assert!(matches!(
                 glyph.glyph_type,
-                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { width_cols: 10 }
+                neomacs_display_protocol::glyph_matrix::GlyphType::Video {
+                    video_id: 88,
+                    width_cols: 10,
+                    loop_count: -1,
+                    autoplay: true,
+                }
             ));
         })
         .expect("current row");
@@ -11280,25 +11372,61 @@ fn display_replacement_append_context_installs_video_replacements() {
     builder.end_row();
     builder.end_window();
     let state = builder.finish(24, 1, 8.0, 16.0);
-    let video = state.videos.first().expect("video side item");
-    assert_eq!(video.window_id.get(), 77);
-    assert_eq!(video.row_role, GlyphRowRole::Text);
-    assert_eq!(video.clip_rect, Some(text_bounds));
+    assert!(
+        state.videos.is_empty(),
+        "row media must not use a side list"
+    );
+    let frame = state.materialize();
+    let video = frame
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Video {
+                window_id,
+                row_role,
+                clip_rect,
+                slot_id,
+                video_id,
+                x,
+                y,
+                width,
+                height,
+                loop_count,
+                autoplay,
+            } => Some((
+                *window_id,
+                *row_role,
+                *clip_rect,
+                *slot_id,
+                *video_id,
+                *x,
+                *y,
+                *width,
+                *height,
+                *loop_count,
+                *autoplay,
+            )),
+            _ => None,
+        })
+        .expect("video materialized from its row glyph");
+    assert_eq!(video.0.get(), 77);
+    assert_eq!(video.1, GlyphRowRole::Text);
+    assert_eq!(video.2, Some(text_bounds));
     assert_eq!(
-        video.slot_id,
+        video.3,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
             window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
             col: 2,
         })
     );
-    assert_eq!(video.video_id.get(), 88);
-    assert_eq!(video.x, 16.0);
-    assert_eq!(video.y, 4.0);
-    assert_eq!(video.width, 80.0);
-    assert_eq!(video.height, 45.0);
-    assert_eq!(video.loop_count, -1);
-    assert!(video.autoplay);
+    assert_eq!(video.4.get(), 88);
+    assert_eq!(
+        (video.5, video.6, video.7, video.8),
+        (16.0, 24.0, 80.0, 45.0)
+    );
+    assert_eq!(video.9, -1);
+    assert!(video.10);
 }
 
 struct DisplayRowSourceStep {

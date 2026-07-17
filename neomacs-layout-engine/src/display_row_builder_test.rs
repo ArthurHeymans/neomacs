@@ -161,7 +161,7 @@ fn row_text(row: &neomacs_display_protocol::glyph_matrix::GlyphRow) -> String {
             GlyphType::Stretch { width_cols } => {
                 text.push_str(&" ".repeat(usize::from(*width_cols)))
             }
-            GlyphType::Image { .. } => {}
+            GlyphType::Image { .. } | GlyphType::Video { .. } | GlyphType::Xwidget { .. } => {}
         }
     }
     text

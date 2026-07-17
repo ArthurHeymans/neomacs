@@ -18,7 +18,7 @@ fn bidi_char_for_glyph(glyph: &Glyph) -> Option<char> {
         GlyphType::Char { ch } | GlyphType::Glyphless { ch } => Some(*ch),
         GlyphType::Composite { text } => text.chars().next(),
         GlyphType::Stretch { .. } => Some(' '),
-        GlyphType::Image { .. } => None,
+        GlyphType::Image { .. } | GlyphType::Video { .. } | GlyphType::Xwidget { .. } => None,
     }
 }
 
@@ -33,7 +33,11 @@ fn apply_bidi_mirroring(glyph: &mut Glyph, level: u8) {
                 *ch = mirrored;
             }
         }
-        GlyphType::Composite { .. } | GlyphType::Stretch { .. } | GlyphType::Image { .. } => {}
+        GlyphType::Composite { .. }
+        | GlyphType::Stretch { .. }
+        | GlyphType::Image { .. }
+        | GlyphType::Video { .. }
+        | GlyphType::Xwidget { .. } => {}
     }
 }
 
@@ -157,7 +161,11 @@ fn merge_extender_into_last_glyph(area: &mut [Glyph], ch: char) -> bool {
                 };
                 return true;
             }
-            GlyphType::Glyphless { .. } | GlyphType::Stretch { .. } | GlyphType::Image { .. } => {
+            GlyphType::Glyphless { .. }
+            | GlyphType::Stretch { .. }
+            | GlyphType::Image { .. }
+            | GlyphType::Video { .. }
+            | GlyphType::Xwidget { .. } => {
                 return false;
             }
         }

@@ -2382,7 +2382,9 @@ impl GlyphTrace {
             GlyphType::Char { ch } => GlyphKindTrace::Char(*ch),
             GlyphType::Composite { text } => GlyphKindTrace::Composite(text.to_string()),
             GlyphType::Stretch { width_cols } => GlyphKindTrace::Stretch(*width_cols),
-            GlyphType::Image { image_id } => GlyphKindTrace::Image(*image_id),
+            GlyphType::Image { image_id, .. } => GlyphKindTrace::Image(*image_id),
+            GlyphType::Video { video_id, .. } => GlyphKindTrace::Image(*video_id),
+            GlyphType::Xwidget { xwidget_id, .. } => GlyphKindTrace::Image(*xwidget_id),
             GlyphType::Glyphless { ch } => GlyphKindTrace::Glyphless(*ch),
         };
         Self {
@@ -8808,12 +8810,26 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let image = state.images.first().expect("inline image glyph");
-    assert_eq!(image.image_id.get(), 77);
-    assert_eq!(image.width, 32.0);
-    assert_eq!(image.height, 24.0);
+    let presentation = state.materialize();
+    let (image_id, width, height, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Image {
+                image_id,
+                width,
+                height,
+                slot_id,
+                ..
+            } => Some((*image_id, *width, *height, *slot_id)),
+            _ => None,
+        })
+        .expect("inline image glyph");
+    assert_eq!(image_id.get(), 77);
+    assert_eq!(width, 32.0);
+    assert_eq!(height, 24.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 32);
-    let slot_id = image.slot_id.expect("image slot id");
+    let slot_id = slot_id.expect("image slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = requests.lock().expect("requests lock");
@@ -8937,14 +8953,30 @@ fn layout_frame_rust_emits_inline_video_glyphs_for_display_video_specs() {
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let video = state.videos.first().expect("inline video glyph");
-    assert_eq!(video.video_id.get(), 88);
-    assert_eq!(video.width, 80.0);
-    assert_eq!(video.height, 45.0);
-    assert_eq!(video.loop_count, -1);
-    assert!(video.autoplay);
+    let presentation = state.materialize();
+    let (video_id, width, height, loop_count, autoplay, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Video {
+                video_id,
+                width,
+                height,
+                loop_count,
+                autoplay,
+                slot_id,
+                ..
+            } => Some((*video_id, *width, *height, *loop_count, *autoplay, *slot_id)),
+            _ => None,
+        })
+        .expect("inline video glyph");
+    assert_eq!(video_id.get(), 88);
+    assert_eq!(width, 80.0);
+    assert_eq!(height, 45.0);
+    assert_eq!(loop_count, -1);
+    assert!(autoplay);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
-    let slot_id = video.slot_id.expect("video slot id");
+    let slot_id = slot_id.expect("video slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = video_requests.lock().expect("video requests lock");
@@ -8998,12 +9030,26 @@ fn layout_frame_rust_emits_inline_webkit_glyphs_for_display_webkit_specs() {
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
-    assert_eq!(xwidget.xwidget_id.get(), 99);
-    assert_eq!(xwidget.width, 80.0);
-    assert_eq!(xwidget.height, 45.0);
+    let presentation = state.materialize();
+    let (xwidget_id, width, height, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Xwidget {
+                xwidget_id,
+                width,
+                height,
+                slot_id,
+                ..
+            } => Some((*xwidget_id, *width, *height, *slot_id)),
+            _ => None,
+        })
+        .expect("inline xwidget glyph");
+    assert_eq!(xwidget_id.get(), 99);
+    assert_eq!(width, 80.0);
+    assert_eq!(height, 45.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 80);
-    let slot_id = xwidget.slot_id.expect("webkit slot id");
+    let slot_id = slot_id.expect("webkit slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
@@ -9061,12 +9107,26 @@ fn layout_frame_rust_emits_inline_xwidget_glyphs_for_gnu_display_xwidget_specs()
         .last_frame_display_state
         .as_ref()
         .expect("frame display state");
-    let xwidget = state.xwidgets.first().expect("inline xwidget glyph");
-    assert_eq!(xwidget.xwidget_id.get(), 1234);
-    assert_eq!(xwidget.width, 96.0);
-    assert_eq!(xwidget.height, 54.0);
+    let presentation = state.materialize();
+    let (xwidget_id, width, height, slot_id) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Xwidget {
+                xwidget_id,
+                width,
+                height,
+                slot_id,
+                ..
+            } => Some((*xwidget_id, *width, *height, *slot_id)),
+            _ => None,
+        })
+        .expect("inline xwidget glyph");
+    assert_eq!(xwidget_id.get(), 1234);
+    assert_eq!(width, 96.0);
+    assert_eq!(height, 54.0);
     let replacement = assert_replacement_slot_between_neighbors(&eval, frame_id, 2, 96);
-    let slot_id = xwidget.slot_id.expect("xwidget slot id");
+    let slot_id = slot_id.expect("xwidget slot id");
     assert_eq!(i64::from(slot_id.col), replacement.col);
 
     let requests = webkit_requests.lock().expect("webkit requests lock");
@@ -12541,10 +12601,21 @@ fn layout_frame_rust_places_window_chrome_images_inside_each_window_clip() {
         .last_frame_display_state
         .as_ref()
         .expect("display state");
-    let chrome_images = state
-        .images
+    let presentation = state.materialize();
+    let chrome_images = presentation
+        .glyphs
         .iter()
-        .filter(|image| image.row_role.is_chrome())
+        .filter_map(|glyph| match glyph {
+            FrameGlyph::Image {
+                window_id,
+                row_role,
+                clip_rect,
+                x,
+                width,
+                ..
+            } if row_role.is_chrome() => Some((*window_id, *row_role, *clip_rect, *x, *width)),
+            _ => None,
+        })
         .collect::<Vec<_>>();
     assert_eq!(
         chrome_images.len(),
@@ -12552,18 +12623,18 @@ fn layout_frame_rust_places_window_chrome_images_inside_each_window_clip() {
         "tab/header/mode line should each emit an image for both windows"
     );
     assert!(chrome_images.iter().any(|image| {
-        image.window_id.get() == right_window.0 as i64 && image.row_role == GlyphRowRole::HeaderLine
+        image.0.get() == right_window.0 as i64 && image.1 == GlyphRowRole::HeaderLine
     }));
-    for image in chrome_images {
-        let clip = image.clip_rect.expect("window chrome image clip");
+    for (window_id, row_role, clip_rect, x, width) in chrome_images {
+        let clip = clip_rect.expect("window chrome image clip");
         assert!(
-            image.x >= clip.x && image.x + image.width <= clip.x + clip.width,
+            x >= clip.x && x + width <= clip.x + clip.width,
             "window chrome media must be in frame coordinates and contained by its window clip: \
              role={:?} window={} image=({:.1}..{:.1}) clip=({:.1}..{:.1})",
-            image.row_role,
-            image.window_id.get(),
-            image.x,
-            image.x + image.width,
+            row_role,
+            window_id.get(),
+            x,
+            x + width,
             clip.x,
             clip.x + clip.width,
         );

@@ -34,7 +34,13 @@ fn golden_state() -> FrameDisplayState {
     matrix.rows[0].glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
     matrix.rows[0].glyphs[text_area].push(Glyph::stretch(2, FaceId::new(0)));
     matrix.rows[0].glyphs[text_area].push(Glyph {
-        glyph_type: GlyphType::Image { image_id: 7 },
+        glyph_type: GlyphType::Image {
+            image_id: 7,
+            width_cols: 1,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background: None,
+        },
         ..Glyph::char('x', FaceId::new(0), 3)
     });
     let mut wide = Glyph::char('你', FaceId::new(0), 4);

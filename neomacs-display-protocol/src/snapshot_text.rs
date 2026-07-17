@@ -219,8 +219,18 @@ fn row_text(row: &GlyphRow) -> (String, Vec<FaceRun>) {
                     text.extend(std::iter::repeat_n(' ', width));
                     col += width;
                 }
-                GlyphType::Image { image_id } => {
+                GlyphType::Image { image_id, .. } => {
                     let marker = format!("[img:{image_id}]");
+                    col += marker.chars().count();
+                    text.push_str(&marker);
+                }
+                GlyphType::Video { video_id, .. } => {
+                    let marker = format!("[video:{video_id}]");
+                    col += marker.chars().count();
+                    text.push_str(&marker);
+                }
+                GlyphType::Xwidget { xwidget_id, .. } => {
+                    let marker = format!("[xwidget:{xwidget_id}]");
                     col += marker.chars().count();
                     text.push_str(&marker);
                 }

@@ -30,8 +30,26 @@ pub enum GlyphType {
     Composite { text: Box<str> },
     /// Whitespace/filler — occupies `width_cols` character cells.
     Stretch { width_cols: u16 },
-    /// Inline image referenced by ID.
-    Image { image_id: i32 },
+    /// Inline image.  Layout geometry and drawable identity travel together so
+    /// an image cannot be positioned through a second, independently mutable
+    /// side channel.
+    Image {
+        image_id: i32,
+        width_cols: u16,
+        horizontal_margin: f32,
+        vertical_margin: f32,
+        opaque_background: Option<u32>,
+    },
+    /// Inline video, represented by the same row primitive that reserves its
+    /// layout slot.
+    Video {
+        video_id: i32,
+        width_cols: u16,
+        loop_count: i32,
+        autoplay: bool,
+    },
+    /// Inline native/web widget.
+    Xwidget { xwidget_id: i32, width_cols: u16 },
     /// Character with no available glyph (rendered as hex code or thin-space).
     Glyphless { ch: char },
 }
@@ -46,11 +64,15 @@ pub enum GlyphTypeKind {
     Image = 3,
     Stretch = 4,
     Xwidget = 5,
+    /// Neomacs extension; GNU currently has no distinct video glyph kind.
+    Video = 6,
 }
 
 impl GlyphTypeKind {
     pub fn from_gnu_code(code: u8) -> Option<Self> {
-        Self::try_from(code).ok()
+        (code <= Self::Xwidget as u8)
+            .then(|| Self::try_from(code).ok())
+            .flatten()
     }
 
     pub fn gnu_code(self) -> u8 {
@@ -65,6 +87,8 @@ impl GlyphType {
             GlyphType::Composite { .. } => GlyphTypeKind::Composite,
             GlyphType::Glyphless { .. } => GlyphTypeKind::Glyphless,
             GlyphType::Image { .. } => GlyphTypeKind::Image,
+            GlyphType::Video { .. } => GlyphTypeKind::Video,
+            GlyphType::Xwidget { .. } => GlyphTypeKind::Xwidget,
             GlyphType::Stretch { .. } => GlyphTypeKind::Stretch,
         }
     }
@@ -307,6 +331,9 @@ impl Glyph {
         }
         match self.glyph_type {
             GlyphType::Stretch { width_cols } => width_cols.max(1),
+            GlyphType::Image { width_cols, .. }
+            | GlyphType::Video { width_cols, .. }
+            | GlyphType::Xwidget { width_cols, .. } => width_cols.max(1),
             _ if self.wide => 2,
             _ => 1,
         }
@@ -353,6 +380,20 @@ pub struct GlyphRow {
     pub ends_at_zv: bool,
     /// This is a mode-line, header-line, or tab-line row.
     pub mode_line: bool,
+    /// Row start relative to the containing row area's left edge.
+    ///
+    /// Mirrors GNU `struct glyph_row::x`.  Keeping this on the row makes the
+    /// horizontal pen position authoritative for every consumer instead of
+    /// letting non-text primitives carry an independent placement.
+    #[serde(default)]
+    pub pixel_x: f32,
+    /// First materialized display-slot column owned by this row.
+    ///
+    /// Pixel placement cannot recover this value for proportionally-spaced
+    /// text, so source identity travels beside `pixel_x` and is consumed by
+    /// cursor, hit-test, GUI, and TTY adapters alike.
+    #[serde(default)]
+    pub start_col: u16,
     /// Row top relative to the containing window's origin.
     ///
     /// Mirrors GNU `struct glyph_row::y`. `height_px == 0.0` means
@@ -404,6 +445,8 @@ impl GlyphRow {
             displays_text: false,
             ends_at_zv: false,
             mode_line: false,
+            pixel_x: 0.0,
+            start_col: 0,
             pixel_y: 0.0,
             height_px: 0.0,
             ascent_px: 0.0,
@@ -438,7 +481,36 @@ impl GlyphRow {
                         h
                     }
                     GlyphType::Stretch { width_cols } => 0x8000_0000 | (*width_cols as u64),
-                    GlyphType::Image { image_id } => 0x4000_0000 | (*image_id as u64),
+                    GlyphType::Image {
+                        image_id,
+                        width_cols,
+                        horizontal_margin,
+                        vertical_margin,
+                        opaque_background,
+                    } => {
+                        0x4000_0000
+                            ^ (*image_id as u64)
+                            ^ u64::from(*width_cols).rotate_left(3)
+                            ^ u64::from(horizontal_margin.to_bits()).rotate_left(7)
+                            ^ u64::from(vertical_margin.to_bits()).rotate_left(13)
+                            ^ u64::from(opaque_background.unwrap_or_default()).rotate_left(19)
+                    }
+                    GlyphType::Video {
+                        video_id,
+                        width_cols,
+                        loop_count,
+                        autoplay,
+                    } => {
+                        0x6000_0000
+                            ^ (*video_id as u64)
+                            ^ u64::from(*width_cols).rotate_left(5)
+                            ^ (*loop_count as u64).rotate_left(11)
+                            ^ u64::from(*autoplay).rotate_left(23)
+                    }
+                    GlyphType::Xwidget {
+                        xwidget_id,
+                        width_cols,
+                    } => 0x5000_0000 | (*xwidget_id as u64) | u64::from(*width_cols).rotate_left(9),
                     GlyphType::Glyphless { ch } => 0x2000_0000 | (*ch as u64),
                 };
                 hash ^= ch_val;
@@ -455,8 +527,11 @@ impl GlyphRow {
                 hash = hash.wrapping_mul(FNV_PRIME);
             }
         }
-        // Right-to-left rows are aligned differently, so a direction flip on
-        // otherwise-identical glyphs must still count as a change.
+        // Placement and direction are part of a row's presentation identity.
+        hash ^= self.pixel_x.to_bits() as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+        hash ^= u64::from(self.start_col);
+        hash = hash.wrapping_mul(FNV_PRIME);
         hash ^= self.reversed_p as u64;
         hash = hash.wrapping_mul(FNV_PRIME);
         hash
@@ -467,6 +542,9 @@ impl GlyphRow {
             return false;
         }
         if self.reversed_p != other.reversed_p {
+            return false;
+        }
+        if self.pixel_x != other.pixel_x || self.start_col != other.start_col {
             return false;
         }
         if self.pointer_appearances != other.pointer_appearances {
@@ -973,6 +1051,14 @@ pub fn materialize_call_count_for_current_thread() -> u32 {
 struct MaterializedRowCell {
     y: f32,
     height: f32,
+}
+
+fn intersect_rects(a: Rect, b: Rect) -> Rect {
+    let left = a.x.max(b.x);
+    let top = a.y.max(b.y);
+    let right = a.right().min(b.right()).max(left);
+    let bottom = a.bottom().min(b.bottom()).max(top);
+    Rect::new(left, top, right - left, bottom - top)
 }
 
 impl MaterializedRowCell {
@@ -2034,9 +2120,17 @@ impl FrameDisplayState {
         // when a vscroll shifts content past the header/mode-line); for chrome
         // rows the caller passes the window bounds, matching the historical
         // `Some(pixel_bounds)`.
-        let clip_rect = Some(row_clip);
-        let mut col = 0usize;
-        let mut x_cursor = win_x;
+        // A chrome row's measured cell is its authoritative clip.  The window
+        // rectangle is only its containing partition; using that container as
+        // the clip lets tall media bleed into adjacent rows.  Text rows already
+        // receive the authoritative text-area clip from the caller.
+        let clip_rect = Some(if row_role.is_chrome() {
+            intersect_rects(row_clip, Rect::new(win_x, y, win_w, row_height))
+        } else {
+            row_clip
+        });
+        let mut col = usize::from(glyph_row.start_col);
+        let mut x_cursor = win_x + glyph_row.pixel_x.max(0.0);
 
         // GNU `reversed_p` rows (right-to-left paragraphs) are flush to the
         // right margin: start the pen so the content ends at the right edge,
@@ -2069,7 +2163,10 @@ impl FrameDisplayState {
                 }
                 let fallback_width = match &glyph.glyph_type {
                     GlyphType::Stretch { width_cols } => *width_cols as f32 * char_w,
-                    GlyphType::Image { .. } | GlyphType::Glyphless { .. } => char_w,
+                    GlyphType::Image { .. }
+                    | GlyphType::Video { .. }
+                    | GlyphType::Xwidget { .. }
+                    | GlyphType::Glyphless { .. } => char_w,
                     GlyphType::Char { .. } | GlyphType::Composite { .. } => {
                         if glyph.wide {
                             char_w * 2.0
@@ -2184,17 +2281,102 @@ impl FrameDisplayState {
                             stipple_fg: None,
                         });
                     }
-                    GlyphType::Image { image_id } => {
+                    GlyphType::Image {
+                        image_id,
+                        horizontal_margin,
+                        vertical_margin,
+                        ..
+                    } => {
+                        let baseline = y + if glyph_row.ascent_px > 0.0 {
+                            glyph_row.ascent_px
+                        } else {
+                            row_height
+                        };
+                        let layout_height = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_height
+                        } else {
+                            row_height
+                        };
+                        let layout_ascent = if glyph.pixel_ascent > 0.0 {
+                            glyph.pixel_ascent
+                        } else {
+                            layout_height
+                        };
                         push(FrameGlyph::Image {
                             window_id,
                             row_role,
                             clip_rect,
                             slot_id: Some(slot_id),
                             image_id: ImageId::new(*image_id as u32),
+                            x: x + horizontal_margin,
+                            y: baseline - layout_ascent
+                                + vertical_margin
+                                + glyph.vertical_offset_px,
+                            width: (materialized_width - 2.0 * horizontal_margin).max(0.0),
+                            height: (layout_height - 2.0 * vertical_margin).max(0.0),
+                        });
+                    }
+                    GlyphType::Video {
+                        video_id,
+                        loop_count,
+                        autoplay,
+                        ..
+                    } => {
+                        let layout_height = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_height
+                        } else {
+                            row_height
+                        };
+                        let layout_ascent = if glyph.pixel_ascent > 0.0 {
+                            glyph.pixel_ascent
+                        } else {
+                            layout_height
+                        };
+                        let baseline = y + if glyph_row.ascent_px > 0.0 {
+                            glyph_row.ascent_px
+                        } else {
+                            row_height
+                        };
+                        push(FrameGlyph::Video {
+                            window_id,
+                            row_role,
+                            clip_rect,
+                            slot_id: Some(slot_id),
+                            video_id: VideoId::new(*video_id as u32),
                             x,
-                            y: y + glyph.vertical_offset_px,
+                            y: baseline - layout_ascent + glyph.vertical_offset_px,
                             width: materialized_width,
-                            height: row_height,
+                            height: layout_height,
+                            loop_count: *loop_count,
+                            autoplay: *autoplay,
+                        });
+                    }
+                    GlyphType::Xwidget { xwidget_id, .. } => {
+                        let layout_height = if glyph.pixel_height > 0.0 {
+                            glyph.pixel_height
+                        } else {
+                            row_height
+                        };
+                        let layout_ascent = if glyph.pixel_ascent > 0.0 {
+                            glyph.pixel_ascent
+                        } else {
+                            layout_height
+                        };
+                        let baseline = y + if glyph_row.ascent_px > 0.0 {
+                            glyph_row.ascent_px
+                        } else {
+                            row_height
+                        };
+                        push(FrameGlyph::Xwidget {
+                            window_id,
+                            row_role,
+                            clip_rect,
+                            slot_id: Some(slot_id),
+                            xwidget_id: XwidgetId::new(*xwidget_id as u32),
+                            x,
+                            y: baseline - layout_ascent + glyph.vertical_offset_px,
+                            width: materialized_width,
+                            height: layout_height,
                         });
                     }
                     GlyphType::Glyphless { ch } => {

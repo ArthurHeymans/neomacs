@@ -2,8 +2,8 @@ use crate::composition::base_width_cols;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLength,
-    DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, GlyphlessMethod, RenderFaceRef,
-    SourceSpan, control_char_caret_char,
+    DisplayMediaReplacement, DisplayMediaReplacementKind, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, GlyphlessMethod, RenderFaceRef, SourceSpan, control_char_caret_char,
 };
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -439,6 +439,9 @@ impl DisplayRowWriteMetrics {
             }
             let width_cols = match &glyph.glyph_type {
                 GlyphType::Stretch { width_cols } => usize::from((*width_cols).max(1)),
+                GlyphType::Image { width_cols, .. }
+                | GlyphType::Video { width_cols, .. }
+                | GlyphType::Xwidget { width_cols, .. } => usize::from((*width_cols).max(1)),
                 GlyphType::Glyphless { .. } if glyph.pixel_width > 0.0 => {
                     (glyph.pixel_width / char_width_px.max(1.0)).ceil().max(1.0) as usize
                 }
@@ -1011,7 +1014,8 @@ impl<'layout, 'row> DisplayRowProgressWriter<'layout, 'row, '_> {
         position: DisplayRowPosition,
         max_x_px: f32,
     ) -> Self {
-        let writer = DisplayRowWriter::new(layout, row);
+        let mut writer = DisplayRowWriter::new(layout, row);
+        writer.set_empty_row_start(position);
         let position = append_start_position(position, writer.current_text_position());
         Self {
             writer,
@@ -1049,8 +1053,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
-        let writer =
+        let mut writer =
             DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
+        writer.set_empty_row_start(position);
         let position = append_start_position(position, writer.current_text_position());
         Self {
             writer,
@@ -1087,7 +1092,8 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
-        let writer = DisplayRowWriter::for_area(layout, row, area);
+        let mut writer = DisplayRowWriter::for_area(layout, row, area);
+        writer.set_empty_row_start(position);
         let position = append_start_position(position, writer.current_text_position());
         Self {
             writer,
@@ -1106,8 +1112,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
-        let writer =
+        let mut writer =
             DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
+        writer.set_empty_row_start(position);
         let position = append_start_position(position, writer.current_text_position());
         Self {
             writer,
@@ -1361,7 +1368,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             }
             DisplayItemKind::Stretch(stretch) => self.push_stretch(stretch, face_id),
             DisplayItemKind::MediaReplacement(media) => {
-                self.push_stretch(media.replacement_stretch(), face_id);
+                self.push_media(media, face_id, source_span_start_char(&item.span))
             }
             DisplayItemKind::ControlChar { ch } => {
                 self.push_control_char(ch, face_id, source_span_start_char(&item.span));
@@ -1644,9 +1651,28 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn current_text_position(&self) -> DisplayRowPosition {
         let metrics = self.current_text_metrics();
         DisplayRowPosition::new(
-            self.layout.tab_policy.origin_x_px + metrics.width_px(),
-            metrics.width_cols(),
+            self.layout.tab_policy.origin_x_px + self.row.pixel_x + metrics.width_px(),
+            usize::from(self.row.start_col) + metrics.width_cols(),
         )
+    }
+
+    /// Capture the initial pen and display-slot position on the row itself.
+    ///
+    /// The old media side channel remembered this position separately while
+    /// ordinary glyph materialization always began at column zero.  Stamp an
+    /// empty text row once so every primitive follows the same geometry.  A
+    /// non-empty row already owns its origin and must never be repositioned by
+    /// a later append fragment.
+    fn set_empty_row_start(&mut self, requested: DisplayRowPosition) {
+        if self.area_index != GlyphArea::Text.index() || display_row_glyph_count(self.row) != 0 {
+            return;
+        }
+
+        let origin_x = self.layout.tab_policy.origin_x_px;
+        if requested.x_px() >= origin_x {
+            self.row.pixel_x = requested.x_px() - origin_x;
+        }
+        self.row.start_col = requested.col().min(usize::from(u16::MAX)) as u16;
     }
 
     fn current_text_metrics(&self) -> DisplayRowWriteMetrics {
@@ -1690,6 +1716,54 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_height,
             pixel_ascent,
         );
+        self.promote_row_metrics_for_explicit_stretch();
+    }
+
+    fn push_media(&mut self, media: DisplayMediaReplacement, face_id: FaceId, charpos: usize) {
+        let Some((width_cols, pixel_width)) =
+            self.stretch_width(&media.replacement_stretch().width)
+        else {
+            return;
+        };
+        let glyph_type = match media.kind {
+            DisplayMediaReplacementKind::Image {
+                image_id,
+                horizontal_margin,
+                vertical_margin,
+                opaque_background,
+            } => GlyphType::Image {
+                image_id: image_id as i32,
+                width_cols,
+                horizontal_margin,
+                vertical_margin,
+                opaque_background,
+            },
+            DisplayMediaReplacementKind::Video {
+                video_id,
+                loop_count,
+                autoplay,
+            } => GlyphType::Video {
+                video_id: video_id as i32,
+                width_cols,
+                loop_count,
+                autoplay,
+            },
+            DisplayMediaReplacementKind::Xwidget { xwidget_id } => GlyphType::Xwidget {
+                xwidget_id: xwidget_id as i32,
+                width_cols,
+            },
+        };
+        let mut glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
+            pixel_width,
+            media.height,
+            media.ascent,
+        );
+        glyph.glyph_type = glyph_type;
+        glyph.charpos = charpos;
+        self.row.glyphs[self.area_index].push(glyph);
+        if self.area_index == GlyphArea::Text.index() {
+            self.row.displays_text = true;
+        }
         self.promote_row_metrics_for_explicit_stretch();
     }
 

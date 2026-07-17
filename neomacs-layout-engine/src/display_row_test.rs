@@ -4,9 +4,7 @@ use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement,
 use crate::display_rendered_row_output_install::{
     frame_chrome_display_row, install_measured_window_display_row,
 };
-use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowAppendProgress, DisplayRowItemMeasurement,
-};
+use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowItemMeasurement};
 use crate::display_row_source_render::TextRowSourceMeasureState;
 use crate::display_text_output_install::install_display_row;
 use crate::font_metrics::FontMetrics;
@@ -222,7 +220,7 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
 }
 
 #[test]
-fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
+fn display_row_render_item_preserves_media_as_one_row_item() {
     let media = DisplayMediaReplacement::xwidget(crate::display_item::DisplayXwidgetItem {
         xwidget_id: 17,
         width: 42.0,
@@ -240,34 +238,10 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
         render_item.row_face(),
         RenderFaceRef::FaceId(FaceId::new(7))
     );
-    let DisplayItemKind::Stretch(stretch) = &render_item.row_item().kind else {
-        panic!("media replacement should lower to a row stretch item");
+    let DisplayItemKind::MediaReplacement(rendered) = &render_item.row_item().kind else {
+        panic!("media replacement should remain a typed row item");
     };
-    assert_eq!(
-        stretch.width,
-        crate::display_item::DisplayStretchWidth::Length(
-            crate::display_item::DisplayLength::Pixels(42.0)
-        )
-    );
-
-    let rendered_media = render_item
-        .pending_media_for_progress(&DisplayRowAppendProgress::from_positions(
-            DisplayRowPosition::new(8.0, 1),
-            DisplayRowPosition::new(50.0, 2),
-            DisplayRowAppendStatus::Complete,
-            Vec::new(),
-        ))
-        .expect("media should render after complete nonempty append")
-        .place_on_baseline(17.0);
-
-    assert_eq!(
-        rendered_media.kind,
-        RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 17 }
-    );
-    assert_eq!(rendered_media.x, 8.0);
-    assert_eq!(rendered_media.y, 6.0);
-    assert_eq!(rendered_media.width, 42.0);
-    assert_eq!(rendered_media.height, 11.0);
+    assert_eq!(*rendered, media);
 }
 
 #[test]
@@ -1563,25 +1537,15 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
             .expect("display source row");
 
     let glyphs = &rendered.row().glyphs[1];
-    assert_eq!(
-        row_text_expanding_stretches(rendered.row()),
-        "A            B"
-    );
     assert!(matches!(
         glyphs[1].glyph_type,
-        GlyphType::Stretch { width_cols: 12 }
+        GlyphType::Xwidget {
+            xwidget_id: 1234,
+            ..
+        }
     ));
-    assert_eq!(
-        rendered.media(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
-            x: 8.0,
-            y: 4.0,
-            col: 1,
-            width: 96.0,
-            height: 54.0,
-        }]
-    );
+    assert_eq!(glyphs[1].pixel_width, 96.0);
+    assert_eq!(glyphs[1].pixel_height, 54.0);
 }
 
 fn render_tab_line_with_media_host(
@@ -1689,30 +1653,20 @@ fn render_lisp_string_row_centers_image_on_text_centerline() {
 
     let (rendered, _) =
         render_tab_line_with_sized_media_host(rendered_text, 0, 0, 16, 16, 18.0, 14.0);
-    let stretch = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+    let image = &rendered.row().glyphs[GlyphArea::Text.index()][1];
 
-    assert_eq!(stretch.pixel_height, 16.0);
-    assert_eq!(stretch.pixel_ascent, 13.0);
+    assert!(matches!(
+        image.glyph_type,
+        GlyphType::Image { image_id: 42, .. }
+    ));
+    assert_eq!(image.pixel_height, 16.0);
+    assert_eq!(image.pixel_ascent, 13.0);
     assert_eq!(
         rendered.source_slots()[1].source().lisp_string_char_index(),
         Some(1)
     );
     assert_eq!(rendered.source_slots()[1].width_px(), 16.0);
     assert_eq!(rendered.row().pixel_y + rendered.row().ascent_px, 18.0);
-    assert_eq!(
-        rendered.media(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Image {
-                image_id: 42,
-                opaque_background: None,
-            },
-            x: 8.0,
-            y: 5.0,
-            col: 1,
-            width: 16.0,
-            height: 16.0,
-        }]
-    );
 }
 
 #[test]
@@ -1737,20 +1691,12 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
     );
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00112233, 0x00445566);
 
-    assert_eq!(
-        rendered.media(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Image {
-                image_id: 42,
-                opaque_background: None,
-            },
-            x: 8.0,
-            y: 4.0,
-            col: 1,
-            width: 64.0,
-            height: 32.0,
-        }]
-    );
+    let image = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+    assert!(matches!(
+        image.glyph_type,
+        GlyphType::Image { image_id: 42, .. }
+    ));
+    assert_eq!((image.pixel_width, image.pixel_height), (64.0, 32.0));
     let requests = host.image_requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].fg_color, 0x00112233);
@@ -1862,8 +1808,11 @@ fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
         }),
     );
     let not_ready = render(image_text(true), None);
-    let background = |rendered: &RenderedDisplayRow| match rendered.media()[0].kind {
-        RenderedDisplayRowMediaKind::Image {
+    let background = |rendered: &RenderedDisplayRow| match rendered.row().glyphs
+        [GlyphArea::Text.index()][0]
+        .glyph_type
+    {
+        GlyphType::Image {
             opaque_background, ..
         } => opaque_background,
         _ => panic!("expected image replacement"),
@@ -1902,21 +1851,17 @@ fn render_lisp_string_row_resolves_video_display_property_through_display_host()
     );
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
 
-    assert_eq!(
-        rendered.media(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Video {
-                video_id: 84,
-                loop_count: -1,
-                autoplay: true,
-            },
-            x: 8.0,
-            y: 4.0,
-            col: 1,
-            width: 120.0,
-            height: 45.0,
-        }]
-    );
+    let video = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+    assert!(matches!(
+        video.glyph_type,
+        GlyphType::Video {
+            video_id: 84,
+            loop_count: -1,
+            autoplay: true,
+            ..
+        }
+    ));
+    assert_eq!((video.pixel_width, video.pixel_height), (120.0, 45.0));
     assert_eq!(
         host.video_requests
             .lock()
@@ -1950,17 +1895,12 @@ fn render_lisp_string_row_resolves_webkit_display_property_through_display_host(
     );
     let (rendered, host) = render_tab_line_with_media_host(rendered_text, 0x00FFFFFF, 0x00000000);
 
-    assert_eq!(
-        rendered.media(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 99 },
-            x: 8.0,
-            y: 4.0,
-            col: 1,
-            width: 80.0,
-            height: 50.0,
-        }]
-    );
+    let xwidget = &rendered.row().glyphs[GlyphArea::Text.index()][1];
+    assert!(matches!(
+        xwidget.glyph_type,
+        GlyphType::Xwidget { xwidget_id: 99, .. }
+    ));
+    assert_eq!((xwidget.pixel_width, xwidget.pixel_height), (80.0, 50.0));
     assert_eq!(
         host.webkit_requests
             .lock()
@@ -3645,7 +3585,6 @@ fn rendered_display_row_materializes_output_row_with_geometry_and_finalization()
         DisplayRowOutputProgress::new(8.0, 1, 0.0, 16.0),
         Vec::new(),
         Vec::new(),
-        Vec::new(),
     );
 
     let output = rendered.materialize_output_row(21.0, 18.0, 13.0);
@@ -3675,7 +3614,6 @@ fn measured_display_row_materializes_frame_chrome_local_and_window_relative_rows
         RenderedDisplayRow::new(
             row,
             DisplayRowOutputProgress::new(0.0, 0, 40.0, 18.0),
-            Vec::new(),
             Vec::new(),
             Vec::new(),
         ),
@@ -3731,7 +3669,6 @@ fn frame_chrome_rtl_row_reorders_to_visual_order_at_install() {
             DisplayRowOutputProgress::new(0.0, 0, 0.0, 18.0),
             Vec::new(),
             Vec::new(),
-            Vec::new(),
         ),
         DisplayRowBoundsPolicy::PreserveAllocatedMinimum,
     );
@@ -3757,19 +3694,17 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     row.pixel_y = 4.0;
     row.height_px = 54.0;
     row.ascent_px = 42.0;
+    let mut xwidget = Glyph::stretch(12, FaceId::new(1)).with_pixel_geometry(96.0, 54.0, 42.0);
+    xwidget.glyph_type = GlyphType::Xwidget {
+        xwidget_id: 1234,
+        width_cols: 12,
+    };
+    row.glyphs[GlyphArea::Text.index()].push(xwidget);
     let rendered = RenderedDisplayRow::new(
         row,
         DisplayRowOutputProgress::new(0.0, 0, 4.0, 54.0),
         Vec::new(),
         Vec::new(),
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Xwidget { xwidget_id: 1234 },
-            x: 8.0,
-            y: 4.0,
-            col: 1,
-            width: 96.0,
-            height: 54.0,
-        }],
     );
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     let window_bounds = Rect::new(0.0, 0.0, 200.0, 80.0);
@@ -3797,23 +3732,55 @@ fn install_measured_display_row_clips_window_chrome_media_to_measured_row() {
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
-    let xwidget = state.xwidgets.first().expect("xwidget side item");
-    assert_eq!(xwidget.window_id.get(), 77);
-    assert_eq!(xwidget.row_role, GlyphRowRole::TabLine);
-    assert_eq!(xwidget.clip_rect, Some(row_bounds));
+    assert!(
+        state.xwidgets.is_empty(),
+        "row media must not use a side list"
+    );
+    let materialized = state.materialize();
+    let xwidget = materialized
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Xwidget {
+                window_id,
+                row_role,
+                clip_rect,
+                slot_id,
+                xwidget_id,
+                x,
+                y,
+                width,
+                height,
+            } => Some((
+                *window_id,
+                *row_role,
+                *clip_rect,
+                *slot_id,
+                *xwidget_id,
+                *x,
+                *y,
+                *width,
+                *height,
+            )),
+            _ => None,
+        })
+        .expect("xwidget materialized from row glyph");
+    assert_eq!(xwidget.0.get(), 77);
+    assert_eq!(xwidget.1, GlyphRowRole::TabLine);
+    assert_eq!(xwidget.2, Some(row_bounds));
     assert_eq!(
-        xwidget.slot_id,
+        xwidget.3,
         Some(neomacs_display_protocol::frame_glyphs::DisplaySlotId {
             window_id: neomacs_display_protocol::types::DisplayWindowId::new(77),
             row: 0,
-            col: 1,
+            col: 0,
         })
     );
-    assert_eq!(xwidget.xwidget_id.get(), 1234);
-    assert_eq!(xwidget.x, 8.0);
-    assert_eq!(xwidget.y, 4.0);
-    assert_eq!(xwidget.width, 96.0);
-    assert_eq!(xwidget.height, 54.0);
+    assert_eq!(xwidget.4.get(), 1234);
+    assert_eq!(xwidget.5, 0.0);
+    assert_eq!(xwidget.6, 4.0);
+    assert_eq!(xwidget.7, 96.0);
+    assert_eq!(xwidget.8, 54.0);
 }
 
 #[test]
@@ -3832,7 +3799,6 @@ fn measured_display_row_promotes_bounds_from_rendered_row_metrics() {
         RenderedDisplayRow::new(
             row,
             DisplayRowOutputProgress::new(24.0, 3, 6.0, 24.0),
-            Vec::new(),
             Vec::new(),
             Vec::new(),
         ),
@@ -3854,6 +3820,15 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
     face.id = FaceId::new(8);
     face.font_ascent = 13;
     face.font_descent = 4;
+    let mut image = Glyph::stretch(4, face.id).with_pixel_geometry(32.0, 24.0, 24.0);
+    image.glyph_type = GlyphType::Image {
+        image_id: 77,
+        width_cols: 4,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    };
+    row.glyphs[GlyphArea::Text.index()].push(image);
     let measured = MeasuredDisplayRow::new(
         DisplayRowOwner::FrameChrome {
             kind: FrameChromeKind::TabBar,
@@ -3865,17 +3840,6 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
             DisplayRowOutputProgress::new(24.0, 1, 0.0, 120.0),
             Vec::new(),
             vec![face],
-            vec![RenderedDisplayRowMedia {
-                kind: RenderedDisplayRowMediaKind::Image {
-                    image_id: 77,
-                    opaque_background: None,
-                },
-                x: 0.0,
-                y: 0.0,
-                col: 0,
-                width: 32.0,
-                height: 24.0,
-            }],
         ),
         DisplayRowBoundsPolicy::MeasureContent,
     );

@@ -887,11 +887,6 @@ pub(crate) enum DisplayMediaReplacementKind {
 }
 
 impl DisplayMediaReplacement {
-    pub(crate) fn replacement_item(self, mut item: DisplayItem) -> DisplayItem {
-        item.kind = DisplayItemKind::Stretch(self.replacement_stretch());
-        item
-    }
-
     pub(crate) fn replacement_stretch(self) -> DisplayStretch {
         DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),

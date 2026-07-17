@@ -3,13 +3,10 @@ use crate::display_item::DisplaySourcePosition;
 use crate::display_row::DisplayRowFace;
 use crate::display_row_builder::DisplayRowGlyphSlot;
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
-use crate::display_row_render_state::{
-    DisplayRowOutputProgress, RenderedDisplayRow, RenderedDisplayRowMedia,
-    RenderedDisplayRowMediaKind,
-};
+use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
 use neomacs_display_protocol::frame_chrome::ChromeAction;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::{
     Color, FaceId, FrameGlyphBuffer, FrameRect, ImageId, PointerDrawMode, PointerImageRelief,
     PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
@@ -284,7 +281,6 @@ fn tab_bar_hit_regions_preserve_body_close_and_add_item_meaning() {
         DisplayRowOutputProgress::new(23.0, 4, 0.0, 18.0),
         slots,
         Vec::new(),
-        Vec::new(),
     );
     let text = Value::string_with_text_properties(
         "abcd",
@@ -418,10 +414,21 @@ fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
     let face_background = FaceId::new(40);
     let face_box = FaceId::new(41);
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
+    let image = |image_id, face_id, opaque_background| {
+        let mut glyph = Glyph::stretch(1, face_id).with_pixel_geometry(8.0, 8.0, 8.0);
+        glyph.glyph_type = GlyphType::Image {
+            image_id,
+            width_cols: 1,
+            horizontal_margin: 0.0,
+            vertical_margin: 0.0,
+            opaque_background,
+        };
+        glyph
+    };
     row.glyphs[GlyphArea::Text.index()] = vec![
-        Glyph::char(' ', face_background, 0),
-        Glyph::char(' ', face_box, 1),
-        Glyph::char(' ', face_background, 2),
+        image(0, face_background, Some(0x12_34_56)),
+        image(1, face_box, Some(0x22_33_44)),
+        image(2, face_background, None),
     ];
     let mut background = neomacs_display_protocol::face::Face::default();
     background.id = face_background;
@@ -429,27 +436,11 @@ fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
     let mut boxed = background.clone();
     boxed.id = face_box;
     boxed.box_color = Some(Color::RED);
-    let media = |col, opaque_background| RenderedDisplayRowMedia {
-        kind: RenderedDisplayRowMediaKind::Image {
-            image_id: u32::from(col),
-            opaque_background,
-        },
-        x: f32::from(col) * 8.0,
-        y: 0.0,
-        col,
-        width: 8.0,
-        height: 8.0,
-    };
     let rendered = RenderedDisplayRow::new(
         row,
         DisplayRowOutputProgress::new(24.0, 3, 0.0, 18.0),
         Vec::new(),
         vec![background, boxed],
-        vec![
-            media(0, Some(0x12_34_56)),
-            media(1, Some(0x22_33_44)),
-            media(2, None),
-        ],
     );
 
     let styles = tab_bar_image_relief_styles(&rendered, 0, 0xaa_bb_cc, 2.0, 3.0, 1.0);
@@ -472,10 +463,15 @@ fn tab_bar_image_relief_uses_glyph_at_visual_column_after_wide_stretch() {
     let fallback_face = FaceId::new(50);
     let image_face = FaceId::new(51);
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
-    row.glyphs[GlyphArea::Text.index()] = vec![
-        Glyph::stretch(3, fallback_face),
-        Glyph::char(' ', image_face, 1),
-    ];
+    let mut image_glyph = Glyph::stretch(1, image_face).with_pixel_geometry(8.0, 8.0, 8.0);
+    image_glyph.glyph_type = GlyphType::Image {
+        image_id: 1,
+        width_cols: 1,
+        horizontal_margin: 0.0,
+        vertical_margin: 0.0,
+        opaque_background: None,
+    };
+    row.glyphs[GlyphArea::Text.index()] = vec![Glyph::stretch(3, fallback_face), image_glyph];
 
     let mut fallback = neomacs_display_protocol::face::Face::default();
     fallback.id = fallback_face;
@@ -489,17 +485,6 @@ fn tab_bar_image_relief_uses_glyph_at_visual_column_after_wide_stretch() {
         DisplayRowOutputProgress::new(32.0, 4, 0.0, 18.0),
         Vec::new(),
         vec![fallback, image],
-        vec![RenderedDisplayRowMedia {
-            kind: RenderedDisplayRowMediaKind::Image {
-                image_id: 1,
-                opaque_background: None,
-            },
-            x: 24.0,
-            y: 0.0,
-            col: 3,
-            width: 8.0,
-            height: 8.0,
-        }],
     );
 
     let styles = tab_bar_image_relief_styles(&rendered, 0, 0xaa_bb_cc, 1.0, 1.0, 1.0);
@@ -571,7 +556,6 @@ fn tab_bar_pointer_appearance_body_and_close_share_whole_tab_mouse_face() {
             DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 0, 0), 0.0, 0, 8.0, 1),
             DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 1, 1), 8.0, 1, 8.0, 1),
         ],
-        Vec::new(),
         Vec::new(),
     );
     let caption = Value::string_with_text_properties(
@@ -668,7 +652,6 @@ fn tab_bar_pointer_appearance_add_image_uses_resolved_raised_and_sunken_relief()
             8.0,
             1,
         )],
-        Vec::new(),
         Vec::new(),
     );
     let caption = Value::string(" ");
@@ -942,7 +925,6 @@ fn tab_bar_pointer_appearance_uses_each_effective_mouse_face_and_skips_invalid_f
             DisplayRowGlyphSlot::new(DisplaySourcePosition::lisp_string(1, 2, 2), 16.0, 2, 8.0, 1),
         ],
         Vec::new(),
-        Vec::new(),
     );
     let text = Value::string_with_text_properties(
         "abc",
@@ -1036,7 +1018,6 @@ fn tab_bar_mouse_face_coalesces_adjacent_wide_source_characters_not_display_colu
             ),
         ],
         Vec::new(),
-        Vec::new(),
     );
     let items = [TabBarSourceItem {
         caption: text,
@@ -1086,7 +1067,6 @@ fn disabled_tab_bar_item_publishes_no_pointer_behavior() {
             8.0,
             1,
         )],
-        Vec::new(),
         Vec::new(),
     );
     let text = Value::string("x");

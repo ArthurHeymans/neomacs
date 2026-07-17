@@ -33,9 +33,7 @@ use crate::display_row_measured_state::{
 };
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
-use crate::display_row_render_state::{
-    DisplayRowRenderIntoRowResult, RenderedDisplayRow, RenderedDisplayRowMediaKind,
-};
+use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
 use crate::font_metrics::FontMetricsService;
@@ -49,7 +47,7 @@ use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_chrome::{
     BandRect, ChromeAction, ChromeHitRegion, InteractionId,
 };
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 use neomacs_display_protocol::{
     FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
@@ -1567,17 +1565,20 @@ pub(crate) fn tab_bar_image_relief_styles(
     vertical_margin: f32,
     thickness: f32,
 ) -> Vec<(u16, TabBarPointerAppearanceStyle)> {
-    rendered
-        .media()
+    let mut col = 0u16;
+    rendered.row().glyphs[GlyphArea::Text.index()]
         .iter()
-        .filter_map(|medium| {
-            let RenderedDisplayRowMediaKind::Image {
+        .filter(|glyph| !glyph.padding)
+        .filter_map(|glyph| {
+            let glyph_col = col;
+            col = col.saturating_add(glyph.materialized_slot_span());
+            let GlyphType::Image {
                 opaque_background, ..
-            } = medium.kind
+            } = glyph.glyph_type
             else {
                 return None;
             };
-            let face = glyph_at_visual_column(rendered.row(), medium.col).and_then(|glyph| {
+            let face = glyph_at_visual_column(rendered.row(), glyph_col).and_then(|glyph| {
                 rendered
                     .faces()
                     .iter()
@@ -1590,7 +1591,7 @@ pub(crate) fn tab_bar_image_relief_styles(
                     .unwrap_or_else(|| Color::from_pixel(fallback_background)),
             );
             Some((
-                medium.col,
+                glyph_col,
                 gnu_tab_bar_pointer_appearance_style(
                     background,
                     frame_background,

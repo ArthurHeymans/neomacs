@@ -1,51 +1,23 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplaySourceMappedText,
-    DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
+    RenderFaceRef, SourceSpan,
 };
-use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row_render_state::PendingDisplayRowMedia;
+use crate::display_row_builder::DisplayRowAppendProgress;
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
-
-impl DisplayMediaReplacement {
-    fn pending_media(self, start: DisplayRowPosition) -> PendingDisplayRowMedia {
-        let (horizontal_margin, vertical_margin) = match self.kind {
-            crate::display_item::DisplayMediaReplacementKind::Image {
-                horizontal_margin,
-                vertical_margin,
-                ..
-            } => (horizontal_margin, vertical_margin),
-            _ => (0.0, 0.0),
-        };
-        PendingDisplayRowMedia {
-            kind: self.kind.into(),
-            x: start.x_px() + horizontal_margin,
-            col: start.col().min(usize::from(u16::MAX)) as u16,
-            width: self.width - 2.0 * horizontal_margin,
-            height: self.height - 2.0 * vertical_margin,
-            ascent: self.ascent - vertical_margin,
-        }
-    }
-}
 
 pub(crate) struct DisplayRowRenderItem {
     source_item: DisplayItem,
     row_item: DisplayItem,
-    media_descriptor: Option<DisplayMediaReplacement>,
 }
 
 impl DisplayRowRenderItem {
     pub(crate) fn from_source_item(source_item: DisplayItem) -> Self {
-        let media_descriptor = match &source_item.kind {
-            DisplayItemKind::MediaReplacement(media) => Some(*media),
-            _ => None,
-        };
-        let row_item = media_descriptor
-            .map(|descriptor| descriptor.replacement_item(source_item.clone()))
-            .unwrap_or_else(|| source_item.clone());
+        // Preserve media as one row item.  The row writer now emits a typed
+        // media glyph that owns both its layout metrics and drawable identity.
+        let row_item = source_item.clone();
         Self {
             source_item,
             row_item,
-            media_descriptor,
         }
     }
 
@@ -63,16 +35,6 @@ impl DisplayRowRenderItem {
 
     pub(crate) fn row_item_for_write(&self) -> DisplayItem {
         self.row_item.clone()
-    }
-
-    pub(crate) fn pending_media_for_progress(
-        &self,
-        progress: &DisplayRowAppendProgress,
-    ) -> Option<PendingDisplayRowMedia> {
-        let descriptor = self.media_descriptor?;
-        progress
-            .is_complete_with_positive_width()
-            .then(|| descriptor.pending_media(progress.start()))
     }
 
     pub(crate) fn clipped_remainder(
@@ -126,7 +88,9 @@ fn clipped_display_item_remainder(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display_item::{DisplayImageItem, DisplayMediaReplacementKind};
+    use crate::display_item::{
+        DisplayImageItem, DisplayMediaReplacement, DisplayMediaReplacementKind,
+    };
 
     #[test]
     fn image_margin_expands_the_slot_but_keeps_media_bounds_on_image_content() {
@@ -143,20 +107,6 @@ mod tests {
         assert_eq!(replacement.height, 14.0);
         assert_eq!(replacement.ascent, 10.0);
 
-        let medium = replacement
-            .pending_media(DisplayRowPosition::new(11.0, 4))
-            .place_on_baseline(30.0);
-        assert_eq!(
-            (medium.x, medium.y, medium.width, medium.height),
-            (14.0, 22.0, 20.0, 10.0)
-        );
-        assert_eq!(
-            medium.kind,
-            crate::display_row_render_state::RenderedDisplayRowMediaKind::Image {
-                image_id: 7,
-                opaque_background: Some(0x12_34_56),
-            }
-        );
         assert!(matches!(
             replacement.kind,
             DisplayMediaReplacementKind::Image {
@@ -164,6 +114,33 @@ mod tests {
                 vertical_margin: 2.0,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn media_replacement_remains_one_authoritative_row_item() {
+        let replacement = DisplayMediaReplacement::image(DisplayImageItem {
+            image_id: 7,
+            width: 20.0,
+            height: 10.0,
+            ascent: 8.0,
+            horizontal_margin: 3.0,
+            vertical_margin: 2.0,
+            opaque_background: Some(0x12_34_56),
+        });
+        let source = DisplayItem {
+            span: SourceSpan::synthetic(1, 0, 1),
+            face: RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(1)),
+            kind: DisplayItemKind::MediaReplacement(replacement),
+            layout: Default::default(),
+            pointer_appearance: None,
+        };
+
+        let rendered = DisplayRowRenderItem::from_source_item(source);
+
+        assert!(matches!(
+            rendered.row_item().kind,
+            DisplayItemKind::MediaReplacement(actual) if actual == replacement
         ));
     }
 }

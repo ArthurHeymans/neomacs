@@ -1,4 +1,3 @@
-use crate::display_item::DisplayMediaReplacementKind;
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowVerticalMetrics;
 use crate::display_row_builder::{
@@ -62,7 +61,6 @@ pub(crate) struct RenderedDisplayRow {
     progress: DisplayRowOutputProgress,
     source_slots: Vec<DisplayRowGlyphSlot>,
     faces: Vec<Face>,
-    media: Vec<RenderedDisplayRowMedia>,
 }
 
 impl RenderedDisplayRow {
@@ -71,14 +69,12 @@ impl RenderedDisplayRow {
         progress: DisplayRowOutputProgress,
         source_slots: Vec<DisplayRowGlyphSlot>,
         faces: Vec<Face>,
-        media: Vec<RenderedDisplayRowMedia>,
     ) -> Self {
         Self {
             row,
             progress,
             source_slots,
             faces,
-            media,
         }
     }
 
@@ -145,10 +141,6 @@ impl RenderedDisplayRow {
         &self.faces
     }
 
-    pub(crate) fn media(&self) -> &[RenderedDisplayRowMedia] {
-        &self.media
-    }
-
     #[cfg(test)]
     pub(crate) fn into_row(self) -> GlyphRow {
         self.row
@@ -159,61 +151,6 @@ impl RenderedDisplayRow {
         // reorder happens at install (see `RenderedDisplayRow::materialize_output_row`).
         glyph_row_writer::normalize_external_row(&mut self.row);
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RenderedDisplayRowMedia {
-    pub(crate) kind: RenderedDisplayRowMediaKind,
-    /// Horizontal position in the render request's coordinate space.  Window
-    /// chrome requests start at row-local X zero; body-row requests can start
-    /// at their already placed text surface.
-    pub(crate) x: f32,
-    /// Vertical position in the render attempt's coordinate space.  A measured
-    /// row normalizes this against `RenderedDisplayRow::progress().y()` before
-    /// placing the medium at the row's final owner-selected origin.
-    pub(crate) y: f32,
-    pub(crate) col: u16,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct PendingDisplayRowMedia {
-    pub(crate) kind: RenderedDisplayRowMediaKind,
-    pub(crate) x: f32,
-    pub(crate) col: u16,
-    pub(crate) width: f32,
-    pub(crate) height: f32,
-    pub(crate) ascent: f32,
-}
-
-impl PendingDisplayRowMedia {
-    pub(crate) fn place_on_baseline(self, baseline_y: f32) -> RenderedDisplayRowMedia {
-        RenderedDisplayRowMedia {
-            kind: self.kind,
-            x: self.x,
-            y: baseline_y - self.ascent,
-            col: self.col,
-            width: self.width,
-            height: self.height,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum RenderedDisplayRowMediaKind {
-    Image {
-        image_id: u32,
-        opaque_background: Option<u32>,
-    },
-    Video {
-        video_id: u32,
-        loop_count: i32,
-        autoplay: bool,
-    },
-    Xwidget {
-        xwidget_id: u32,
-    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -227,7 +164,6 @@ pub(crate) struct DisplayRowRenderIntoRowResult {
     progress: DisplayRowOutputProgress,
     source_slots: Vec<DisplayRowGlyphSlot>,
     faces: Vec<Face>,
-    media: Vec<RenderedDisplayRowMedia>,
     stop: DisplayRowRenderStop,
 }
 
@@ -236,14 +172,12 @@ impl DisplayRowRenderIntoRowResult {
         progress: DisplayRowOutputProgress,
         source_slots: Vec<DisplayRowGlyphSlot>,
         faces: Vec<Face>,
-        media: Vec<RenderedDisplayRowMedia>,
         stop: DisplayRowRenderStop,
     ) -> Self {
         Self {
             progress,
             source_slots,
             faces,
-            media,
             stop,
         }
     }
@@ -272,26 +206,13 @@ impl DisplayRowRenderIntoRowResult {
         DisplayRowOutputProgress,
         Vec<DisplayRowGlyphSlot>,
         Vec<Face>,
-        Vec<RenderedDisplayRowMedia>,
         DisplayRowRenderStop,
     ) {
-        (
-            self.progress,
-            self.source_slots,
-            self.faces,
-            self.media,
-            self.stop,
-        )
+        (self.progress, self.source_slots, self.faces, self.stop)
     }
 
     pub(crate) fn with_row(self, row: GlyphRow) -> RenderedDisplayRow {
-        RenderedDisplayRow::new(
-            row,
-            self.progress,
-            self.source_slots,
-            self.faces,
-            self.media,
-        )
+        RenderedDisplayRow::new(row, self.progress, self.source_slots, self.faces)
     }
 }
 
@@ -418,29 +339,4 @@ pub(crate) fn display_row_progress(
         y,
         height,
     )
-}
-
-impl From<DisplayMediaReplacementKind> for RenderedDisplayRowMediaKind {
-    fn from(kind: DisplayMediaReplacementKind) -> Self {
-        match kind {
-            DisplayMediaReplacementKind::Image {
-                image_id,
-                opaque_background,
-                ..
-            } => Self::Image {
-                image_id,
-                opaque_background,
-            },
-            DisplayMediaReplacementKind::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            } => Self::Video {
-                video_id,
-                loop_count,
-                autoplay,
-            },
-            DisplayMediaReplacementKind::Xwidget { xwidget_id } => Self::Xwidget { xwidget_id },
-        }
-    }
 }

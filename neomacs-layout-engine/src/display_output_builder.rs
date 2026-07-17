@@ -12,7 +12,7 @@ use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_output_frame_state::OutputFrameBuildState;
 use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest,
-    OutputFrameIdentityInstallRequest, OutputFrameStateInstallRequest, OutputMediaInstallRequest,
+    OutputFrameIdentityInstallRequest, OutputFrameStateInstallRequest,
     OutputWindowMetadataInstallRequest,
 };
 #[cfg(test)]
@@ -324,10 +324,6 @@ impl DisplayOutputBuilder {
         self.frame_state.install_cursor(request);
     }
 
-    pub(crate) fn install_output_media(&mut self, request: OutputMediaInstallRequest) {
-        self.frame_state.install_media(request);
-    }
-
     pub(crate) fn set_output_frame_identity(
         &mut self,
         frame_id: u64,
@@ -462,10 +458,6 @@ impl DisplayOutputBuilder {
         self.window_state.current_window_pixel_bounds()
     }
 
-    pub(crate) fn current_window_text_clip_bounds(&self) -> Rect {
-        self.window_state.current_window_text_clip_bounds()
-    }
-
     pub(crate) fn cursor_visual_column_context(&self) -> CursorVisualColumnResolutionContext<'_> {
         self.window_state.cursor_visual_column_context()
     }
@@ -515,18 +507,8 @@ impl DisplayOutputBuilder {
         window_id: i64,
         fallback_row_height: f32,
     ) -> Option<f32> {
-        let window_id_typed = DisplayWindowId::new(window_id);
-        match (
-            self.window_state
-                .window_content_height_px(window_id, fallback_row_height),
-            self.frame_state
-                .window_text_media_height_px(window_id_typed),
-        ) {
-            (Some(rows), Some(media)) => Some(rows.max(media)),
-            (Some(rows), None) => Some(rows),
-            (None, Some(media)) => Some(media),
-            (None, None) => None,
-        }
+        self.window_state
+            .window_content_height_px(window_id, fallback_row_height)
     }
 
     #[cfg(test)]

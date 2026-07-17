@@ -692,7 +692,10 @@ impl TtyRif {
             return;
         }
 
-        let mut col = screen_col_start;
+        // A row's horizontal start and source slot are one authoritative
+        // placement.  TTY cells have no sub-cell positioning, so project the
+        // pixel offset to its already-resolved display column.
+        let mut col = screen_col_start.saturating_add(usize::from(glyph_row.start_col));
 
         for area_idx in 0..3 {
             let glyphs = &glyph_row.glyphs[area_idx];
@@ -956,7 +959,7 @@ fn glyph_to_char(glyph: &Glyph) -> char {
         GlyphType::Char { ch } => *ch,
         GlyphType::Composite { text } => text.chars().next().unwrap_or(' '),
         GlyphType::Stretch { .. } => ' ',
-        GlyphType::Image { .. } => ' ',
+        GlyphType::Image { .. } | GlyphType::Video { .. } | GlyphType::Xwidget { .. } => ' ',
         GlyphType::Glyphless { ch } => *ch,
     }
 }

@@ -87,7 +87,7 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
 pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     builder: &mut DisplayOutputBuilder,
     rendered: &RenderedDisplayRow,
-    display_row_index: usize,
+    _display_row_index: usize,
 ) -> DisplayRowPosition {
     for face in rendered.faces() {
         builder.install_output_frame_state(OutputFrameStateInstallRequest::face(
@@ -98,13 +98,7 @@ pub(crate) fn append_rendered_display_row_fragment_to_current_row(
     let end = DisplayRowCurrentRowOutput::from_output_builder(builder)
         .append_rendered_fragment(rendered)
         .expect("current row");
-    install_rendered_display_row_fragment_assets(
-        builder,
-        rendered.row().role,
-        display_row_index,
-        &[],
-        rendered.media(),
-    );
+    install_rendered_display_row_fragment_assets(builder, &[]);
     end
 }
 
