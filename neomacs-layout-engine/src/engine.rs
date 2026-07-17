@@ -1220,29 +1220,6 @@ impl LayoutEngine {
             }
         };
 
-        if let Some(pointer_plan) = self.pending_tab_bar_pointer.take()
-            && let Some(tab_bar) = frame_display_state
-                .frame_chrome
-                .band(ProtocolFrameChromeKind::TabBar)
-        {
-            let canonical_row = tab_bar.canonical_row(frame_display_state.char_height);
-            match pointer_plan.into_source_map(tab_bar.bounds(), canonical_row) {
-                Ok(source) => {
-                    if let Err(error) = frame_display_state.presented_pointer_source.append(source)
-                    {
-                        tracing::error!(?error, "rejecting combined pointer snapshot");
-                        evaluator.retire_interaction_presentation(presentation_id);
-                        return;
-                    }
-                }
-                Err(error) => {
-                    tracing::error!(?error, "rejecting invalid tab-bar pointer snapshot");
-                    evaluator.retire_interaction_presentation(presentation_id);
-                    return;
-                }
-            }
-        }
-
         // Embed the user-defined fringe bitmaps once per frame so the renderer
         // can expand any `GlyphRow::left_fringe_bitmap` reference (magit section
         // heading fold arrows). GC-safe: copied out as plain `u16`/`u8` data.
@@ -1465,9 +1442,12 @@ impl LayoutEngine {
                 return;
             }
         };
+        let presentation_inputs =
+            crate::frame_presentation::PresentationInputs::new(&self.window_snapshots)
+                .with_tab_bar_pointer(self.pending_tab_bar_pointer.take());
         let sealed = match crate::frame_presentation::PresentationComposer::compose(
             resolved,
-            &self.window_snapshots,
+            presentation_inputs,
         ) {
             Ok(sealed) => sealed,
             Err(error) => {

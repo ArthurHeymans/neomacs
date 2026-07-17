@@ -1,6 +1,7 @@
 use super::*;
 use neomacs_display_protocol::{
-    DisplayFrameId, FrameDisplayState, FrameRect, PresentationId, PresentedFramePlacement,
+    DisplayFrameId, FrameDisplayState, FrameRect, InteractionId, PresentationId,
+    PresentedFramePlacement, PresentedPointerRegion, PresentedPointerSourceMap,
 };
 
 fn resolved_state(revision: u64) -> FrameDisplayState {
@@ -20,13 +21,36 @@ fn resolved_state(revision: u64) -> FrameDisplayState {
 fn composer_seals_all_spatial_products_under_one_revision() {
     let resolved = ResolvedFrame::new(resolved_state(41)).expect("coherent resolved frame");
 
-    let sealed = PresentationComposer::compose(resolved, &[]).expect("valid presentation");
+    let sealed = PresentationComposer::compose(resolved, PresentationInputs::new(&[]))
+        .expect("valid presentation");
 
     assert_eq!(sealed.revision().presentation(), PresentationId::new(41));
     assert_eq!(sealed.transport().presentation_id, PresentationId::new(41));
     assert_eq!(
         sealed.transport().presented_hit_index.presentation(),
         PresentationId::new(41)
+    );
+}
+
+#[test]
+fn composer_replaces_any_presealed_pointer_projection() {
+    let mut state = resolved_state(41);
+    state.presented_pointer_source = PresentedPointerSourceMap::new(
+        vec![PresentedPointerRegion::new(
+            FrameRect::new(0.0, 0.0, 8.0, 16.0).unwrap(),
+            Some(InteractionId::new(99)),
+            None,
+        )],
+        vec![],
+    );
+    let resolved = ResolvedFrame::new(state).expect("coherent resolved frame");
+
+    let sealed = PresentationComposer::compose(resolved, PresentationInputs::new(&[]))
+        .expect("valid presentation");
+
+    assert!(
+        sealed.transport().presented_pointer_source.is_empty(),
+        "pointer metadata must be derived while sealing, not trusted from a mutable builder"
     );
 }
 

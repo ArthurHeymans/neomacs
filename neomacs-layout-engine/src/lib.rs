@@ -112,6 +112,7 @@ pub mod incremental_layout;
 pub mod mock_frame;
 pub mod neovm_bridge;
 pub mod pixel_scroll;
+pub(crate) mod presentation_pointer;
 pub(crate) mod presentation_spatial;
 pub(crate) mod presented_pointer_map;
 pub mod text_shaper;

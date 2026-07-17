@@ -35,8 +35,10 @@ use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::DisplaySlotId;
+#[cfg(test)]
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::frame_glyphs::{
-    GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
+    PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
 #[cfg(test)]
@@ -564,7 +566,6 @@ impl DisplayOutputBuilder {
         let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
         state.window_matrices = window_state.into_window_matrix_entries();
         frame_state.install_into(&mut state);
-        state.presented_pointer_source = buffer_pointer_source_map(&state);
         state
     }
 
@@ -582,64 +583,6 @@ impl DisplayOutputBuilder {
         state.frame_pixel_height = frame_pixel_height;
         state
     }
-}
-
-fn buffer_pointer_source_map(
-    state: &FrameDisplayState,
-) -> neomacs_display_protocol::PresentedPointerSourceMap {
-    let mut builder = crate::presented_pointer_map::PresentedPointerMapBuilder::new();
-    for entry in &state.window_matrices {
-        let row_bounds = entry.row_pixel_bounds(GlyphRowRole::Text);
-        let row_clip = entry.text_area_clip_rect();
-        for (row_index, row) in entry.matrix.rows.iter().enumerate() {
-            if !row.enabled || row.role != GlyphRowRole::Text {
-                continue;
-            }
-            let row_height = if row.height_px > 0.0 {
-                row.height_px
-            } else {
-                state.char_height
-            };
-            let y = row_bounds.y
-                + if row.height_px > 0.0 {
-                    row.pixel_y
-                } else {
-                    row_index as f32 * state.char_height
-                };
-            for run in row.pointer_runs() {
-                let x = row_bounds.x + run.x;
-                let visible_left = x.max(row_clip.x);
-                let visible_top = y.max(row_clip.y);
-                let visible_right = (x + run.width)
-                    .min(row_clip.x + row_clip.width)
-                    .min(row_bounds.x + row_bounds.width);
-                let visible_bottom = (y + row_height).min(row_clip.y + row_clip.height);
-                if let Some(pointer) = row.pointer_appearance(run.appearance).copied()
-                    && visible_right > visible_left
-                    && visible_bottom > visible_top
-                    && let Ok(bounds) = neomacs_display_protocol::FrameRect::new(
-                        visible_left,
-                        visible_top,
-                        visible_right - visible_left,
-                        visible_bottom - visible_top,
-                    )
-                {
-                    builder.observe_glyph_run(
-                        entry.window_id,
-                        GlyphRowRole::Text,
-                        row_index as u32,
-                        run.first_col.min(u32::from(u16::MAX)) as u16,
-                        run.glyph_len,
-                        bounds,
-                        pointer,
-                    );
-                }
-            }
-        }
-    }
-    builder
-        .finish()
-        .expect("finalized pointer runs must build a valid source map")
 }
 
 #[cfg(test)]

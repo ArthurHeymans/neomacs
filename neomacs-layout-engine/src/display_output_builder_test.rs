@@ -1556,6 +1556,13 @@ fn render_row_text(row: &GlyphRow) -> String {
     s
 }
 
+fn derive_window_pointer_source(
+    state: &FrameDisplayState,
+) -> neomacs_display_protocol::PresentedPointerSourceMap {
+    crate::presentation_pointer::window_pointer_source_map(state)
+        .expect("finalized window rows must produce valid pointer metadata")
+}
+
 #[test]
 fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
     use crate::display_item::{
@@ -1592,7 +1599,7 @@ fn buffer_mouse_face_wrapped_slots_share_one_source_appearance() {
     builder.end_window();
 
     let state = builder.finish(10, 3, 8.0, 16.0);
-    let source = &state.presented_pointer_source;
+    let source = derive_window_pointer_source(&state);
 
     assert_eq!(source.appearances().len(), 1);
     assert_eq!(source.regions().len(), 2);
@@ -1643,8 +1650,9 @@ fn buffer_mouse_face_is_derived_only_from_the_final_authoritative_row() {
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
-    assert!(state.presented_pointer_source.appearances().is_empty());
-    assert!(state.presented_pointer_source.regions().is_empty());
+    let source = derive_window_pointer_source(&state);
+    assert!(source.appearances().is_empty());
+    assert!(source.regions().is_empty());
 }
 
 #[test]
@@ -1683,7 +1691,8 @@ fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);
-    let regions = state.presented_pointer_source.regions();
+    let source = derive_window_pointer_source(&state);
+    let regions = source.regions();
     assert_eq!(regions.len(), 1);
     assert_eq!(regions[0].bounds().x(), 2.0);
     assert_eq!(regions[0].bounds().y(), 15.0);
@@ -1752,6 +1761,7 @@ fn long_buffer_mouse_face_publishes_one_region_and_one_source_span() {
         GLYPHS,
         "frame finish must consume finalized runs without rescanning glyphs"
     );
+    state.presented_pointer_source = derive_window_pointer_source(&state);
     assert_eq!(state.presented_pointer_source.regions().len(), 1);
     assert_eq!(state.presented_pointer_source.appearances().len(), 1);
     assert_eq!(
@@ -1817,6 +1827,7 @@ fn buffer_mouse_face_uses_canonical_margin_pen_and_column() {
 
     let mut state = builder.finish(10, 1, 8.0, 16.0);
     install_test_text_body_hit_index(&mut state, 3, Rect::new(0.0, 0.0, 80.0, 16.0));
+    state.presented_pointer_source = derive_window_pointer_source(&state);
     let region = &state.presented_pointer_source.regions()[0];
     assert_eq!(region.bounds().x(), 32.0);
     assert_eq!(region.bounds().width(), 8.0);
@@ -1871,6 +1882,7 @@ fn one_logical_mouse_face_keeps_multiple_face_paint_batches() {
 
     let mut state = builder.finish(10, 1, 8.0, 16.0);
     install_test_text_body_hit_index(&mut state, 3, Rect::new(0.0, 0.0, 80.0, 16.0));
+    state.presented_pointer_source = derive_window_pointer_source(&state);
     assert_eq!(state.presented_pointer_source.regions().len(), 1);
     assert_eq!(state.presented_pointer_source.appearances().len(), 1);
     let source_spans = state.presented_pointer_source.appearances()[0].paint_spans();

@@ -11,6 +11,8 @@ use neomacs_display_protocol::{
 };
 use neovm_core::window::WindowDisplaySnapshot;
 
+use crate::display_status_line::TabBarPresentedPointerPlan;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct FrameRevision(PresentationId);
 
@@ -76,6 +78,7 @@ pub(crate) enum PresentationComposeError {
         available: PresentationId,
     },
     Spatial(PresentedHitError),
+    Pointer(crate::presentation_pointer::PresentationPointerError),
 }
 
 impl From<PresentedHitError> for PresentationComposeError {
@@ -84,20 +87,55 @@ impl From<PresentedHitError> for PresentationComposeError {
     }
 }
 
+impl From<crate::presentation_pointer::PresentationPointerError> for PresentationComposeError {
+    fn from(error: crate::presentation_pointer::PresentationPointerError) -> Self {
+        Self::Pointer(error)
+    }
+}
+
+pub(crate) struct PresentationInputs<'a> {
+    window_snapshots: &'a [WindowDisplaySnapshot],
+    tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
+}
+
+impl<'a> PresentationInputs<'a> {
+    pub(crate) const fn new(window_snapshots: &'a [WindowDisplaySnapshot]) -> Self {
+        Self {
+            window_snapshots,
+            tab_bar_pointer: None,
+        }
+    }
+
+    pub(crate) fn with_tab_bar_pointer(
+        mut self,
+        pointer: Option<TabBarPresentedPointerPlan>,
+    ) -> Self {
+        self.tab_bar_pointer = pointer;
+        self
+    }
+}
+
 pub(crate) struct PresentationComposer;
 
 impl PresentationComposer {
     pub(crate) fn compose(
         resolved: ResolvedFrame,
-        snapshots: &[WindowDisplaySnapshot],
+        inputs: PresentationInputs<'_>,
     ) -> Result<SealedFramePresentation, PresentationComposeError> {
         let ResolvedFrame {
             revision,
             mut transport,
         } = resolved;
-        let spatial =
-            crate::presentation_spatial::PresentationSpatialPlan::compile(&transport, snapshots)?;
+        let spatial = crate::presentation_spatial::PresentationSpatialPlan::compile(
+            &transport,
+            inputs.window_snapshots,
+        )?;
+        let pointer = crate::presentation_pointer::PresentationPointerPlan::compile(
+            &transport,
+            inputs.tab_bar_pointer,
+        )?;
         spatial.seal(&mut transport)?;
+        pointer.seal(&mut transport);
         Ok(SealedFramePresentation {
             revision,
             transport,
