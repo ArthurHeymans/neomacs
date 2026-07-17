@@ -14106,17 +14106,24 @@ fn jit_subr_spec_pred_recordp_engages_and_matches() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
+    // Root each cross-eval Rust local AT CREATION (see the swp-p test note).
     let hot = jit_subr_spec_caller("recordp", 1, true);
+    ev.push_specpdl_root(hot);
     let cold = jit_subr_spec_caller("recordp", 1, false);
+    ev.push_specpdl_root(cold);
     let record = ev.eval_str("(record 'foo 1 2)").expect("record");
+    ev.push_specpdl_root(record);
     let chartable = ev.eval_str("(make-char-table 'test)").expect("char-table");
+    ev.push_specpdl_root(chartable);
+    let probe_string = Value::string("s");
+    ev.push_specpdl_root(probe_string);
     let cases = [
         record,
         chartable,
         Value::symbol("x"),
         Value::make_int(3),
         Value::NIL,
-        Value::string("s"),
+        probe_string,
     ];
     #[cfg(debug_assertions)]
     let (entries0, fast0, _) = jit_subr_spec_counters();
@@ -14200,11 +14207,17 @@ fn jit_subr_spec_symbol_with_pos_p_both_flag_states() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
+    // Heap values held in Rust locals across evals must be rooted AT
+    // CREATION: under NEOVM_GC_STRESS every allocation-bearing safe point
+    // collects, so the very next eval can free an unrooted local.
     let hot = jit_subr_spec_caller("symbol-with-pos-p", 1, true);
+    ev.push_specpdl_root(hot);
     let cold = jit_subr_spec_caller("symbol-with-pos-p", 1, false);
+    ev.push_specpdl_root(cold);
     let swp = ev
         .eval_str("(position-symbol 'foo 5)")
         .expect("position-symbol");
+    ev.push_specpdl_root(swp);
     for flag in ["t", "nil"] {
         ev.eval_str(&format!("(setq symbols-with-pos-enabled {flag})"))
             .expect("set flag");
@@ -14336,11 +14349,15 @@ fn jit_subr_spec_tracks_redefinition_and_rearms() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
+    // Root each cross-eval Rust local AT CREATION (see the swp-p test note).
     let hot = jit_subr_spec_caller("recordp", 1, true);
+    ev.push_specpdl_root(hot);
     let record = ev.eval_str("(record 'foo 1)").expect("record");
+    ev.push_specpdl_root(record);
     let original = ev
         .eval_str("(symbol-function 'recordp)")
         .expect("original recordp");
+    ev.push_specpdl_root(original);
 
     // 1) Armed: t.
     let r = ev
@@ -14507,8 +14524,11 @@ fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
     let mut ev = Context::new();
     ev.eval_str("(insert \"hello world\")")
         .expect("buffer content");
+    // Root each cross-eval Rust local AT CREATION (see the swp-p test note).
     let hot = jit_subr_spec_caller("re-search-forward", 1, true);
+    ev.push_specpdl_root(hot);
     let cold = jit_subr_spec_caller("re-search-forward", 1, false);
+    ev.push_specpdl_root(cold);
     #[cfg(debug_assertions)]
     let (entries0, fast0, _) = jit_subr_spec_counters();
 
@@ -15524,6 +15544,15 @@ fn jit_cbsym_read_bolp_at_begv_in_narrowed_buffer() {
 #[test]
 fn jit_cbsym_read_current_buffer_bounces_when_unmaterialized() {
     crate::test_utils::init_test_tracing();
+    // This test's premise is that the current buffer's tagged value has NOT
+    // been materialized before the first compiled call. Under NEOVM_GC_STRESS
+    // the compilations above force collections whose buffer marking
+    // materializes it, so the bounce it asserts never happens. The premise
+    // (not the behavior) is stress-incompatible; skip, like the other
+    // stress-gated tests.
+    if std::env::var("NEOVM_GC_STRESS").as_deref() == Ok("1") {
+        return;
+    }
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
     // Do NOT call current-buffer / make_buffer before the compiled call, so the

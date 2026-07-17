@@ -10959,6 +10959,9 @@ mod tests {
         let cleanup = ev
             .eval_str("'((setq jit-up-ran t))")
             .expect("cleanup forms");
+        // The cleanup form list lives in a Rust local across the next eval
+        // and the native calls below; root it or a stress-GC frees it.
+        ev.push_specpdl_root(cleanup);
         ev.eval_str("(setq jit-up-ran nil)").expect("flag init");
         let specpdl_before = ev.specpdl.len();
         let consts = [
