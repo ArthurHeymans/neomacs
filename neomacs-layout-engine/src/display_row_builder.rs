@@ -262,7 +262,14 @@ impl DisplayTabPolicy {
         } else {
             tab_x_px + char_width_px
         };
-        let next_tab_x_px = if next_tab_x_px - tab_x_px < char_width_px {
+        // GNU's minimum-one-space guard (gui_produce_glyphs: a tab landing
+        // exactly on a stop advances a full stop) works in INTEGER pixels.
+        // Here positions are f32: a preceding glyph advance like 12.150001
+        // leaves a gap of 12.149999 against a 12.15 space — equal in GNU's
+        // arithmetic, but a strict < would double the tab. Treat sub-epsilon
+        // shortfalls as exact hits.
+        const TAB_STOP_EPSILON_PX: f32 = 0.01;
+        let next_tab_x_px = if next_tab_x_px - tab_x_px < char_width_px - TAB_STOP_EPSILON_PX {
             next_tab_x_px + tab_width_px
         } else {
             next_tab_x_px
