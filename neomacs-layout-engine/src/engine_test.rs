@@ -16498,6 +16498,79 @@ fn edit_below_reuse_does_not_shift_trailing_placeholder_row() {
     );
 }
 
+/// REDESIGN GOLDEN (empty-row real charpos): an EMPTY buffer line mid-buffer
+/// must carry its line's real buffer position on the matrix row
+/// (start_charpos == end_charpos == the newline's 0-based position), not the
+/// legacy (0,0) sentinel. GNU keeps MATRIX_ROW_START/END_CHARPOS real for every
+/// enabled row. The second part edits above the empty line and asserts the edit
+/// fast path stays byte-identical (role/start/end/pixel_y) to a full rebuild of
+/// the same final state — the empty line (and the EOB placeholder below it) must
+/// shift with the insert exactly as a fresh rebuild produces them.
+#[test]
+fn empty_line_row_carries_real_buffer_position() {
+    let text = "alpha\n\ngamma\n";
+    // Full rebuild: the empty line (line 2) is at 0-based charpos 6 (the second
+    // newline). Its row must report start == end == 6, not the (0,0) sentinel.
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame(text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let trace = selected_window_layout_trace(&eval, &engine, frame_id);
+    let empty = trace
+        .matrix_rows
+        .iter()
+        .find(|r| r.role == GlyphRowRole::Text && !r.displays_text && r.start_charpos == 6)
+        .unwrap_or_else(|| {
+            panic!(
+                "empty mid-buffer line row with real charpos 6 not found: {:#?}",
+                trace.matrix_rows
+            )
+        });
+    assert_eq!(
+        (empty.start_charpos, empty.end_charpos),
+        (6, 6),
+        "the empty mid-buffer line must carry its real buffer position, not (0,0)"
+    );
+
+    // Edit above the empty line (insert on line 1) and assert the edit fast path
+    // matches a full rebuild of the final state: the empty line and the trailing
+    // placeholder both move by the inserted count.
+    let edit_byte: usize = 2; // inside "alpha" on line 1
+    let run = |lay_incrementally: bool| -> Vec<(GlyphRowRole, usize, usize, u32, bool, bool)> {
+        let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        if lay_incrementally {
+            engine.layout_frame_rust(&mut eval, frame_id);
+        }
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+            buffer.insert("X");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        selected_window_layout_trace(&eval, &engine, frame_id)
+            .matrix_rows
+            .iter()
+            .map(|r| {
+                (
+                    r.role,
+                    r.start_charpos,
+                    r.end_charpos,
+                    r.pixel_y_bits,
+                    r.displays_text,
+                    r.ends_at_zv,
+                )
+            })
+            .collect()
+    };
+    let incremental = run(true);
+    let reference = run(false);
+    assert_eq!(
+        incremental, reference,
+        "\nedit across an empty line must match a full rebuild\n INC={:#?}\n REF={:#?}",
+        incremental, reference
+    );
+}
+
 /// Phase 5 (#44) — the fast paths attach `RowDamage` to each authoritative
 /// matrix row: cursor-only reuses every body row (`Reused`), scroll marks its
 /// reused rows `ReusedShifted{dvpos}`, and a full rebuild is all `New`.

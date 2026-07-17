@@ -160,6 +160,19 @@ impl DisplayOutputBuilder {
             .install_row_lifecycle(request, self.frame_state.phys_cursor_mut());
     }
 
+    /// Give a buffer-text row that emitted no buffer glyphs (still in the unset
+    /// `start_charpos == end_charpos` state) the real buffer position where its
+    /// walk began. Only body (`GlyphRowRole::Text`) rows are affected; chrome
+    /// rows never take this path.
+    pub(crate) fn stamp_empty_text_row_buffer_bounds(
+        &mut self,
+        display_row_index: usize,
+        row_start_charpos: i64,
+    ) {
+        self.window_state
+            .stamp_empty_text_row_buffer_bounds(display_row_index, row_start_charpos);
+    }
+
     /// Install an already-finalized (visual-order) row into the current window
     /// grid verbatim, marking it finalized so it is not bidi-reordered again.
     /// Used by the Phase 1 cursor-only fast path to replay retained body rows.

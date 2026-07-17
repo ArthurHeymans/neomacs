@@ -363,9 +363,11 @@ fn finish_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
+    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let matrix_metrics =
-        display_text_row_metrics_request(display_row_index, metrics).install(output_builder);
+        display_text_row_metrics_request(display_row_index, metrics, row_start_charpos)
+            .install(output_builder);
     DisplayTextRowFinish {
         display_row_index,
         metrics: matrix_metrics,
@@ -399,9 +401,15 @@ pub(crate) fn finish_text_window_row(
     mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
+    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let finish = finish_display_text_row(output.builder(), display_row_index, metrics);
+    let finish = finish_display_text_row(
+        output.builder(),
+        display_row_index,
+        metrics,
+        row_start_charpos,
+    );
     output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
     finish
 }
@@ -410,9 +418,10 @@ pub(crate) fn finish_and_end_text_window_row(
     mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
+    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let request = display_text_row_metrics_request(display_row_index, metrics);
+    let request = display_text_row_metrics_request(display_row_index, metrics, row_start_charpos);
     let output_builder = output.builder();
     let matrix_metrics = request.install(output_builder);
     output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(
@@ -431,7 +440,12 @@ pub(crate) fn transition_text_window_row(
     evaluator: &mut Context,
     transition: DisplayTextRowGeometryTransition,
 ) -> DisplayTextRowTransition {
-    finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
+    finish_and_end_text_window_row(
+        output.reborrow(),
+        output_emitter,
+        transition.finished_row,
+        transition.finished_row_start_charpos,
+    );
     begin_text_window_row(
         output.reborrow(),
         output_emitter,
@@ -449,7 +463,12 @@ pub(crate) fn transition_text_window_row_with_limit(
     max_rows: usize,
 ) -> DisplayTextRowTransition {
     if transition.begin_row.row >= max_rows {
-        finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
+        finish_and_end_text_window_row(
+            output.reborrow(),
+            output_emitter,
+            transition.finished_row,
+            transition.finished_row_start_charpos,
+        );
         return DisplayTextRowTransition::ExhaustedRows;
     }
     transition_text_window_row(output.reborrow(), output_emitter, evaluator, transition)
@@ -467,10 +486,18 @@ pub(crate) fn begin_text_window_output_and_row(
 }
 
 pub(crate) fn finish_pending_text_window_row(
-    output: TextWindowOutputTarget<'_>,
+    mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     request: TextWindowPendingRowFinish<'_>,
 ) -> bool {
+    // The pending row began its walk at hit_row_range.start(). Stamp it now,
+    // before the finish guard: an empty trailing row (the EOB placeholder past
+    // the final newline) is left unfinished by the guard below, yet it must
+    // still carry its real buffer position (ZV) rather than the (0, 0) sentinel.
+    output
+        .current_row_output()
+        .stamp_empty_text_row_buffer_bounds(request.hit_row_range.start());
+
     let has_pending_row_output = output_emitter.current_row_has_output();
     if !request.row_geometry.is_within_row_limit(request.row_limit)
         || !request
@@ -489,7 +516,12 @@ pub(crate) fn finish_pending_text_window_row(
     request
         .hit_rows
         .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
-    finish_text_window_row(output, output_emitter, row_cursor.finish_current_row());
+    finish_text_window_row(
+        output,
+        output_emitter,
+        row_cursor.finish_current_row(),
+        request.hit_row_range.start(),
+    );
     true
 }
 
@@ -546,12 +578,14 @@ pub(crate) fn restore_text_window_retry_checkpoint(
 fn display_text_row_metrics_request(
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
+    row_start_charpos: i64,
 ) -> DisplayOutputTextRowMetricsInstallRequest {
     DisplayOutputTextRowMetricsInstallRequest::new(
         display_row_index,
         metrics.y,
         metrics.height,
         metrics.ascent,
+        row_start_charpos,
     )
 }
 
@@ -672,6 +706,11 @@ impl TextWindowCursor {
 pub(crate) struct DisplayTextRowGeometryTransition {
     pub(crate) finished_row: DisplayTextRowMetrics,
     pub(crate) begin_row: DisplayTextRowBegin,
+    /// Buffer position (0-based, same base as `GlyphRow::start_charpos`) where
+    /// the walk of the just-finished row began. The install seam stamps it onto
+    /// a row that emitted no buffer glyphs so empty lines and the EOB
+    /// placeholder carry real positions instead of the `(0, 0)` sentinel.
+    pub(crate) finished_row_start_charpos: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

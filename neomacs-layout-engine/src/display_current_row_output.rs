@@ -13,6 +13,7 @@ use crate::display_row_render_state::RenderedDisplayRow;
 use crate::display_row_text_output::TextRowOutput;
 #[cfg(test)]
 use crate::window_output::WindowOutputEmitter;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 #[cfg(test)]
 use neovm_core::emacs_core::Context;
@@ -76,10 +77,39 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
             })
     }
 
+    /// Give the current buffer-text row its real walk-start buffer position when
+    /// it emitted no buffer glyphs (its bounds are still the unset `start == end`
+    /// state). Used for the trailing EOB placeholder, which is never "finished"
+    /// through the metrics install seam yet must carry ZV like every other
+    /// enabled row (GNU's MATRIX_ROW_START/END_CHARPOS). A no-op when there is no
+    /// current row, when the row already carries real bounds, or for chrome rows.
+    pub(crate) fn stamp_empty_text_row_buffer_bounds(&mut self, row_start_charpos: i64) {
+        self.apply_current_row_mutation(StampEmptyTextRowBufferBoundsMutation {
+            row_start_charpos,
+        });
+    }
+
     pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
         self.current_row_snapshot()
             .as_ref()
             .and_then(last_text_cluster_tail_in_row)
+    }
+}
+
+struct StampEmptyTextRowBufferBoundsMutation {
+    row_start_charpos: i64,
+}
+
+impl DisplayCurrentRowMutation for StampEmptyTextRowBufferBoundsMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        if row.role != GlyphRowRole::Text || row.start_charpos != row.end_charpos {
+            return;
+        }
+        let charpos = self.row_start_charpos.max(0) as usize;
+        row.start_charpos = charpos;
+        row.end_charpos = charpos;
     }
 }
 

@@ -17,7 +17,9 @@ use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{
+    GlyphArea, GlyphMatrix, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
+};
 use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
@@ -505,13 +507,11 @@ impl RetainedWindowMatrix {
         }
         // Whole-row scroll distance: the body row whose start matches the new
         // window_start. `None` (no match) → partial-row scroll or scroll-up → bail.
-        // Only a row that DISPLAYS buffer text carries a real window_start
-        // position. The trailing past-last-line placeholder row (`!displays_text`)
-        // has the sentinel `start_charpos == 0`, which spuriously matches a
-        // scroll-to-top (`window_start == 0`) — the replay then treats the
-        // placeholder as the new top and emits a phantom leading blank row + a
-        // one-column-clipped first line (the recenter-to-top corruption). Match
-        // only real text rows so scroll-up correctly bails to a full rebuild.
+        // Match only rows that DISPLAY buffer text: an empty line or the EOB
+        // placeholder now also carries a real buffer position, but window_start
+        // is always the position of a line that shows text, so gating on
+        // `displays_text` keeps a positionless-but-real empty row from being
+        // taken as the new top (GNU only starts a window at a text row).
         let s = body.iter().position(|(_, row)| {
             row.displays_text && row.start_charpos as i64 == curr.window_start
         })?;
@@ -690,21 +690,20 @@ impl RetainedWindowMatrix {
                     let mut row = row.clone();
                     row.cursor_col = None;
                     row.cursor_type = None;
-                    // Only rows that DISPLAY buffer text carry real buffer
-                    // positions that shift with the insert. The trailing
-                    // past-last-line placeholder row (`!displays_text`, e.g. the
-                    // synthetic row after the final newline) has a canonical
-                    // (0,0) charpos that a full rebuild reproduces unchanged;
-                    // shifting it by `delta` turns it into a phantom row at
-                    // pixel_y 0 (start_charpos == delta), which then propagates
-                    // through cursor-only reuse — the yank-pop first-row
-                    // corruption. Leave such placeholder rows' charpos intact so
-                    // the reused matrix stays byte-identical to a full rebuild.
-                    if row.displays_text {
-                        row.start_charpos = (row.start_charpos as i64 + delta) as usize;
-                        row.end_charpos = (row.end_charpos as i64 + delta) as usize;
-                        for area in row.glyphs.iter_mut() {
-                            for g in area.iter_mut() {
+                    // Every enabled body row below the edit sits at a real buffer
+                    // position past the insert point, so all of them move by the
+                    // inserted count — including empty lines (which carry their
+                    // line's charpos) and the trailing EOB placeholder (which
+                    // carries ZV, and ZV moves by `delta`). A full rebuild of the
+                    // post-edit state reproduces exactly these shifted positions.
+                    // Glyphs that map to no buffer position (the empty-row face
+                    // anchor and `:extend` fill, charpos `NO_BUFFER_POSITION`)
+                    // keep their sentinel.
+                    row.start_charpos = (row.start_charpos as i64 + delta) as usize;
+                    row.end_charpos = (row.end_charpos as i64 + delta) as usize;
+                    for area in row.glyphs.iter_mut() {
+                        for g in area.iter_mut() {
+                            if g.charpos != NO_BUFFER_POSITION_CHARPOS {
                                 g.charpos = (g.charpos as i64 + delta) as usize;
                             }
                         }

@@ -8,7 +8,7 @@ use crate::display_output_row_request::{
 };
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
-use neomacs_display_protocol::frame_glyphs::PhysCursor;
+use neomacs_display_protocol::frame_glyphs::{GlyphRowRole, PhysCursor};
 use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow, WindowMatrixEntry};
 use neomacs_display_protocol::types::{DisplayWindowId, Rect};
 
@@ -215,6 +215,16 @@ impl OutputWindowBuildState {
         }
     }
 
+    pub(crate) fn stamp_empty_text_row_buffer_bounds(
+        &mut self,
+        row: usize,
+        row_start_charpos: i64,
+    ) {
+        if let Some(grid) = self.current_row_grid.as_mut() {
+            grid.stamp_empty_text_row_buffer_bounds(row, row_start_charpos);
+        }
+    }
+
     fn replace_current_row(&mut self, source: GlyphRow) {
         let current_row = self.current_row;
         if let Some(grid) = self.current_row_grid.as_mut() {
@@ -418,6 +428,23 @@ impl OutputWindowRowGrid {
             return;
         };
         metrics.apply_to_row(row);
+    }
+
+    /// Stamp the walk-start buffer position onto a body row that emitted no
+    /// buffer glyphs (its bounds are still the unset `start == end` state). GNU
+    /// keeps `MATRIX_ROW_START/END_CHARPOS` real for every enabled row: an empty
+    /// line carries its line's position, the EOB placeholder carries ZV. Chrome
+    /// rows keep whatever positions their own path assigned.
+    fn stamp_empty_text_row_buffer_bounds(&mut self, row: usize, row_start_charpos: i64) {
+        let Some(row) = self.row_mut(row) else {
+            return;
+        };
+        if row.role != GlyphRowRole::Text || row.start_charpos != row.end_charpos {
+            return;
+        }
+        let charpos = row_start_charpos.max(0) as usize;
+        row.start_charpos = charpos;
+        row.end_charpos = charpos;
     }
 
     pub(crate) fn write_row_cursor(

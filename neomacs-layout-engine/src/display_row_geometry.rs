@@ -714,6 +714,7 @@ impl DisplayRowGeometryState {
             target.transition.row_base,
             target.transition.col,
             target.transition.x,
+            target.hit_range.charpos_start,
         );
         *self = row_cursor.state();
         match target.transition.row_y_recording {
@@ -913,12 +914,14 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
+        finished_row_start_charpos: i64,
     ) -> DisplayTextRowGeometryTransition {
         let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
         let begin_row = self.display_text_row_begin(row_base, col, x);
         DisplayTextRowGeometryTransition {
             finished_row,
             begin_row,
+            finished_row_start_charpos,
         }
     }
 

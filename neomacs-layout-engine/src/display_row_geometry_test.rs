@@ -736,6 +736,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
         5,
         7,
         13.0,
+        21,
     );
 
     assert_eq!(
@@ -753,6 +754,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
                 y: 10.0 + 3.0 * 16.0 + 15.0,
                 x: 13.0,
             },
+            finished_row_start_charpos: 21,
         }
     );
     assert_eq!(
@@ -869,6 +871,7 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
                 y: 10.0 + 3.0 * 16.0 + 11.0,
                 x: 13.0,
             },
+            finished_row_start_charpos: 0,
         }
     );
     assert_eq!(geometry.row, 3);
@@ -985,6 +988,7 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 y: 69.0,
                 x: 13.0,
             },
+            finished_row_start_charpos: 11,
         },
     };
     let mut hit_rows = Vec::new();
@@ -1011,6 +1015,7 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 y: 69.0,
                 x: 13.0,
             },
+            finished_row_start_charpos: 11,
         }
     );
 }

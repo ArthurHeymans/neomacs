@@ -27,6 +27,10 @@ pub(crate) struct DisplayOutputTextRowMetricsInstallRequest {
     absolute_y: f32,
     height_px: f32,
     ascent_px: f32,
+    /// Buffer position (0-based) where this row's walk began. Stamped onto the
+    /// row when it emitted no buffer glyphs, so empty lines and the EOB
+    /// placeholder carry real `MATRIX_ROW_START/END_CHARPOS` values.
+    row_start_charpos: i64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -120,12 +124,14 @@ impl DisplayOutputTextRowMetricsInstallRequest {
         absolute_y: f32,
         height_px: f32,
         ascent_px: f32,
+        row_start_charpos: i64,
     ) -> Self {
         Self {
             display_row_index,
             absolute_y,
             height_px,
             ascent_px,
+            row_start_charpos,
         }
     }
 
@@ -153,6 +159,11 @@ impl DisplayOutputTextRowMetricsInstallRequest {
             metrics.height_px,
             metrics.ascent_px,
         ));
+        // A buffer-text row that emitted no buffer glyphs still holds the unset
+        // `start == end` bounds; give it the real position where its walk began
+        // so empty lines carry their line's charpos and the trailing EOB
+        // placeholder carries ZV, matching GNU's MATRIX_ROW_START/END_CHARPOS.
+        builder.stamp_empty_text_row_buffer_bounds(self.display_row_index, self.row_start_charpos);
         metrics
     }
 }

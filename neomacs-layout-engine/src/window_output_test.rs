@@ -571,6 +571,7 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
             height: 16.0,
             ascent: 11.0,
         },
+        0,
     );
 
     assert_eq!(
@@ -674,6 +675,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             height: 16.0,
             ascent: 12.0,
         },
+        0,
     );
     builder.end_row();
 
@@ -697,6 +699,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             height: 16.0,
             ascent: 12.0,
         },
+        0,
     );
 
     let positions = TextWindowRedisplayPositions::from_output_rows(&emitter, 3, 100, 4);
@@ -978,6 +981,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
             height: 16.0,
             ascent: 12.0,
         },
+        0,
     );
 
     assert_eq!(emitter.rows().len(), 1);
@@ -1032,6 +1036,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
             height: 16.0,
             ascent: 12.0,
         },
+        0,
     );
 
     assert_eq!(emitter.rows().len(), 1);
@@ -1150,6 +1155,7 @@ fn install_text_window_output_installs_row_metrics() {
             height: 20.0,
             ascent: 15.0,
         },
+        0,
     );
 
     install_text_window_finished_rows(TextWindowOutputTarget::from_builder(&mut builder), &emitter);
@@ -1216,6 +1222,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             height: 20.0,
             ascent: 15.0,
         },
+        0,
     );
 
     let positions = install_text_window_body_output(
@@ -1318,6 +1325,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
                 y: 16.0,
                 x: 0.0,
             },
+            finished_row_start_charpos: 0,
         },
         1,
     );
@@ -1382,6 +1390,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
                 y: 16.0,
                 x: 0.0,
             },
+            finished_row_start_charpos: 0,
         },
     );
 

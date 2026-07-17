@@ -1399,22 +1399,14 @@ impl LayoutEngine {
                         RetainedWindowMatrix {
                             matrix: entry.matrix.clone(),
                             key: key.clone(),
-                            // Scroll fast-path reuse is now canonical (scroll_replay
-                            // only matches real text rows, never the trailing
-                            // placeholder), so a scroll-committed matrix is safe to
-                            // re-replay. The EDIT fast path, however, still commits a
-                            // non-canonical matrix when the edit touches empty lines
-                            // (empty content rows report a sentinel start_charpos == 0,
-                            // which confuses first_dirty/reuse and inserts a phantom
-                            // leading blank row — the yank-pop corruption). Until empty
-                            // rows carry their real charpos, mark an edit-committed
-                            // matrix non-reusable so the next frame re-certifies via a
-                            // full rebuild. Correct; costs one rebuild after an edit.
-                            validity: if self.edit_window_ids.contains_key(&window_id) {
-                                MatrixValidity::Invalid
-                            } else {
-                                MatrixValidity::Valid
-                            },
+                            // Every enabled body row now carries real
+                            // MATRIX_ROW_START/END_CHARPOS values (empty lines
+                            // hold their line's position; the EOB placeholder
+                            // holds ZV), so both the scroll and edit fast paths
+                            // commit a canonical matrix that first_dirty/reuse
+                            // reads without the old (0, 0)-sentinel confusion.
+                            // A committed matrix is therefore always reusable.
+                            validity: MatrixValidity::Valid,
                             display_snapshot,
                             presented_cursor: presented_cursor
                                 .as_ref()

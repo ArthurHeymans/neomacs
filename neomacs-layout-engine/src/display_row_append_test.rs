@@ -7707,6 +7707,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             height: 20.0,
             ascent: 15.0,
         },
+        0,
     );
 
     let mut row_flags = DisplayRowFlags::new(1);
@@ -7806,6 +7807,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             height: 17.0,
             ascent: 12.0,
         },
+        0,
     );
     crate::window_output::close_text_window_output(TextWindowOutputTarget::from_builder(
         &mut builder,

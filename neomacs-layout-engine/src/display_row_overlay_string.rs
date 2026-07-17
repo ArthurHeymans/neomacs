@@ -389,10 +389,10 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
             .geometry
             .is_within_row_limit(self.row_context.row_limit())
         {
-            state
-                .source_render
-                .output_render()
-                .finish_and_end_text_row(geometry_transition.finished_row);
+            state.source_render.output_render().finish_and_end_text_row(
+                geometry_transition.finished_row,
+                geometry_transition.finished_row_start_charpos,
+            );
             return false;
         }
 

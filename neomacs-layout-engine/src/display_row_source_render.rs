@@ -473,8 +473,17 @@ impl<'a> TextRowOutputRenderState<'a> {
         f(self.output, self.output_emitter, self.evaluator)
     }
 
-    pub(crate) fn finish_and_end_text_row(self, metrics: DisplayTextRowMetrics) {
-        finish_and_end_text_window_row(self.output, self.output_emitter, metrics);
+    pub(crate) fn finish_and_end_text_row(
+        self,
+        metrics: DisplayTextRowMetrics,
+        row_start_charpos: i64,
+    ) {
+        finish_and_end_text_window_row(
+            self.output,
+            self.output_emitter,
+            metrics,
+            row_start_charpos,
+        );
     }
 
     pub(crate) fn transition_text_row(self, transition: DisplayTextRowGeometryTransition) {
