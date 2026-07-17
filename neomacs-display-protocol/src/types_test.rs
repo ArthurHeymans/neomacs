@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn layout_units_collapse_subpixel_float_noise_deterministically() {
+    let expected = LayoutUnit::from_px(12.15);
+    let noisy = LayoutUnit::from_px(12.150_001);
+
+    assert_eq!(noisy, expected);
+    assert_eq!(expected.raw(), 778);
+    assert_eq!(expected.to_px(), 12.15625);
+}
+
+#[test]
+fn layout_unit_arithmetic_stays_in_fixed_point_space() {
+    let glyph = LayoutUnit::from_px(9.0);
+    let cell = LayoutUnit::from_px(5.0);
+
+    assert_eq!((glyph + cell).to_px(), 14.0);
+    assert_eq!((glyph - cell).to_px(), 4.0);
+    assert_eq!((cell * 3).to_px(), 15.0);
+}
+
+#[test]
 fn display_ids_preserve_raw_values_without_sharing_types() {
     let frame_id = DisplayFrameId::new(0x1000_0001);
     let window_id = DisplayWindowId::new(42);

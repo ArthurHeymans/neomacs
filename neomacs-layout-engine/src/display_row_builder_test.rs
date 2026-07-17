@@ -854,6 +854,18 @@ fn display_row_builder_tabs_use_realized_face_space_width_after_nerd_icon() {
 }
 
 #[test]
+fn tab_advance_quantizes_inputs_before_comparing_the_minimum_space() {
+    let advance =
+        DisplayTabPolicy::every(1).advance_from(DisplayRowPosition::new(12.150_001, 1), 12.15);
+
+    assert_eq!(
+        advance.pixel_width,
+        neomacs_display_protocol::LayoutUnit::from_px(12.15).to_px()
+    );
+    assert_eq!(advance.width_cols, 1);
+}
+
+#[test]
 fn display_row_writer_appends_items_to_existing_row_tab_context() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;

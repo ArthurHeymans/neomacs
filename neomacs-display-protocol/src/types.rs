@@ -52,6 +52,103 @@ display_id_type!(XwidgetId, u32);
 // neovm bridge boundary, which wrap into `FaceId` immediately.
 display_id_type!(FaceId, u32);
 
+/// A deterministic logical-pixel quantity used while laying out a frame.
+///
+/// Layout uses 26.6-style fixed-point arithmetic (1/64 logical pixel).  Font
+/// backends and protocol adapters may speak `f32`, but values entering layout
+/// are quantized once so equality, tab stops, clipping, and accumulated
+/// advances cannot depend on floating-point noise.  Conversion to device
+/// pixels belongs at the sealed-presentation/render boundary.
+#[repr(transparent)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct LayoutUnit(i64);
+
+impl LayoutUnit {
+    pub const FRACTION_BITS: u32 = 6;
+    pub const UNITS_PER_PIXEL: i64 = 1_i64 << Self::FRACTION_BITS;
+    pub const ZERO: Self = Self(0);
+
+    #[must_use]
+    pub const fn from_raw(raw: i64) -> Self {
+        Self(raw)
+    }
+
+    /// Quantize a logical-pixel measurement at the boundary where it enters
+    /// deterministic layout. Rust's float-to-integer cast gives defined
+    /// saturation for infinities and maps NaN to zero.
+    #[must_use]
+    pub fn from_px(px: f32) -> Self {
+        Self((px * Self::UNITS_PER_PIXEL as f32).round() as i64)
+    }
+
+    #[must_use]
+    pub const fn raw(self) -> i64 {
+        self.0
+    }
+
+    #[must_use]
+    pub fn to_px(self) -> f32 {
+        self.0 as f32 / Self::UNITS_PER_PIXEL as f32
+    }
+
+    #[must_use]
+    pub const fn max(self, other: Self) -> Self {
+        if self.0 >= other.0 { self } else { other }
+    }
+
+    #[must_use]
+    pub const fn min(self, other: Self) -> Self {
+        if self.0 <= other.0 { self } else { other }
+    }
+
+    #[must_use]
+    pub const fn saturating_sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+}
+
+impl Add for LayoutUnit {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+}
+
+impl Sub for LayoutUnit {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+}
+
+impl std::ops::Mul<i64> for LayoutUnit {
+    type Output = Self;
+
+    fn mul(self, factor: i64) -> Self {
+        Self(self.0.saturating_mul(factor))
+    }
+}
+
+impl std::fmt::Display for LayoutUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}px", self.to_px())
+    }
+}
+
 /// A physical-pixel quantity.
 ///
 /// Introduced at protocol conversion seams (e.g.

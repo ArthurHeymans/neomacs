@@ -17,7 +17,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::glyph_row_writer;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
-use neomacs_display_protocol::types::FaceId;
+use neomacs_display_protocol::types::{FaceId, LayoutUnit};
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
@@ -238,44 +238,46 @@ impl DisplayTabPolicy {
         position: DisplayRowPosition,
         char_width_px: f32,
     ) -> DisplayTabAdvance {
-        let char_width_px = char_width_px.max(1.0);
-        let tab_width_px = f32::from(self.width_cols.max(1)) * char_width_px;
-        let tab_x_px = (position.x_px - self.origin_x_px).max(0.0);
-        let next_tab_x_px = if !self.stop_cols.is_empty() {
+        let char_width = LayoutUnit::from_px(char_width_px.max(1.0));
+        let tab_width = char_width * i64::from(self.width_cols.max(1));
+        let origin_x = LayoutUnit::from_px(self.origin_x_px);
+        let tab_x = (LayoutUnit::from_px(position.x_px) - origin_x).max(LayoutUnit::ZERO);
+        let next_tab_x = if !self.stop_cols.is_empty() {
             self.stop_cols
                 .iter()
                 .copied()
-                .map(|stop| stop as f32 * char_width_px)
-                .find(|stop_px| *stop_px > tab_x_px)
+                .map(|stop| char_width * i64::try_from(stop).unwrap_or(i64::MAX))
+                .find(|stop| *stop > tab_x)
                 .unwrap_or_else(|| {
-                    let last =
-                        self.stop_cols.last().copied().unwrap_or_default() as f32 * char_width_px;
-                    if tab_x_px >= last && tab_width_px > 0.0 {
-                        last + ((tab_x_px - last) / tab_width_px).floor() * tab_width_px
-                            + tab_width_px
+                    let last = char_width
+                        * i64::try_from(self.stop_cols.last().copied().unwrap_or_default())
+                            .unwrap_or(i64::MAX);
+                    if tab_x >= last && tab_width > LayoutUnit::ZERO {
+                        let repeated_stops = (tab_x - last).raw() / tab_width.raw() + 1;
+                        last + tab_width * repeated_stops
                     } else {
                         last
                     }
                 })
-        } else if tab_width_px > 0.0 {
-            ((tab_x_px / tab_width_px).floor() + 1.0) * tab_width_px
+        } else if tab_width > LayoutUnit::ZERO {
+            tab_width * (tab_x.raw() / tab_width.raw() + 1)
         } else {
-            tab_x_px + char_width_px
+            tab_x + char_width
         };
         // GNU's minimum-one-space guard (gui_produce_glyphs: a tab landing
-        // exactly on a stop advances a full stop) works in INTEGER pixels.
-        // Here positions are f32: a preceding glyph advance like 12.150001
-        // leaves a gap of 12.149999 against a 12.15 space — equal in GNU's
-        // arithmetic, but a strict < would double the tab. Treat sub-epsilon
-        // shortfalls as exact hits.
-        const TAB_STOP_EPSILON_PX: f32 = 0.01;
-        let next_tab_x_px = if next_tab_x_px - tab_x_px < char_width_px - TAB_STOP_EPSILON_PX {
-            next_tab_x_px + tab_width_px
+        // exactly on a stop advances a full stop) works in integer layout
+        // units. Inputs are quantized once above, so this comparison has no
+        // epsilon policy and cannot change with f32 noise.
+        let next_tab_x = if next_tab_x - tab_x < char_width {
+            next_tab_x + tab_width
         } else {
-            next_tab_x_px
+            next_tab_x
         };
-        let pixel_width = (next_tab_x_px - tab_x_px).max(char_width_px);
-        let next_col = ((next_tab_x_px / char_width_px).round() as usize).max(position.col + 1);
+        let pixel_width = (next_tab_x - tab_x).max(char_width).to_px();
+        let next_col =
+            usize::try_from((next_tab_x.raw() + char_width.raw() / 2) / char_width.raw())
+                .unwrap_or(usize::MAX)
+                .max(position.col + 1);
         DisplayTabAdvance {
             pixel_width,
             width_cols: next_col.saturating_sub(position.col).max(1),
