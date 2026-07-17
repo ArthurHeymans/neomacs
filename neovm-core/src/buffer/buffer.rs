@@ -1814,6 +1814,41 @@ impl SavedRestrictionState {
             }
         }
     }
+
+    /// Root the restriction markers themselves. They are referenced only by
+    /// u64 ids here, and an unmarked marker is spliced out of its buffer's
+    /// chain and freed by `unchain_dead_markers` — after which the saved
+    /// bounds silently resolve to the full buffer. GNU keeps these markers
+    /// alive through the specpdl's Lisp save_restriction data (editfns.c);
+    /// this is the precise-GC equivalent. Called at seed time, before the
+    /// mark phase, so every marker is still findable in its chain.
+    pub fn trace_marker_roots(&self, buffers: &BufferManager, roots: &mut Vec<Value>) {
+        let Some(buffer) = buffers.get(self.buffer_id) else {
+            return;
+        };
+        if let SavedRestrictionKind::Markers {
+            beg_marker,
+            end_marker,
+        } = self.restriction
+        {
+            if let Some(value) = buffer.marker_value_by_id(beg_marker) {
+                roots.push(value);
+            }
+            if let Some(value) = buffer.marker_value_by_id(end_marker) {
+                roots.push(value);
+            }
+        }
+        if let Some(restrictions) = &self.labeled_restrictions {
+            for restriction in restrictions {
+                if let Some(value) = buffer.marker_value_by_id(restriction.beg_marker) {
+                    roots.push(value);
+                }
+                if let Some(value) = buffer.marker_value_by_id(restriction.end_marker) {
+                    roots.push(value);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -6267,10 +6302,25 @@ impl GcTrace for BufferManager {
         for slot in &self.buffer_defaults {
             roots.push(*slot);
         }
-        for restrictions in self.labeled_restrictions.values() {
+        for (buffer_id, restrictions) in &self.labeled_restrictions {
+            let buffer = self.buffers.get(buffer_id);
             for restriction in restrictions {
                 if let LabeledRestrictionLabel::User(label) = restriction.label {
                     roots.push(label);
+                }
+                // The bounds markers are referenced only by u64 id from this
+                // map; an unmarked marker is spliced out and freed by
+                // unchain_dead_markers, silently widening the restriction.
+                // Synthesize Lisp handles so the mark phase walks them
+                // (same hazard and fix as state_markers above; GNU keeps
+                // these alive via staticpro'd narrowing_locks, editfns.c).
+                if let Some(buffer) = buffer {
+                    if let Some(value) = buffer.marker_value_by_id(restriction.beg_marker) {
+                        roots.push(value);
+                    }
+                    if let Some(value) = buffer.marker_value_by_id(restriction.end_marker) {
+                        roots.push(value);
+                    }
                 }
             }
         }

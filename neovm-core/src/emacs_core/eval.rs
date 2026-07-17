@@ -5856,6 +5856,10 @@ impl Context {
                 SpecBinding::SaveRestriction { state } => {
                     let mut roots = Vec::new();
                     state.trace_roots(&mut roots);
+                    // The saved bounds live as marker ids only; root the
+                    // marker objects so restore still finds them (see
+                    // SavedRestrictionState::trace_marker_roots).
+                    state.trace_marker_roots(&self.buffers, &mut roots);
                     for root in roots {
                         visit(root);
                     }

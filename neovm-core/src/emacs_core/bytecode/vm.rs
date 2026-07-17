@@ -2104,13 +2104,22 @@ impl<'a> Vm<'a> {
                     );
                     // eval_sub runs arbitrary Lisp; window-config restore can
                     // run hooks — both escape, so bracket them together.
+                    // `saved` (and its embedded snapshot roots) lives only in
+                    // this Rust local while the body runs — root it, or a GC
+                    // during the body frees the configuration and restore
+                    // silently no-ops (GNU keeps it on the specpdl via
+                    // record_unwind_protect, bytecode.c:945-952).
                     cursor.publish(&mut self.ctx);
+                    let root_scope = self.ctx.save_vm_roots();
+                    self.push_dynamic_vm_root(saved);
+                    self.push_dynamic_vm_root(progn_form);
                     let body_result = self.ctx.eval_sub(progn_form);
                     let restore_result =
                         crate::emacs_core::window_cmds::builtin_set_window_configuration(
                             self.ctx,
                             vec![saved],
                         );
+                    self.ctx.restore_vm_roots(root_scope);
                     cursor = StackCursor::acquire(&mut self.ctx);
 
                     match body_result {
