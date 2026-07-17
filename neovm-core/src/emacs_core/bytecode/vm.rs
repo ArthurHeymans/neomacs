@@ -728,6 +728,28 @@ impl<'a> Vm<'a> {
             self.ctx.bc_frames.pop();
             return result;
         }
+        // Closure fast path: an env=Some frame's sole outstanding entry is
+        // its own prologue LexicalEnv save. Popping it is unbind_to's exact
+        // restore — a pure `ctx.lexenv = old` assignment (no GC, no watchers,
+        // no allocation; see the SpecBinding::LexicalEnv arm of
+        // unbind_to_result) — so the result needs no rooting here either.
+        // Every closure call (mapcar lambdas and friends) returns through
+        // this instead of the save-roots/unbind/restore machinery.
+        if self.ctx.specpdl.len() == specpdl_base + 1
+            && matches!(
+                self.ctx.specpdl.last(),
+                Some(crate::emacs_core::eval::SpecBinding::LexicalEnv { .. })
+            )
+        {
+            if let Some(crate::emacs_core::eval::SpecBinding::LexicalEnv { old_lexenv }) =
+                self.ctx.specpdl.pop()
+            {
+                self.ctx.lexenv = old_lexenv;
+            }
+            self.ctx.bc_buf.truncate(frame_base);
+            self.ctx.bc_frames.pop();
+            return result;
+        }
         let root_scope = self.ctx.save_vm_roots();
         self.ctx.push_eval_result_roots(&result);
         self.ctx.unbind_to(specpdl_base);
