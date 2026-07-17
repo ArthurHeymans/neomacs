@@ -1296,7 +1296,18 @@ impl BufferText {
         // buffer end; clamp before converting so byte->char never overflows.
         // A limit at the buffer end means "no cap in range", and the scan then
         // reduces to the exact unbounded answer.
-        let limit = limit.min(self.emacs_byte_end_pos());
+        let mut limit = limit.min(self.emacs_byte_end_pos());
+        // The same byte arithmetic can land INSIDE a multibyte character
+        // (trailing bytes are 10xxxxxx, GNU CHAR_HEAD_P); converting an
+        // unaligned byte position to a char position panics. Snap the soft
+        // cap UP to the next character head — up, not down, so the cap never
+        // collapses onto `pos` and the caller's re-scan always progresses.
+        // The buffer end is always a boundary, so this loop terminates at
+        // the clamp above at worst.
+        let end = self.emacs_byte_end_pos();
+        while limit < end && (self.byte_at_emacs_byte_pos(limit) & 0xC0) == 0x80 {
+            limit = EmacsBytePos::new(limit.get() + 1);
+        }
         let char_pos = self
             .byte_range_to_char_range(EmacsByteRange::new(pos, pos))
             .start();
