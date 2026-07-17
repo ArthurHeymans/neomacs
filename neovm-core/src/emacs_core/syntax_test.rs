@@ -3084,3 +3084,31 @@ fn parse_partial_sexp_from_state_not_in_string_or_comment_keeps_start_nil() {
     .unwrap();
     assert_eq!(nth_value(&state, 8), Value::NIL);
 }
+
+#[test]
+fn forward_word_with_boundary_table_reaches_buffer_end() {
+    crate::test_utils::init_test_tracing();
+    // GNU Fforward_word: when scan_words finds no further word, point still
+    // moves to the accessible limit. With a find-word-boundary-function-table
+    // installed (the subword-mode configuration), the boundary path used to
+    // leave point stalled before trailing non-word text, turning the
+    // ubiquitous (while (< (point) (point-max)) (forward-word)) idiom into an
+    // infinite loop.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "word ")
+                 (let ((find-word-boundary-function-table
+                        (let ((tab (make-char-table nil)))
+                          (set-char-table-range tab t #'ignore)
+                          tab)))
+                   (goto-char (point-min))
+                   (forward-word)
+                   (forward-word)
+                   (list (point) (point-max))))"#,
+        )
+        .expect("forward-word with boundary table");
+    let rendered = crate::emacs_core::error::format_eval_result(&Ok(result));
+    assert_eq!(rendered, "OK (6 6)");
+}

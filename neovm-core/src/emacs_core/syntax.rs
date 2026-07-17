@@ -997,6 +997,21 @@ fn word_motion_with_table(
         };
 
         let Some((ch, pos1, limit1)) = probe else {
+            // GNU Fforward_word: when scan_words finds no further word, point
+            // still moves to the accessible limit (ZV forward, BEGV backward)
+            // and the motion reports incomplete. Leaving point in place
+            // instead turns the ubiquitous
+            // (while (< (point) (point-max)) (forward-word)) idiom into an
+            // infinite loop whenever trailing non-word text remains.
+            if let Some(buf) = eval.buffers.get(current_id) {
+                let region = buf.accessible_emacs_byte_region();
+                let limit = if forward {
+                    region.range().end()
+                } else {
+                    region.range().start()
+                };
+                let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, limit);
+            }
             completed = false;
             break;
         };
