@@ -1597,6 +1597,13 @@ enum CompletionText {
         value: Value,
         string: crate::heap_types::LispString,
     },
+    /// Symbol name backed by the append-only global interner. Storing the
+    /// static reference avoids a per-candidate registry lock + deep string
+    /// copy — with tens of thousands of obarray symbols per try-completion
+    /// call that copying dominated imageless bootstrap.
+    Interned {
+        string: &'static crate::heap_types::LispString,
+    },
     Generated {
         string: crate::heap_types::LispString,
     },
@@ -1606,12 +1613,14 @@ impl CompletionText {
     fn lisp_string(&self) -> &crate::heap_types::LispString {
         match self {
             Self::OriginalString { string, .. } | Self::Generated { string } => string,
+            Self::Interned { string } => string,
         }
     }
 
     fn as_result_value(&self) -> Value {
         match self {
             Self::OriginalString { value, .. } => *value,
+            Self::Interned { string } => Value::heap_string((*string).clone()),
             Self::Generated { string } => Value::heap_string(string.clone()),
         }
     }
@@ -1638,6 +1647,7 @@ impl CompletionText {
     fn searched_string(&self) -> super::regex::SearchedString {
         match self {
             Self::OriginalString { value, .. } => super::regex::SearchedString::Heap(*value),
+            Self::Interned { string } => super::regex::SearchedString::Owned((*string).clone()),
             Self::Generated { string } => super::regex::SearchedString::Owned(string.clone()),
         }
     }
@@ -1654,8 +1664,8 @@ fn completion_text_from_value(value: &Value) -> Option<CompletionText> {
                     string,
                 })
         }
-        ValueKind::Symbol(id) => Some(CompletionText::Generated {
-            string: crate::heap_types::LispString::from_utf8(resolve_sym(id)),
+        ValueKind::Symbol(id) => Some(CompletionText::Interned {
+            string: crate::emacs_core::intern::resolve_sym_lisp_string(id),
         }),
         ValueKind::Nil => Some(CompletionText::Generated {
             string: crate::heap_types::LispString::from_utf8("nil"),
@@ -1704,6 +1714,36 @@ fn completion_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
     super::builtins::lisp_string_char_codes(string)
 }
 
+/// Lazy char-code iterator over a LispString, decoding exactly like
+/// lisp_string_char_codes but without materializing a Vec. Prefix matching
+/// over large candidate sets (a whole obarray) usually rejects on the first
+/// character; allocating the full decode per candidate dominated bootstrap.
+fn lisp_string_chars(
+    string: &crate::heap_types::LispString,
+) -> impl Iterator<Item = u32> + use<'_> {
+    let bytes = string.as_bytes();
+    let multibyte = string.is_multibyte();
+    let mut pos = 0usize;
+    std::iter::from_fn(move || {
+        if pos >= bytes.len() {
+            return None;
+        }
+        if !multibyte {
+            let code = bytes[pos] as u32;
+            pos += 1;
+            return Some(code);
+        }
+        let byte = bytes[pos];
+        if byte < 0x80 {
+            pos += 1;
+            return Some(byte as u32);
+        }
+        let (cp, len) = crate::emacs_core::emacs_char::string_char_unchecked(&bytes[pos..]);
+        pos += len;
+        Some(cp)
+    })
+}
+
 fn completion_fold_char(code: u32, ignore_case: bool) -> u32 {
     if !ignore_case {
         return code;
@@ -1712,34 +1752,39 @@ fn completion_fold_char(code: u32, ignore_case: bool) -> u32 {
 }
 
 fn completion_text_matches_prefix(
-    prefix: &crate::heap_types::LispString,
+    prefix_codes: &[u32],
     completion: &CompletionText,
     ignore_case: bool,
 ) -> bool {
-    let prefix_codes = completion_char_codes(prefix);
-    let completion_codes = completion_char_codes(completion.lisp_string());
-    if prefix_codes.len() > completion_codes.len() {
+    let string = completion.lisp_string();
+    if prefix_codes.len() > string.schars() {
         return false;
     }
-    prefix_codes
-        .iter()
-        .zip(completion_codes.iter())
-        .all(|(left, right)| {
-            completion_fold_char(*left, ignore_case) == completion_fold_char(*right, ignore_case)
-        })
+    let mut chars = lisp_string_chars(string);
+    prefix_codes.iter().all(|&left| match chars.next() {
+        Some(right) => {
+            completion_fold_char(left, ignore_case) == completion_fold_char(right, ignore_case)
+        }
+        None => false,
+    })
 }
 
 fn completion_text_equals_string(
     completion: &CompletionText,
-    string: &crate::heap_types::LispString,
+    string_codes: &[u32],
     ignore_case: bool,
 ) -> bool {
-    let left = completion_char_codes(completion.lisp_string());
-    let right = completion_char_codes(string);
-    left.len() == right.len()
-        && left.iter().zip(right.iter()).all(|(l, r)| {
-            completion_fold_char(*l, ignore_case) == completion_fold_char(*r, ignore_case)
-        })
+    let string = completion.lisp_string();
+    if string.schars() != string_codes.len() {
+        return false;
+    }
+    let mut chars = lisp_string_chars(string);
+    string_codes.iter().all(|&right| match chars.next() {
+        Some(left) => {
+            completion_fold_char(left, ignore_case) == completion_fold_char(right, ignore_case)
+        }
+        None => false,
+    })
 }
 
 /// GNU-faithful result of `Fcompare_strings` over the first `len` chars of two
@@ -1826,18 +1871,13 @@ fn completion_candidates_from_global_obarray_in_state(
 ) -> Vec<CompletionCandidate> {
     super::builtins::symbols::global_obarray_symbols_in_bucket_order(obarray, lisp_obarray)
         .into_iter()
-        .map(|id| {
-            (
-                crate::emacs_core::intern::resolve_sym_lisp_string(
-                    id.as_symbol_id()
+        .map(|sym| CompletionCandidate {
+            completion: CompletionText::Interned {
+                string: crate::emacs_core::intern::resolve_sym_lisp_string(
+                    sym.as_symbol_id()
                         .expect("global obarray entries are symbols"),
-                )
-                .clone(),
-                id,
-            )
-        })
-        .map(|(name, sym)| CompletionCandidate {
-            completion: CompletionText::Generated { string: name },
+                ),
+            },
             predicate_arg: sym,
             predicate_extra_arg: None,
         })
@@ -1926,7 +1966,7 @@ pub(crate) fn builtin_try_completion_with_candidates(
     let mut matchcount = 0i32;
 
     for candidate in &candidates {
-        if !completion_text_matches_prefix(&string, &candidate.completion, ignore_case) {
+        if !completion_text_matches_prefix(&string_codes, &candidate.completion, ignore_case) {
             continue;
         }
         if !regexps.is_empty()
@@ -2043,9 +2083,10 @@ pub(crate) fn builtin_all_completions_with_candidates(
     // (which may trigger GC via apply), then create string Values.
     // This avoids holding unrooted Value strings across GC-triggering
     // predicate calls.
+    let string_codes = completion_char_codes(&string);
     let mut matching_completions: Vec<CompletionText> = Vec::new();
     for candidate in &candidates {
-        if !completion_text_matches_prefix(&string, &candidate.completion, ignore_case) {
+        if !completion_text_matches_prefix(&string_codes, &candidate.completion, ignore_case) {
             continue;
         }
         if !regexps.is_empty()
@@ -2085,8 +2126,9 @@ pub(crate) fn builtin_test_completion_with_candidates(
         );
     };
 
+    let string_codes = completion_char_codes(&string);
     for candidate in &candidates {
-        if !completion_text_equals_string(&candidate.completion, &string, ignore_case) {
+        if !completion_text_equals_string(&candidate.completion, &string_codes, ignore_case) {
             continue;
         }
         if !regexps.is_empty()
