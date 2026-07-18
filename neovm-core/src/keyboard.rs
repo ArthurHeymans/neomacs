@@ -1832,6 +1832,11 @@ pub struct CommandLoop {
     /// auto-save fired from the command loop. GNU tracks this in
     /// the global `last_auto_save` at `src/keyboard.c:107`.
     pub last_auto_save_input_events: u64,
+    /// Size of the most recently selected non-minibuffer buffer, in
+    /// characters. GNU keeps this separately because a minibuffer input wait
+    /// should scale idle auto-save latency from the edited buffer, not from
+    /// the tiny minibuffer (`src/keyboard.c:229,2939-2941`).
+    last_non_minibuffer_size: usize,
 }
 
 impl CommandLoop {
@@ -1848,6 +1853,7 @@ impl CommandLoop {
             last_idle_start_time: None,
             num_nonmacro_input_events: 0,
             last_auto_save_input_events: 0,
+            last_non_minibuffer_size: 0,
         }
     }
 
@@ -4301,9 +4307,10 @@ impl crate::emacs_core::eval::Context {
     fn read_char_event_with_timeout_policy(
         &mut self,
         timeout: Option<std::time::Duration>,
-        _wait_noninteractive: bool,
+        command_input: bool,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
+        let mut idle_auto_save_deadline = None;
 
         loop {
             self.sync_keyboard_terminal_owner();
@@ -4394,25 +4401,105 @@ impl crate::emacs_core::eval::Context {
                 return Ok(None);
             }
 
-            self.timer_start_idle();
-            let wait_result = self.wait_for_command_input(deadline);
-            self.timer_stop_idle();
+            // GNU starts the idle epoch only for an unbounded read. A timed
+            // Lisp `read-char` must not recursively activate idle timers, but
+            // the command loop's unbounded read does (`keyboard.c:2869-2875`).
+            if timeout.is_none() {
+                self.timer_start_idle();
+            }
+
+            // `auto-save-timeout` is not a Lisp idle timer. GNU computes it
+            // inside `read_char`, then folds the resulting `sit_for` deadline
+            // into the same input/process/timer wait. Keep one fixed deadline
+            // across ordinary timer and process wakeups so background activity
+            // cannot postpone auto-save forever.
+            if command_input && idle_auto_save_deadline.is_none() {
+                idle_auto_save_deadline = self
+                    .command_idle_auto_save_delay()
+                    .and_then(|delay| std::time::Instant::now().checked_add(delay));
+            }
+            let wait_deadline = match (deadline, idle_auto_save_deadline) {
+                (Some(read), Some(auto_save)) => Some(read.min(auto_save)),
+                (Some(read), None) => Some(read),
+                (None, Some(auto_save)) => Some(auto_save),
+                (None, None) => None,
+            };
+            let wait_result = self.wait_for_command_input(wait_deadline);
 
             match wait_result? {
                 CommandInputWaitOutcome::InputPending => {
+                    self.timer_stop_idle();
                     continue;
                 }
                 CommandInputWaitOutcome::DeadlineElapsed => {
-                    if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                    let now = std::time::Instant::now();
+                    if deadline.is_some_and(|deadline| now >= deadline) {
+                        self.timer_stop_idle();
                         return Ok(None);
+                    }
+                    if idle_auto_save_deadline.is_some_and(|deadline| now >= deadline) {
+                        idle_auto_save_deadline = None;
+                        self.run_command_loop_auto_save("idle timeout");
+                        self.redisplay();
                     }
                     continue;
                 }
                 CommandInputWaitOutcome::Interrupted => {
+                    // Resize/focus/display maintenance is not user input. Its
+                    // handlers preserve the idle epoch; do not start a fresh
+                    // epoch (and re-arm repeating idle timers) merely because
+                    // the unified wait was interrupted.
+                    self.timer_resume_idle();
                     continue;
                 }
             }
         }
+    }
+
+    /// GNU's buffer-size-scaled delay for `auto-save-timeout`.
+    ///
+    /// This is command-input policy, not general timer policy: ordinary Lisp
+    /// `read-char` calls must never cause automatic saves. Returning `None`
+    /// means there has been no input since the last auto-save or the user has
+    /// disabled idle auto-saving.
+    fn command_idle_auto_save_delay(&mut self) -> Option<std::time::Duration> {
+        if self.command_loop.num_nonmacro_input_events
+            <= self.command_loop.last_auto_save_input_events
+        {
+            return None;
+        }
+
+        let timeout = self
+            .eval_symbol("auto-save-timeout")
+            .ok()
+            .and_then(|value| value.as_fixnum())
+            .filter(|timeout| *timeout > 0)? as u64;
+
+        let selected = self.frames.selected_frame().and_then(|frame| {
+            frame.selected_window().map(|window| {
+                (
+                    frame.minibuffer_window == Some(window.id()),
+                    window.buffer_id(),
+                )
+            })
+        });
+        if let Some((false, Some(buffer_id))) = selected
+            && let Some(buffer) = self.buffers.get(buffer_id)
+        {
+            self.command_loop.last_non_minibuffer_size = buffer.accessible_char_len().get();
+        }
+
+        let mut scaled_size = (self.command_loop.last_non_minibuffer_size >> 8) + 1;
+        let mut delay_level = 0_u64;
+        while scaled_size > 64 {
+            delay_level += 1;
+            scaled_size -= scaled_size >> 2;
+        }
+        delay_level = delay_level.max(4);
+
+        Some(std::time::Duration::from_secs(
+            timeout.saturating_mul(delay_level) / 4,
+        ))
     }
 
     pub(crate) fn read_char_with_timeout(

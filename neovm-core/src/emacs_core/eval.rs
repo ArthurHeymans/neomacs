@@ -7192,15 +7192,27 @@ impl Context {
         if self.input_pending_for_auto_save() {
             return;
         }
-        // Record the attempt *before* calling do-auto-save so a
-        // throw/signal from the save doesn't loop the check on
-        // every iteration. GNU writes `last_auto_save` after the
-        // call but also swallows errors via cmd_error; setting
-        // it first is safer in our flow-based error model.
-        self.command_loop.last_auto_save_input_events = current;
-        if let Err(flow) = self.apply(Value::symbol("do-auto-save"), vec![Value::NIL, Value::NIL]) {
+        self.run_command_loop_auto_save("input interval");
+    }
+
+    /// Run GNU's command-input auto-save boundary for either the event-count
+    /// or idle-time trigger. Both paths must pass `auto-save-no-message`, call
+    /// the same `do-auto-save` primitive, and throttle a failing attempt so a
+    /// broken hook cannot spin the command loop.
+    pub(crate) fn run_command_loop_auto_save(&mut self, trigger: &'static str) {
+        self.command_loop.last_auto_save_input_events = self.command_loop.num_nonmacro_input_events;
+        let no_message = if self
+            .eval_symbol("auto-save-no-message")
+            .unwrap_or(Value::NIL)
+            .is_truthy()
+        {
+            Value::T
+        } else {
+            Value::NIL
+        };
+        if let Err(flow) = self.apply(Value::symbol("do-auto-save"), vec![no_message, Value::NIL]) {
             let rendered = super::error::format_flow_with_eval(self, &flow);
-            tracing::warn!("auto-save from command_loop_1 failed: {}", rendered);
+            tracing::warn!("auto-save from {trigger} failed: {rendered}");
         }
     }
 
@@ -7263,7 +7275,7 @@ impl Context {
     /// `safe_run_hooks (Qhook_name)` at
     /// `src/keyboard.c:1361,1485` and `src/eval.c:2779-2830`.
     /// Keyboard audit Finding 7.
-    fn safe_run_hook_if_bound(&mut self, hook_name: &str) -> EvalResult {
+    pub(crate) fn safe_run_hook_if_bound(&mut self, hook_name: &str) -> EvalResult {
         // GNU `keyboard.c:1970-1978` (`safe_run_hooks`):
         //
         //   void safe_run_hooks (Lisp_Object hook) {
@@ -7291,7 +7303,11 @@ impl Context {
         // the command loop, and `read-char-from-minibuffer` relies on
         // that when its local `post-command-hook` calls
         // `exit-minibuffer`.
-        super::hook_runtime::safe_run_named_hook(self, hook_sym, &[])
+        let specpdl_count = self.specpdl.len();
+        self.specbind(intern("inhibit-quit"), Value::T);
+        let result = super::hook_runtime::safe_run_named_hook(self, hook_sym, &[]);
+        self.unbind_to(specpdl_count);
+        result
     }
 
     fn executing_kbd_macro_iteration_complete_for_command_loop(&self) -> bool {

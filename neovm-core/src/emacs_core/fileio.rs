@@ -6362,10 +6362,11 @@ pub(crate) fn builtin_do_auto_save(
     let _no_message = args.first().is_some_and(|v| v.is_truthy());
     let current_only = args.get(1).is_some_and(|v| v.is_truthy());
 
-    // Run auto-save-hook before saving
-    // (We skip hook running here since the stub infrastructure doesn't easily
-    // support calling back into eval from here. The hook will be called by
-    // Elisp wrappers if needed.)
+    // GNU `Fdo_auto_save` runs this before inspecting or snapshotting any
+    // buffer, so edits made by the hook belong to this auto-save pass.  Use
+    // the same safe named-hook boundary as the command loop: one broken hook
+    // is reported and removed without suppressing the remaining functions.
+    eval.safe_run_hook_if_bound("auto-save-hook")?;
 
     let auto_save_visited = eval
         .obarray
@@ -6480,6 +6481,12 @@ pub(crate) fn builtin_do_auto_save(
             }
         }
     }
+
+    // GNU `Fdo_auto_save` ends with `record_auto_save`, regardless of whether
+    // any buffer needed writing. Keeping the record at the primitive boundary
+    // also makes direct Lisp calls and idle-triggered calls obey the same
+    // "new input is required before another automatic pass" invariant.
+    eval.command_loop.last_auto_save_input_events = eval.command_loop.num_nonmacro_input_events;
 
     Ok(Value::NIL)
 }

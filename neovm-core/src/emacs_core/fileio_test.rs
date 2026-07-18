@@ -5234,6 +5234,54 @@ fn builtin_do_auto_save_preserves_raw_unibyte_filename_and_bytes() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// GNU `Fdo_auto_save` runs `auto-save-hook` before it snapshots any
+/// buffers.  Hook changes therefore belong to the auto-save image produced by
+/// the same call, rather than being deferred until a later auto-save.
+#[test]
+fn builtin_do_auto_save_runs_auto_save_hook_before_writing_buffer() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited_path = dir.path().join("visited.txt");
+    let auto_path = dir.path().join("#visited.txt#");
+
+    let mut eval = Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.set_file_name_value(Value::string(visited_path.to_string_lossy()));
+        let auto_name = Value::string(auto_path.to_string_lossy());
+        buf.set_buffer_local("buffer-auto-save-file-name", auto_name);
+        buf.set_auto_save_file_name_value(auto_name);
+        buf.insert("before\n");
+    }
+    eval.eval_str(
+        r#"(progn
+             (setq neo-auto-save-hook-inhibit-quit nil)
+             (setq auto-save-hook
+                   (list (lambda ()
+                           (setq neo-auto-save-hook-inhibit-quit inhibit-quit)
+                           (goto-char (point-max))
+                           (insert "from-hook\n")))))"#,
+    )
+    .expect("install auto-save-hook");
+
+    eval.eval_str("(do-auto-save nil t)")
+        .expect("do-auto-save should run its hook and write the current buffer");
+
+    assert_eq!(
+        fs::read_to_string(&auto_path).expect("read auto-save image"),
+        "before\nfrom-hook\n",
+        "auto-save image must include changes made by auto-save-hook"
+    );
+    assert_eq!(
+        eval.eval_symbol("neo-auto-save-hook-inhibit-quit")
+            .expect("hook should record inhibit-quit"),
+        Value::T,
+        "GNU safe hook execution dynamically binds inhibit-quit"
+    );
+}
+
 #[test]
 fn test_find_file_noselect_nonexistent() {
     crate::test_utils::init_test_tracing();

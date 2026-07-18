@@ -5070,6 +5070,59 @@ fn read_char_fires_bootstrapped_gnu_run_with_idle_timer_while_waiting_for_input(
     assert_eq!(ev.current_idle_time_value(), Value::NIL);
 }
 
+/// A repeating idle timer runs once per idle epoch.  Reading real input ends
+/// the current epoch; the following input wait must begin a fresh epoch and
+/// make the timer eligible again.  Packages such as Super Save depend on this
+/// lifecycle: their timer commonly fires once before a file is edited, then
+/// must fire again after the editing command when Emacs becomes idle.
+#[test]
+fn repeating_idle_timer_rearms_after_user_input_starts_new_idle_epoch() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+
+    ev.eval_str(
+        r#"(progn
+           (setq vm-repeating-idle-count 0)
+           (run-with-idle-timer
+            0.01 t
+            (lambda ()
+              (setq vm-repeating-idle-count
+                    (1+ vm-repeating-idle-count)))))"#,
+    )
+    .expect("schedule repeating GNU Lisp idle timer");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let _tx_keepalive = tx.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(80));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('a'),
+        ))
+        .expect("send first keypress");
+        thread::sleep(Duration::from_millis(80));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('b'),
+        ))
+        .expect("send second keypress");
+    });
+
+    assert_eq!(
+        ev.read_char().expect("read first keypress"),
+        Value::fixnum('a' as i64)
+    );
+    assert_eq!(
+        ev.read_char().expect("read second keypress"),
+        Value::fixnum('b' as i64)
+    );
+    assert_eq!(
+        ev.eval_symbol("vm-repeating-idle-count")
+            .expect("idle timer count should be bound"),
+        Value::fixnum(2),
+        "repeating idle timer must run once in each idle epoch"
+    );
+}
+
 /// GNU `read_key_sequence_vs` clears the committed `this-command-keys` at
 /// entry when CONTINUE-ECHO is nil (keyboard.c:11919-11923) so a fresh key
 /// sequence starts from an empty `(this-command-keys-vector)`. `read-key`
@@ -19503,6 +19556,141 @@ fn command_loop_test_context() -> Context {
         "command loop test should have a selected frame"
     );
     ev
+}
+
+/// GNU's command-input auto-save gate invokes `do-auto-save` after more than
+/// `max (auto-save-interval, 20)` non-macro input events.  This exercises the
+/// complete command-loop boundary rather than calling `do-auto-save`
+/// directly, and observes the public `auto-save-hook` contract.
+#[test]
+fn command_loop_input_interval_triggers_auto_save_hook() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    fn stop_command_loop_after_auto_save_probe(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-command-loop-after-auto-save-probe",
+        stop_command_loop_after_auto_save_probe,
+        0,
+        Some(0),
+    );
+    ev.eval_str(
+        r#"(progn
+             (setq neo-auto-save-hook-count 0)
+             (setq auto-save-interval 1)
+             (setq auto-save-hook
+                   (list (lambda ()
+                           (setq neo-auto-save-hook-count
+                                 (1+ neo-auto-save-hook-count)))))
+             (fset 'neo-stop-auto-save-probe-command
+                   (lambda ()
+                     (interactive)
+                     (neo-stop-command-loop-after-auto-save-probe)))
+             (keymap-set global-map "q" 'neo-stop-auto-save-probe-command))"#,
+    )
+    .expect("install auto-save command-loop probe");
+
+    for _ in 0..21 {
+        ev.command_loop
+            .keyboard
+            .kboard
+            .unread_events
+            .push_back(Value::fixnum('a' as i64));
+    }
+    ev.command_loop
+        .keyboard
+        .kboard
+        .unread_events
+        .push_back(Value::fixnum('q' as i64));
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should exit through the stop command");
+
+    assert_eq!(
+        ev.eval_symbol("neo-auto-save-hook-count")
+            .expect("auto-save hook count"),
+        Value::fixnum(1),
+        "the input-event threshold must trigger exactly one auto-save pass"
+    );
+}
+
+/// GNU also invokes `do-auto-save` when command input has modified state and
+/// Emacs subsequently remains idle for `auto-save-timeout` seconds.  The
+/// timeout is independent of `auto-save-interval`; disabling the event-count
+/// trigger must not disable the idle trigger.
+#[test]
+fn command_loop_idle_timeout_triggers_auto_save_hook() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    fn stop_command_loop_after_idle_auto_save_probe(
+        ctx: &mut Context,
+        args: Vec<Value>,
+    ) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-command-loop-after-idle-auto-save-probe",
+        stop_command_loop_after_idle_auto_save_probe,
+        0,
+        Some(0),
+    );
+    ev.eval_str(
+        r#"(progn
+             ;; Keep the probe buffer out of the auto-save file writer; this
+             ;; test observes the hook boundary, not filesystem mechanics.
+             (rename-buffer " command-loop-idle-auto-save")
+             (setq neo-idle-auto-save-hook-count 0)
+             (setq auto-save-interval 0)
+             (setq auto-save-timeout 1)
+             (setq auto-save-hook
+                   (list (lambda ()
+                           (setq neo-idle-auto-save-hook-count
+                                 (1+ neo-idle-auto-save-hook-count)))))
+             (fset 'neo-stop-idle-auto-save-probe-command
+                   (lambda ()
+                     (interactive)
+                     (neo-stop-command-loop-after-idle-auto-save-probe)))
+             (keymap-set global-map "q"
+                         'neo-stop-idle-auto-save-probe-command))"#,
+    )
+    .expect("install idle auto-save command-loop probe");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let _tx_keepalive = tx.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('a'),
+        ))
+        .expect("send editing keypress");
+        // Bound the test even while the idle auto-save implementation is
+        // absent: this real command stops the loop after the GNU deadline.
+        thread::sleep(Duration::from_millis(1_950));
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char('q'),
+        ))
+        .expect("send stop keypress");
+    });
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should exit through the stop command");
+
+    assert_eq!(
+        ev.eval_symbol("neo-idle-auto-save-hook-count")
+            .expect("idle auto-save hook count"),
+        Value::fixnum(1),
+        "one second of post-command idleness must trigger one auto-save pass"
+    );
 }
 
 /// Finding 1 — pressing a truly-unbound key must run the per-command
