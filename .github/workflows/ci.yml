@@ -275,7 +275,7 @@ jobs:
       - *install_rust
       - *cache_cargo
 
-      - name: Measure cargo build --release
+      - name: cargo build --release
         run: cargo build --release
 
       - name: Build fresh release runtime
