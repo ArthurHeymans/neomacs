@@ -83,9 +83,7 @@ fn div_o0_file_remote_and_local_name() {
 #[test]
 fn div_o0_abbreviate_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"~/Projects/github.com/eval-exec/neomacs/neovm-oracle-tests/\" \"/absolute/unmodified/path\" \"c\" \"../b/c\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/\" \"/absolute/unmodified/path\" \"c\" \"../b/c\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (abbreviate-file-name default-directory)
