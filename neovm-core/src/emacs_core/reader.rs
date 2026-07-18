@@ -541,6 +541,38 @@ fn find_or_create_minibuffer_buffer_in_state(
     minibuf_id
 }
 
+/// Capture the directory that a newly activated minibuffer should inherit.
+///
+/// GNU `read_minibuf` snapshots `BVAR (current_buffer, directory)` before it
+/// switches to `*Minibuf-N*`, then installs that value in the minibuffer after
+/// `set_minibuffer_mode`.  The fallback scan is GNU's minibuffer-only-frame
+/// defense for callers whose current buffer has no string directory.
+fn minibuffer_ambient_directory_in_state(buffers: &crate::buffer::BufferManager) -> Option<Value> {
+    let current = buffers.current_buffer_id();
+    current
+        .and_then(|id| buffers.get(id))
+        .and_then(|buffer| buffer.buffer_local_value("default-directory"))
+        .filter(|value| value.is_string())
+        .or_else(|| {
+            buffers.buffer_list().into_iter().find_map(|id| {
+                buffers
+                    .get(id)
+                    .and_then(|buffer| buffer.buffer_local_value("default-directory"))
+                    .filter(|value| value.is_string())
+            })
+        })
+}
+
+fn install_minibuffer_ambient_directory_in_state(
+    buffers: &mut crate::buffer::BufferManager,
+    minibuf_id: crate::buffer::BufferId,
+    ambient_directory: Option<Value>,
+) {
+    if let Some(directory) = ambient_directory {
+        let _ = buffers.set_buffer_local_property(minibuf_id, "default-directory", directory);
+    }
+}
+
 fn run_minibuffer_mode_if_bound(eval: &mut super::eval::Context, mode: &str) -> EvalResult {
     if eval.obarray().symbol_function(mode).is_some() {
         eval.apply0(Value::symbol(mode))
@@ -1128,6 +1160,10 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         .copied()
         .unwrap_or(Value::NIL);
 
+    // GNU `read_minibuf` captures the caller's directory before switching to
+    // *Minibuf-N*, then installs it after minibuffer-mode has reset locals.
+    let ambient_directory = minibuffer_ambient_directory_in_state(buffers);
+
     // Find or create *Minibuf-N* buffer
     let minibuf_depth = minibuffers.depth() + 1;
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
@@ -1145,6 +1181,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         buffers.switch_current(minibuf_id);
     }
     run_active_mode()?;
+    install_minibuffer_ambient_directory_in_state(buffers, minibuf_id, ambient_directory);
 
     // Clear the minibuffer buffer and insert prompt + initial input
     let prompt_properties = obarray
@@ -1629,6 +1666,10 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         .unwrap_or(Value::NIL);
     let recursive_depth = shared.recursive_command_loop_depth();
 
+    // GNU `read_minibuf` captures the caller's directory before switching to
+    // *Minibuf-N*, then installs it after minibuffer-mode has reset locals.
+    let ambient_directory = minibuffer_ambient_directory_in_state(&shared.buffers);
+
     let minibuf_depth = shared.minibuffers.depth() + 1;
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
@@ -1643,6 +1684,11 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         shared.buffers.switch_current(minibuf_id);
     }
     run_minibuffer_mode_if_bound(shared, "minibuffer-mode")?;
+    install_minibuffer_ambient_directory_in_state(
+        &mut shared.buffers,
+        minibuf_id,
+        ambient_directory,
+    );
 
     let prompt_properties = shared
         .obarray

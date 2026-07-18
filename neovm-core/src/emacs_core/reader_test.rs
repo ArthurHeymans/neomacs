@@ -956,6 +956,39 @@ fn read_from_minibuffer_runs_minibuffer_modes_to_clear_stale_locals() {
 }
 
 #[test]
+fn read_from_minibuffer_uses_calling_buffers_default_directory_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue space");
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r#"(progn
+                 (with-current-buffer (get-buffer-create " *Minibuf-1*")
+                   (setq default-directory "/tmp/launch-directory/"))
+                 (let ((default-directory "/tmp/project-root/")
+                       (seen nil)
+                       (map (make-sparse-keymap)))
+                   (define-key map " "
+                     (lambda ()
+                       (interactive)
+                       (setq seen default-directory)
+                       (exit-minibuffer)))
+                   (read-from-minibuffer "Prompt: " nil map)
+                   seen))"#,
+        )
+        .expect("eval should return the directory visible to a minibuffer command");
+
+    assert_eq!(format!("{result}"), r#""/tmp/project-root/""#);
+}
+
+#[test]
 fn shared_read_from_minibuffer_runtime_swallows_exit_hook_signals() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
