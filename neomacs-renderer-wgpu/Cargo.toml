@@ -25,11 +25,12 @@ bytemuck.workspace = true
 pollster.workspace = true
 ash.workspace = true
 image.workspace = true
+imagesize.workspace = true
+flate2.workspace = true
 libc.workspace = true
-librsvg.workspace = true
-cairo-rs.workspace = true
-gio.workspace = true
-glib.workspace = true
+resvg.workspace = true
+svgtypes.workspace = true
+simplecss.workspace = true
 gstreamer = { workspace = true, optional = true }
 gstreamer-video = { workspace = true, optional = true }
 gstreamer-app = { workspace = true, optional = true }

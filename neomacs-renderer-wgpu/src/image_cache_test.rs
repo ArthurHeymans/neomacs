@@ -47,11 +47,66 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
     );
 }
 
+#[test]
+fn decoder_worker_survives_a_panicking_request() {
+    let (request_tx, request_rx) = mpsc::channel();
+    let (outcome_tx, outcome_rx) = mpsc::channel();
+    let worker = thread::spawn(move || {
+        ImageCache::decoder_thread_pooled(0, Arc::new(Mutex::new(request_rx)), outcome_tx)
+    });
+    let mut loads = ImageLoadLifecycle::default();
+    let panicking = loads.begin(61);
+    let following = loads.begin(62);
+
+    request_tx
+        .send(DecodeRequest {
+            load: panicking,
+            source: ImageSource::Panic,
+            max_width: 0,
+            max_height: 0,
+            realization: ImageRealization::new(1.0, 1.0),
+            fg_color: 0,
+            bg_color: 0,
+        })
+        .unwrap();
+    request_tx
+        .send(DecodeRequest {
+            load: following,
+            source: ImageSource::Data(png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1)),
+            max_width: 0,
+            max_height: 0,
+            realization: ImageRealization::new(1.0, 1.0),
+            fg_color: 0,
+            bg_color: 0,
+        })
+        .unwrap();
+    drop(request_tx);
+
+    assert!(matches!(
+        outcome_rx.recv().unwrap(),
+        WorkerDecodeOutcome::Failed(load) if load == panicking
+    ));
+    assert!(matches!(
+        outcome_rx.recv().unwrap(),
+        WorkerDecodeOutcome::Ready(decoded) if decoded.load == following
+    ));
+    worker.join().unwrap();
+}
+
 fn png_bytes(pixels: Vec<u8>, width: u32, height: u32) -> Vec<u8> {
     let image = image::RgbaImage::from_raw(width, height, pixels).unwrap();
     let mut bytes = Cursor::new(Vec::new());
     image::DynamicImage::ImageRgba8(image)
         .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    bytes.into_inner()
+}
+
+fn encoded_image_bytes(format: image::ImageFormat) -> Vec<u8> {
+    let image = image::RgbaImage::from_raw(1, 1, vec![0x12, 0x34, 0x56, 0xff]).unwrap();
+    let mut bytes = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut bytes, format)
         .unwrap();
     bytes.into_inner()
 }
@@ -131,6 +186,29 @@ fn decoded_dimensionless_svg_uses_gnu_visible_geometry() {
 }
 
 #[test]
+fn dimensionless_svg_ignores_inline_style_percentages_during_measurement() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <rect width="80" height="40" fill="#ff0000"/>
+        <path d="M 0 40 L 80 40" style="stroke: #000000; stroke-width: 100%"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+}
+
+#[test]
+fn dimensionless_svg_ignores_stylesheet_percentages_during_measurement() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <style>.relative { stroke: #000000; stroke-width: 100% }</style>
+        <rect width="80" height="40" fill="#ff0000"/>
+        <path class="relative" d="M 0 40 L 80 40"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+}
+
+#[test]
 fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
     let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
         <rect width="80" height="40" fill="#000000"/>
@@ -146,6 +224,386 @@ fn decoded_dimensionless_svg_scales_document_coordinates_to_requested_size() {
         &[0xff, 0x00, 0x00, 0xff],
         "the natural-coordinate bottom band must be scaled into the constrained output"
     );
+}
+
+#[test]
+fn oversized_svg_input_is_rejected_before_parsing() {
+    let mut data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">"#.to_vec();
+    data.resize(crate::svg::MAX_SVG_INPUT_SIZE + 1, b' ');
+    data.extend_from_slice(b"</svg>");
+
+    assert!(ImageCache::query_data_dimensions(&data).is_none());
+    assert!(ImageCache::decode_data_with_metadata(&data, 0, 0, (0, 0)).is_none());
+}
+
+#[test]
+fn svgz_expanding_past_the_svg_input_limit_is_rejected() {
+    use std::io::Write;
+
+    let mut svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">"#.to_vec();
+    svg.resize(crate::svg::MAX_SVG_INPUT_SIZE + 1, b' ');
+    svg.extend_from_slice(b"</svg>");
+
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    encoder.write_all(&svg).unwrap();
+    let compressed = encoder.finish().unwrap();
+    assert!(
+        compressed.len() < 64 * 1024,
+        "fixture must be a compact SVGZ"
+    );
+
+    assert!(ImageCache::query_data_dimensions(&compressed).is_none());
+    assert!(ImageCache::decode_data_with_metadata(&compressed, 0, 0, (0, 0)).is_none());
+}
+
+#[test]
+fn svg_physical_units_are_resolved_at_96_dpi() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="1in" height="25.4mm">
+        <rect width="100%" height="100%" fill="#123456"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (96, 96));
+}
+
+#[test]
+fn svg_single_explicit_dimension_uses_view_box_aspect_ratio() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="200" viewBox="0 0 100 50">
+        <rect width="100" height="50" fill="#123456"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (200, 100));
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert_eq!((decoded.raster_width, decoded.raster_height), (200, 100));
+    assert_eq!(&decoded.data[0..4], &[0x12, 0x34, 0x56, 0xff]);
+    assert_eq!(
+        &decoded.data[decoded.data.len() - 4..],
+        &[0x12, 0x34, 0x56, 0xff]
+    );
+}
+
+#[test]
+fn svg_height_only_and_view_box_only_documents_preserve_aspect_ratio() {
+    let height_only =
+        br#"<svg xmlns="http://www.w3.org/2000/svg" height="100" viewBox="0 0 100 50"/>"#;
+    let view_box_only = br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"/>"#;
+
+    let height_only = ImageCache::query_data_dimensions(height_only).unwrap();
+    let view_box_only = ImageCache::query_data_dimensions(view_box_only).unwrap();
+    assert_eq!((height_only.width, height_only.height), (200, 100));
+    assert_eq!((view_box_only.width, view_box_only.height), (100, 50));
+}
+
+#[test]
+fn svg_percentage_root_dimensions_defer_to_view_box_or_visible_geometry() {
+    let with_view_box = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 100 50"/>"#;
+    let dimensionless = br#"<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"><rect width="80" height="40"/></svg>"#;
+
+    let with_view_box = ImageCache::query_data_dimensions(with_view_box).unwrap();
+    let dimensionless = ImageCache::query_data_dimensions(dimensionless).unwrap();
+    assert_eq!((with_view_box.width, with_view_box.height), (100, 50));
+    assert_eq!((dimensionless.width, dimensionless.height), (80, 40));
+}
+
+#[test]
+fn svg_rejects_empty_malformed_and_invalid_dimension_documents() {
+    for data in [
+        br#"<svg xmlns="http://www.w3.org/2000/svg"/>"#.as_slice(),
+        br#"<svg xmlns="http://www.w3.org/2000/svg">"#.as_slice(),
+        br#"<svg xmlns="http://www.w3.org/2000/svg" width="0" height="10" viewBox="0 0 20 10"/>"#.as_slice(),
+        br#"<svg xmlns="http://www.w3.org/2000/svg" width="NaN" height="10" viewBox="0 0 20 10"/>"#.as_slice(),
+        br#"<svg xmlns="http://www.w3.org/2000/svg" width="1e999" height="10" viewBox="0 0 20 10"/>"#.as_slice(),
+        b"\xff\xfe\xfd".as_slice(),
+    ] {
+        assert!(ImageCache::query_data_dimensions(data).is_none());
+        assert!(ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).is_none());
+    }
+}
+
+#[test]
+fn recursive_svg_references_fail_closed_without_panicking() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+        <defs><g id="recursive"><use href="#recursive"/></g></defs>
+        <use href="#recursive"/>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
+}
+
+#[test]
+fn dimensionless_svg_fallback_geometry_includes_strokes() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <path d="M 5 5 L 15 5" stroke="#123456" stroke-width="10"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+}
+
+#[test]
+fn dimensionless_svg_fallback_keeps_gnu_positive_extent_for_negative_origins() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <rect x="-10" y="-5" width="30" height="15" fill="#123456"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (20, 10));
+}
+
+#[test]
+fn dimensionless_svg_fallback_includes_filter_layer_extent() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="blur" filterUnits="userSpaceOnUse" x="0" y="0" width="20" height="20">
+                <feGaussianBlur stdDeviation="2"/>
+            </filter>
+        </defs>
+        <rect x="5" y="5" width="10" height="10" fill="#123456" filter="url(#blur)"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+    assert_eq!((dimensions.width, dimensions.height), (20, 20));
+}
+
+#[test]
+fn dimensionless_svg_preserves_object_bounding_box_filter_percentages() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="1"/>
+            </filter>
+        </defs>
+        <rect x="10" y="10" width="10" height="10" fill="#123456" filter="url(#blur)"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+
+    assert_eq!((dimensions.width, dimensions.height), (25, 25));
+}
+
+#[test]
+fn dimensionless_svg_fallback_includes_group_transforms() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <g transform="translate(5 3)">
+            <rect width="10" height="7" fill="#123456"/>
+        </g>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+
+    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+}
+
+#[test]
+fn dimensionless_svg_fallback_includes_root_transforms() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" transform="translate(5 3)">
+        <rect width="10" height="7" fill="#123456"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+
+    assert_eq!((dimensions.width, dimensions.height), (15, 10));
+}
+
+#[test]
+fn dimensionless_svg_preserves_percentages_inside_a_nested_viewport() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <svg width="80" height="40">
+            <rect width="100%" height="100%" fill="#123456"/>
+        </svg>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+
+    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+}
+
+#[test]
+fn dimensionless_svg_preserves_percentages_on_a_resolved_root_axis() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80">
+        <rect width="100%" height="40" fill="#123456"/>
+    </svg>"##;
+
+    let dimensions = ImageCache::query_data_dimensions(data).unwrap();
+
+    assert_eq!((dimensions.width, dimensions.height), (80, 40));
+}
+
+#[test]
+fn dimensionless_svg_preserves_percentages_inside_a_symbol_viewport() {
+    let symbol = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <symbol id="tile" viewBox="0 0 80 40">
+                <rect width="100%" height="100%" fill="#123456"/>
+            </symbol>
+        </defs>
+        <use href="#tile" width="80" height="40"/>
+    </svg>"##;
+
+    let symbol = ImageCache::query_data_dimensions(symbol).unwrap();
+
+    assert_eq!((symbol.width, symbol.height), (80, 40));
+}
+
+#[test]
+fn dimensionless_svg_fallback_includes_markers_and_rasterization_applies_clipping() {
+    let marker = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <marker id="dot" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="5" refY="5">
+                <circle cx="5" cy="5" r="5" fill="#123456"/>
+            </marker>
+        </defs>
+        <path d="M 5 5 L 15 5" marker-end="url(#dot)"/>
+    </svg>"##;
+    let clipped_data = br##"<svg xmlns="http://www.w3.org/2000/svg">
+        <defs><clipPath id="clip"><rect width="10" height="10"/></clipPath></defs>
+        <rect width="20" height="20" clip-path="url(#clip)" fill="#123456"/>
+    </svg>"##;
+
+    let marker = ImageCache::query_data_dimensions(marker).unwrap();
+    let clipped = ImageCache::query_data_dimensions(clipped_data).unwrap();
+    assert_eq!((marker.width, marker.height), (20, 10));
+    assert_eq!((clipped.width, clipped.height), (20, 20));
+
+    let clipped = ImageCache::decode_data_with_metadata(clipped_data, 0, 0, (0, 0)).unwrap();
+    let inside = ((5 * clipped.raster_width + 5) * 4) as usize;
+    let outside = ((15 * clipped.raster_width + 15) * 4) as usize;
+    assert_eq!(&clipped.data[inside..inside + 4], &[0x12, 0x34, 0x56, 0xff]);
+    assert_eq!(&clipped.data[outside..outside + 4], &[0, 0, 0, 0]);
+}
+
+#[test]
+fn svg_masks_gradients_and_inline_css_survive_rasterization() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1">
+        <style>.paint { fill: url(#gradient); color: #123456 }</style>
+        <defs>
+            <linearGradient id="gradient"><stop stop-color="currentColor"/><stop offset="1" stop-color="#abcdef"/></linearGradient>
+            <mask id="half"><rect width="2" height="1" fill="white" fill-opacity="0.5"/></mask>
+        </defs>
+        <rect class="paint" width="2" height="1" color="#123456" mask="url(#half)"/>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert!(decoded.data[3].abs_diff(128) <= 1);
+    assert!(decoded.data[7].abs_diff(128) <= 1);
+    assert_ne!(&decoded.data[..3], &decoded.data[4..7]);
+}
+
+#[test]
+fn svg_group_transforms_are_applied_before_rasterization() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">
+        <g transform="translate(5 0)">
+            <rect width="5" height="10" fill="#123456"/>
+        </g>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert_eq!(&decoded.data[0..4], &[0, 0, 0, 0]);
+    let translated_pixel = (5 * 4) as usize;
+    assert_eq!(
+        &decoded.data[translated_pixel..translated_pixel + 4],
+        &[0x12, 0x34, 0x56, 0xff]
+    );
+}
+
+#[test]
+fn svg_does_not_load_images_relative_to_the_process_working_directory() {
+    let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">
+        <image href="neomacs-display-runtime/assets/window-icon.svg" width="4" height="4"/>
+    </svg>"#;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
+}
+
+#[test]
+fn svg_keeps_embedded_data_images_enabled() {
+    let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">
+        <image width="1" height="1" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3Crect%20width%3D%221%22%20height%3D%221%22%20fill%3D%22%23ff0000%22%2F%3E%3C%2Fsvg%3E"/>
+    </svg>"#;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert_eq!(&decoded.data, &[0xff, 0x00, 0x00, 0xff]);
+}
+
+#[test]
+fn nested_svg_cannot_escape_the_external_resource_policy() {
+    let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">
+        <image width="1" height="1" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3Cimage%20href%3D%22neomacs-display-runtime%2Fassets%2Fwindow-icon.svg%22%20width%3D%221%22%20height%3D%221%22%2F%3E%3C%2Fsvg%3E"/>
+    </svg>"#;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert!(decoded.data.chunks_exact(4).all(|pixel| pixel[3] == 0));
+}
+
+#[test]
+fn embedded_raster_formats_and_svgz_remain_enabled() {
+    use resvg::usvg::ImageKind;
+    use std::io::Write;
+
+    let options = resvg::usvg::Options::default();
+    for (mime, format, expected) in [
+        ("image/png", image::ImageFormat::Png, "png"),
+        ("image/jpeg", image::ImageFormat::Jpeg, "jpeg"),
+        ("image/gif", image::ImageFormat::Gif, "gif"),
+        ("image/webp", image::ImageFormat::WebP, "webp"),
+    ] {
+        let kind = crate::svg::resolve_embedded_image(
+            mime,
+            Arc::new(encoded_image_bytes(format)),
+            &options,
+        )
+        .unwrap();
+        assert!(
+            matches!(
+                (&kind, expected),
+                (ImageKind::PNG(_), "png")
+                    | (ImageKind::JPEG(_), "jpeg")
+                    | (ImageKind::GIF(_), "gif")
+                    | (ImageKind::WEBP(_), "webp")
+            ),
+            "wrong embedded image kind for {mime}"
+        );
+    }
+
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    encoder
+        .write_all(br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>"#)
+        .unwrap();
+    let svgz = encoder.finish().unwrap();
+    assert!(matches!(
+        crate::svg::resolve_embedded_image("image/svg+xml-compressed", Arc::new(svgz), &options,),
+        Some(ImageKind::SVG(_))
+    ));
+}
+
+#[test]
+fn svg_text_uses_the_shared_system_font_database() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="24">
+        <text x="1" y="18" font-family="sans-serif" font-size="18" fill="#123456">SVG</text>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert!(decoded.data.chunks_exact(4).any(|pixel| pixel[3] != 0));
+}
+
+#[test]
+fn semitransparent_svg_pixels_are_returned_as_straight_rgba() {
+    let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">
+        <rect width="1" height="1" fill="#804020" fill-opacity="0.5"/>
+    </svg>"##;
+
+    let decoded = ImageCache::decode_data_with_metadata(data, 0, 0, (0, 0)).unwrap();
+    assert_eq!(decoded.data[3], 0x80);
+    for (actual, expected) in decoded.data[..3].iter().zip([0x80_u8, 0x40, 0x20]) {
+        assert!(
+            actual.abs_diff(expected) <= 1,
+            "RGB must be straight rather than alpha-premultiplied"
+        );
+    }
 }
 
 #[test]

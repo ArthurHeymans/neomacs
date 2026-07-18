@@ -38,7 +38,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential git pkg-config cmake m4 \
             libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
-            libharfbuzz-dev libcairo2-dev libglib2.0-dev libpango1.0-dev \
+            libglib2.0-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev \
@@ -148,7 +148,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential git pkg-config cmake m4 \
             libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
-            libharfbuzz-dev libcairo2-dev libglib2.0-dev libpango1.0-dev \
+            libglib2.0-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev libxkbcommon-x11-dev \
@@ -225,7 +225,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install system dependencies (brew)
-        run: brew install pkg-config cairo pango gstreamer
+        run: brew install pkg-config gstreamer
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable

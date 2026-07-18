@@ -115,6 +115,7 @@ enumflags2 = "0.7"
 bytemuck = { version = "1.18", features = ["derive"] }
 memmap2 = "0.9"
 image = "0.25"
+imagesize = "0.14"
 allsorts = "0.16.1"
 encoding_rs = "0.8"
 
@@ -148,10 +149,8 @@ raw-window-handle = "0.6"
 ash = "0.38"
 pollster = "0.4"
 resvg = "0.47"
-librsvg = "2.62"
-cairo-rs = "0.22"
-gio = "0.22"
-glib = "0.22"
+svgtypes = "0.16.1"
+simplecss = "0.2.2"
 cosmic-text = "0.18.2"
 # >=0.2.9 required: 0.2.7 rebuilt the TrueType hinting instance for every
 # rasterized glyph (dfrg/swash#114 -- default-weight variation coords made the

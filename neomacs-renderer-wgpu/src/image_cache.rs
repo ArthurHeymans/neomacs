@@ -11,6 +11,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
@@ -302,6 +303,8 @@ struct DecodeRequest {
 enum ImageSource {
     File(String),
     Data(Vec<u8>),
+    #[cfg(test)]
+    Panic,
     /// Raw ARGB32 pixel data (A,R,G,B byte order, 4 bytes per pixel)
     RawArgb32 {
         data: Vec<u8>,
@@ -427,60 +430,62 @@ impl ImageCache {
             match request {
                 Ok(request) => {
                     tracing::debug!("Thread {} decoding image {}", thread_id, request.load.id);
-                    let fg_bg = (request.fg_color, request.bg_color);
-                    let result = match request.source {
-                        ImageSource::File(path) => Self::decode_file(
-                            &path,
-                            request.max_width,
-                            request.max_height,
-                            fg_bg,
-                            request.realization,
-                        ),
-                        ImageSource::Data(data) => Self::decode_data(
-                            &data,
-                            request.max_width,
-                            request.max_height,
-                            fg_bg,
-                            request.realization,
-                        ),
-                        ImageSource::RawArgb32 {
-                            data,
-                            width,
-                            height,
-                            stride,
-                        } => Self::convert_argb32_to_rgba(
-                            &data,
-                            width,
-                            height,
-                            stride,
-                            request.max_width,
-                            request.max_height,
-                        )
-                        .map(DecodedPixels::from_raster_tuple),
-                        ImageSource::RawRgb24 {
-                            data,
-                            width,
-                            height,
-                            stride,
-                        } => Self::convert_rgb24_to_rgba(
-                            &data,
-                            width,
-                            height,
-                            stride,
-                            request.max_width,
-                            request.max_height,
-                        )
-                        .map(DecodedPixels::from_raster_tuple),
-                    };
+                    let DecodeRequest {
+                        load,
+                        source,
+                        max_width,
+                        max_height,
+                        realization,
+                        fg_color,
+                        bg_color,
+                    } = request;
+                    let result = catch_unwind(AssertUnwindSafe(|| {
+                        let fg_bg = (fg_color, bg_color);
+                        match source {
+                            #[cfg(test)]
+                            ImageSource::Panic => panic!("injected decoder panic"),
+                            ImageSource::File(path) => {
+                                Self::decode_file(&path, max_width, max_height, fg_bg, realization)
+                            }
+                            ImageSource::Data(data) => {
+                                Self::decode_data(&data, max_width, max_height, fg_bg, realization)
+                            }
+                            ImageSource::RawArgb32 {
+                                data,
+                                width,
+                                height,
+                                stride,
+                            } => Self::convert_argb32_to_rgba(
+                                &data, width, height, stride, max_width, max_height,
+                            )
+                            .map(DecodedPixels::from_raster_tuple),
+                            ImageSource::RawRgb24 {
+                                data,
+                                width,
+                                height,
+                                stride,
+                            } => Self::convert_rgb24_to_rgba(
+                                &data, width, height, stride, max_width, max_height,
+                            )
+                            .map(DecodedPixels::from_raster_tuple),
+                        }
+                    }));
 
-                    if let Some(pixels) = result {
-                        let _ = tx.send(WorkerDecodeOutcome::Ready(Self::decoded_image(
-                            request.load,
-                            pixels,
-                        )));
-                    } else {
-                        let _ = tx.send(WorkerDecodeOutcome::Failed(request.load));
-                    }
+                    let outcome = match result {
+                        Ok(Some(pixels)) => {
+                            WorkerDecodeOutcome::Ready(Self::decoded_image(load, pixels))
+                        }
+                        Ok(None) => WorkerDecodeOutcome::Failed(load),
+                        Err(_) => {
+                            tracing::warn!(
+                                "Decoder thread {} recovered from a panic while decoding image {}",
+                                thread_id,
+                                load.id
+                            );
+                            WorkerDecodeOutcome::Failed(load)
+                        }
+                    };
+                    let _ = tx.send(outcome);
                 }
                 Err(_) => {
                     // Channel closed, exit thread
@@ -527,7 +532,7 @@ impl ImageCache {
         {
             return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
-        // Fallback: try SVG via the shared librsvg backend.
+        // Fallback: try SVG via the shared vector backend.
         let data = std::fs::read(path).ok()?;
         Self::decode_svg_data(&data, max_width, max_height, realization)
     }
@@ -553,7 +558,7 @@ impl ImageCache {
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg, max_width, max_height) {
             return DecodedPixels::from_raster_tuple(result).realize_bitmap(realization);
         }
-        // Fallback: try SVG via the shared librsvg backend.
+        // Fallback: try SVG via the shared vector backend.
         Self::decode_svg_data(data, max_width, max_height, realization)
     }
 

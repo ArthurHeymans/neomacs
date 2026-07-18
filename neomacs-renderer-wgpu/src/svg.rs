@@ -4,8 +4,13 @@
 //! Otherwise a dimensionless document can be measured with one set of layout
 //! rules and painted with another.
 
-use cairo::{Format, ImageSurface};
-use rsvg::{CairoRenderer, Length, LengthUnit, Loader, SvgHandle};
+use resvg::{tiny_skia, usvg};
+use std::borrow::Cow;
+use std::io::Read;
+use std::ops::Range;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::str::FromStr;
+use std::sync::{Arc, OnceLock};
 
 use crate::image_cache::constrain_dimensions;
 use neomacs_display_protocol::ImageRealization;
@@ -20,13 +25,39 @@ pub(crate) struct DecodedSvg {
     pub(crate) rgba: Vec<u8>,
 }
 
+struct LoadedSvg {
+    tree: usvg::Tree,
+    natural_width: f64,
+    natural_height: f64,
+}
+
+#[derive(Debug)]
+struct RootGeometry {
+    width: Option<f64>,
+    height: Option<f64>,
+    width_value_range: Option<Range<usize>>,
+    height_value_range: Option<Range<usize>>,
+    view_box: Option<(f64, f64)>,
+    start_tag_insert_pos: usize,
+}
+
 const DEFAULT_DPI: f64 = 96.0;
+pub(crate) const MAX_SVG_INPUT_SIZE: usize = 8 * 1024 * 1024;
+const MAX_SVG_RASTER_BYTES: usize = 64 * 1024 * 1024;
+const FALLBACK_VIEWPORT_SIZE: f32 = 0.001;
 
 pub(crate) fn query_dimensions(data: &[u8]) -> Option<(u32, u32)> {
-    let handle = load(data)?;
-    let renderer = CairoRenderer::new(&handle);
-    let (width, height) = natural_dimensions(&renderer)?;
-    Some((width.ceil() as u32, height.ceil() as u32))
+    catch_unwind(AssertUnwindSafe(|| query_dimensions_inner(data)))
+        .ok()
+        .flatten()
+}
+
+fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
+    let loaded = load(data)?;
+    Some((
+        loaded.natural_width.ceil() as u32,
+        loaded.natural_height.ceil() as u32,
+    ))
 }
 
 pub(crate) fn decode(
@@ -35,48 +66,56 @@ pub(crate) fn decode(
     max_height: u32,
     realization: ImageRealization,
 ) -> Option<DecodedSvg> {
-    let handle = load(data)?;
-    let renderer = CairoRenderer::new(&handle);
-    let (natural_width, natural_height) = natural_dimensions(&renderer)?;
+    catch_unwind(AssertUnwindSafe(|| {
+        decode_inner(data, max_width, max_height, realization)
+    }))
+    .ok()
+    .flatten()
+}
+
+fn decode_inner(
+    data: &[u8],
+    max_width: u32,
+    max_height: u32,
+    realization: ImageRealization,
+) -> Option<DecodedSvg> {
+    let loaded = load(data)?;
     let (base_width, base_height) = constrain_dimensions(
-        natural_width.ceil() as u32,
-        natural_height.ceil() as u32,
+        loaded.natural_width.ceil() as u32,
+        loaded.natural_height.ceil() as u32,
         max_width,
         max_height,
     );
     let layout_width = realization.layout_dimension(base_width);
     let layout_height = realization.layout_dimension(base_height);
     // Match GNU `scale_image_size`: ceil so fractional device scales never
-    // discard a partial SVG pixel.  Constrain once more to the GPU limit.
+    // discard a partial SVG pixel. Constrain once more to the GPU limit.
     let (raster_width, raster_height) = constrain_dimensions(
         realization.raster_dimension(layout_width),
         realization.raster_dimension(layout_height),
         0,
         0,
     );
+    let raster_bytes = (raster_width as usize)
+        .checked_mul(raster_height as usize)?
+        .checked_mul(4)?;
+    if raster_bytes > MAX_SVG_RASTER_BYTES {
+        return None;
+    }
 
-    let mut surface =
-        ImageSurface::create(Format::ARgb32, raster_width as i32, raster_height as i32).ok()?;
-    let context = cairo::Context::new(&surface).ok()?;
+    let mut pixmap = tiny_skia::Pixmap::new(raster_width, raster_height)?;
     // Render in the document's measured coordinate space, then scale that
-    // complete space into the constrained output.  A dimensionless SVG has
-    // no intrinsic viewport for librsvg to resize, so passing the smaller
-    // output rectangle directly would clip absolute coordinates (including
-    // CSS-pixel font sizes) instead of scaling them.  This is equivalent to
-    // GNU Emacs's generated outer SVG with a natural-size viewBox.
-    context.scale(
-        f64::from(raster_width) / natural_width,
-        f64::from(raster_height) / natural_height,
+    // complete space into the constrained output. This keeps dimensionless
+    // documents and GNU's generated outer-viewBox behavior coherent.
+    let transform = tiny_skia::Transform::from_scale(
+        raster_width as f32 / loaded.natural_width as f32,
+        raster_height as f32 / loaded.natural_height as f32,
     );
-    let viewport = cairo::Rectangle::new(0.0, 0.0, natural_width, natural_height);
-    renderer.render_document(&context, &viewport).ok()?;
-    drop(context);
-
-    surface.flush();
-    let stride = surface.stride() as usize;
-    let pixels = surface.data().ok()?;
-    let rgba = cairo_argb32_to_rgba(&pixels, stride, raster_width, raster_height);
-    drop(pixels);
+    resvg::render(&loaded.tree, transform, &mut pixmap.as_mut());
+    let rgba = pixmap.take_demultiplied();
+    if rgba.len() != raster_bytes {
+        return None;
+    }
 
     Some(DecodedSvg {
         layout_width,
@@ -87,87 +126,610 @@ pub(crate) fn decode(
     })
 }
 
-fn load(data: &[u8]) -> Option<SvgHandle> {
-    let bytes = glib::Bytes::from(data);
-    let stream = gio::MemoryInputStream::from_bytes(&bytes);
-    Loader::new()
-        .read_stream(&stream, None::<&gio::File>, None::<&gio::Cancellable>)
-        .ok()
-}
-
-fn natural_dimensions(renderer: &CairoRenderer<'_>) -> Option<(f64, f64)> {
-    if let Some((width, height)) = renderer.intrinsic_size_in_pixels()
-        && valid_dimensions(width, height)
+fn load(data: &[u8]) -> Option<LoadedSvg> {
+    let data = bounded_svg_data(data)?;
+    let geometry = root_geometry(data.as_ref())?;
+    if let Some((natural_width, natural_height)) = geometry.view_box_dimensions() {
+        return load_with_dimensions(data, geometry, natural_width, natural_height);
+    }
+    if let (Some(natural_width), Some(natural_height)) = (geometry.width, geometry.height)
+        && valid_dimensions(natural_width, natural_height)
     {
-        return Some((width, height));
+        return load_with_dimensions(data, geometry, natural_width, natural_height);
     }
 
-    let intrinsic = renderer.intrinsic_dimensions();
-    let explicit_width = absolute_length_in_pixels(&intrinsic.width);
-    let explicit_height = absolute_length_in_pixels(&intrinsic.height);
-    let view_box = intrinsic
-        .vbox
-        .filter(|rect| valid_dimensions(rect.width(), rect.height()));
-
-    match (explicit_width, explicit_height, view_box.as_ref()) {
-        (Some(width), Some(height), _) if valid_dimensions(width, height) => {
-            return Some((width, height));
-        }
-        (Some(width), None, Some(view_box)) if width > 0.0 => {
-            return Some((width, width * view_box.height() / view_box.width()));
-        }
-        (None, Some(height), Some(view_box)) if height > 0.0 => {
-            return Some((height * view_box.width() / view_box.height(), height));
-        }
-        (_, _, Some(view_box)) => return Some((view_box.width(), view_box.height())),
-        _ => {}
-    }
-
-    // This is GNU Emacs's fallback for an SVG without usable intrinsic
-    // dimensions: ask librsvg for the visible ink geometry in a maximal
-    // viewport, then include any positive origin offset in the extent.
-    let viewport = cairo::Rectangle::new(0.0, 0.0, f64::from(u32::MAX), f64::from(u32::MAX));
-    let (ink, _) = renderer.geometry_for_layer(None, &viewport).ok()?;
-    let width = ink.x() + ink.width();
-    let height = ink.y() + ink.height();
-    valid_dimensions(width, height).then_some((width, height))
+    // A dimensionless SVG has no viewport in GNU/librsvg. Relative child
+    // lengths therefore cannot establish its natural size. Measure absolute
+    // content first, then give the original document that measured viewport
+    // so percentages (typically a 100% background) paint correctly.
+    let measurement_data = suppress_unresolved_percentages(data.as_ref())?;
+    let options = svg_options(&geometry);
+    let measurement_tree = usvg::Tree::from_data(measurement_data.as_ref(), &options).ok()?;
+    let (natural_width, natural_height) = fallback_dimensions(&measurement_tree)?;
+    load_with_dimensions(data, geometry, natural_width, natural_height)
 }
 
-fn absolute_length_in_pixels(length: &Length) -> Option<f64> {
-    let value = length.length;
-    match length.unit {
-        LengthUnit::Px => Some(value),
-        LengthUnit::In => Some(value * DEFAULT_DPI),
-        LengthUnit::Cm => Some(value * DEFAULT_DPI / 2.54),
-        LengthUnit::Mm => Some(value * DEFAULT_DPI / 25.4),
-        LengthUnit::Pt => Some(value * DEFAULT_DPI / 72.0),
-        LengthUnit::Pc => Some(value * DEFAULT_DPI / 6.0),
+fn load_with_dimensions(
+    data: Cow<'_, [u8]>,
+    geometry: RootGeometry,
+    natural_width: f64,
+    natural_height: f64,
+) -> Option<LoadedSvg> {
+    let (data, geometry) = normalize_root_dimensions(data, geometry, natural_width, natural_height);
+    let options = svg_options(&geometry);
+    let tree = usvg::Tree::from_data(data.as_ref(), &options).ok()?;
+    Some(LoadedSvg {
+        tree,
+        natural_width,
+        natural_height,
+    })
+}
+
+fn bounded_svg_data(data: &[u8]) -> Option<Cow<'_, [u8]>> {
+    if data.len() > MAX_SVG_INPUT_SIZE {
+        return None;
+    }
+    if !data.starts_with(&[0x1f, 0x8b]) {
+        return Some(Cow::Borrowed(data));
+    }
+
+    let mut decoded = Vec::new();
+    flate2::read::GzDecoder::new(data)
+        .take((MAX_SVG_INPUT_SIZE + 1) as u64)
+        .read_to_end(&mut decoded)
+        .ok()?;
+    (decoded.len() <= MAX_SVG_INPUT_SIZE).then_some(Cow::Owned(decoded))
+}
+
+fn normalize_root_dimensions(
+    data: Cow<'_, [u8]>,
+    mut geometry: RootGeometry,
+    width: f64,
+    height: f64,
+) -> (Cow<'_, [u8]>, RootGeometry) {
+    // Normalize both root dimensions so usvg constructs the same viewport that
+    // NeoMacs exposes as the image's natural layout size. In particular, usvg
+    // otherwise defaults a missing root dimension to 100% of the viewBox.
+    let mut replacements = Vec::with_capacity(3);
+    let mut missing = String::new();
+    let width_text = format!("{width}px");
+    let height_text = format!("{height}px");
+    if let Some(range) = geometry.width_value_range.clone() {
+        replacements.push((range, width_text));
+    } else {
+        missing.push_str(&format!(" width=\"{width_text}\""));
+    }
+    if let Some(range) = geometry.height_value_range.clone() {
+        replacements.push((range, height_text));
+    } else {
+        missing.push_str(&format!(" height=\"{height_text}\""));
+    }
+    if !missing.is_empty() {
+        replacements.push((
+            geometry.start_tag_insert_pos..geometry.start_tag_insert_pos,
+            missing,
+        ));
+    }
+
+    let mut normalized = data.into_owned();
+    replacements.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+    for (range, replacement) in replacements {
+        normalized.splice(range, replacement.bytes());
+    }
+    geometry.width = Some(width);
+    geometry.height = Some(height);
+    geometry.width_value_range = None;
+    geometry.height_value_range = None;
+    (Cow::Owned(normalized), geometry)
+}
+
+fn suppress_unresolved_percentages(data: &[u8]) -> Option<Cow<'_, [u8]>> {
+    let text = std::str::from_utf8(data).ok()?;
+    let document = usvg::roxmltree::Document::parse(text).ok()?;
+    let root = document.root_element();
+    let mut ranges = Vec::new();
+    for node in root
+        .descendants()
+        .filter(|node| node.is_element() && *node != root)
+    {
+        for attribute in node.attributes() {
+            // The temporary viewport is deliberately tiny. Remove only
+            // percentages that resolve against it; objectBoundingBox values
+            // and locally resolved viewports must remain intact.
+            if attribute.name() == "style" {
+                let range = attribute.range_value();
+                collect_inline_css_percentage_ranges(
+                    &text[range.clone()],
+                    range.start,
+                    node,
+                    &mut ranges,
+                );
+            } else if percentage_reference(node, attribute.name())
+                == Some(PercentageReference::UnresolvedViewport)
+                && svgtypes::Length::from_str(attribute.value())
+                    .is_ok_and(|length| length.unit == svgtypes::LengthUnit::Percent)
+            {
+                ranges.push(attribute.range_value());
+            }
+        }
+        if node.is_element() && node.tag_name().name() == "style" {
+            for child in node.children().filter(|child| child.is_text()) {
+                let range = child.range();
+                collect_stylesheet_percentage_ranges(
+                    &text[range.clone()],
+                    range.start,
+                    root,
+                    &mut ranges,
+                );
+            }
+        }
+    }
+    if ranges.is_empty() {
+        return Some(Cow::Borrowed(data));
+    }
+
+    ranges.sort_by_key(|range| std::cmp::Reverse(range.start));
+    ranges.dedup();
+    let mut measurement = data.to_vec();
+    for range in ranges {
+        measurement.splice(range, b"0".iter().copied());
+    }
+    Some(Cow::Owned(measurement))
+}
+
+fn collect_inline_css_percentage_ranges(
+    css: &str,
+    source_offset: usize,
+    node: usvg::roxmltree::Node<'_, '_>,
+    ranges: &mut Vec<Range<usize>>,
+) {
+    collect_css_declaration_ranges(
+        css,
+        source_offset,
+        simplecss::DeclarationTokenizer::from(css),
+        |name| percentage_reference(node, name) == Some(PercentageReference::UnresolvedViewport),
+        ranges,
+    );
+}
+
+fn collect_stylesheet_percentage_ranges(
+    css: &str,
+    source_offset: usize,
+    root: usvg::roxmltree::Node<'_, '_>,
+    ranges: &mut Vec<Range<usize>>,
+) {
+    for rule in simplecss::StyleSheet::parse(css).rules {
+        let matching_nodes: Vec<_> = root
+            .descendants()
+            .filter(|node| node.is_element() && *node != root)
+            .filter(|node| rule.selector.matches(&XmlNode(*node)))
+            .collect();
+        collect_css_declaration_ranges(
+            css,
+            source_offset,
+            rule.declarations.into_iter(),
+            |name| {
+                let mut references = matching_nodes
+                    .iter()
+                    .filter_map(|node| percentage_reference(*node, name))
+                    .peekable();
+                references.peek().is_some()
+                    && references
+                        .all(|reference| reference == PercentageReference::UnresolvedViewport)
+            },
+            ranges,
+        );
+    }
+}
+
+fn collect_css_declaration_ranges<'a>(
+    css: &'a str,
+    source_offset: usize,
+    declarations: impl Iterator<Item = simplecss::Declaration<'a>>,
+    should_suppress: impl Fn(&str) -> bool,
+    ranges: &mut Vec<Range<usize>>,
+) {
+    let css_start = css.as_ptr() as usize;
+    for declaration in declarations {
+        if !should_suppress(declaration.name)
+            || !svgtypes::Length::from_str(declaration.value)
+                .is_ok_and(|length| length.unit == svgtypes::LengthUnit::Percent)
+        {
+            continue;
+        }
+        let Some(relative_start) = (declaration.value.as_ptr() as usize).checked_sub(css_start)
+        else {
+            continue;
+        };
+        if relative_start + declaration.value.len() > css.len() {
+            continue;
+        }
+        let start = source_offset + relative_start;
+        ranges.push(start..start + declaration.value.len());
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PercentageReference {
+    UnresolvedViewport,
+    ResolvedViewport,
+    ObjectBoundingBox,
+}
+
+#[derive(Clone, Copy)]
+enum ViewportBasis {
+    Horizontal,
+    Vertical,
+    Both,
+}
+
+#[derive(Clone, Copy)]
+enum CoordinateUnits {
+    UserSpaceOnUse,
+    ObjectBoundingBox,
+}
+
+fn percentage_reference(
+    node: usvg::roxmltree::Node<'_, '_>,
+    name: &str,
+) -> Option<PercentageReference> {
+    use CoordinateUnits::{ObjectBoundingBox as ObjectUnits, UserSpaceOnUse};
+    use PercentageReference::ObjectBoundingBox;
+
+    let element = node.tag_name().name();
+    let property = name.to_ascii_lowercase();
+    let basis = percentage_basis(property.as_str())?;
+    let geometry_reference = || {
+        if uses_object_bounding_box_coordinates(node) {
+            ObjectBoundingBox
+        } else {
+            viewport_reference(node, basis)
+        }
+    };
+
+    match (element, property.as_str()) {
+        (_, "stroke-width" | "stroke-dashoffset") => Some(geometry_reference()),
+        ("rect", "x" | "y" | "width" | "height" | "rx" | "ry")
+        | ("image" | "use" | "svg" | "foreignObject", "x" | "y" | "width" | "height")
+        | ("circle", "cx" | "cy" | "r")
+        | ("ellipse", "cx" | "cy" | "rx" | "ry")
+        | ("line", "x1" | "y1" | "x2" | "y2")
+        | ("text" | "tspan", "x" | "y" | "dx" | "dy") => Some(geometry_reference()),
+        ("filter", "x" | "y" | "width" | "height") => {
+            Some(units_reference(node, "filterUnits", ObjectUnits, basis))
+        }
+        ("mask", "x" | "y" | "width" | "height") => {
+            Some(units_reference(node, "maskUnits", ObjectUnits, basis))
+        }
+        ("pattern", "x" | "y" | "width" | "height") => {
+            Some(units_reference(node, "patternUnits", ObjectUnits, basis))
+        }
+        ("linearGradient", "x1" | "y1" | "x2" | "y2")
+        | ("radialGradient", "cx" | "cy" | "r" | "fx" | "fy" | "fr") => {
+            Some(units_reference(node, "gradientUnits", ObjectUnits, basis))
+        }
+        (element, "x" | "y" | "width" | "height") if element.starts_with("fe") => {
+            let filter = node
+                .ancestors()
+                .find(|ancestor| ancestor.has_tag_name("filter"));
+            Some(filter.map_or_else(
+                || viewport_reference(node, basis),
+                |filter| units_reference(filter, "primitiveUnits", UserSpaceOnUse, basis),
+            ))
+        }
         _ => None,
     }
 }
 
-fn valid_dimensions(width: f64, height: f64) -> bool {
-    width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0
+fn percentage_basis(name: &str) -> Option<ViewportBasis> {
+    match name {
+        "x" | "x1" | "x2" | "width" | "cx" | "rx" | "fx" | "dx" => Some(ViewportBasis::Horizontal),
+        "y" | "y1" | "y2" | "height" | "cy" | "ry" | "fy" | "dy" => Some(ViewportBasis::Vertical),
+        "r" | "fr" | "stroke-width" | "stroke-dashoffset" => Some(ViewportBasis::Both),
+        _ => None,
+    }
 }
 
-fn cairo_argb32_to_rgba(pixels: &[u8], stride: usize, width: u32, height: u32) -> Vec<u8> {
-    let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
-    for row in pixels.chunks(stride).take(height as usize) {
-        for pixel in row.chunks_exact(4).take(width as usize) {
-            let argb = u32::from_ne_bytes(pixel.try_into().expect("four-byte Cairo pixel"));
-            let alpha = (argb >> 24) as u8;
-            let red = unpremultiply((argb >> 16) as u8, alpha);
-            let green = unpremultiply((argb >> 8) as u8, alpha);
-            let blue = unpremultiply(argb as u8, alpha);
-            rgba.extend_from_slice(&[red, green, blue, alpha]);
+fn viewport_reference(
+    node: usvg::roxmltree::Node<'_, '_>,
+    basis: ViewportBasis,
+) -> PercentageReference {
+    let resolved = match basis {
+        ViewportBasis::Horizontal => containing_viewport_axis_is_resolved(node, "width"),
+        ViewportBasis::Vertical => containing_viewport_axis_is_resolved(node, "height"),
+        ViewportBasis::Both => {
+            containing_viewport_axis_is_resolved(node, "width")
+                && containing_viewport_axis_is_resolved(node, "height")
+        }
+    };
+    if resolved {
+        PercentageReference::ResolvedViewport
+    } else {
+        PercentageReference::UnresolvedViewport
+    }
+}
+
+fn containing_viewport_axis_is_resolved(
+    node: usvg::roxmltree::Node<'_, '_>,
+    dimension: &str,
+) -> bool {
+    let mut ancestor = node.parent_element();
+    while let Some(candidate) = ancestor {
+        match candidate.tag_name().name() {
+            "svg" => return svg_viewport_axis_is_resolved(candidate, dimension),
+            // A symbol establishes a local viewport when instantiated by use.
+            // Marker and pattern intentionally do not establish viewports.
+            "symbol" => return true,
+            _ => ancestor = candidate.parent_element(),
         }
     }
-    rgba
+    false
 }
 
-fn unpremultiply(channel: u8, alpha: u8) -> u8 {
-    match alpha {
-        0 | 255 => channel,
-        _ => ((u32::from(channel) * 255) / u32::from(alpha)).min(255) as u8,
+fn svg_viewport_axis_is_resolved(svg: usvg::roxmltree::Node<'_, '_>, dimension: &str) -> bool {
+    match svg
+        .attribute(dimension)
+        .and_then(|value| svgtypes::Length::from_str(value).ok())
+    {
+        Some(length) if length.unit == svgtypes::LengthUnit::Percent => {
+            containing_viewport_axis_is_resolved(svg, dimension)
+        }
+        Some(length) => length.number.is_finite() && length.number > 0.0,
+        None if svg.parent_element().is_some() => {
+            // A nested SVG defaults to 100% of its containing viewport.
+            containing_viewport_axis_is_resolved(svg, dimension)
+        }
+        None => false,
     }
+}
+
+fn units_reference(
+    node: usvg::roxmltree::Node<'_, '_>,
+    attribute: &str,
+    default: CoordinateUnits,
+    basis: ViewportBasis,
+) -> PercentageReference {
+    let units = match node.attribute(attribute) {
+        Some("userSpaceOnUse") => CoordinateUnits::UserSpaceOnUse,
+        Some("objectBoundingBox") => CoordinateUnits::ObjectBoundingBox,
+        _ => default,
+    };
+    match units {
+        CoordinateUnits::UserSpaceOnUse => viewport_reference(node, basis),
+        CoordinateUnits::ObjectBoundingBox => PercentageReference::ObjectBoundingBox,
+    }
+}
+
+fn uses_object_bounding_box_coordinates(node: usvg::roxmltree::Node<'_, '_>) -> bool {
+    node.ancestors().any(|ancestor| {
+        (ancestor.has_tag_name("mask")
+            && ancestor.attribute("maskContentUnits") == Some("objectBoundingBox"))
+            || (ancestor.has_tag_name("pattern")
+                && ancestor.attribute("patternContentUnits") == Some("objectBoundingBox"))
+            || (ancestor.has_tag_name("clipPath")
+                && ancestor.attribute("clipPathUnits") == Some("objectBoundingBox"))
+    })
+}
+
+struct XmlNode<'a, 'input: 'a>(usvg::roxmltree::Node<'a, 'input>);
+
+impl simplecss::Element for XmlNode<'_, '_> {
+    fn parent_element(&self) -> Option<Self> {
+        self.0.parent_element().map(XmlNode)
+    }
+
+    fn prev_sibling_element(&self) -> Option<Self> {
+        self.0.prev_sibling_element().map(XmlNode)
+    }
+
+    fn has_local_name(&self, local_name: &str) -> bool {
+        self.0.tag_name().name() == local_name
+    }
+
+    fn attribute_matches(
+        &self,
+        local_name: &str,
+        operator: simplecss::AttributeOperator<'_>,
+    ) -> bool {
+        self.0
+            .attribute(local_name)
+            .is_some_and(|value| operator.matches(value))
+    }
+
+    fn pseudo_class_matches(&self, class: simplecss::PseudoClass<'_>) -> bool {
+        matches!(class, simplecss::PseudoClass::FirstChild)
+            && self.0.prev_sibling_element().is_none()
+    }
+}
+
+fn root_geometry(data: &[u8]) -> Option<RootGeometry> {
+    let text = std::str::from_utf8(data).ok()?;
+    let document = usvg::roxmltree::Document::parse(text).ok()?;
+    let root = document.root_element();
+    if root.tag_name().name() != "svg" {
+        return None;
+    }
+
+    let width_attribute = root.attribute_node("width");
+    let height_attribute = root.attribute_node("height");
+    if width_attribute.is_some_and(|attribute| !valid_root_length(attribute.value()))
+        || height_attribute.is_some_and(|attribute| !valid_root_length(attribute.value()))
+    {
+        return None;
+    }
+    let width = width_attribute.and_then(|attribute| absolute_length_in_pixels(attribute.value()));
+    let height =
+        height_attribute.and_then(|attribute| absolute_length_in_pixels(attribute.value()));
+    let view_box = root
+        .attribute("viewBox")
+        .and_then(|value| svgtypes::ViewBox::from_str(value).ok())
+        .map(|view_box| (view_box.w, view_box.h));
+    let start_tag_insert_pos = find_start_tag_insert_pos(data, root.range().start)?;
+
+    Some(RootGeometry {
+        width,
+        height,
+        width_value_range: width_attribute.map(|attribute| attribute.range_value()),
+        height_value_range: height_attribute.map(|attribute| attribute.range_value()),
+        view_box,
+        start_tag_insert_pos,
+    })
+}
+
+fn find_start_tag_insert_pos(data: &[u8], start: usize) -> Option<usize> {
+    let mut quote = None;
+    for (offset, byte) in data.get(start..)?.iter().copied().enumerate() {
+        match (quote, byte) {
+            (Some(expected), actual) if actual == expected => quote = None,
+            (None, b'\'' | b'"') => quote = Some(byte),
+            (None, b'>') => {
+                let close = start + offset;
+                return Some(if data.get(close.wrapping_sub(1)) == Some(&b'/') {
+                    close - 1
+                } else {
+                    close
+                });
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+impl RootGeometry {
+    fn view_box_dimensions(&self) -> Option<(f64, f64)> {
+        let (view_width, view_height) = self.view_box?;
+        let dimensions = match (self.width, self.height) {
+            (Some(width), Some(height)) if valid_dimensions(width, height) => (width, height),
+            (Some(width), _) if width.is_finite() && width > 0.0 => {
+                (width, width * view_height / view_width)
+            }
+            (_, Some(height)) if height.is_finite() && height > 0.0 => {
+                (height * view_width / view_height, height)
+            }
+            _ => (view_width, view_height),
+        };
+        valid_dimensions(dimensions.0, dimensions.1).then_some(dimensions)
+    }
+}
+
+fn svg_options(geometry: &RootGeometry) -> usvg::Options<'static> {
+    let defaults = usvg::Options::default();
+    let default_size =
+        if geometry.view_box.is_none() && (geometry.width.is_none() || geometry.height.is_none()) {
+            usvg::Size::from_wh(FALLBACK_VIEWPORT_SIZE, FALLBACK_VIEWPORT_SIZE).unwrap()
+        } else {
+            defaults.default_size
+        };
+    usvg::Options {
+        dpi: DEFAULT_DPI as f32,
+        fontdb: shared_font_database(),
+        image_href_resolver: restricted_image_href_resolver(),
+        default_size,
+        ..defaults
+    }
+}
+
+fn shared_font_database() -> Arc<usvg::fontdb::Database> {
+    static FONT_DATABASE: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+    Arc::clone(FONT_DATABASE.get_or_init(|| {
+        let mut database = usvg::fontdb::Database::new();
+        database.load_system_fonts();
+        Arc::new(database)
+    }))
+}
+
+fn restricted_image_href_resolver() -> usvg::ImageHrefResolver<'static> {
+    usvg::ImageHrefResolver {
+        resolve_data: Box::new(resolve_embedded_image),
+        // In-memory SVGs have no base file. Never let an image href inherit
+        // NeoMacs's process working directory as an ambient file capability.
+        resolve_string: Box::new(|_, _| None),
+    }
+}
+
+pub(crate) fn resolve_embedded_image(
+    mime: &str,
+    data: Arc<Vec<u8>>,
+    options: &usvg::Options<'_>,
+) -> Option<usvg::ImageKind> {
+    if data.len() > MAX_SVG_INPUT_SIZE {
+        return None;
+    }
+
+    let raster = match mime {
+        "image/jpg" | "image/jpeg" => Some(usvg::ImageKind::JPEG(Arc::clone(&data))),
+        "image/png" => Some(usvg::ImageKind::PNG(Arc::clone(&data))),
+        "image/gif" => Some(usvg::ImageKind::GIF(Arc::clone(&data))),
+        "image/webp" => Some(usvg::ImageKind::WEBP(Arc::clone(&data))),
+        "text/plain" => raster_image_from_magic(Arc::clone(&data)),
+        _ => None,
+    };
+    if let Some(raster) = raster {
+        validate_embedded_raster(&data)?;
+        return Some(raster);
+    }
+
+    let data = bounded_svg_data(&data)?;
+    usvg::Tree::from_data_nested(data.as_ref(), options)
+        .ok()
+        .map(usvg::ImageKind::SVG)
+}
+
+fn raster_image_from_magic(data: Arc<Vec<u8>>) -> Option<usvg::ImageKind> {
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(usvg::ImageKind::PNG(data))
+    } else if data.starts_with(&[0xff, 0xd8]) {
+        Some(usvg::ImageKind::JPEG(data))
+    } else if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
+        Some(usvg::ImageKind::GIF(data))
+    } else if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") {
+        Some(usvg::ImageKind::WEBP(data))
+    } else {
+        None
+    }
+}
+
+fn validate_embedded_raster(data: &[u8]) -> Option<()> {
+    let size = imagesize::blob_size(data).ok()?;
+    let bytes = size.width.checked_mul(size.height)?.checked_mul(4)?;
+    (size.width <= 4096 && size.height <= 4096 && bytes <= MAX_SVG_RASTER_BYTES).then_some(())
+}
+
+fn fallback_dimensions(tree: &usvg::Tree) -> Option<(f64, f64)> {
+    if tree.root().children().is_empty() {
+        return None;
+    }
+
+    // GNU's fallback is the visible layer geometry in a viewport with no
+    // intrinsic dimensions. Include a positive origin offset by using the
+    // layer box's right/bottom edges, as the librsvg implementation did.
+    let ink = tree.root().abs_layer_bounding_box();
+    let width = f64::from(ink.right());
+    let height = f64::from(ink.bottom());
+    valid_dimensions(width, height).then_some((width, height))
+}
+
+fn absolute_length_in_pixels(value: &str) -> Option<f64> {
+    let length = svgtypes::Length::from_str(value).ok()?;
+    let pixels = match length.unit {
+        svgtypes::LengthUnit::None | svgtypes::LengthUnit::Px => length.number,
+        svgtypes::LengthUnit::In => length.number * DEFAULT_DPI,
+        svgtypes::LengthUnit::Cm => length.number * DEFAULT_DPI / 2.54,
+        svgtypes::LengthUnit::Mm => length.number * DEFAULT_DPI / 25.4,
+        svgtypes::LengthUnit::Pt => length.number * DEFAULT_DPI / 72.0,
+        svgtypes::LengthUnit::Pc => length.number * DEFAULT_DPI / 6.0,
+        _ => return None,
+    };
+    pixels.is_finite().then_some(pixels)
+}
+
+fn valid_root_length(value: &str) -> bool {
+    svgtypes::Length::from_str(value)
+        .ok()
+        .is_some_and(|length| length.number.is_finite() && length.number > 0.0)
+}
+
+fn valid_dimensions(width: f64, height: f64) -> bool {
+    width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0
 }
