@@ -39,18 +39,28 @@ fn div_cx299_process_thread_query() {
 #[test]
 fn div_cx299_network_interface_info_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 45559 44316 64216 52806 0]))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t :wrong-type)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((ifaces (network-interface-list)))
-      (list (or (null ifaces) (consp ifaces))
-            (when ifaces
-              (let ((info (network-interface-info (car ifaces))))
-                (or (null info) (consp info)))))
-  (error (list :errored (car e)))))
+      (list
+       (or (null ifaces) (consp ifaces))
+       ;; Entries are (NAME . ADDRESS); the info query takes the NAME
+       ;; string. Project to shape booleans -- the live interface set,
+       ;; ordering, and addresses are machine state and must not leak
+       ;; into the expect.
+       (and ifaces
+            (let ((info (network-interface-info (caar ifaces))))
+              (or (null info) (consp info))))
+       ;; GNU signals wrong-type-argument for a non-string; lock the
+       ;; signal SYMBOL only (its data embeds the volatile entry).
+       (and ifaces
+            (condition-case err
+                (progn (network-interface-info (car ifaces)) :no-error)
+              (wrong-type-argument :wrong-type)
+              (error (list :other (car err)))))))
+  (error (list :errored (car e))))
 "##,
         expect,
     )
