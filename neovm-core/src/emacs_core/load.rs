@@ -654,43 +654,64 @@ fn candidate_mtime(path: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 
-fn pick_suffixed(base: &Path, prefer_newer: bool) -> Option<PathBuf> {
-    let module = module_suffixed_path(base);
-    let el = source_suffixed_path(base);
-    let elc = compiled_suffixed_path(base);
-    let skip_elc = prefer_el_only();
+/// The ordered suffix list `load` searches, mirroring GNU
+/// `Fget_load_suffixes` (src/lread.c): the cross product of the live
+/// `load-suffixes` and `load-file-rep-suffixes` variables, in order. Falls
+/// back to the built-in default (module suffix, then `.elc`, then `.el`)
+/// when the variables are unbound (pre-bootstrap contexts).
+pub(crate) fn load_suffixes_from_obarray(obarray: &super::symbol::Obarray) -> Vec<Vec<u8>> {
+    let strings_of = |name: &str| -> Option<Vec<Vec<u8>>> {
+        let value = obarray.symbol_value(name)?.clone();
+        let items = super::value::list_to_vec(&value)?;
+        Some(
+            items
+                .into_iter()
+                .filter_map(|v| v.as_lisp_string().map(|s| s.as_bytes().to_vec()))
+                .collect(),
+        )
+    };
+    let Some(suffixes) = strings_of("load-suffixes") else {
+        return default_load_suffixes();
+    };
+    let reps = strings_of("load-file-rep-suffixes").unwrap_or_else(|| vec![Vec::new()]);
+    let mut out = Vec::with_capacity(suffixes.len() * reps.len().max(1));
+    for suffix in &suffixes {
+        for rep in &reps {
+            let mut combined = suffix.clone();
+            combined.extend_from_slice(rep);
+            out.push(combined);
+        }
+    }
+    out
+}
 
-    if prefer_newer && !skip_elc {
-        let mut candidates = Vec::new();
-        if module.exists() {
-            candidates.push(module.clone());
-        }
-        if elc.exists() {
-            candidates.push(elc.clone());
-        }
-        if el.exists() {
-            candidates.push(el.clone());
-        }
+fn default_load_suffixes() -> Vec<Vec<u8>> {
+    vec![
+        std::env::consts::DLL_SUFFIX.as_bytes().to_vec(),
+        b".elc".to_vec(),
+        b".el".to_vec(),
+    ]
+}
+
+fn pick_suffixed(base: &Path, prefer_newer: bool, suffixes: &[Vec<u8>]) -> Option<PathBuf> {
+    let skip_elc = prefer_el_only();
+    // Compressed candidates are not loadable (no jka-compr); they are
+    // excluded here and surfaced by the explicit unsupported-artifact check
+    // in `find_for_base`, preserving the pre-existing error behavior.
+    let candidates = suffixes
+        .iter()
+        .filter(|suffix| !suffix.ends_with(b".gz"))
+        .filter(|suffix| !(skip_elc && suffix.ends_with(b".elc")))
+        .map(|suffix| append_load_suffix(base, suffix))
+        .filter(|path| path.is_file());
+
+    if prefer_newer {
         return candidates
-            .into_iter()
             .filter_map(|path| candidate_mtime(&path).map(|mtime| (mtime, path)))
             .max_by_key(|(mtime, _)| *mtime)
             .map(|(_, path)| path);
     }
-
-    // GNU default with module support: try the module suffix first, then
-    // .elc, then .el.
-    if module.exists() {
-        return Some(module);
-    }
-    if !skip_elc && elc.exists() {
-        return Some(elc);
-    }
-    if el.exists() {
-        return Some(el);
-    }
-
-    None
+    candidates.into_iter().next()
 }
 
 fn find_for_base(
@@ -699,6 +720,7 @@ fn find_for_base(
     no_suffix: bool,
     must_suffix: bool,
     prefer_newer: bool,
+    suffixes: &[Vec<u8>],
 ) -> Option<PathBuf> {
     if no_suffix || has_load_suffix(original_name) {
         if base.is_file() {
@@ -707,7 +729,7 @@ fn find_for_base(
         return None;
     }
 
-    if let Some(suffixed) = pick_suffixed(base, prefer_newer) {
+    if let Some(suffixed) = pick_suffixed(base, prefer_newer, suffixes) {
         return Some(suffixed);
     }
 
@@ -772,8 +794,15 @@ pub fn find_file_in_load_path_with_flags(
     prefer_newer: bool,
 ) -> Option<PathBuf> {
     let name = LispString::from_utf8(name);
-    find_lisp_file_in_load_path_with_flags(&name, load_path, no_suffix, must_suffix, prefer_newer)
-        .map(|found| load_path_buf(&found))
+    find_lisp_file_in_load_path_with_flags(
+        &name,
+        load_path,
+        no_suffix,
+        must_suffix,
+        prefer_newer,
+        &default_load_suffixes(),
+    )
+    .map(|found| load_path_buf(&found))
 }
 
 fn find_lisp_file_in_load_path_with_flags(
@@ -782,10 +811,11 @@ fn find_lisp_file_in_load_path_with_flags(
     no_suffix: bool,
     must_suffix: bool,
     prefer_newer: bool,
+    suffixes: &[Vec<u8>],
 ) -> Option<LispString> {
     let path = expand_tilde_path_buf(name);
     if path.is_absolute() {
-        return find_for_base(&path, name, no_suffix, must_suffix, prefer_newer)
+        return find_for_base(&path, name, no_suffix, must_suffix, prefer_newer, suffixes)
             .map(|found| load_path_lisp_string(&found));
     }
 
@@ -793,7 +823,9 @@ fn find_lisp_file_in_load_path_with_flags(
     // is evaluated within each directory.
     for dir in load_path {
         let full = expand_tilde_path_buf(dir).join(load_path_buf(name));
-        if let Some(found) = find_for_base(&full, name, no_suffix, must_suffix, prefer_newer) {
+        if let Some(found) =
+            find_for_base(&full, name, no_suffix, must_suffix, prefer_newer, suffixes)
+        {
             return Some(load_path_lisp_string(&found));
         }
     }
@@ -859,12 +891,18 @@ pub(crate) fn plan_load_in_state(
         .is_some_and(|v| v.is_truthy());
 
     let load_path = get_load_path(obarray);
+    // GNU Fload (src/lread.c): the searched suffixes come from the LIVE
+    // `load-suffixes` x `load-file-rep-suffixes` cross product
+    // (Fget_load_suffixes), so a dynamic `(let ((load-suffixes '(".el"))) ...)`
+    // binding steers resolution.
+    let suffixes = load_suffixes_from_obarray(obarray);
     match find_lisp_file_in_load_path_with_flags(
         &file,
         &load_path,
         nosuffix,
         must_suffix,
         prefer_newer,
+        &suffixes,
     ) {
         Some(found) => Ok(LoadPlan::Load {
             requested: file,
