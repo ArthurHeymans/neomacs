@@ -544,7 +544,21 @@ fn run_fresh_build(options: &FreshBuildOptions) -> Result<()> {
     // lisp/theme-loaddefs.el, and secondary loaddefs such as
     // org/org-loaddefs.el and dired-loaddefs.el.
     // ---------------------------------------------------------------
-    let loaddefs_gen = paths.lisp_root.join("emacs-lisp/loaddefs-gen.elc");
+    // GNU lisp/Makefile.in guarantees loaddefs-gen.elc exists here by make
+    // dependency ($(lisp)/loaddefs.el depends on $(LOADDEFS_GEN), which the
+    // compile rules build first).  A --no-byte-compile Neomacs pipeline
+    // deliberately drops that guarantee, so on a pristine source-only tree
+    // the .elc is absent; fall back to loading loaddefs-gen.el from source,
+    // which produces the identical generated loaddefs set (only the scrape
+    // itself runs slower).
+    let loaddefs_gen = {
+        let compiled = paths.lisp_root.join("emacs-lisp/loaddefs-gen.elc");
+        if compiled.is_file() {
+            compiled
+        } else {
+            paths.lisp_root.join("emacs-lisp/loaddefs-gen.el")
+        }
+    };
     let loaddefs_dirs = loaddefs_dirs(&paths.lisp_root)?;
     let loaddefs_args = loaddefs_generation_args(&loaddefs_gen, &loaddefs_dirs);
     remove_primary_loaddefs_for_regeneration(options, &paths, &loaddefs_el, &theme_loaddefs_el)?;

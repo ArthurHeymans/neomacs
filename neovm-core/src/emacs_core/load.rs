@@ -4352,13 +4352,50 @@ fn eval_startup_forms(eval: &mut super::eval::Context, forms_src: &str) -> Resul
     Ok(())
 }
 
-/// Apply the runtime startup state that GNU Emacs has after the dumped image
-/// is loaded and `normal-top-level` begins to run.
+/// Restore GNU's FINAL-image interpreted-closure environment filter.
 ///
-/// The dumped bootstrap image intentionally stops before normal interactive
-/// startup.  Runtime callers that compare against `emacs --batch -Q` still
-/// need the early startup buffer initialization that `startup.el` performs for
-/// the `*scratch*` buffer.
+/// GNU lisp/loadup.el:387-392 sets `internal-make-interpreted-closure-function'
+/// to `cconv-make-interpreted-closure' right after loading cconv, guarded by
+/// `(compiled-function-p (symbol-function 'cconv-fv))`.  The guard splits
+/// GNU's two image flavors: bootstrap-emacs (interpreted cconv -- the filter
+/// stays nil because running it interpreted over the whole build would be
+/// "excruciatingly slow") and the final emacs (compiled cconv -- the filter
+/// is installed; loadup's comment states the setting itself "should be safe
+/// ... unconditionally").  Every shipped GNU image, including the oracle
+/// Emacs, therefore runs with the filter on: src/eval.c Ffunction (lines
+/// 617-623) routes interpreted-closure creation through
+/// lisp/emacs-lisp/cconv.el cconv-make-interpreted-closure, which trims the
+/// captured environment to the lambda's free variables (cconv-fv).
+///
+/// A Neomacs tree dumped without byte-compiled Lisp evaluates the loadup
+/// guard to nil, so without this repair even the FINAL image would stay in
+/// GNU's bootstrap flavor and closures would capture the whole lexical
+/// environment -- observably diverging from any real GNU (e.g. gv-get setter
+/// closures printing extra env pairs).  Callers apply this only to
+/// final-image surfaces: the release binary's Final runtime image and the
+/// `apply_runtime_startup_state` "GNU -Q equivalent" test surface.  The
+/// Bootstrap image keeps the nil filter exactly like GNU's bootstrap-emacs,
+/// so build tooling (loaddefs scrape, unidata generation) is not slowed by
+/// interpreted cconv.
+fn restore_final_image_interpreted_closure_filter(eval: &mut super::eval::Context) {
+    let filter_sym = super::intern::intern("internal-make-interpreted-closure-function");
+    let cconv_sym = super::intern::intern("cconv-make-interpreted-closure");
+    let filter_is_nil = eval
+        .obarray()
+        .symbol_value_id(filter_sym)
+        .is_none_or(|value| value.is_nil());
+    let cconv_bound = eval
+        .obarray()
+        .symbol_function_id(cconv_sym)
+        .is_some_and(|function| !function.is_nil());
+    if filter_is_nil && cconv_bound {
+        eval.set_variable(
+            "internal-make-interpreted-closure-function",
+            Value::symbol(cconv_sym),
+        );
+    }
+}
+
 fn sync_runtime_interpreted_closure_filter(eval: &mut super::eval::Context) {
     let closure_filter_sym = super::intern::intern("internal-make-interpreted-closure-function");
     let cconv_sym = super::intern::intern("cconv-make-interpreted-closure");
@@ -4376,6 +4413,13 @@ fn sync_runtime_interpreted_closure_filter(eval: &mut super::eval::Context) {
     eval.set_interpreted_closure_filter_fn(filter_fn);
 }
 
+/// Apply the runtime startup state that GNU Emacs has after the dumped image
+/// is loaded and `normal-top-level` begins to run.
+///
+/// The dumped bootstrap image intentionally stops before normal interactive
+/// startup.  Runtime callers that compare against `emacs --batch -Q` still
+/// need the early startup buffer initialization that `startup.el` performs for
+/// the `*scratch*` buffer.
 pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<(), EvalError> {
     let project_root = runtime_project_root();
     let minibuf_id = eval
@@ -4426,6 +4470,10 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
     // those forms run.
     normalize_bootstrap_runtime_surface(eval, &project_root)?;
 
+    // This surface emulates a GNU -Q FINAL image for runtime consumers, so
+    // the interpreted-closure env filter belongs here even when the cached
+    // bootstrap image (correctly) left it nil.
+    restore_final_image_interpreted_closure_filter(eval);
     sync_runtime_interpreted_closure_filter(eval);
     clear_transient_runtime_features(eval);
     eval.set_variable("max-lisp-eval-depth", Value::fixnum(1600));
@@ -4869,6 +4917,14 @@ pub(crate) fn load_runtime_image_with_features_for_executable(
         tracing::error!("finalize_cached_bootstrap_eval failed: {e:?}");
         e
     })?;
+
+    // Only the FINAL runtime image presents GNU's shipped-emacs surface;
+    // the Bootstrap image mirrors GNU bootstrap-emacs, whose loadup guard
+    // deliberately leaves the closure-env filter nil so build tooling
+    // (loaddefs scrape, unidata generation) never runs interpreted cconv.
+    if role == RuntimeImageRole::Final {
+        restore_final_image_interpreted_closure_filter(&mut eval);
+    }
 
     Ok(eval)
 }
