@@ -274,9 +274,13 @@ fn frozen_time_env() -> Vec<(String, String)> {
     ]
 }
 
-fn project_lisp_dir() -> PathBuf {
+fn project_root() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().expect("project root").join("lisp")
+    manifest.parent().expect("project root").to_path_buf()
+}
+
+fn project_lisp_dir() -> PathBuf {
+    project_root().join("lisp")
 }
 
 fn ensure_nonempty_form(form: &str) -> Result<(), String> {
@@ -364,52 +368,54 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; -- the non-determinism is fixed at the source instead of matching every
          ;; timestamp format with a regex.
          ;;
-         ;; The project lisp/ tree the harness loads from
-         ;; (`NEOVM_ORACLE_LOAD_ROOT', an absolute path derived from
-         ;; CARGO_MANIFEST_DIR) leaks into engine output through `load'
+         ;; The configured load tree (`NEOVM_ORACLE_LOAD_ROOT') leaks into
+         ;; engine output through `load'
          ;; error data, `load-file-name', `locate-library', and load-path
          ;; echoes.  That prefix depends on where the checkout lives (main
          ;; repo vs per-agent worktree), so stored expectations embedding it
          ;; go stale the moment the suite runs from a different directory.
          ;; Squash it to a stable token on BOTH engines, like the tempdirs
          ;; above; the path REMAINDER (the file actually reported) stays a
-         ;; real parity lock.  The checkout root itself (the parent of
-         ;; lisp/) leaks too -- e.g. `default-directory' under nextest is
+         ;; real parity lock.  The checkout root itself
+         ;; (`NEOVM_ORACLE_PROJECT_ROOT') leaks too -- e.g. `default-directory'
+         ;; under nextest is
          ;; <checkout>/neovm-oracle-tests/ -- so squash any remaining
          ;; occurrences of it to a second, coarser token AFTER the
          ;; more-specific lisp/ squash, keeping lisp paths on the finer
-         ;; token.
+         ;; token.  Apply those exact domain roots before generic temp-path
+         ;; scrubbing, which could otherwise consume an external load root.
          ((stringp v)
-          (neovm--oracle-squash-roots
+          (replace-regexp-in-string
+           "/tmp/nix-shell\\.[A-Za-z0-9]+"
+           "[SESSION-TMPDIR]"
            (replace-regexp-in-string
-            "/tmp/nix-shell\\.[A-Za-z0-9]+"
-            "[SESSION-TMPDIR]"
+            "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
+            "[ORACLE-TMPDIR]"
             (replace-regexp-in-string
-             "/[^ \n\"]*neovm-oracle-case-[A-Za-z0-9]+"
-             "[ORACLE-TMPDIR]"
-             (replace-regexp-in-string
-              "%b - \\(?:GNU\\|NEO\\) Emacs at "
-              "%b - [EMACS-PRODUCT] at "
-              v)))))
+             "%b - \\(?:GNU\\|NEO\\) Emacs at "
+             "%b - [EMACS-PRODUCT] at "
+             (neovm--oracle-squash-roots v)))))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
-        (let ((root (getenv "NEOVM_ORACLE_LOAD_ROOT")))
-          (if (or (null root) (= (length root) 0))
-              s
-            (let* ((load-abs (directory-file-name root))
-                   (proj-abs (directory-file-name
-                              (or (file-name-directory load-abs) load-abs)))
-                   (pairs nil))
+        (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
+              (project-root (getenv "NEOVM_ORACLE_PROJECT_ROOT"))
+              (pairs nil))
+          (let ((proj-abs (and project-root
+                               (> (length project-root) 0)
+                               (directory-file-name project-root)))
+                (load-abs (and load-root
+                               (> (length load-root) 0)
+                               (directory-file-name load-root))))
               ;; Coarser project-root token LAST so the finer lisp/ token
               ;; wins on lisp paths; each root in both its absolute and its
               ;; abbreviated (~/...) spelling, since `default-directory'
               ;; and friends leak the abbreviated form.
-              (when (> (length proj-abs) 1)
+              (when (and proj-abs (> (length proj-abs) 1))
                 (push (cons (abbreviate-file-name proj-abs)
                             "[ORACLE-PROJECT-ROOT]")
                       pairs)
                 (push (cons proj-abs "[ORACLE-PROJECT-ROOT]") pairs))
-              (when (> (length load-abs) 1)
+              (when (and load-abs (> (length load-abs) 1))
                 (push (cons (abbreviate-file-name load-abs)
                             "[ORACLE-LOAD-ROOT]")
                       pairs)
@@ -417,7 +423,7 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
               (dolist (p pairs s)
                 (when (> (length (car p)) 1)
                   (setq s (replace-regexp-in-string
-                           (regexp-quote (car p)) (cdr p) s t t))))))))
+                           (regexp-quote (car p)) (cdr p) s t t)))))))
       (defun neovm--oracle-normalize (v)
         (neovm--oracle-normalize-1 v (make-hash-table :test 'eq)))
     (let* ((coding-system-for-read 'utf-8-unix)
@@ -527,6 +533,7 @@ fn run_oracle_eval_inner_with_tmpdir(
     let mut cmd = Command::new(&oracle_bin);
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
+        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
         .env("NEOVM_ORACLE_LOAD_FILES", oracle_load_files)
         .env("EMACSNATIVELOADPATH", "/dev/null")
         .args([
@@ -578,6 +585,7 @@ fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, 
     let mut cmd = Command::new(&oracle_bin);
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
+        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
         .env("NEOVM_ORACLE_LOAD_FILES", oracle_load_files)
         .env("EMACSNATIVELOADPATH", "/dev/null")
         .args([
@@ -680,6 +688,7 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     let mut cmd = Command::new(&neomacs_bin);
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
+        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
         .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
         .args([
             "--batch",
@@ -731,6 +740,7 @@ fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<
     let mut cmd = Command::new(&neomacs_bin);
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
+        .env("NEOVM_ORACLE_PROJECT_ROOT", project_root())
         .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
         .args([
             "--batch",

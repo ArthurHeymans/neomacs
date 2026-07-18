@@ -2637,7 +2637,7 @@ fn run_gui_main_thread(
     });
     let render_waker = GuiEventLoopWaker::new(event_loop.create_proxy());
 
-    let comms = ThreadComms::new().expect("Failed to create thread comms");
+    let comms = ThreadComms::new();
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
@@ -2897,14 +2897,16 @@ fn run_gui_evaluator_worker(
                         break;
                     }
                     if let Some(notifier) = &input_notifier {
-                        notifier.notify();
+                        if let Err(error) = notifier.notify() {
+                            tracing::error!(%error, "input bridge failed to wake evaluator");
+                        }
                     }
                 }
             }
         })
         .expect("Failed to spawn input bridge thread");
 
-    evaluator.init_input_system(input_rx, emacs_comms.wakeup_reader.read_fd());
+    evaluator.init_input_system(input_rx);
     install_diagnostics_eval_hooks(&mut evaluator);
 
     tty_layout::LAYOUT_ENGINE.with(|engine| {
@@ -3019,10 +3021,9 @@ static DIAG_TASK_RX: std::sync::Mutex<
 > = std::sync::Mutex::new(None);
 
 /// The Lisp thread's wait notifier, so the diagnostics thread can wake it after
-/// queueing a task. In TTY mode the poller's notify handle is created lazily
-/// (only once `recursive_edit` blocks), so it may be absent at install time —
-/// [`ensure_diag_notifier`] therefore also publishes it from the first task
-/// that runs on the Lisp thread.
+/// queueing a task. It can be absent only when the platform poller could not
+/// be created; [`ensure_diag_notifier`] also retries publication from tasks
+/// that run on the Lisp thread.
 static DIAG_NOTIFIER: std::sync::OnceLock<neovm_core::emacs_core::process::WaitNotifier> =
     std::sync::OnceLock::new();
 
@@ -3037,13 +3038,14 @@ static DIAG_INSTALLED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 /// active editor also drains queued tasks on its next loop iteration).
 fn diag_wake_lisp() {
     if let Some(notifier) = DIAG_NOTIFIER.get() {
-        notifier.notify();
+        if let Err(error) = notifier.notify() {
+            tracing::warn!(%error, "diagnostics task failed to wake evaluator");
+        }
     }
 }
 
 /// Publish the Context's wait notifier if available and not yet set. Called from
-/// task closures, which run on the Lisp thread during `recursive_edit` — by
-/// which point the (lazily-created) poller notify handle exists.
+/// task closures, which run on the Lisp thread during `recursive_edit`.
 fn ensure_diag_notifier(ctx: &Context) {
     if DIAG_NOTIFIER.get().is_none()
         && let Some(notifier) = ctx.wait_notifier()
@@ -3322,7 +3324,7 @@ pub fn run(mode: RuntimeMode) {
     // 4. Create communication channels before entering GNU's outer
     //    recursive-edit command loop. GNU evaluates `top-level` from that
     //    outer loop, not directly from `main`.
-    let comms = ThreadComms::new().expect("Failed to create thread comms");
+    let comms = ThreadComms::new();
     let (emacs_comms, render_comms) = comms.split();
     let primary_window_size: SharedPrimaryWindowSize =
         Arc::new(Mutex::new(PrimaryWindowSize { width, height }));
@@ -3410,7 +3412,9 @@ pub fn run(mode: RuntimeMode) {
                             break; // Context dropped
                         }
                         if let Some(notifier) = &input_notifier {
-                            notifier.notify();
+                            if let Err(error) = notifier.notify() {
+                                tracing::error!(%error, "input bridge failed to wake evaluator");
+                            }
                         }
                     }
                 }
@@ -3418,8 +3422,7 @@ pub fn run(mode: RuntimeMode) {
             .expect("Failed to spawn input bridge thread");
 
         // 7. Connect evaluator to input system
-        let wakeup_fd = emacs_comms.wakeup_reader.read_fd();
-        evaluator.init_input_system(input_rx, wakeup_fd);
+        evaluator.init_input_system(input_rx);
         install_diagnostics_eval_hooks(&mut evaluator);
     }
 
@@ -4216,16 +4219,9 @@ fn run_gnu_startup_inner(eval: &mut Context) {
 
     let (_tx, rx) = crossbeam_channel::unbounded();
 
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
 
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
 
     if let Err(other) = result {
         let last_phase = eval

@@ -590,37 +590,37 @@ impl ProcessOutputServiceOutcome {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ProcessWaitEvents {
-    input_wakeup: bool,
+    notification_wakeup: bool,
     ready_processes: Vec<ProcessId>,
     writable_processes: Vec<ProcessId>,
 }
 
 impl ProcessWaitEvents {
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn from_sources(input_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
-        Self::from_sources_with_writable(input_wakeup, ready_processes, Vec::new())
+    pub(crate) fn from_sources(notification_wakeup: bool, ready_processes: Vec<ProcessId>) -> Self {
+        Self::from_sources_with_writable(notification_wakeup, ready_processes, Vec::new())
     }
 
     pub(crate) fn from_sources_with_writable(
-        input_wakeup: bool,
+        notification_wakeup: bool,
         ready_processes: Vec<ProcessId>,
         writable_processes: Vec<ProcessId>,
     ) -> Self {
         Self {
-            input_wakeup,
+            notification_wakeup,
             ready_processes,
             writable_processes,
         }
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub(crate) fn input_wakeup() -> Self {
+    pub(crate) fn notification_wakeup() -> Self {
         Self::from_sources(true, Vec::new())
     }
 
     pub(crate) fn ready_processes(processes: Vec<ProcessId>) -> Self {
         Self {
-            input_wakeup: false,
+            notification_wakeup: false,
             ready_processes: processes,
             writable_processes: Vec::new(),
         }
@@ -631,8 +631,8 @@ impl ProcessWaitEvents {
         Self::from_sources_with_writable(false, Vec::new(), processes)
     }
 
-    pub(crate) fn has_input_wakeup(&self) -> bool {
-        self.input_wakeup
+    pub(crate) fn has_notification_wakeup(&self) -> bool {
+        self.notification_wakeup
     }
 
     pub(crate) fn has_ready_processes(&self) -> bool {
@@ -650,7 +650,9 @@ impl ProcessWaitEvents {
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn is_empty(&self) -> bool {
-        !self.input_wakeup && self.ready_processes.is_empty() && self.writable_processes.is_empty()
+        !self.notification_wakeup
+            && self.ready_processes.is_empty()
+            && self.writable_processes.is_empty()
     }
 
     pub(crate) fn ready_processes_ref(&self) -> &[ProcessId] {
@@ -661,8 +663,6 @@ impl ProcessWaitEvents {
         &self.writable_processes
     }
 }
-
-const INPUT_WAKEUP_EVENT_KEY: usize = 0;
 
 /// Process family used by compatibility helpers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -981,8 +981,8 @@ pub struct ProcessManager {
     wait_backend: ProcessWaitBackend,
 }
 
-/// Opaque, thread-safe handle the render/frontend thread uses to wake a blocked
-/// wait loop after delivering input, via the cross-platform `Poller::notify()`.
+/// Opaque, thread-safe handle a cross-thread producer uses to wake the blocked
+/// evaluator after publishing work, via cross-platform `Poller::notify()`.
 ///
 /// This is the platform-agnostic replacement for the Unix-only wakeup pipe: it
 /// works identically on Linux/macOS/Windows (the `polling` crate maps `notify`
@@ -991,47 +991,61 @@ pub struct ProcessManager {
 #[derive(Clone)]
 pub struct WaitNotifier {
     poller: Arc<polling::Poller>,
+    notification_pending: Arc<AtomicBool>,
 }
 
 impl WaitNotifier {
-    fn new(poller: Arc<polling::Poller>) -> Self {
-        Self { poller }
+    fn new(poller: Arc<polling::Poller>, notification_pending: Arc<AtomicBool>) -> Self {
+        Self {
+            poller,
+            notification_pending,
+        }
     }
 
-    /// Wake the current (or next) `poller.wait()` so the evaluator drains its
-    /// input channel. Call this right after pushing an event to the input
-    /// channel from the render/frontend thread.
-    pub fn notify(&self) {
-        let _ = self.poller.notify();
+    /// Wake the current (or next) `poller.wait()` so the evaluator services
+    /// work already published by the caller (input, diagnostics, async DNS).
+    #[must_use = "a failed notification can leave the evaluator blocked"]
+    pub fn notify(&self) -> std::io::Result<()> {
+        // `Poller::wait` represents both notify and timeout as an empty event
+        // batch.  Preserve the semantic cause separately so the wait adapter
+        // never invents a notification on a timeout.  Release pairs with the backend's
+        // AcqRel swap; Poller supplies the actual cross-thread wakeup.
+        self.notification_pending.store(true, Ordering::Release);
+        self.poller.notify()
     }
 }
 
 struct ProcessWaitBackend {
-    /// I/O multiplexer for process descriptors and render-thread input wakeups.
+    /// I/O multiplexer for process descriptors and cross-thread notifications.
     ///
-    /// Shared (`Arc`) so the render/frontend thread can wake a blocked
+    /// Shared (`Arc`) so any cross-thread producer can wake a blocked
     /// `poller.wait()` via the cross-platform `Poller::notify()` — the basis for
     /// the unified single-poll wait loop (no per-OS wakeup pipe needed).
     poller: Option<Arc<polling::Poller>>,
-    /// Render-thread input wakeup fd registered in the shared wait poller.
-    #[cfg(unix)]
-    input_wakeup_fd: Option<std::os::unix::io::RawFd>,
+    /// Semantic cause paired with the poller's eventless notify wakeup.
+    ///
+    /// A bool is sufficient because notifications are coalescing readiness,
+    /// not a count: one wake tells the evaluator to service published work.
+    notification_pending: Arc<AtomicBool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProcessWaitBackendInterest {
     ProcessesOnly,
-    InputWakeupOnly,
-    InputWakeupAndProcesses,
+    NotificationsOnly,
+    NotificationsAndProcesses,
 }
 
 impl ProcessWaitBackendInterest {
-    fn wants_input_wakeup(self) -> bool {
-        matches!(self, Self::InputWakeupOnly | Self::InputWakeupAndProcesses)
+    fn wants_notifications(self) -> bool {
+        matches!(
+            self,
+            Self::NotificationsOnly | Self::NotificationsAndProcesses
+        )
     }
 
     fn wants_processes(self) -> bool {
-        matches!(self, Self::ProcessesOnly | Self::InputWakeupAndProcesses)
+        matches!(self, Self::ProcessesOnly | Self::NotificationsAndProcesses)
     }
 }
 
@@ -1039,8 +1053,7 @@ impl ProcessWaitBackend {
     fn new() -> Self {
         Self {
             poller: polling::Poller::new().ok().map(Arc::new),
-            #[cfg(unix)]
-            input_wakeup_fd: None,
+            notification_pending: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -1048,46 +1061,16 @@ impl ProcessWaitBackend {
         self.poller.as_deref()
     }
 
-    /// A shared handle the frontend uses to wake a blocked wait (cross-platform).
+    /// A shared handle producers use to wake a blocked wait (cross-platform).
     fn notify_handle(&self) -> Option<WaitNotifier> {
-        self.poller.clone().map(WaitNotifier::new)
+        self.poller
+            .clone()
+            .map(|poller| WaitNotifier::new(poller, Arc::clone(&self.notification_pending)))
     }
 
-    #[cfg(unix)]
-    fn register_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
-        let Some(ref poller) = self.poller else {
-            self.input_wakeup_fd = None;
-            return;
-        };
-
-        if let Some(old_fd) = self.input_wakeup_fd.take() {
-            let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(old_fd) };
-            let _ = poller.delete(borrowed);
-        }
-
-        // SAFETY: the fd is owned by the display communication layer and
-        // remains valid for the evaluator lifetime after `init_input_system`.
-        let registered = unsafe {
-            poller.add_with_mode(
-                fd,
-                polling::Event::readable(INPUT_WAKEUP_EVENT_KEY),
-                polling::PollMode::Level,
-            )
-        }
-        .is_ok();
-
-        if registered {
-            self.input_wakeup_fd = Some(fd);
-        }
-    }
-
-    #[cfg(not(unix))]
-    fn register_input_wakeup_fd(&mut self, _fd: super::eval::WakeupFd) {}
-
-    fn has_input_wakeup(&self) -> bool {
+    fn has_notifications(&self) -> bool {
         // Cross-platform: any live poller can be woken via `Poller::notify()`,
-        // so the unified input+process wait path is available on every OS — not
-        // only where the Unix wakeup pipe (`input_wakeup_fd`) is registered.
+        // so the unified notification+process wait path is available on every OS.
         self.poller.is_some()
     }
 
@@ -1098,6 +1081,12 @@ impl ProcessWaitBackend {
         interest: ProcessWaitBackendInterest,
     ) -> Option<ProcessWaitEvents> {
         if let Some(ref poller) = self.poller {
+            if interest.wants_notifications()
+                && self.notification_pending.swap(false, Ordering::AcqRel)
+            {
+                return Some(ProcessWaitEvents::notification_wakeup());
+            }
+
             let deadline = Instant::now() + timeout;
             loop {
                 let now = Instant::now();
@@ -1109,16 +1098,11 @@ impl ProcessWaitBackend {
                 let mut events = polling::Events::new();
                 match poller.wait(&mut events, Some(wait_time)) {
                     Ok(_) => {
-                        let mut input_wakeup = false;
+                        let notification_wakeup = interest.wants_notifications()
+                            && self.notification_pending.swap(false, Ordering::AcqRel);
                         let mut ready_processes = Vec::new();
                         let mut writable_processes = Vec::new();
                         for event in events.iter() {
-                            if event.key == INPUT_WAKEUP_EVENT_KEY {
-                                if interest.wants_input_wakeup() {
-                                    input_wakeup = true;
-                                }
-                                continue;
-                            }
                             if interest.wants_processes() {
                                 let id = event.key as ProcessId;
                                 let Some(process) = processes.get(&id) else {
@@ -1135,25 +1119,20 @@ impl ProcessWaitBackend {
                                 }
                             }
                         }
-                        // A cross-platform `Poller::notify()` wake (the frontend
-                        // delivered input) carries no event — so any wake while
-                        // input is of interest means "input may be ready": surface
-                        // it and let the caller drain the input channel. This also
-                        // makes the wait return promptly instead of yield-looping.
-                        if interest.wants_input_wakeup() {
-                            input_wakeup = true;
-                        }
+                        // A cross-platform `Poller::notify()` wake carries no
+                        // poll event.  The shared pending bit above distinguishes
+                        // that semantic wake from an equally eventless timeout.
                         if interest.wants_processes() {
                             ready_processes.extend(processes.iter().filter_map(|(id, process)| {
                                 process_has_ready_async_dns(process).then_some(*id)
                             }));
                         }
                         let backend = ProcessWaitEvents::from_sources_with_writable(
-                            input_wakeup,
+                            notification_wakeup,
                             ready_processes,
                             writable_processes,
                         );
-                        if backend.has_input_wakeup()
+                        if backend.has_notification_wakeup()
                             || backend.has_ready_processes()
                             || backend.has_writable_processes()
                             || timeout.is_zero()
@@ -2976,7 +2955,9 @@ fn start_async_network_dns_lookup(
         let _ = sender.send(result);
         thread_ready.store(true, Ordering::Release);
         if let Some(notifier) = notifier {
-            notifier.notify();
+            if let Err(error) = notifier.notify() {
+                tracing::error!(%error, "failed to wake evaluator after asynchronous DNS lookup");
+            }
         }
     });
     PendingDnsRequest {
@@ -4429,29 +4410,18 @@ impl ProcessManager {
         ProcessWaitEvents::ready_processes(self.live_process_ids())
     }
 
-    #[cfg(unix)]
-    pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: std::os::unix::io::RawFd) {
-        self.wait_backend.register_input_wakeup_fd(fd);
+    pub(crate) fn has_wait_notification_backend(&self) -> bool {
+        self.wait_backend.has_notifications()
     }
 
-    #[cfg(not(unix))]
-    pub(crate) fn register_wait_input_wakeup_fd(&mut self, fd: super::eval::WakeupFd) {
-        self.wait_backend.register_input_wakeup_fd(fd);
-    }
-
-    pub(crate) fn has_wait_input_wakeup_backend(&self) -> bool {
-        self.wait_backend.has_input_wakeup()
-    }
-
-    /// Cross-platform handle for the render/frontend thread to wake a blocked
-    /// wait via `Poller::notify()` after delivering input. `None` if no poller
-    /// could be created (e.g. headless/batch).
+    /// Cross-platform handle for producers to wake a blocked wait after
+    /// publishing work. `None` if no poller could be created.
     pub(crate) fn wait_notifier(&self) -> Option<WaitNotifier> {
         self.wait_backend.notify_handle()
     }
 
-    /// Block on the unified wait poller (input-wakeup fd and/or process fds,
-    /// per `interest`) until something is ready or `timeout` elapses. This is
+    /// Block on the unified wait poller (cross-thread notification and/or process
+    /// fds, per `interest`) until something is ready or `timeout` elapses. This is
     /// the single GNU-`pselect`-style primitive the wait loop blocks on; see
     /// `Context::block_for_wait_request`.
     pub(crate) fn wait_for_backend_events(

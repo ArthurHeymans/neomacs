@@ -3190,19 +3190,6 @@ impl crate::emacs_core::eval::Context {
         }
     }
 
-    pub(crate) fn clear_input_wakeup_fd(&self) {
-        #[cfg(unix)]
-        if let Some(fd) = self.wakeup_fd {
-            let mut buf = [0u8; 64];
-            unsafe {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                while libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
-                libc::fcntl(fd, libc::F_SETFL, flags);
-            }
-        }
-    }
-
     pub(crate) fn stage_pending_command_input_for_wait_request(
         &mut self,
     ) -> Result<bool, crate::emacs_core::error::Flow> {

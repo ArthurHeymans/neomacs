@@ -22,6 +22,51 @@ pub(crate) enum EnvironmentLookup {
     Missing,
 }
 
+fn host_process_environment() -> Value {
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut entries: Vec<(String, String)> = std::env::vars().collect();
+    // Mirror GNU `w32.c init_environment`: guarantee HOME is set on Windows,
+    // where the OS environment provides APPDATA/USERPROFILE but typically not
+    // HOME. Without it `getenv "HOME"` is nil and `~` never expands, so e.g.
+    // `directory-files "~"` fails fatally during startup. GNU defaults HOME to
+    // the roaming AppData folder (CSIDL_APPDATA == %APPDATA%), else "C:/".
+    #[cfg(windows)]
+    if !entries.iter().any(|(k, _)| k.eq_ignore_ascii_case("HOME")) {
+        let home = std::env::var("APPDATA")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| "C:/".to_string());
+        entries.push(("HOME".to_string(), home));
+    }
+
+    Value::list(
+        entries
+            .into_iter()
+            .map(|(name, value)| Value::string(format!("{name}={value}")))
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Install the environment inherited by this Neomacs process as the Lisp
+/// startup environment.
+///
+/// GNU initializes `process-environment` before `loadup.el`, so every startup
+/// consumer observes the same HOME, PATH, and other host variables as file
+/// expansion and subprocess creation. A cached evaluator needs the same
+/// operation when it is activated, because its dumped environment belongs to
+/// the process that created the cache rather than the current process.
+pub(crate) fn install_host_environment_snapshot(eval: &mut Context) {
+    let process_environment = host_process_environment();
+    {
+        let obarray = eval.obarray_mut();
+        obarray.make_special("initial-environment");
+        obarray.make_special("process-environment");
+    }
+    let initial_environment = super::builtins::builtin_copy_sequence(vec![process_environment])
+        .expect("copy the startup environment snapshot");
+    eval.set_variable("initial-environment", initial_environment);
+    eval.set_variable("process-environment", process_environment);
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ChildEnvironment {
     entries: Vec<(OsString, OsString)>,

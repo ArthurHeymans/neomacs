@@ -1,10 +1,5 @@
 //! Context — special forms, function application, and dispatch.
 
-#[cfg(unix)]
-pub type WakeupFd = std::os::unix::io::RawFd;
-#[cfg(windows)]
-pub type WakeupFd = std::os::windows::io::RawHandle;
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::hash::Hash;
@@ -2150,11 +2145,6 @@ pub struct Context {
     /// Tasks queued from other threads (e.g. the diagnostics server) to run on
     /// the Lisp thread at a safe point. Drained in the `read_char` loop.
     eval_task_rx: Option<crossbeam_channel::Receiver<EvalThreadTask>>,
-    /// Wakeup file descriptor — the read end of a pipe that the render thread
-    /// writes to when input is available.  Used by `wait_for_input()` with
-    /// `pselect()`/`poll()` to multiplex input with process I/O and timers.
-    /// `None` in batch mode.
-    pub wakeup_fd: Option<WakeupFd>,
     /// Cross-thread quit signal. The input-bridge thread flips this to
     /// `true` when it observes a `quit-char` keystroke; the evaluator
     /// drains it from `maybe_quit` into `Vquit_flag` on its next poll.
@@ -3227,7 +3217,6 @@ impl Context {
         ev.command_loop = crate::keyboard::CommandLoop::default();
         ev.input_rx = None;
         ev.eval_task_rx = None;
-        ev.wakeup_fd = None;
         ev.redisplay_fn = None;
         ev.frame_snapshot_fn = None;
         ev.display_host = None;
@@ -5626,7 +5615,6 @@ impl Context {
             command_loop,
             input_rx: None,
             eval_task_rx: None,
-            wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
@@ -5815,7 +5803,6 @@ impl Context {
             command_loop: crate::keyboard::CommandLoop::new(),
             input_rx: None,
             eval_task_rx: None,
-            wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
@@ -6305,15 +6292,11 @@ impl Context {
     ///
     /// # Arguments
     /// * `input_rx` — Receiver end of the crossbeam channel from the render thread
-    /// * `wakeup_fd` — Read end of the wakeup pipe (render thread writes to signal input)
     pub fn init_input_system(
         &mut self,
         input_rx: crossbeam_channel::Receiver<crate::keyboard::InputEvent>,
-        wakeup_fd: WakeupFd,
     ) {
         self.input_rx = Some(input_rx);
-        self.wakeup_fd = Some(wakeup_fd);
-        self.processes.register_wait_input_wakeup_fd(wakeup_fd);
         self.command_loop.running = true;
     }
 
@@ -6336,11 +6319,10 @@ impl Context {
         }
     }
 
-    /// Cross-platform handle the render/frontend thread uses to wake the wait
-    /// loop after pushing an input event to the channel (see [`WaitNotifier`]).
-    /// Returns `None` in headless/batch where no poller exists. Prefer this over
-    /// the legacy Unix wakeup pipe: it works on every platform via
-    /// `Poller::notify()`.
+    /// Cross-platform handle producers use to wake the wait loop after
+    /// publishing work (see [`WaitNotifier`]). Returns `None` only if the
+    /// platform poller could not be created. Frontend input, diagnostics, and
+    /// asynchronous process work share this mechanism.
     pub fn wait_notifier(&self) -> Option<crate::emacs_core::process::WaitNotifier> {
         self.processes.wait_notifier()
     }

@@ -3628,16 +3628,9 @@ fn recursive_edit_processes_load_option_from_forwarded_args_before_first_input()
     })
     .expect("queue close request");
     drop(tx);
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
 
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
     result.expect("close request should let the outer recursive edit exit cleanly");
 
     let result = eval
@@ -3676,16 +3669,9 @@ fn bootstrap_batch_eval_exits_outer_command_loop_like_gnu() {
     configure_gnu_startup_state(&mut eval, frame_id, &startup);
 
     let (_tx, rx) = crossbeam_channel::unbounded();
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
 
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
     result.expect("batch recursive edit should exit cleanly");
 
     assert_eq!(
@@ -3724,16 +3710,9 @@ fn bootstrap_batch_kill_emacs_is_silent_shutdown() {
     configure_gnu_startup_state(&mut eval, frame_id, &startup);
 
     let (_tx, rx) = crossbeam_channel::unbounded();
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
 
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
     result.expect("batch kill-emacs should exit cleanly");
 
     assert_eq!(
@@ -3765,16 +3744,9 @@ fn bootstrap_batch_startup_error_exits_nonzero_like_gnu() {
     configure_gnu_startup_state(&mut eval, frame_id, &startup);
 
     let (_tx, rx) = crossbeam_channel::unbounded();
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
 
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
     result.expect("batch startup error should leave through kill-emacs");
 
     assert_eq!(
@@ -4241,15 +4213,8 @@ fn gnu_startup_clears_terminal_frame_without_deselecting_opening_gui_frame() {
     })
     .expect("queue close request");
     drop(tx);
-    let mut wake_pipe = [0; 2];
-    let pipe_result = unsafe { libc::pipe(wake_pipe.as_mut_ptr()) };
-    assert_eq!(pipe_result, 0, "pipe should initialize");
-    eval.init_input_system(rx, wake_pipe[0]);
+    eval.init_input_system(rx);
     let result = eval.recursive_edit();
-    unsafe {
-        libc::close(wake_pipe[0]);
-        libc::close(wake_pipe[1]);
-    }
     result.expect("close request should let recursive edit exit cleanly");
 
     assert_eq!(

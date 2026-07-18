@@ -621,16 +621,14 @@ fn append_load_suffix(base: &Path, suffix: &[u8]) -> PathBuf {
     }
 }
 
+#[cfg(test)]
 fn source_suffixed_path(base: &Path) -> PathBuf {
     append_load_suffix(base, b".el")
 }
 
+#[cfg(test)]
 fn compiled_suffixed_path(base: &Path) -> PathBuf {
     append_load_suffix(base, b".elc")
-}
-
-fn module_suffixed_path(base: &Path) -> PathBuf {
-    append_load_suffix(base, std::env::consts::DLL_SUFFIX.as_bytes())
 }
 
 fn unsupported_compiled_suffixed_paths(base: &Path) -> [PathBuf; 1] {
@@ -654,35 +652,112 @@ fn candidate_mtime(path: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 
-/// The ordered suffix list `load` searches, mirroring GNU
-/// `Fget_load_suffixes` (src/lread.c): the cross product of the live
-/// `load-suffixes` and `load-file-rep-suffixes` variables, in order. Falls
-/// back to the built-in default (module suffix, then `.elc`, then `.el`)
-/// when the variables are unbound (pre-bootstrap contexts).
-pub(crate) fn load_suffixes_from_obarray(obarray: &super::symbol::Obarray) -> Vec<Vec<u8>> {
-    let strings_of = |name: &str| -> Option<Vec<Vec<u8>>> {
-        let value = obarray.symbol_value(name)?.clone();
-        let items = super::value::list_to_vec(&value)?;
-        Some(
-            items
-                .into_iter()
-                .filter_map(|v| v.as_lisp_string().map(|s| s.as_bytes().to_vec()))
-                .collect(),
-        )
-    };
-    let Some(suffixes) = strings_of("load-suffixes") else {
-        return default_load_suffixes();
-    };
-    let reps = strings_of("load-file-rep-suffixes").unwrap_or_else(|| vec![Vec::new()]);
-    let mut out = Vec::with_capacity(suffixes.len() * reps.len().max(1));
-    for suffix in &suffixes {
-        for rep in &reps {
-            let mut combined = suffix.clone();
-            combined.extend_from_slice(rep);
-            out.push(combined);
+/// One validated snapshot of GNU's live load-suffix variables.
+///
+/// Both Lisp-visible `get-load-suffixes` and file resolution consume this
+/// plan, so validation, cross-product ordering, and representation handling
+/// cannot drift between the two paths.
+pub(crate) struct LoadSuffixPlan {
+    required: Vec<Vec<u8>>,
+    representations: Vec<Vec<u8>>,
+}
+
+impl LoadSuffixPlan {
+    pub(crate) fn from_obarray(obarray: &super::symbol::Obarray) -> Result<Self, Flow> {
+        let suffixes = strict_load_suffix_list(
+            obarray.symbol_value("load-suffixes"),
+            "load-suffixes",
+            Some(default_load_suffixes()),
+        )?;
+        let representations = strict_load_suffix_list(
+            obarray.symbol_value("load-file-rep-suffixes"),
+            "load-file-rep-suffixes",
+            Some(vec![Vec::new()]),
+        )?;
+        // GNU only reads `jka-compr-load-suffixes` while considering a
+        // non-empty representation of a dynamic module.  Keep the raw Lisp
+        // value so irrelevant members (and even an otherwise-invalid value)
+        // do not affect ordinary Elisp suffixes.
+        let compressed_representations = obarray
+            .symbol_value("jka-compr-load-suffixes")
+            .copied()
+            .unwrap_or(Value::NIL);
+
+        let mut required = Vec::with_capacity(suffixes.len() * representations.len());
+        for suffix in &suffixes {
+            for representation in &representations {
+                // GNU Fget_load_suffixes does not try compressed dynamic
+                // modules when the representation comes from jka-compr.
+                if !representation.is_empty()
+                    && suffix.ends_with(std::env::consts::DLL_SUFFIX.as_bytes())
+                    && super::builtins::builtin_member(vec![
+                        Value::heap_string(LispString::from_unibyte(representation.clone())),
+                        compressed_representations,
+                    ])?
+                    .is_truthy()
+                {
+                    continue;
+                }
+                let mut combined = suffix.clone();
+                combined.extend_from_slice(representation);
+                required.push(combined);
+            }
         }
+
+        Ok(Self {
+            required,
+            representations,
+        })
     }
-    out
+
+    pub(crate) fn required_values(&self) -> Vec<Value> {
+        self.required
+            .iter()
+            .cloned()
+            .map(|bytes| Value::heap_string(LispString::from_unibyte(bytes)))
+            .collect()
+    }
+
+    fn search_suffixes(&self, must_suffix: bool) -> Vec<Vec<u8>> {
+        let mut suffixes = self.required.clone();
+        if !must_suffix {
+            suffixes.extend(self.representations.iter().cloned());
+        }
+        suffixes
+    }
+}
+
+fn strict_load_suffix_list(
+    value: Option<&Value>,
+    name: &str,
+    unbound_default: Option<Vec<Vec<u8>>>,
+) -> Result<Vec<Vec<u8>>, Flow> {
+    let Some(value) = value else {
+        return Ok(unbound_default.unwrap_or_default());
+    };
+    let Some(items) = super::value::list_to_vec(value) else {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("listp"), *value],
+        ));
+    };
+    items
+        .into_iter()
+        .map(|item| {
+            item.as_lisp_string()
+                .map(|suffix| suffix.as_bytes().to_vec())
+                .ok_or_else(|| {
+                    signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("stringp"), item],
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|flow| {
+            tracing::debug!(variable = name, "invalid live load suffix list");
+            flow
+        })
 }
 
 fn default_load_suffixes() -> Vec<Vec<u8>> {
@@ -716,13 +791,11 @@ fn pick_suffixed(base: &Path, prefer_newer: bool, suffixes: &[Vec<u8>]) -> Optio
 
 fn find_for_base(
     base: &Path,
-    original_name: &LispString,
     no_suffix: bool,
-    must_suffix: bool,
     prefer_newer: bool,
     suffixes: &[Vec<u8>],
 ) -> Option<PathBuf> {
-    if no_suffix || has_load_suffix(original_name) {
+    if no_suffix {
         if base.is_file() {
             return Some(base.to_path_buf());
         }
@@ -731,10 +804,6 @@ fn find_for_base(
 
     if let Some(suffixed) = pick_suffixed(base, prefer_newer, suffixes) {
         return Some(suffixed);
-    }
-
-    if !must_suffix && base.is_file() {
-        return Some(base.to_path_buf());
     }
 
     // Surface unsupported compressed compiled artifacts explicitly.
@@ -794,28 +863,25 @@ pub fn find_file_in_load_path_with_flags(
     prefer_newer: bool,
 ) -> Option<PathBuf> {
     let name = LispString::from_utf8(name);
-    find_lisp_file_in_load_path_with_flags(
-        &name,
-        load_path,
-        no_suffix,
-        must_suffix,
-        prefer_newer,
-        &default_load_suffixes(),
-    )
-    .map(|found| load_path_buf(&found))
+    let must_suffix = effective_must_suffix(&name, must_suffix);
+    let mut suffixes = default_load_suffixes();
+    if !must_suffix {
+        suffixes.push(Vec::new());
+    }
+    find_lisp_file_in_load_path_with_flags(&name, load_path, no_suffix, prefer_newer, &suffixes)
+        .map(|found| load_path_buf(&found))
 }
 
 fn find_lisp_file_in_load_path_with_flags(
     name: &LispString,
     load_path: &[LispString],
     no_suffix: bool,
-    must_suffix: bool,
     prefer_newer: bool,
     suffixes: &[Vec<u8>],
 ) -> Option<LispString> {
     let path = expand_tilde_path_buf(name);
     if path.is_absolute() {
-        return find_for_base(&path, name, no_suffix, must_suffix, prefer_newer, suffixes)
+        return find_for_base(&path, no_suffix, prefer_newer, suffixes)
             .map(|found| load_path_lisp_string(&found));
     }
 
@@ -823,14 +889,26 @@ fn find_lisp_file_in_load_path_with_flags(
     // is evaluated within each directory.
     for dir in load_path {
         let full = expand_tilde_path_buf(dir).join(load_path_buf(name));
-        if let Some(found) =
-            find_for_base(&full, name, no_suffix, must_suffix, prefer_newer, suffixes)
-        {
+        if let Some(found) = find_for_base(&full, no_suffix, prefer_newer, suffixes) {
             return Some(load_path_lisp_string(&found));
         }
     }
 
     None
+}
+
+/// GNU's MUST-SUFFIX means that an otherwise bare FILE must acquire a load
+/// suffix.  It is deliberately relaxed for an already-suffixed FILE and for
+/// any FILE containing a directory component, where the exact name remains a
+/// permitted representation candidate.
+fn effective_must_suffix(file: &LispString, requested: bool) -> bool {
+    if !requested || has_load_suffix(file) {
+        return false;
+    }
+
+    load_path_buf(file)
+        .parent()
+        .is_none_or(|parent| parent.as_os_str().is_empty())
 }
 
 /// Extract `load-path` from the evaluator's obarray as Lisp strings.
@@ -885,22 +963,27 @@ pub(crate) fn plan_load_in_state(
     let file = super::fileio::substitute_in_file_name_lisp(&file);
     let noerror = noerror.is_some_and(|v| v.is_truthy());
     let nosuffix = nosuffix.is_some_and(|v| v.is_truthy());
-    let must_suffix = must_suffix.is_some_and(|v| v.is_truthy());
+    let must_suffix =
+        effective_must_suffix(&file, must_suffix.is_some_and(|value| value.is_truthy()));
     let prefer_newer = obarray
         .symbol_value("load-prefer-newer")
         .is_some_and(|v| v.is_truthy());
 
     let load_path = get_load_path(obarray);
-    // GNU Fload (src/lread.c): the searched suffixes come from the LIVE
+    // GNU Fload (src/lread.c): NOSUFFIX bypasses suffix-variable evaluation
+    // entirely.  Otherwise the searched suffixes come from the LIVE
     // `load-suffixes` x `load-file-rep-suffixes` cross product
     // (Fget_load_suffixes), so a dynamic `(let ((load-suffixes '(".el"))) ...)`
     // binding steers resolution.
-    let suffixes = load_suffixes_from_obarray(obarray);
+    let suffixes = if nosuffix {
+        Vec::new()
+    } else {
+        LoadSuffixPlan::from_obarray(obarray)?.search_suffixes(must_suffix)
+    };
     match find_lisp_file_in_load_path_with_flags(
         &file,
         &load_path,
         nosuffix,
-        must_suffix,
         prefer_newer,
         &suffixes,
     ) {
@@ -2693,37 +2776,6 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
     let source_dir = lisp_directory_name_from_host_path(project_root);
     let temporary_file_directory = lisp_directory_name_from_host_path(&std::env::temp_dir());
     let path_separator = if cfg!(windows) { ";" } else { ":" };
-    let process_environment = {
-        #[cfg_attr(not(windows), allow(unused_mut))]
-        let mut entries: Vec<(String, String)> = std::env::vars().collect();
-        // Mirror GNU `w32.c init_environment`: guarantee HOME is set on Windows,
-        // where the OS environment provides APPDATA/USERPROFILE but typically not
-        // HOME. Without it `getenv "HOME"` is nil and `~` never expands, so e.g.
-        // `directory-files "~"` fails fatally during startup. GNU defaults HOME to
-        // the roaming AppData folder (CSIDL_APPDATA == %APPDATA%), else "C:/".
-        #[cfg(windows)]
-        if !entries.iter().any(|(k, _)| k.eq_ignore_ascii_case("HOME")) {
-            let home = std::env::var("APPDATA")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .unwrap_or_else(|_| "C:/".to_string());
-            entries.push(("HOME".to_string(), home));
-        }
-        Value::list(
-            entries
-                .into_iter()
-                .map(|(name, value)| Value::string(format!("{name}={value}")))
-                .collect::<Vec<_>>(),
-        )
-    };
-    {
-        let obarray = eval.obarray_mut();
-        obarray.make_special("initial-environment");
-        obarray.make_special("process-environment");
-    }
-    let initial_environment = super::builtins::builtin_copy_sequence(vec![process_environment])
-        .expect("copy the startup environment snapshot");
-    eval.set_variable("initial-environment", initial_environment);
-    eval.set_variable("process-environment", process_environment);
     super::runtime_identity::install(eval);
     let system_configuration = super::builtins_extra::system_configuration_value();
     let system_configuration_options = super::builtins_extra::system_configuration_options_value();
@@ -4227,6 +4279,7 @@ fn finalize_cached_bootstrap_eval(
     super::font::restore_created_faces_from_table(&eval.face_table.face_list());
     clear_runtime_loader_state(eval);
     clear_transient_runtime_features(eval);
+    super::environment::install_host_environment_snapshot(eval);
     ensure_startup_compat_variables(eval, project_root);
     restore_cached_runtime_window_system_surface(eval);
     // GNU subr.el defines this as 0 in the dumped image.  Bootstrap/loading
@@ -4653,6 +4706,9 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         maybe_trace_bootstrap_step("create_bootstrap_evaluator_with_features: enter");
         let mut eval = super::eval::Context::new();
         maybe_trace_bootstrap_step("create_bootstrap_evaluator_with_features: evaluator-new");
+        // Match GNU's initialization order: Lisp startup must inherit the host
+        // environment before loadup.el can inspect HOME or any other variable.
+        super::environment::install_host_environment_snapshot(&mut eval);
         let bootstrap_features = normalized_bootstrap_features(extra_features);
         for feature in &bootstrap_features {
             let _ = eval.provide_value(Value::symbol(&feature), None);

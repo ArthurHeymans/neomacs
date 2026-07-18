@@ -966,6 +966,46 @@ fn get_load_suffixes_cross_products_rep_suffixes() {
 }
 
 #[test]
+fn get_load_suffixes_returns_nil_when_representation_suffixes_are_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.obarray
+        .set_symbol_value("load-file-rep-suffixes", Value::NIL);
+
+    let result = builtin_get_load_suffixes(&ev.obarray, vec![]).unwrap();
+
+    assert!(result.is_nil());
+}
+
+#[test]
+fn get_load_suffixes_ignores_irrelevant_non_string_jka_members() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.obarray
+        .set_symbol_value("load-suffixes", Value::list(vec![Value::string(".el")]));
+    ev.obarray.set_symbol_value(
+        "load-file-rep-suffixes",
+        Value::list(vec![Value::string("")]),
+    );
+    ev.obarray.set_symbol_value(
+        "jka-compr-load-suffixes",
+        Value::list(vec![Value::symbol("not-a-string")]),
+    );
+
+    let result = builtin_get_load_suffixes(&ev.obarray, vec![])
+        .expect("GNU only consults jka members for represented module suffixes");
+
+    assert_eq!(
+        list_to_vec(&result)
+            .expect("suffix list")
+            .into_iter()
+            .map(|value| value.as_utf8_str().expect("string suffix").to_owned())
+            .collect::<Vec<_>>(),
+        vec![".el"]
+    );
+}
+
+#[test]
 fn get_load_suffixes_rejects_over_arity() {
     crate::test_utils::init_test_tracing();
     let ev = Context::new();

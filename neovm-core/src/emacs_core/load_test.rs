@@ -142,12 +142,19 @@ fn runtime_load_path_without_empty_element_appends_defaults() {
 fn startup_environment_snapshot_is_independent_from_process_policy() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("workspace root")
-        .to_path_buf();
 
-    ensure_startup_compat_variables(&mut eval, &project_root);
+    crate::emacs_core::environment::install_host_environment_snapshot(&mut eval);
+
+    if let Ok(expected_home) = std::env::var("HOME") {
+        let lisp_home = eval
+            .eval_str("(getenv-internal \"HOME\")")
+            .expect("read HOME from the Lisp startup environment");
+        assert_eq!(
+            lisp_home.as_utf8_str(),
+            Some(expected_home.as_str()),
+            "raw Lisp startup must observe the HOME inherited by this process"
+        );
+    }
 
     let same_list = eval
         .eval_str("(eq initial-environment process-environment)")
@@ -3651,7 +3658,7 @@ fn bootstrap_runtime_mx_eager_completion_services_printable_input_before_quit() 
             tx.send(crate::keyboard::InputEvent::key_press(event))
                 .expect("send M-x eager-completion test input");
             if let Some(notifier) = &notifier {
-                notifier.notify();
+                notifier.notify().expect("wake M-x completion wait");
             }
         };
 
@@ -8191,6 +8198,210 @@ fn find_file_with_suffix_flags() {
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn builtin_load_honors_bare_live_representation_suffix() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("load representation fixture");
+    fs::write(
+        dir.path().join("representation-probe.rep"),
+        "(setq vm-loaded-live-representation t)\n",
+    )
+    .expect("write represented Lisp source");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::heap_string(runtime_path_entry(
+            dir.path().to_string_lossy().as_ref(),
+        ))]),
+    );
+    eval.set_variable(
+        "load-file-rep-suffixes",
+        Value::list(vec![Value::string(""), Value::string(".rep")]),
+    );
+
+    let loaded = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![Value::string("representation-probe")],
+    )
+    .expect("GNU load searches representation suffixes after required suffixes");
+
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray().symbol_value("vm-loaded-live-representation"),
+        Some(&Value::T)
+    );
+}
+
+#[test]
+fn builtin_load_rejects_non_string_live_suffix_entries() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("load suffix validation fixture");
+    fs::write(
+        dir.path().join("invalid-suffix-probe.el"),
+        "(setq vm-invalid-suffix-probe-ran t)\n",
+    )
+    .expect("write Lisp source");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::heap_string(runtime_path_entry(
+            dir.path().to_string_lossy().as_ref(),
+        ))]),
+    );
+    eval.set_variable(
+        "load-suffixes",
+        Value::list(vec![Value::string(".el"), Value::symbol("not-a-string")]),
+    );
+
+    let result = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![Value::string("invalid-suffix-probe")],
+    );
+
+    assert!(matches!(
+        result,
+        Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-type-argument"
+    ));
+    assert_eq!(
+        eval.obarray().symbol_value("vm-invalid-suffix-probe-ran"),
+        None
+    );
+}
+
+#[test]
+fn builtin_load_does_not_try_bare_name_when_representation_suffixes_are_nil() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("nil representation fixture");
+    fs::write(
+        dir.path().join("bare-representation-probe"),
+        "(setq vm-bare-representation-probe-ran t)\n",
+    )
+    .expect("write bare Lisp source");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::heap_string(runtime_path_entry(
+            dir.path().to_string_lossy().as_ref(),
+        ))]),
+    );
+    eval.set_variable("load-file-rep-suffixes", Value::NIL);
+
+    let loaded = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![Value::string("bare-representation-probe"), Value::T],
+    )
+    .expect("noerror load should return nil when no permitted suffix exists");
+
+    assert_eq!(loaded, Value::NIL);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-bare-representation-probe-ran"),
+        None
+    );
+}
+
+#[test]
+fn builtin_load_finds_representation_of_already_suffixed_name() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("represented suffixed-name fixture");
+    fs::write(
+        dir.path().join("represented-name.el.rep"),
+        "(setq vm-represented-suffixed-name-ran t)\n",
+    )
+    .expect("write represented Lisp source");
+
+    let mut eval = Context::new();
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::heap_string(runtime_path_entry(
+            dir.path().to_string_lossy().as_ref(),
+        ))]),
+    );
+    eval.set_variable(
+        "load-file-rep-suffixes",
+        Value::list(vec![Value::string(""), Value::string(".rep")]),
+    );
+
+    let loaded = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![
+            Value::string("represented-name.el"),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("GNU clears must-suffix and searches representations for a suffixed name");
+
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-represented-suffixed-name-ran"),
+        Some(&Value::T)
+    );
+}
+
+#[test]
+fn builtin_load_must_suffix_accepts_exact_name_with_directory() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("directory-qualified load fixture");
+    let source = dir.path().join("directory-qualified-probe");
+    fs::write(&source, "(setq vm-directory-qualified-probe-ran t)\n")
+        .expect("write directory-qualified Lisp source");
+
+    let mut eval = Context::new();
+    let loaded = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![
+            Value::heap_string(runtime_path_entry(source.to_string_lossy().as_ref())),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("GNU clears must-suffix when FILE includes a directory");
+
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-directory-qualified-probe-ran"),
+        Some(&Value::T)
+    );
+}
+
+#[test]
+fn builtin_load_nosuffix_does_not_read_live_suffix_variables() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempdir().expect("nosuffix load fixture");
+    let source = dir.path().join("nosuffix-probe");
+    fs::write(&source, "(setq vm-nosuffix-probe-ran t)\n").expect("write exact-name Lisp source");
+
+    let mut eval = Context::new();
+    eval.set_variable("load-suffixes", Value::symbol("not-a-list"));
+    eval.set_variable("load-file-rep-suffixes", Value::symbol("not-a-list"));
+    let loaded = crate::emacs_core::builtins::builtin_load(
+        &mut eval,
+        vec![
+            Value::heap_string(runtime_path_entry(source.to_string_lossy().as_ref())),
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("GNU's nosuffix branch does not evaluate suffix variables");
+
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray().symbol_value("vm-nosuffix-probe-ran"),
+        Some(&Value::T)
+    );
 }
 
 #[test]

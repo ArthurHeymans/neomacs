@@ -182,7 +182,6 @@ bindgen = "0.72"
 pkg-config = "0.3"
 
 # OS pipe
-os_pipe = "1.1"
 
 # I/O multiplexing (epoll/kqueue/wepoll)
 polling = "3"
@@ -194,7 +193,7 @@ webpki-roots = "1.0"
 rustls-pki-types = "1"
 
 # Windows
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Networking_WinSock", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_IO", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 
 # Dev / test
 proptest = "1.6"

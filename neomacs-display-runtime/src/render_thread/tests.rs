@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use winit::keyboard::{Key, NamedKey};
 
 fn make_test_app() -> RenderApp {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (_emacs, render) = comms.split();
     RenderApp::new(
         render,
@@ -174,7 +174,7 @@ fn test_translate_key_unknown() {
 
 #[test]
 fn test_render_thread_creation() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     assert!(emacs.input_rx.is_empty());
@@ -183,7 +183,7 @@ fn test_render_thread_creation() {
 
 #[test]
 fn clipboard_command_before_display_initialization_returns_an_explicit_error() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
     let mut app = RenderApp::new(
         render,
@@ -726,7 +726,7 @@ fn adopted_primary_pointer_target_uses_real_frame_id() {
 
 #[test]
 fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
     let mut app = RenderApp::new(
         render,
@@ -794,7 +794,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
 
 #[test]
 fn installing_frame_emits_activation_before_replaced_presentation_retirement() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
     let mut app = RenderApp::new(
         render,
@@ -843,7 +843,7 @@ fn installing_frame_emits_activation_before_replaced_presentation_retirement() {
 
 #[test]
 fn superseded_pending_frame_is_discarded_before_activation() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
     let mut app = RenderApp::new(
         render,
@@ -880,7 +880,7 @@ fn superseded_pending_frame_is_discarded_before_activation() {
 
 #[test]
 fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_window() {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
     let mut app = RenderApp::new(
         render,

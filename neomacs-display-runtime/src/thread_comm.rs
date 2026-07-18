@@ -1,19 +1,11 @@
 //! Thread communication infrastructure for two-thread architecture.
 //!
-//! Provides lock-free channels and wakeup mechanism between Emacs and render threads.
+//! Provides channels between the evaluator and render threads. Input wakeups
+//! are owned by the evaluator's cross-platform wait notifier after the input
+//! bridge queues a converted event.
 
 use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-#[cfg(windows)]
-use std::os::windows::io::{AsRawHandle, OwnedHandle, RawHandle};
 use std::time::Instant;
-
-/// Platform file descriptor type for the wakeup pipe.
-#[cfg(unix)]
-pub type WakeupFd = RawFd;
-#[cfg(windows)]
-pub type WakeupFd = RawHandle;
 
 use neomacs_display_protocol::ImageRealization;
 use neomacs_display_protocol::SealedFramePresentation;
@@ -716,160 +708,6 @@ pub enum RenderCommand {
     Clipboard(ClipboardCommand),
 }
 
-#[cfg(unix)]
-type OwnedWakeupEndpoint = OwnedFd;
-#[cfg(windows)]
-type OwnedWakeupEndpoint = OwnedHandle;
-
-/// Emacs-owned read endpoint of the render-to-evaluator wakeup pipe.
-pub struct WakeupReader {
-    endpoint: OwnedWakeupEndpoint,
-}
-
-/// Render-owned write endpoint of the render-to-evaluator wakeup pipe.
-pub struct WakeupWriter {
-    endpoint: OwnedWakeupEndpoint,
-}
-
-/// Wakeup pipe before its endpoints are split between thread owners.
-pub struct WakeupPipe {
-    reader: WakeupReader,
-    writer: WakeupWriter,
-}
-
-impl WakeupPipe {
-    pub fn new() -> std::io::Result<Self> {
-        let (read, write) = os_pipe::pipe()?;
-        // GNU child_signal_init (src/process.c) puts BOTH ends of its
-        // self-wake pipe in O_NONBLOCK: a full pipe means a wake is already
-        // pending, so the writer must fail with EAGAIN (harmless) instead of
-        // BLOCKING the producing thread until the evaluator drains — a
-        // blocking write end can freeze the render/input threads whenever
-        // the evaluator stalls long enough for ~64K wake bytes to pile up.
-        #[cfg(unix)]
-        unsafe {
-            use std::os::unix::io::AsRawFd;
-            for fd in [read.as_raw_fd(), write.as_raw_fd()] {
-                let flags = libc::fcntl(fd, libc::F_GETFL);
-                if flags >= 0 {
-                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-                }
-            }
-        }
-        Ok(Self {
-            reader: WakeupReader {
-                endpoint: read.into(),
-            },
-            writer: WakeupWriter {
-                endpoint: write.into(),
-            },
-        })
-    }
-
-    pub fn read_fd(&self) -> WakeupFd {
-        self.reader.read_fd()
-    }
-
-    pub fn wake(&self) {
-        self.writer.wake();
-    }
-
-    pub fn clear(&self) {
-        self.reader.clear();
-    }
-
-    fn into_endpoints(self) -> (WakeupReader, WakeupWriter) {
-        (self.reader, self.writer)
-    }
-}
-
-#[cfg(unix)]
-impl WakeupReader {
-    pub fn read_fd(&self) -> WakeupFd {
-        self.endpoint.as_raw_fd()
-    }
-
-    pub fn clear(&self) {
-        let fd = self.read_fd();
-        let mut buf = [0u8; 64];
-        unsafe {
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-            while libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) > 0 {}
-            libc::fcntl(fd, libc::F_SETFL, flags);
-        }
-    }
-}
-
-#[cfg(unix)]
-impl WakeupWriter {
-    pub fn wake(&self) {
-        let fd = self.endpoint.as_raw_fd();
-        unsafe {
-            libc::write(fd, [1u8].as_ptr() as *const _, 1);
-        }
-    }
-}
-
-#[cfg(windows)]
-impl WakeupReader {
-    pub fn read_fd(&self) -> WakeupFd {
-        self.endpoint.as_raw_handle()
-    }
-
-    pub fn clear(&self) {
-        use windows_sys::Win32::Storage::FileSystem::ReadFile;
-        use windows_sys::Win32::System::Pipes::PeekNamedPipe;
-        let handle = self.read_fd();
-        let mut buf = [0u8; 64];
-        loop {
-            let mut avail: u32 = 0;
-            unsafe {
-                PeekNamedPipe(
-                    handle as _,
-                    std::ptr::null_mut(),
-                    0,
-                    std::ptr::null_mut(),
-                    &mut avail,
-                    std::ptr::null_mut(),
-                );
-            }
-            if avail == 0 {
-                break;
-            }
-            let mut read_bytes: u32 = 0;
-            unsafe {
-                ReadFile(
-                    handle as _,
-                    buf.as_mut_ptr() as _,
-                    buf.len() as u32,
-                    &mut read_bytes,
-                    std::ptr::null_mut(),
-                );
-            }
-            if read_bytes == 0 {
-                break;
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-impl WakeupWriter {
-    pub fn wake(&self) {
-        use windows_sys::Win32::Storage::FileSystem::WriteFile;
-        unsafe {
-            WriteFile(
-                self.endpoint.as_raw_handle() as _,
-                [1u8].as_ptr() as _,
-                1,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            );
-        }
-    }
-}
-
 /// Channel capacities
 // Frame channel: unbounded so try_send never drops frames.
 // The render thread drains all queued frames and keeps only the latest
@@ -895,45 +733,36 @@ pub struct ThreadComms {
     /// Input events: Render → Emacs
     pub input_tx: Sender<InputEvent>,
     pub input_rx: Receiver<InputEvent>,
-
-    /// Wakeup pipe: Render → Emacs
-    pub wakeup: WakeupPipe,
 }
 
 impl ThreadComms {
     /// Create new thread communication channels
-    pub fn new() -> std::io::Result<Self> {
+    pub fn new() -> Self {
         let (frame_tx, frame_rx) = unbounded();
         let (cmd_tx, cmd_rx) = bounded(COMMAND_CHANNEL_CAPACITY);
         let (input_tx, input_rx) = bounded(INPUT_CHANNEL_CAPACITY);
-        let wakeup = WakeupPipe::new()?;
-
-        Ok(Self {
+        Self {
             frame_tx,
             frame_rx,
             cmd_tx,
             cmd_rx,
             input_tx,
             input_rx,
-            wakeup,
-        })
+        }
     }
 
     /// Split into Emacs-side and Render-side handles
     pub fn split(self) -> (EmacsComms, RenderComms) {
-        let (wakeup_reader, wakeup_writer) = self.wakeup.into_endpoints();
         let emacs = EmacsComms {
             frame_tx: self.frame_tx,
             cmd_tx: self.cmd_tx,
             input_rx: self.input_rx,
-            wakeup_reader,
         };
 
         let render = RenderComms {
             frame_rx: self.frame_rx,
             cmd_rx: self.cmd_rx,
             input_tx: self.input_tx,
-            wakeup: wakeup_writer,
         };
 
         (emacs, render)
@@ -945,7 +774,6 @@ pub struct EmacsComms {
     pub frame_tx: Sender<SealedFramePresentation>,
     pub cmd_tx: Sender<RenderCommand>,
     pub input_rx: Receiver<InputEvent>,
-    pub wakeup_reader: WakeupReader,
 }
 
 /// Render thread communication handle
@@ -953,7 +781,6 @@ pub struct RenderComms {
     pub frame_rx: Receiver<SealedFramePresentation>,
     pub cmd_rx: Receiver<RenderCommand>,
     pub input_tx: Sender<InputEvent>,
-    pub wakeup: WakeupWriter,
 }
 
 impl RenderComms {
@@ -1020,7 +847,10 @@ impl RenderComms {
         }
     }
 
-    /// Send input event to Emacs and wake it up
+    /// Queue a display input event for the input bridge.
+    ///
+    /// After converting the display event, the bridge owns notifying the
+    /// evaluator's wait backend.
     pub fn send_input(&self, event: InputEvent) {
         let log_delivery = Self::should_log_delivery(&event);
         let event_name = Self::event_name(&event);
@@ -1030,7 +860,6 @@ impl RenderComms {
                     if log_delivery {
                         tracing::debug!("send_input: queued {}", event_name);
                     }
-                    self.wakeup.wake();
                 }
                 Err(TrySendError::Full(event)) => {
                     tracing::debug!(
@@ -1053,7 +882,6 @@ impl RenderComms {
                 if log_delivery {
                     tracing::debug!("send_input: queued {}", event_name);
                 }
-                self.wakeup.wake();
             }
             Err(err) => {
                 tracing::warn!(

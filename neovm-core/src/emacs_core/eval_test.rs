@@ -1598,7 +1598,7 @@ fn read_char_respects_inhibit_redisplay_during_input_wait() {
         ))
         .expect("send keypress");
         if let Some(notifier) = notifier {
-            notifier.notify();
+            notifier.notify().expect("wake command-input wait");
         }
     });
 

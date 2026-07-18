@@ -649,33 +649,9 @@ pub(crate) fn builtin_get_load_suffixes(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("get-load-suffixes", &args, 0)?;
-    // GNU `Fget_load_suffixes' cross-products `load-suffixes' with
-    // `load-file-rep-suffixes'.  The empty representation suffix extends each
-    // load suffix; it is not a standalone load suffix.
-    let load_suffixes = load_suffix_list(obarray.symbol_value("load-suffixes"), "load-suffixes")?;
-    let rep_suffixes = load_suffix_list(
-        obarray.symbol_value("load-file-rep-suffixes"),
-        "load-file-rep-suffixes",
-    )?;
-    let jka_compr_suffixes = load_suffix_list(
-        obarray.symbol_value("jka-compr-load-suffixes"),
-        "jka-compr-load-suffixes",
-    )?;
-    let mut suffixes = Vec::new();
-    for suffix in &load_suffixes {
-        for rep in &rep_suffixes {
-            // GNU `Fget_load_suffixes' does not try compressed dynamic
-            // modules when the representation suffix comes from jka-compr.
-            if !rep.is_empty()
-                && suffix.ends_with(module_file_suffix())
-                && jka_compr_suffixes.iter().any(|jka| jka == rep)
-            {
-                continue;
-            }
-            suffixes.push(Value::string(format!("{suffix}{rep}")));
-        }
-    }
-    Ok(Value::list(suffixes))
+    Ok(Value::list(
+        super::load::LoadSuffixPlan::from_obarray(obarray)?.required_values(),
+    ))
 }
 
 pub(crate) fn module_file_suffix() -> &'static str {
@@ -686,38 +662,6 @@ pub(crate) fn module_file_suffix() -> &'static str {
     } else {
         ".so"
     }
-}
-
-fn load_suffix_list(value: Option<&Value>, name: &str) -> Result<Vec<String>, Flow> {
-    let Some(value) = value else {
-        return Ok(Vec::new());
-    };
-    if value.is_nil() {
-        return Ok(Vec::new());
-    }
-    let Some(items) = list_to_vec(value) else {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("listp"), *value],
-        ));
-    };
-    let mut suffixes = Vec::with_capacity(items.len());
-    for item in items {
-        let Some(suffix) = item
-            .as_lisp_string()
-            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
-        else {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), item],
-            ));
-        };
-        suffixes.push(suffix);
-    }
-    if suffixes.is_empty() && name == "load-file-rep-suffixes" {
-        suffixes.push(String::new());
-    }
-    Ok(suffixes)
 }
 
 /// `(locate-file FILENAME PATH &optional SUFFIXES PREDICATE)`

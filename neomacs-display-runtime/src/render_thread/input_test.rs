@@ -28,7 +28,7 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
 
     use crate::thread_comm::ThreadComms;
 
-    let comms = ThreadComms::new().expect("ThreadComms::new failed");
+    let comms = ThreadComms::new();
     let (_emacs, render) = comms.split();
     let image_metadata = Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
     let shared_monitors = Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new()));

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 fn make_test_app() -> RenderApp {
-    let comms = ThreadComms::new().expect("Failed to create ThreadComms");
+    let comms = ThreadComms::new();
     let (_emacs, render) = comms.split();
     RenderApp::new(
         render,

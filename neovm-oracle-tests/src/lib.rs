@@ -242,6 +242,7 @@ mod object_intervals_semantics;
 mod oclosure;
 mod oclosure_advanced;
 mod or;
+mod oracle_harness_semantics;
 mod org_mode;
 mod overlay_comprehensive_patterns;
 mod overlay_helper_semantics;

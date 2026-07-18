@@ -47,19 +47,17 @@ fn div_cx299_network_interface_info_query() {
       (list
        (or (null ifaces) (consp ifaces))
        ;; Entries are (NAME . ADDRESS); the info query takes the NAME
-       ;; string. Project to shape booleans -- the live interface set,
-       ;; ordering, and addresses are machine state and must not leak
-       ;; into the expect.
-       (and ifaces
-            (let ((info (network-interface-info (caar ifaces))))
-              (or (null info) (consp info))))
-       ;; GNU signals wrong-type-argument for a non-string; lock the
-       ;; signal SYMBOL only (its data embeds the volatile entry).
-       (and ifaces
-            (condition-case err
-                (progn (network-interface-info (car ifaces)) :no-error)
-              (wrong-type-argument :wrong-type)
-              (error (list :other (car err)))))))
+       ;; string. Project to a shape boolean and accept an empty interface
+       ;; set, which is valid in an isolated network namespace.
+       (or (null ifaces)
+           (let ((info (network-interface-info (caar ifaces))))
+             (or (null info) (consp info))))
+       ;; Exercise the wrong-type contract with fixed input so it does not
+       ;; depend on a live interface existing or leak volatile error data.
+       (condition-case err
+           (progn (network-interface-info '(not-a-string)) :no-error)
+         (wrong-type-argument :wrong-type)
+         (error (list :other (car err))))))
   (error (list :errored (car e))))
 "##,
         expect,

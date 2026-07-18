@@ -166,7 +166,7 @@ fn run_gui(demo: &str) {
         pixel_h
     );
 
-    let comms = ThreadComms::new().expect("failed to create comms");
+    let comms = ThreadComms::new();
     let (emacs_comms, render_comms) = comms.split();
 
     let image_dims: SharedImageMetadata =

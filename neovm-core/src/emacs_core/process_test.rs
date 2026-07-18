@@ -5,7 +5,7 @@ use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn process_finite_domains_match_gnu_symbols() {
@@ -3949,7 +3949,7 @@ fn command_input_preempts_self_rescheduling_zero_idle_timer_between_batches() {
         ))
         .expect("send command input while idle timer reschedules");
         if let Some(notifier) = notifier {
-            notifier.notify();
+            notifier.notify().expect("wake command-input wait");
         }
         input_sent_tx
             .send(())
@@ -4151,7 +4151,7 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
         ))
         .expect("send delayed keypress");
         if let Some(notifier) = notifier {
-            notifier.notify();
+            notifier.notify().expect("wake command-input wait");
         }
     });
 
@@ -4192,61 +4192,6 @@ fn timer_service_intent_exposes_side_effects_only() {
         .expect("service timer wait intent");
 }
 
-#[cfg(unix)]
-fn test_pipe_files() -> (std::fs::File, std::fs::File) {
-    use std::os::fd::FromRawFd;
-
-    let mut fds = [0; 2];
-    let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
-    assert_eq!(rc, 0, "create test pipe");
-    let read = unsafe { std::fs::File::from_raw_fd(fds[0]) };
-    let write = unsafe { std::fs::File::from_raw_fd(fds[1]) };
-    (read, write)
-}
-
-#[test]
-#[cfg(unix)]
-fn wait_backend_wakes_on_registered_input_wakeup_fd() {
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-
-    crate::test_utils::init_test_tracing();
-    let mut processes = ProcessManager::new();
-    let (read, mut write) = test_pipe_files();
-    processes.register_wait_input_wakeup_fd(read.as_raw_fd());
-
-    write.write_all(&[1]).expect("write input wakeup");
-    let events = processes
-        .wait_for_backend_events(
-            Duration::from_secs(1),
-            ProcessWaitBackendInterest::InputWakeupOnly,
-        )
-        .expect("poller should be available");
-
-    assert!(events.has_input_wakeup());
-    assert!(!events.has_ready_processes());
-}
-
-#[test]
-#[cfg(unix)]
-fn wait_backend_process_interest_ignores_input_wakeup_fd() {
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-
-    crate::test_utils::init_test_tracing();
-    let mut processes = ProcessManager::new();
-    let (read, mut write) = test_pipe_files();
-    processes.register_wait_input_wakeup_fd(read.as_raw_fd());
-
-    write.write_all(&[1]).expect("write input wakeup");
-    let events = processes
-        .wait_for_backend_events(Duration::ZERO, ProcessWaitBackendInterest::ProcessesOnly)
-        .expect("poller should be available");
-
-    assert!(!events.has_input_wakeup());
-    assert!(!events.has_ready_processes());
-}
-
 #[test]
 fn process_wait_events_use_structured_event_shape() {
     let processes = ProcessManager::new();
@@ -4254,39 +4199,54 @@ fn process_wait_events_use_structured_event_shape() {
     let events = processes.wait_for_process_events(Duration::ZERO);
     let _: ProcessWaitEvents = events;
 
-    assert!(!events.has_input_wakeup());
+    assert!(!events.has_notification_wakeup());
     assert!(!events.has_ready_processes());
 }
 
 #[test]
-#[cfg(unix)]
-fn wait_scheduler_uses_registered_input_wakeup_backend() {
-    use std::io::Write;
-    use std::os::fd::AsRawFd;
-
+fn wait_scheduler_remembers_cross_platform_notification_before_wait() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let (tx, rx) = crossbeam_channel::unbounded();
-    let (read, mut write) = test_pipe_files();
-    ev.init_input_system(rx, read.as_raw_fd());
-    assert!(ev.processes.has_wait_input_wakeup_backend());
+    let processes = ProcessManager::new();
+    assert!(processes.has_wait_notification_backend());
+    let notifier = processes
+        .wait_notifier()
+        .expect("cross-platform wait notifier should be available");
 
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(20));
-        tx.send(crate::keyboard::InputEvent::key_press(
-            crate::keyboard::KeyEvent::char('w'),
-        ))
-        .expect("send delayed keypress");
-        write.write_all(&[1]).expect("write input wakeup");
-    });
+    notifier
+        .notify()
+        .expect("remember notification issued before poller wait");
 
-    let completion = ev
-        .wait_for_command_input(Some(std::time::Instant::now() + Duration::from_secs(1)))
-        .expect("wait for command input through wakeup backend");
+    let started = Instant::now();
+    let events = processes
+        .wait_for_backend_events(
+            Duration::from_secs(2),
+            ProcessWaitBackendInterest::NotificationsOnly,
+        )
+        .expect("poller backend should be available");
 
-    assert_eq!(completion, CommandInputWaitOutcome::InputPending);
-    let event = ev.read_char().expect("keypress should remain readable");
-    assert_eq!(event, Value::fixnum('w' as i64));
+    assert!(events.has_notification_wakeup());
+    assert!(
+        started.elapsed() < Duration::from_millis(500),
+        "a notification issued before wait must be remembered, not time out"
+    );
+}
+
+#[test]
+fn wait_scheduler_does_not_report_timeout_as_notification() {
+    crate::test_utils::init_test_tracing();
+    let processes = ProcessManager::new();
+
+    let events = processes
+        .wait_for_backend_events(
+            Duration::from_millis(10),
+            ProcessWaitBackendInterest::NotificationsOnly,
+        )
+        .expect("poller backend should be available");
+
+    assert!(
+        !events.has_notification_wakeup(),
+        "an elapsed poll timeout is not a cross-thread notification"
+    );
 }
 
 #[test]

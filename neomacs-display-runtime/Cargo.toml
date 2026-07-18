@@ -47,7 +47,6 @@ cfg-if.workspace = true
 
 # Thread communication
 crossbeam-channel.workspace = true
-os_pipe.workspace = true
 
 # Cross-platform TTY terminal I/O
 crossterm = "0.29"

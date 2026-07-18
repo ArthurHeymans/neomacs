@@ -743,21 +743,21 @@ enum WaitProcessService {
 
 #[derive(Debug, PartialEq, Eq)]
 struct WaitBlockActivity {
-    input_wakeup: bool,
+    notification_wakeup: bool,
     process_service: WaitProcessService,
 }
 
 impl WaitBlockActivity {
     fn poll() -> Self {
         Self {
-            input_wakeup: false,
+            notification_wakeup: false,
             process_service: WaitProcessService::Poll,
         }
     }
 
     fn ready_processes(processes: Vec<ProcessId>) -> Self {
         Self {
-            input_wakeup: false,
+            notification_wakeup: false,
             process_service: WaitProcessService::Ready(ProcessWaitEvents::ready_processes(
                 processes,
             )),
@@ -765,24 +765,24 @@ impl WaitBlockActivity {
     }
 
     fn from_source_events(events: ProcessWaitEvents) -> Self {
-        let input_wakeup = events.has_input_wakeup();
+        let notification_wakeup = events.has_notification_wakeup();
         let process_service = if !events.has_ready_processes() && !events.has_writable_processes() {
             WaitProcessService::Poll
         } else {
             WaitProcessService::Ready(events)
         };
         Self {
-            input_wakeup,
+            notification_wakeup,
             process_service,
         }
     }
 
-    fn has_input_wakeup(&self) -> bool {
-        self.input_wakeup
+    fn has_notification_wakeup(&self) -> bool {
+        self.notification_wakeup
     }
 
     fn has_external_activity(&self) -> bool {
-        self.input_wakeup || matches!(self.process_service, WaitProcessService::Ready(_))
+        self.notification_wakeup || matches!(self.process_service, WaitProcessService::Ready(_))
     }
 
     fn into_process_service(self) -> WaitProcessService {
@@ -810,7 +810,7 @@ impl WaitTimeoutChoice {
 /// How the wait loop blocks for one iteration.
 ///
 /// When a wait poller exists (the normal case on every OS) we block on it —
-/// GNU's single `pselect` equivalent — watching the input-wakeup fd and/or the
+/// GNU's single `pselect` equivalent — watching input notifications and/or
 /// process fds as the request requires (`Poller`). Without a poller (creation
 /// failed / headless) we fall back to an explicit degraded primitive.
 #[derive(Debug, PartialEq, Eq)]
@@ -884,8 +884,10 @@ impl super::eval::Context {
         activity: WaitBlockActivity,
         run_timers: bool,
     ) -> Result<WaitServiceOutcome, Flow> {
-        if activity.has_input_wakeup() {
-            self.clear_input_wakeup_fd();
+        if activity.has_notification_wakeup() {
+            // Frontend input is one possible notification source.  Probing the
+            // channel is harmless for diagnostics/DNS notifications and keeps
+            // the generic notifier independent of its producers.
             let _ = self.stage_next_host_input_event_if_available()?;
         }
         self.service_wait_request_processes(request, activity.into_process_service(), run_timers)
@@ -979,7 +981,7 @@ impl super::eval::Context {
         &mut self,
         request: &WaitRequest,
     ) -> Result<WaitServiceOutcome, Flow> {
-        let activity = if self.processes.has_wait_input_wakeup_backend() {
+        let activity = if self.processes.has_wait_notification_backend() {
             let events = self
                 .processes
                 .wait_for_backend_events(Duration::ZERO, ProcessWaitBackendInterest::ProcessesOnly)
@@ -1234,7 +1236,7 @@ impl super::eval::Context {
     /// Choose how to block for one wait-loop iteration. See [`WaitBlock`].
     ///
     /// With a poller present (the normal case) this is GNU's single `pselect`:
-    /// we watch the input-wakeup fd whenever the request reads host input and
+    /// we accept input notifications whenever the request reads host input and
     /// the process fds whenever it services process output. The one wrinkle is
     /// `(host input, no process output)` while process fds are live: the poller
     /// is level-triggered, so polling readable-but-unserviced process fds with
@@ -1247,15 +1249,15 @@ impl super::eval::Context {
         let wants_input = request.waits_for_host_input();
         let wants_processes = request.services_process_output();
 
-        if self.processes.has_wait_input_wakeup_backend() {
+        if self.processes.has_wait_notification_backend() {
             use ProcessWaitBackendInterest::{
-                InputWakeupAndProcesses, InputWakeupOnly, ProcessesOnly,
+                NotificationsAndProcesses, NotificationsOnly, ProcessesOnly,
             };
             return match (wants_input, wants_processes) {
-                (true, true) => WaitBlock::Poller(InputWakeupAndProcesses),
+                (true, true) => WaitBlock::Poller(NotificationsAndProcesses),
                 (true, false) => {
                     if self.processes.live_process_ids().is_empty() {
-                        WaitBlock::Poller(InputWakeupOnly)
+                        WaitBlock::Poller(NotificationsOnly)
                     } else if self.input_rx.is_some() {
                         // Live process fds we won't service → channel, no spin.
                         WaitBlock::HostInputChannel
@@ -1265,9 +1267,9 @@ impl super::eval::Context {
                     }
                 }
                 // Process output, or a pure timeout (sleep-for / sit-for timer
-                // service): register input-wakeup interest too, so a cross-thread
-                // `Poller::notify()` — raised by the input bridge on C-g, which
-                // also sets `quit_requested` — RETURNS the block. The wait loop
+                // service): register notification interest too, so a cross-thread
+                // `Poller::notify()` returns the block. For example, the input
+                // bridge raises it on C-g and also sets `quit_requested`; the wait loop
                 // then re-iterates and `maybe_quit()` raises Quit within one
                 // iteration. This is neomacs' analogue of GNU's SIGINT
                 // interrupting `pselect` inside `sleep-for` (read_kbd == 0): the
@@ -1275,7 +1277,7 @@ impl super::eval::Context {
                 // `completes_on_command_input()` is false), it only wakes to
                 // re-check the quit flag, and the key is reconciled later by the
                 // command loop.
-                (false, _) => WaitBlock::Poller(InputWakeupAndProcesses),
+                (false, _) => WaitBlock::Poller(NotificationsAndProcesses),
             };
         }
 
@@ -1401,10 +1403,10 @@ mod tests {
     }
 
     #[test]
-    fn source_events_construct_input_wakeup_explicitly() {
-        let events = ProcessWaitEvents::input_wakeup();
+    fn source_events_construct_notification_wakeup_explicitly() {
+        let events = ProcessWaitEvents::notification_wakeup();
 
-        assert!(events.has_input_wakeup());
+        assert!(events.has_notification_wakeup());
         assert!(!events.has_ready_processes());
     }
 
@@ -1412,7 +1414,7 @@ mod tests {
     fn source_events_construct_ready_processes_explicitly() {
         let events = ProcessWaitEvents::ready_processes(vec![7]);
 
-        assert!(!events.has_input_wakeup());
+        assert!(!events.has_notification_wakeup());
         assert!(events.has_ready_process(7));
     }
 
@@ -1448,15 +1450,16 @@ mod tests {
     fn empty_source_events_poll_all_processes() {
         let activity = WaitBlockActivity::from_source_events(ProcessWaitEvents::default());
 
-        assert!(!activity.has_input_wakeup());
+        assert!(!activity.has_notification_wakeup());
         assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
     }
 
     #[test]
-    fn input_only_source_events_poll_all_processes() {
-        let activity = WaitBlockActivity::from_source_events(ProcessWaitEvents::input_wakeup());
+    fn notification_only_source_events_poll_all_processes() {
+        let activity =
+            WaitBlockActivity::from_source_events(ProcessWaitEvents::notification_wakeup());
 
-        assert!(activity.has_input_wakeup());
+        assert!(activity.has_notification_wakeup());
         assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
     }
 
@@ -1466,7 +1469,7 @@ mod tests {
 
         let activity = WaitBlockActivity::from_source_events(events);
 
-        assert!(activity.has_input_wakeup());
+        assert!(activity.has_notification_wakeup());
         assert_eq!(
             activity.into_process_service(),
             WaitProcessService::Ready(ProcessWaitEvents::from_sources(true, vec![3]))
@@ -1474,10 +1477,10 @@ mod tests {
     }
 
     #[test]
-    fn block_activity_from_ready_processes_has_no_input_wakeup() {
+    fn block_activity_from_ready_processes_has_no_notification_wakeup() {
         let activity = WaitBlockActivity::ready_processes(vec![4, 9]);
 
-        assert!(!activity.has_input_wakeup());
+        assert!(!activity.has_notification_wakeup());
         assert!(activity.has_external_activity());
         assert_eq!(
             activity.into_process_service(),
@@ -1507,7 +1510,7 @@ mod tests {
             .block_for_wait_request(&request, Duration::ZERO)
             .expect("block for wait request");
 
-        assert!(!activity.has_input_wakeup());
+        assert!(!activity.has_notification_wakeup());
         assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
     }
 

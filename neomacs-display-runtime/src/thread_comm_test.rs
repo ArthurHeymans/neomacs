@@ -33,157 +33,17 @@ fn channel_capacity_constants() {
 }
 
 // ===================================================================
-// WakeupPipe
-// ===================================================================
-
-#[test]
-fn wakeup_pipe_new_succeeds() {
-    let pipe = WakeupPipe::new();
-    assert!(pipe.is_ok());
-}
-
-#[cfg(unix)]
-#[test]
-fn wakeup_pipe_reader_fd_is_valid() {
-    let pipe = WakeupPipe::new().unwrap();
-    let fd = pipe.read_fd();
-    // A valid fd is non-negative
-    assert!(fd >= 0, "read_fd should be a non-negative fd, got {}", fd);
-}
-
-#[cfg(unix)]
-#[test]
-fn wakeup_pipe_wake_and_clear() {
-    let pipe = WakeupPipe::new().unwrap();
-
-    // Wake writes one byte to the pipe
-    pipe.wake();
-
-    // After wake, reading the pipe should yield data.
-    // We can verify by doing a non-blocking read before clear to confirm
-    // there is something, then call clear and confirm the pipe is drained.
-    let mut buf = [0u8; 1];
-    let n = unsafe {
-        let flags = libc::fcntl(pipe.read_fd(), libc::F_GETFL);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
-        let n = libc::read(pipe.read_fd(), buf.as_mut_ptr() as *mut _, 1);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags);
-        n
-    };
-    assert_eq!(
-        n, 1,
-        "wake() should have written 1 byte, read returned {}",
-        n
-    );
-    assert_eq!(buf[0], 1, "wake() writes the byte 0x01");
-}
-
-#[cfg(unix)]
-#[test]
-fn wakeup_pipe_clear_drains_pipe() {
-    let pipe = WakeupPipe::new().unwrap();
-
-    // Wake multiple times
-    pipe.wake();
-    pipe.wake();
-    pipe.wake();
-
-    // Clear should drain all bytes
-    pipe.clear();
-
-    // After clear, a non-blocking read should return EAGAIN (nothing to read)
-    let mut buf = [0u8; 1];
-    let n = unsafe {
-        let flags = libc::fcntl(pipe.read_fd(), libc::F_GETFL);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
-        let n = libc::read(pipe.read_fd(), buf.as_mut_ptr() as *mut _, 1);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags);
-        n
-    };
-    assert!(
-        n <= 0,
-        "pipe should be empty after clear(), but read returned {}",
-        n
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn wakeup_pipe_multiple_wakes() {
-    let pipe = WakeupPipe::new().unwrap();
-
-    // Write 5 bytes
-    for _ in 0..5 {
-        pipe.wake();
-    }
-
-    // Read them all out to verify we got 5
-    let mut total_read = 0isize;
-    let mut buf = [0u8; 64];
-    unsafe {
-        let flags = libc::fcntl(pipe.read_fd(), libc::F_GETFL);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
-        loop {
-            let n = libc::read(pipe.read_fd(), buf.as_mut_ptr() as *mut _, buf.len());
-            if n <= 0 {
-                break;
-            }
-            total_read += n;
-        }
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags);
-    }
-    assert_eq!(
-        total_read, 5,
-        "expected 5 bytes from 5 wake() calls, got {}",
-        total_read
-    );
-}
-
-#[test]
-fn wakeup_pipe_clear_on_empty_pipe_is_noop() {
-    let pipe = WakeupPipe::new().unwrap();
-    // Clearing an empty pipe should not block or panic
-    pipe.clear();
-}
-
-#[cfg(unix)]
-#[test]
-fn wakeup_pipe_wake_clear_wake_clear_cycle() {
-    let pipe = WakeupPipe::new().unwrap();
-
-    pipe.wake();
-    pipe.clear();
-
-    // Pipe should be empty now
-    pipe.wake();
-    pipe.wake();
-    pipe.clear();
-
-    // Verify drained
-    let mut buf = [0u8; 1];
-    let n = unsafe {
-        let flags = libc::fcntl(pipe.read_fd(), libc::F_GETFL);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
-        let n = libc::read(pipe.read_fd(), buf.as_mut_ptr() as *mut _, 1);
-        libc::fcntl(pipe.read_fd(), libc::F_SETFL, flags);
-        n
-    };
-    assert!(n <= 0, "pipe should be empty after second clear()");
-}
-
-// ===================================================================
 // ThreadComms
 // ===================================================================
 
 #[test]
-fn thread_comms_new_succeeds() {
-    let comms = ThreadComms::new();
-    assert!(comms.is_ok());
+fn thread_comms_new_constructs_all_channels() {
+    let (_emacs, _render) = ThreadComms::new().split();
 }
 
 #[test]
 fn thread_comms_input_channel_roundtrip() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     let event = InputEvent::Key {
         keysym: 65, // 'A'
@@ -213,7 +73,7 @@ fn thread_comms_input_channel_roundtrip() {
 
 #[test]
 fn thread_comms_cmd_channel_roundtrip() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     comms
         .cmd_tx
@@ -229,7 +89,7 @@ fn thread_comms_cmd_channel_roundtrip() {
 
 #[test]
 fn thread_comms_frame_channel_roundtrip() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     let buf = FrameGlyphBuffer::new();
     let state = FrameDisplayState::from_frame_glyph_buffer(&buf);
@@ -242,7 +102,7 @@ fn thread_comms_frame_channel_roundtrip() {
 
 #[test]
 fn thread_comms_frame_channel_is_unbounded() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     // Send many frames without blocking -- unbounded channel
     for i in 0..100 {
@@ -260,7 +120,7 @@ fn thread_comms_frame_channel_is_unbounded() {
 
 #[test]
 fn thread_comms_cmd_channel_bounded_capacity() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     // Fill up the command channel to capacity
     for _ in 0..COMMAND_CHANNEL_CAPACITY {
@@ -283,7 +143,7 @@ fn thread_comms_cmd_channel_bounded_capacity() {
 
 #[test]
 fn thread_comms_input_channel_bounded_capacity() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     // Fill up the input channel to capacity
     for _ in 0..INPUT_CHANNEL_CAPACITY {
@@ -312,7 +172,7 @@ fn thread_comms_input_channel_bounded_capacity() {
 
 #[test]
 fn presentation_lifecycle_events_roundtrip_without_losing_frame_identity() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     comms
         .input_tx
@@ -351,7 +211,7 @@ fn presentation_lifecycle_events_roundtrip_without_losing_frame_identity() {
 
 #[test]
 fn thread_comms_split_channels_work() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     // Emacs sends command, render receives
@@ -387,21 +247,13 @@ fn thread_comms_split_channels_work() {
     assert_eq!(frame.frame_pixel_height, 600.0);
 }
 
-#[test]
-fn thread_comms_split_wakeup_fd_matches() {
-    let comms = ThreadComms::new().unwrap();
-    let wakeup_fd = comms.wakeup.read_fd();
-    let (emacs, _render) = comms.split();
-    assert_eq!(emacs.wakeup_reader.read_fd(), wakeup_fd);
-}
-
 // ===================================================================
 // RenderComms::send_input()
 // ===================================================================
 
 #[test]
-fn render_comms_send_input_delivers_event_and_wakes() {
-    let comms = ThreadComms::new().unwrap();
+fn render_comms_send_input_delivers_event() {
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     render.send_input(InputEvent::MouseMove {
@@ -420,52 +272,6 @@ fn render_comms_send_input_delivers_event_and_wakes() {
         }
         other => panic!("Expected MouseMove, got {:?}", other),
     }
-
-    // Wakeup pipe should have been written to, clear it
-    emacs.wakeup_reader.clear();
-}
-
-// ===================================================================
-// WakeupReader
-// ===================================================================
-
-#[cfg(unix)]
-#[test]
-fn wakeup_clear_drains_pipe() {
-    let comms = ThreadComms::new().unwrap();
-    let (emacs, render) = comms.split();
-
-    // Wake via RenderComms
-    render.wakeup.wake();
-    render.wakeup.wake();
-
-    // Clear via EmacsComms
-    emacs.wakeup_reader.clear();
-
-    // Pipe should be empty
-    let mut buf = [0u8; 1];
-    let n = unsafe {
-        let wakeup_fd = emacs.wakeup_reader.read_fd();
-        let flags = libc::fcntl(wakeup_fd, libc::F_GETFL);
-        libc::fcntl(wakeup_fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-        let n = libc::read(wakeup_fd, buf.as_mut_ptr() as *mut _, 1);
-        libc::fcntl(wakeup_fd, libc::F_SETFL, flags);
-        n
-    };
-    assert!(n <= 0, "pipe should be drained after WakeupReader::clear()");
-}
-
-#[cfg(unix)]
-#[test]
-fn split_reader_remains_valid_after_render_endpoint_drops() {
-    let comms = ThreadComms::new().unwrap();
-    let (emacs, render) = comms.split();
-    let read_fd = emacs.wakeup_reader.read_fd();
-
-    drop(render);
-
-    let result = unsafe { libc::fcntl(read_fd, libc::F_GETFD) };
-    assert!(result >= 0, "render endpoint must not own the reader fd");
 }
 
 // ===================================================================
@@ -1865,7 +1671,7 @@ fn effect_updater_closure_executes() {
 
 #[test]
 fn channel_sends_multiple_input_events_in_order() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     let events = vec![
         InputEvent::Key {
@@ -1922,7 +1728,7 @@ fn channel_sends_multiple_input_events_in_order() {
 
 #[test]
 fn channel_sends_multiple_commands_in_order() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
 
     comms
         .cmd_tx
@@ -1957,7 +1763,7 @@ fn channel_sends_multiple_commands_in_order() {
 
 #[test]
 fn channel_empty_recv_returns_error() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
     assert!(comms.input_rx.try_recv().is_err());
     assert!(comms.cmd_rx.try_recv().is_err());
     assert!(comms.frame_rx.try_recv().is_err());
@@ -1969,7 +1775,7 @@ fn channel_empty_recv_returns_error() {
 
 #[test]
 fn cross_thread_input_event_delivery() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     let handle = std::thread::spawn(move || {
@@ -2004,13 +1810,11 @@ fn cross_thread_input_event_delivery() {
         }
         other => panic!("Expected WindowResize, got {:?}", other),
     }
-
-    emacs.wakeup_reader.clear();
 }
 
 #[test]
 fn cross_thread_command_delivery() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     let handle = std::thread::spawn(move || {
@@ -2035,7 +1839,7 @@ fn cross_thread_command_delivery() {
 
 #[test]
 fn cross_thread_frame_delivery() {
-    let comms = ThreadComms::new().unwrap();
+    let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
     let handle = std::thread::spawn(move || {
