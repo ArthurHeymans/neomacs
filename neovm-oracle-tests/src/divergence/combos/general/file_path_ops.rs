@@ -129,16 +129,36 @@ fn divergence_file_truename_tilde() {
 fn divergence_file_attributes_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (t t 27 t 660 t)""#]];
-    crate::common::assert_oracle_parity_expect(
-        r#"(progn
-  (let ((attrs (file-attributes "/tmp")))
-    (list (car attrs)
-          (eq (car attrs) t)
-          (nth 1 attrs)
-          (integerp (nth 1 attrs))
-          (nth 7 attrs)
-          (integerp (nth 7 attrs))))) "#,
+    // Hermetic: stats a fixture directory + file created inside the
+    // harness-controlled shared tempdir, not live /tmp, whose nlink/size
+    // drift with machine state (27/660 at the 2026-07-14 bless, 129/3300
+    // three days later).  Locks GNU src/dired.c `file_attributes` (single
+    // AT_SYMLINK_NOFOLLOW fstatat) semantics: car is t for a directory and
+    // nil for a regular file, st_nlink is 1 for a fresh regular file,
+    // st_size is the byte length, and the modes string comes from
+    // filemodestring — pinned via set-file-modes (src/fileio.c
+    // Fset_file_modes) so the process umask cannot leak in.  Directory
+    // nlink/size stay type-asserted only (filesystem-dependent).
+    let expect = expect_test::expect![[r#""OK (t t t t nil 1 27 t \"-rw-r--r--\")""#]];
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
+        r#"(let* ((base (file-name-as-directory
+              (or (getenv "NEOVM_ORACLE_TEST_TMPDIR") temporary-file-directory)))
+       (dir (expand-file-name "attr-fixture" base))
+       (file (expand-file-name "data.bin" dir)))
+  (make-directory dir t)
+  (write-region "0123456789abcdefghijklmnopq" nil file nil 'silent)
+  (set-file-modes file #o644)
+  (let ((dattrs (file-attributes dir))
+        (fattrs (file-attributes file)))
+    (list (car dattrs)
+          (eq (car dattrs) t)
+          (integerp (nth 1 dattrs))
+          (integerp (nth 7 dattrs))
+          (car fattrs)
+          (nth 1 fattrs)
+          (nth 7 fattrs)
+          (integerp (nth 7 fattrs))
+          (nth 8 fattrs)))) "#,
         expect,
     );
 }
