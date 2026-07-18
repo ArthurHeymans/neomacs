@@ -51,16 +51,24 @@ fn div_cx86_with_eval_after_load_runs_once() {
 #[test]
 fn div_cx86_locate_library_for_known_libs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/cl-lib.elc\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/emacs-lisp/subr-x.elc\" \"cl-lib.elc\" nil)""#
-    ]];
+    // Suffix search pinned to ".el" so the result no longer depends on
+    // whether the checkout has been byte-compiled (.elc present) — per GNU
+    // lisp/subr.el `locate-library` -> `locate-file` with
+    // (append (get-load-suffixes) load-file-rep-suffixes), where
+    // src/lread.c `Fget_load_suffixes` is exactly the cross product of the
+    // dynamic variables `load-suffixes` x `load-file-rep-suffixes` bound
+    // here.  The checkout-root prefix in the result is squashed to
+    // [ORACLE-LOAD-ROOT] by the harness normalizer.
+    let expect = expect_test::expect![[r#""OK (\"[ORACLE-LOAD-ROOT]/emacs-lisp/cl-lib.el\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/subr-x.el\" \"cl-lib.el\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(list
- (locate-library "cl-lib")
- (locate-library "subr-x")
- (file-name-nondirectory (or (locate-library "cl-lib") ""))
- (locate-library "definitely-no-such-lib-xyz"))
+(let ((load-suffixes '(".el"))
+      (load-file-rep-suffixes '("")))
+  (list
+   (locate-library "cl-lib")
+   (locate-library "subr-x")
+   (file-name-nondirectory (or (locate-library "cl-lib") ""))
+   (locate-library "definitely-no-such-lib-xyz")))
 "##,
         expect,
     );
