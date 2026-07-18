@@ -16450,50 +16450,71 @@ fn phase3_delete_at_eob_does_not_relay_reused_prefix_from_buffer_start() {
     );
 }
 
-/// REGRESSION (yank-pop first-row corruption): a localized-edit INSERT with the
-/// below-reuse fast path must not shift the charpos of the trailing
-/// past-last-line placeholder row. Insert `delta` chars on a content line that
-/// has real content + a trailing empty line below it; the edit-replay output
-/// must be byte-identical (row role/start/end/pixel_y) to a full rebuild of the
-/// same final state. Before the fix, the trailing row's charpos is shifted by
-/// `delta` (e.g. (0,0) -> (delta,delta)) — a phantom row at pixel_y 0.
+/// REDESIGN GOLDEN (empty-row real charpos, review round 2): the trailing
+/// EOB placeholder row carries ZV (GNU MATRIX_ROW_START/END_CHARPOS with
+/// ends_at_zv), so an edit that moves ZV must SHIFT it — the below-reuse fast
+/// path and a full rebuild must both report the new ZV. Successor of the
+/// pre-redesign edit_below_reuse_does_not_shift_trailing_placeholder_row,
+/// which pinned the opposite ((0, 0)-sentinel) semantics. Trace equality
+/// alone is deliberately not trusted here: both paths could agree on a wrong
+/// value, so the placeholder's ZV is asserted explicitly per trace.
 #[test]
-fn edit_below_reuse_does_not_shift_trailing_placeholder_row() {
+fn edit_below_reuse_shifts_trailing_placeholder_to_new_zv() {
     let text = "alpha line\nbeta line\ncharlie line\ndelta line\n";
-    let edit_byte: usize = 12; // inside "charlie" on line 3 (below has "delta line" + EOB)
+    let edit_byte: usize = 12; // inside "beta line" on line 2
+    let zv_after = text.len() + 1; // ASCII; one char inserted
 
-    let run = |lay_incrementally: bool| -> Vec<(GlyphRowRole, usize, usize, u32, bool, bool)> {
-        let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
-        let mut engine = LayoutEngine::new();
-        if lay_incrementally {
-            engine.layout_frame_rust(&mut eval, frame_id);
-        }
-        {
-            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
-            buffer.insert("X");
-        }
-        engine.layout_frame_rust(&mut eval, frame_id);
-        selected_window_layout_trace(&eval, &engine, frame_id)
+    // Reference: fresh engine over the post-edit buffer.
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(text, 800, 600);
+    {
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    // Incremental: warm layout, edit, relay through below-reuse.
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.allow_below_reuse = true;
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    });
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "the edit must take the edit fast path (got {:?})",
+        m.stats
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    for (label, trace) in [("incremental", &incremental), ("reference", &reference)] {
+        let placeholder = trace
             .matrix_rows
             .iter()
-            .map(|r| {
-                (
-                    r.role,
-                    r.start_charpos,
-                    r.end_charpos,
-                    r.pixel_y_bits,
-                    r.displays_text,
-                    r.ends_at_zv,
-                )
-            })
-            .collect()
-    };
-    let incremental = run(true);
-    let reference = run(false);
+            .filter(|r| r.role == GlyphRowRole::Text && r.ends_at_zv)
+            .next_back()
+            .unwrap_or_else(|| panic!("{label}: no ends_at_zv row: {:#?}", trace.matrix_rows));
+        assert!(
+            !placeholder.displays_text,
+            "{label}: the trailing placeholder displays no text"
+        );
+        assert_eq!(
+            (placeholder.start_charpos, placeholder.end_charpos),
+            (zv_after, zv_after),
+            "{label}: the placeholder must shift to the post-edit ZV: {:#?}",
+            trace.matrix_rows
+        );
+    }
     assert_eq!(
         incremental, reference,
-        "\nedit below-reuse must not corrupt the trailing placeholder row\n INC={:#?}\n REF={:#?}",
+        "\nbelow-reuse must match a full rebuild\n INC={:#?}\n REF={:#?}",
         incremental, reference
     );
 }
@@ -16531,42 +16552,144 @@ fn empty_line_row_carries_real_buffer_position() {
         "the empty mid-buffer line must carry its real buffer position, not (0,0)"
     );
 
-    // Edit above the empty line (insert on line 1) and assert the edit fast path
-    // matches a full rebuild of the final state: the empty line and the trailing
-    // placeholder both move by the inserted count.
-    let edit_byte: usize = 2; // inside "alpha" on line 1
-    let run = |lay_incrementally: bool| -> Vec<(GlyphRowRole, usize, usize, u32, bool, bool)> {
-        let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
-        let mut engine = LayoutEngine::new();
-        if lay_incrementally {
-            engine.layout_frame_rust(&mut eval, frame_id);
-        }
-        {
-            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
-            buffer.insert("X");
-        }
-        engine.layout_frame_rust(&mut eval, frame_id);
-        selected_window_layout_trace(&eval, &engine, frame_id)
-            .matrix_rows
-            .iter()
-            .map(|r| {
-                (
-                    r.role,
-                    r.start_charpos,
-                    r.end_charpos,
-                    r.pixel_y_bits,
-                    r.displays_text,
-                    r.ends_at_zv,
-                )
-            })
-            .collect()
-    };
-    let incremental = run(true);
-    let reference = run(false);
+    // The incremental (edit fast path) half of this redesign lives in
+    // edit_fast_path_reuses_empty_line_and_placeholder_rows below: an edit at
+    // row 0 cannot exercise it (edit_replay bails when first_dirty == 0).
+}
+
+/// REDESIGN GOLDEN (empty-row real charpos, review round 2): the EDIT fast
+/// path with below-reuse must reproduce a full rebuild byte-for-byte when the
+/// reused region below the edit contains an EMPTY line and the EOB
+/// placeholder. The edit lands on line 2 with an unchanged row ABOVE it so
+/// edit_replay actually engages (first_dirty > 0; editing row 0 bails to a
+/// full rebuild) and relays ONLY the edited line, below-reusing the empty
+/// line, "delta", and the ZV placeholder with charpos shifted by the insert.
+#[test]
+fn edit_fast_path_reuses_empty_line_and_placeholder_rows() {
+    let text = "alpha\nbeta\n\ndelta\n";
+    let edit_byte: usize = 7; // inside "beta" on line 2
+
+    // Reference: a fresh engine laying out the post-edit buffer.
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(text, 800, 600);
+    {
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    // Incremental: warm layout, edit, relay. Must take the edit fast path and
+    // relay only the edited line (the empty line and placeholder are reused).
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.allow_below_reuse = true;
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    });
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "the edit must take the edit fast path (got {:?})",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows <= 2,
+        "below-reuse must relay only the edited line (got {:?})",
+        m.stats
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
     assert_eq!(
         incremental, reference,
-        "\nedit across an empty line must match a full rebuild\n INC={:#?}\n REF={:#?}",
+        "\nedit across an empty line + placeholder must match a full rebuild\n INC={:#?}\n REF={:#?}",
+        incremental, reference
+    );
+}
+
+/// REDESIGN GOLDEN (empty-row real charpos, review round 2): the
+/// indicate-empty-lines viewport FILLER rows below the EOB placeholder are
+/// produced outside the text walk, yet they are enabled Text rows in the
+/// matrix. GNU produces the same rows in display_line with start = end = ZV
+/// and ends_at_zv set, so ours must carry ZV too — a filler left at the
+/// (0, 0) sentinel gets charpos-shifted by the edit fast path into
+/// (delta, delta) while a full rebuild recreates it at (0, 0), committing a
+/// non-canonical reusable matrix.
+#[test]
+fn edit_fast_path_shifts_indicate_empty_lines_fillers_to_zv() {
+    let text = "alpha\nbeta\n\ndelta\n";
+    let edit_byte: usize = 7; // inside "beta" on line 2
+    let zv_after = text.len() + 1; // ASCII; one char inserted
+
+    let enable_fillers = |eval: &mut Context| {
+        eval.eval_str("(set-default 'indicate-empty-lines t)")
+            .expect("enable indicate-empty-lines");
+    };
+
+    // Reference: fresh engine over the post-edit buffer, fillers enabled.
+    let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(text, 800, 600);
+    enable_fillers(&mut eval_ref);
+    {
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    }
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    // Incremental: warm layout with fillers on, edit, relay via the fast path.
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(text, 800, 600);
+    enable_fillers(&mut eval);
+    let mut engine = LayoutEngine::new();
+    engine.allow_below_reuse = true;
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+        buffer.insert("X");
+    });
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "the edit must take the edit fast path (got {:?})",
+        m.stats
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    // The filler producer must actually be exercised: beyond the placeholder,
+    // the tall window over a 4-line buffer yields filler rows, all at ZV.
+    for trace in [&incremental, &reference] {
+        let zv_rows: Vec<_> = trace
+            .matrix_rows
+            .iter()
+            .filter(|r| r.role == GlyphRowRole::Text && r.ends_at_zv && !r.displays_text)
+            .collect();
+        assert!(
+            zv_rows.len() >= 2,
+            "expected the EOB placeholder plus indicate-empty-lines fillers, got {}: {:#?}",
+            zv_rows.len(),
+            trace.matrix_rows
+        );
+        for row in zv_rows {
+            assert_eq!(
+                (row.start_charpos, row.end_charpos),
+                (zv_after, zv_after),
+                "every past-EOB row carries ZV like GNU, got ({}, {}): {:#?}",
+                row.start_charpos,
+                row.end_charpos,
+                trace.matrix_rows
+            );
+        }
+    }
+    assert_eq!(
+        incremental, reference,
+        "\nedit with indicate-empty-lines fillers must match a full rebuild\n INC={:#?}\n REF={:#?}",
         incremental, reference
     );
 }

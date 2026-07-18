@@ -600,6 +600,8 @@ impl<'a> TextWindowTailFinalizeRequest<'a> {
                     output_emitter,
                     TextWindowPendingRowFinish {
                         row_geometry,
+                        source_exhausted: context.charpos
+                            >= context.params.accessible_end_charpos().get(),
                         row_limit: context.row_limit,
                         row_y_positions,
                         text_y: context.text_y,

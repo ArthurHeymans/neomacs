@@ -2,6 +2,7 @@ use crate::display_item::RenderFaceRef;
 use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row_builder::{DisplayRowLayout, DisplayTabPolicy};
 use crate::hit_test::HitRow;
+use crate::types::LayoutCharPos0;
 use crate::window_output::{
     DisplayTextRowBegin, DisplayTextRowGeometryTransition, DisplayTextRowMetrics,
     RowMetricsSnapshot,
@@ -693,8 +694,14 @@ impl DisplayRowGeometryState {
         row_base: usize,
         col: usize,
         x: f32,
+        start_charpos: LayoutCharPos0,
     ) -> DisplayTextRowBegin {
-        DisplayRowGeometryCursor::from_state(*self).display_text_row_begin(row_base, col, x)
+        DisplayRowGeometryCursor::from_state(*self).display_text_row_begin(
+            row_base,
+            col,
+            x,
+            start_charpos,
+        )
     }
 
     pub(crate) fn glyph_y(&self, glyph_y_offset: f32) -> f32 {
@@ -714,7 +721,7 @@ impl DisplayRowGeometryState {
             target.transition.row_base,
             target.transition.col,
             target.transition.x,
-            target.hit_range.charpos_start,
+            LayoutCharPos0::new(target.hit_range.charpos_end),
         );
         *self = row_cursor.state();
         match target.transition.row_y_recording {
@@ -914,14 +921,13 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
-        finished_row_start_charpos: i64,
+        begin_row_start_charpos: LayoutCharPos0,
     ) -> DisplayTextRowGeometryTransition {
         let finished_row = self.finish_and_advance_to_next_row(defaults, kind);
-        let begin_row = self.display_text_row_begin(row_base, col, x);
+        let begin_row = self.display_text_row_begin(row_base, col, x, begin_row_start_charpos);
         DisplayTextRowGeometryTransition {
             finished_row,
             begin_row,
-            finished_row_start_charpos,
         }
     }
 
@@ -930,6 +936,7 @@ impl DisplayRowGeometryCursor {
         row_base: usize,
         col: usize,
         x: f32,
+        start_charpos: LayoutCharPos0,
     ) -> DisplayTextRowBegin {
         DisplayTextRowBegin {
             display_row_index: row_base + self.row,
@@ -937,6 +944,7 @@ impl DisplayRowGeometryCursor {
             col,
             y: self.y,
             x,
+            start_charpos,
         }
     }
 

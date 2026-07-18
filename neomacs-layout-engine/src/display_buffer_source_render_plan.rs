@@ -286,6 +286,7 @@ impl BufferSourceOutputSetup {
                     display_text_row_base,
                     walk_setup.col,
                     walk_setup.x,
+                    crate::types::LayoutCharPos0::new(walk_setup.charpos),
                 ),
             ),
             row_visibility_limit: DisplayRowVisibilityLimit {

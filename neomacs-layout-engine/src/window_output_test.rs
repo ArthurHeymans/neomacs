@@ -39,6 +39,7 @@ use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, Disp
 use crate::display_row_text_output::TextRowOutput;
 use crate::display_row_walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
+use crate::types::LayoutCharPos0;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
@@ -504,6 +505,7 @@ fn text_matrix_row_output_begins_row() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -561,6 +563,7 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
             col: 0,
             y: 4.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     let outcome = finish_text_window_row(
@@ -571,7 +574,6 @@ fn text_matrix_row_output_finishes_with_matrix_metrics() {
             height: 16.0,
             ascent: 11.0,
         },
-        0,
     );
 
     assert_eq!(
@@ -664,6 +666,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
@@ -675,7 +678,6 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             height: 16.0,
             ascent: 12.0,
         },
-        0,
     );
     builder.end_row();
 
@@ -689,6 +691,7 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             col: 0,
             y: 16.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     finish_text_window_row(
@@ -699,7 +702,6 @@ fn text_window_redisplay_positions_use_last_row_with_buffer_position() {
             height: 16.0,
             ascent: 12.0,
         },
-        0,
     );
 
     let positions = TextWindowRedisplayPositions::from_output_rows(&emitter, 3, 100, 4);
@@ -954,6 +956,7 @@ fn text_matrix_row_commands_begin_and_finish_output() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -981,7 +984,6 @@ fn text_matrix_row_commands_begin_and_finish_output() {
             height: 16.0,
             ascent: 12.0,
         },
-        0,
     );
 
     assert_eq!(emitter.rows().len(), 1);
@@ -1025,6 +1027,7 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -1036,7 +1039,6 @@ fn display_text_row_metrics_finish_and_end_closes_matrix_row() {
             height: 16.0,
             ascent: 12.0,
         },
-        0,
     );
 
     assert_eq!(emitter.rows().len(), 1);
@@ -1077,6 +1079,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
             col: 0,
             y: 4.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -1089,6 +1092,7 @@ fn finish_pending_text_window_row_records_hit_and_row_metrics() {
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
         TextWindowPendingRowFinish {
+            source_exhausted: false,
             row_geometry: &row_geometry,
             row_limit: DisplayRowLimit { max_rows: 1 },
             row_y_positions: &row_y_positions,
@@ -1144,6 +1148,7 @@ fn install_text_window_output_installs_row_metrics() {
             col: 0,
             y: 2.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     write_char_to_current_row(&mut builder, 'x', FaceId::new(7), 0);
@@ -1155,7 +1160,6 @@ fn install_text_window_output_installs_row_metrics() {
             height: 20.0,
             ascent: 15.0,
         },
-        0,
     );
 
     install_text_window_finished_rows(TextWindowOutputTarget::from_builder(&mut builder), &emitter);
@@ -1210,6 +1214,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             col: 0,
             y: 2.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
@@ -1222,7 +1227,6 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             height: 20.0,
             ascent: 15.0,
         },
-        0,
     );
 
     let positions = install_text_window_body_output(
@@ -1305,6 +1309,7 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -1324,8 +1329,8 @@ fn text_matrix_row_transition_finishes_without_starting_past_max_rows() {
                 col: 0,
                 y: 16.0,
                 x: 0.0,
+                start_charpos: LayoutCharPos0::new(0),
             },
-            finished_row_start_charpos: 0,
         },
         1,
     );
@@ -1370,6 +1375,7 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
             col: 0,
             y: 0.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
 
@@ -1389,8 +1395,8 @@ fn text_matrix_row_transition_emits_finish_and_begin() {
                 col: 0,
                 y: 16.0,
                 x: 0.0,
+                start_charpos: LayoutCharPos0::new(0),
             },
-            finished_row_start_charpos: 0,
         },
     );
 

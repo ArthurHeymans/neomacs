@@ -178,13 +178,14 @@ fn display_row_geometry_cursor_advances_row_position_and_resets_metrics() {
         }
     );
     assert_eq!(
-        cursor.display_text_row_begin(5, 7, 13.0),
+        cursor.display_text_row_begin(5, 7, 13.0, LayoutCharPos0::new(21)),
         DisplayTextRowBegin {
             display_row_index: 8,
             row: 3,
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 15.0,
             x: 13.0,
+            start_charpos: LayoutCharPos0::new(21),
         }
     );
 }
@@ -635,7 +636,7 @@ fn display_row_geometry_state_builds_display_text_row_begin() {
         ascent: 12.0,
     };
 
-    let begin = geometry.display_text_row_begin(5, 7, 13.0);
+    let begin = geometry.display_text_row_begin(5, 7, 13.0, LayoutCharPos0::new(21));
 
     assert_eq!(
         begin,
@@ -645,6 +646,7 @@ fn display_row_geometry_state_builds_display_text_row_begin() {
             col: 7,
             y: 69.0,
             x: 13.0,
+            start_charpos: LayoutCharPos0::new(21),
         }
     );
 }
@@ -736,7 +738,7 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
         5,
         7,
         13.0,
-        21,
+        LayoutCharPos0::new(21),
     );
 
     assert_eq!(
@@ -753,8 +755,8 @@ fn display_row_geometry_cursor_finishes_and_builds_next_display_text_row_begin()
                 col: 7,
                 y: 10.0 + 3.0 * 16.0 + 15.0,
                 x: 13.0,
+                start_charpos: LayoutCharPos0::new(21),
             },
-            finished_row_start_charpos: 21,
         }
     );
     assert_eq!(
@@ -818,6 +820,7 @@ fn display_row_geometry_state_can_finish_boundary_and_record_hit_row() {
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 11.0,
             x: 13.0,
+            start_charpos: LayoutCharPos0::new(22),
         }
     );
     assert_eq!(row_y_positions.recorded(), &[8.0, 10.0 + 3.0 * 16.0 + 11.0]);
@@ -870,8 +873,8 @@ fn display_row_geometry_transition_target_groups_truncation_transition_and_commi
                 col: 7,
                 y: 10.0 + 3.0 * 16.0 + 11.0,
                 x: 13.0,
+                start_charpos: LayoutCharPos0::new(0),
             },
-            finished_row_start_charpos: 0,
         }
     );
     assert_eq!(geometry.row, 3);
@@ -924,6 +927,7 @@ fn display_row_geometry_transition_target_line_break_constructor_sets_kind() {
             col: 7,
             y: 10.0 + 3.0 * 16.0 + 15.0,
             x: 13.0,
+            start_charpos: LayoutCharPos0::new(0),
         }
     );
     assert_eq!(geometry.row_extra_y, 15.0);
@@ -987,8 +991,8 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 col: 7,
                 y: 69.0,
                 x: 13.0,
+                start_charpos: LayoutCharPos0::new(21),
             },
-            finished_row_start_charpos: 11,
         },
     };
     let mut hit_rows = Vec::new();
@@ -1014,8 +1018,8 @@ fn display_row_boundary_transition_records_hit_row_and_returns_geometry_transiti
                 col: 7,
                 y: 69.0,
                 x: 13.0,
+                start_charpos: LayoutCharPos0::new(21),
             },
-            finished_row_start_charpos: 11,
         }
     );
 }

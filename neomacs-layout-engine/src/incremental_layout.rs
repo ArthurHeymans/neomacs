@@ -496,7 +496,15 @@ impl RetainedWindowMatrix {
             if !row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
                 || row.continued
                 || row.truncated_left
-                || row.left_fringe_bitmap.is_some()
+            {
+                return None;
+            }
+            // Fringe bitmaps on TEXT rows are buffer-dependent decorations the
+            // replay cannot re-derive. The indicate-empty-lines fillers past
+            // EOB (!displays_text, left OR right side) are position-independent
+            // and carry real ZV bounds, so they reuse like the placeholder.
+            if (row.left_fringe_bitmap.is_some() || row.right_fringe_bitmap.is_some())
+                && row.displays_text
             {
                 return None;
             }
@@ -608,7 +616,15 @@ impl RetainedWindowMatrix {
             if !row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
                 || row.continued
                 || row.truncated_left
-                || row.left_fringe_bitmap.is_some()
+            {
+                return None;
+            }
+            // Fringe bitmaps on TEXT rows are buffer-dependent decorations the
+            // replay cannot re-derive. The indicate-empty-lines fillers past
+            // EOB (!displays_text, left OR right side) are position-independent
+            // and carry real ZV bounds, so they reuse like the placeholder.
+            if (row.left_fringe_bitmap.is_some() || row.right_fringe_bitmap.is_some())
+                && row.displays_text
             {
                 return None;
             }

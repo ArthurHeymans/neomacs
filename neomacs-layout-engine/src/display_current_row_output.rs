@@ -77,16 +77,12 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
             })
     }
 
-    /// Give the current buffer-text row its real walk-start buffer position when
-    /// it emitted no buffer glyphs (its bounds are still the unset `start == end`
-    /// state). Used for the trailing EOB placeholder, which is never "finished"
-    /// through the metrics install seam yet must carry ZV like every other
-    /// enabled row (GNU's MATRIX_ROW_START/END_CHARPOS). A no-op when there is no
-    /// current row, when the row already carries real bounds, or for chrome rows.
-    pub(crate) fn stamp_empty_text_row_buffer_bounds(&mut self, row_start_charpos: i64) {
-        self.apply_current_row_mutation(StampEmptyTextRowBufferBoundsMutation {
-            row_start_charpos,
-        });
+    /// Mark the current buffer-text row as the one that reached the end of the
+    /// buffer (GNU `row->ends_at_zv_p`): the walk sets it when the source is
+    /// exhausted, on the final text row or the empty EOB placeholder alike.
+    /// A no-op when there is no current row or for chrome rows.
+    pub(crate) fn mark_text_row_ends_at_zv(&mut self) {
+        self.apply_current_row_mutation(MarkTextRowEndsAtZvMutation);
     }
 
     pub(crate) fn cluster_tail(&self) -> Option<(char, bool)> {
@@ -96,20 +92,16 @@ impl<'builder> DisplayRowCurrentRowOutput<'builder> {
     }
 }
 
-struct StampEmptyTextRowBufferBoundsMutation {
-    row_start_charpos: i64,
-}
+struct MarkTextRowEndsAtZvMutation;
 
-impl DisplayCurrentRowMutation for StampEmptyTextRowBufferBoundsMutation {
+impl DisplayCurrentRowMutation for MarkTextRowEndsAtZvMutation {
     type Output = ();
 
     fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        if row.role != GlyphRowRole::Text || row.start_charpos != row.end_charpos {
+        if row.role != GlyphRowRole::Text {
             return;
         }
-        let charpos = self.row_start_charpos.max(0) as usize;
-        row.start_charpos = charpos;
-        row.end_charpos = charpos;
+        row.ends_at_zv = true;
     }
 }
 

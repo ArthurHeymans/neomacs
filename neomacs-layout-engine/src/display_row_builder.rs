@@ -604,10 +604,9 @@ fn display_row_buffer_source_slot_bounds(slots: &[DisplayRowGlyphSlot]) -> Optio
 }
 
 fn merge_display_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: usize) {
-    if row.start_charpos == row.end_charpos {
-        set_display_row_buffer_source_bounds(row, start, end);
-        return;
-    }
+    // Row bounds are real from the row's BEGIN (stamped with the walk-start
+    // position), so glyph spans always MERGE — never replace. No numeric
+    // "unset" state exists to test for.
     set_display_row_buffer_source_bounds(
         row,
         row.start_charpos.min(start),

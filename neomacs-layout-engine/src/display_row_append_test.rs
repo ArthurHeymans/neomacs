@@ -99,6 +99,7 @@ use crate::display_text_window_row_lifecycle::{
 };
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
+use crate::types::LayoutCharPos0;
 use crate::types::WindowKind;
 use crate::window_output::DisplayTextRowTransition;
 use crate::window_output::TextWindowOutputTarget;
@@ -7695,6 +7696,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             col: 0,
             y: 2.0,
             x: 0.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     );
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
@@ -7707,7 +7709,6 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
             height: 20.0,
             ascent: 15.0,
         },
-        0,
     );
 
     let mut row_flags = DisplayRowFlags::new(1);
@@ -7791,6 +7792,7 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             col: 1,
             y: 9.0,
             x: 18.0,
+            start_charpos: LayoutCharPos0::new(0),
         },
     )
     .begin_and_apply(
@@ -7807,7 +7809,6 @@ fn buffer_text_window_begin_request_opens_window_and_first_text_row() {
             height: 17.0,
             ascent: 12.0,
         },
-        0,
     );
     crate::window_output::close_text_window_output(TextWindowOutputTarget::from_builder(
         &mut builder,

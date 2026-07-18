@@ -19,6 +19,7 @@ use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
+use crate::types::LayoutCharPos0;
 use crate::types::WindowParams;
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
@@ -53,6 +54,12 @@ pub(crate) struct EmptyLineFringeFillRequest {
     /// Whether this window is a minibuffer (GNU never indicates empty lines in
     /// the mini-window: `!MINI_WINDOW_P (it->w)`).
     is_minibuffer: bool,
+    /// End of the accessible buffer (0-based char count). Every filler row
+    /// carries `start = end = ZV` with `ends_at_zv` — GNU display_line keeps
+    /// producing rows at ZV until the window is full, each with real
+    /// MATRIX_ROW_START/END_CHARPOS, so the fillers shift with ZV on edits
+    /// exactly like the EOB placeholder.
+    zv: LayoutCharPos0,
 }
 
 impl EmptyLineFringeFillRequest {
@@ -75,6 +82,7 @@ impl EmptyLineFringeFillRequest {
             char_height,
             char_ascent,
             is_minibuffer: params.kind.is_minibuffer(),
+            zv: params.accessible_end_charpos(),
         }
     }
 
@@ -91,6 +99,7 @@ impl EmptyLineFringeFillRequest {
             char_height: 20.0,
             char_ascent: 16.0,
             is_minibuffer,
+            zv: LayoutCharPos0::new(0),
         }
     }
 
@@ -181,6 +190,9 @@ impl EmptyLineFringeFillRequest {
             glyph_row.enabled = true;
             glyph_row.displays_text = false;
             glyph_row.ends_at_zv = true;
+            let zv = self.zv.get().max(0) as usize;
+            glyph_row.start_charpos = zv;
+            glyph_row.end_charpos = zv;
             glyph_row.pixel_y = y - window_y;
             glyph_row.height_px = char_height;
             glyph_row.ascent_px = ascent;

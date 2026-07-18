@@ -41,12 +41,11 @@ use crate::display_text_output_install::{
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
+use crate::types::LayoutCharPos0;
 use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
-};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, PhysCursor};
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
@@ -172,6 +171,12 @@ pub(crate) struct DisplayTextRowBegin {
     pub(crate) col: usize,
     pub(crate) y: f32,
     pub(crate) x: f32,
+    /// Buffer position where this row's walk begins; stamped onto the row's
+    /// start/end charpos at BEGIN so every buffer-text row carries real
+    /// bounds from birth (GNU MATRIX_ROW_START_CHARPOS comes from the
+    /// iterator at display_line entry). Empty lines and the EOB placeholder
+    /// therefore never expose a (0, 0) sentinel.
+    pub(crate) start_charpos: LayoutCharPos0,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -234,6 +239,11 @@ pub(crate) struct TextWindowDisplayRange {
 
 pub(crate) struct TextWindowPendingRowFinish<'a> {
     pub(crate) row_geometry: &'a DisplayRowGeometryState,
+    /// True when the walk stopped because the buffer source is exhausted
+    /// (charpos reached ZV) rather than because the window filled. The row
+    /// that reached ZV gets `ends_at_zv` (GNU row->ends_at_zv_p), whether it
+    /// displays trailing text or is the empty EOB placeholder.
+    pub(crate) source_exhausted: bool,
     pub(crate) row_limit: DisplayRowLimit,
     pub(crate) row_y_positions: &'a DisplayRowYPositions,
     pub(crate) text_y: f32,
@@ -351,10 +361,9 @@ fn begin_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     begin: DisplayTextRowBegin,
 ) -> usize {
-    output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::begin(
+    output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::begin_text_at(
         begin.display_row_index,
-        GlyphRowRole::Text,
-        false,
+        begin.start_charpos,
     ));
     begin.display_row_index
 }
@@ -363,11 +372,9 @@ fn finish_display_text_row(
     output_builder: &mut DisplayOutputBuilder,
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
-    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let matrix_metrics =
-        display_text_row_metrics_request(display_row_index, metrics, row_start_charpos)
-            .install(output_builder);
+        display_text_row_metrics_request(display_row_index, metrics).install(output_builder);
     DisplayTextRowFinish {
         display_row_index,
         metrics: matrix_metrics,
@@ -401,15 +408,9 @@ pub(crate) fn finish_text_window_row(
     mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
-    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let finish = finish_display_text_row(
-        output.builder(),
-        display_row_index,
-        metrics,
-        row_start_charpos,
-    );
+    let finish = finish_display_text_row(output.builder(), display_row_index, metrics);
     output_emitter.push_text_row(metrics.y, metrics.height, metrics.ascent);
     finish
 }
@@ -418,10 +419,9 @@ pub(crate) fn finish_and_end_text_window_row(
     mut output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     metrics: DisplayTextRowMetrics,
-    row_start_charpos: i64,
 ) -> DisplayTextRowFinish {
     let display_row_index = output_emitter.current_display_text_row_index();
-    let request = display_text_row_metrics_request(display_row_index, metrics, row_start_charpos);
+    let request = display_text_row_metrics_request(display_row_index, metrics);
     let output_builder = output.builder();
     let matrix_metrics = request.install(output_builder);
     output_builder.install_output_row_lifecycle(OutputRowLifecycleRequest::finalize(
@@ -440,12 +440,7 @@ pub(crate) fn transition_text_window_row(
     evaluator: &mut Context,
     transition: DisplayTextRowGeometryTransition,
 ) -> DisplayTextRowTransition {
-    finish_and_end_text_window_row(
-        output.reborrow(),
-        output_emitter,
-        transition.finished_row,
-        transition.finished_row_start_charpos,
-    );
+    finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
     begin_text_window_row(
         output.reborrow(),
         output_emitter,
@@ -463,12 +458,7 @@ pub(crate) fn transition_text_window_row_with_limit(
     max_rows: usize,
 ) -> DisplayTextRowTransition {
     if transition.begin_row.row >= max_rows {
-        finish_and_end_text_window_row(
-            output.reborrow(),
-            output_emitter,
-            transition.finished_row,
-            transition.finished_row_start_charpos,
-        );
+        finish_and_end_text_window_row(output.reborrow(), output_emitter, transition.finished_row);
         return DisplayTextRowTransition::ExhaustedRows;
     }
     transition_text_window_row(output.reborrow(), output_emitter, evaluator, transition)
@@ -490,13 +480,13 @@ pub(crate) fn finish_pending_text_window_row(
     output_emitter: &mut WindowOutputEmitter,
     request: TextWindowPendingRowFinish<'_>,
 ) -> bool {
-    // The pending row began its walk at hit_row_range.start(). Stamp it now,
-    // before the finish guard: an empty trailing row (the EOB placeholder past
-    // the final newline) is left unfinished by the guard below, yet it must
-    // still carry its real buffer position (ZV) rather than the (0, 0) sentinel.
-    output
-        .current_row_output()
-        .stamp_empty_text_row_buffer_bounds(request.hit_row_range.start());
+    // The current row is the one whose walk hit the end of the source. When
+    // the source is exhausted (ZV reached), GNU sets row->ends_at_zv_p on it —
+    // both on a final text row and on the empty EOB placeholder, which the
+    // guard below leaves unfinished yet enabled. Mark it before the guard.
+    if request.source_exhausted {
+        output.current_row_output().mark_text_row_ends_at_zv();
+    }
 
     let has_pending_row_output = output_emitter.current_row_has_output();
     if !request.row_geometry.is_within_row_limit(request.row_limit)
@@ -516,12 +506,7 @@ pub(crate) fn finish_pending_text_window_row(
     request
         .hit_rows
         .push(row_cursor.hit_row(request.hit_row_range.start(), request.charpos));
-    finish_text_window_row(
-        output,
-        output_emitter,
-        row_cursor.finish_current_row(),
-        request.hit_row_range.start(),
-    );
+    finish_text_window_row(output, output_emitter, row_cursor.finish_current_row());
     true
 }
 
@@ -578,14 +563,12 @@ pub(crate) fn restore_text_window_retry_checkpoint(
 fn display_text_row_metrics_request(
     display_row_index: usize,
     metrics: DisplayTextRowMetrics,
-    row_start_charpos: i64,
 ) -> DisplayOutputTextRowMetricsInstallRequest {
     DisplayOutputTextRowMetricsInstallRequest::new(
         display_row_index,
         metrics.y,
         metrics.height,
         metrics.ascent,
-        row_start_charpos,
     )
 }
 
@@ -706,11 +689,6 @@ impl TextWindowCursor {
 pub(crate) struct DisplayTextRowGeometryTransition {
     pub(crate) finished_row: DisplayTextRowMetrics,
     pub(crate) begin_row: DisplayTextRowBegin,
-    /// Buffer position (0-based, same base as `GlyphRow::start_charpos`) where
-    /// the walk of the just-finished row began. The install seam stamps it onto
-    /// a row that emitted no buffer glyphs so empty lines and the EOB
-    /// placeholder carry real positions instead of the `(0, 0)` sentinel.
-    pub(crate) finished_row_start_charpos: i64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1152,11 +1130,16 @@ impl WindowOutputEmitter {
         self.points.extend(points);
     }
 
-    /// Normalize the body rows' `start_col` to the emitter's carry convention
-    /// (each row starts at the previous row's end column; the top body row at 0).
-    /// The Phase 2 partial walk produces a fresh row 0 for the exposed span and
-    /// reused rows carry their old positions' values, so the boundary rows need
-    /// this fix-up for byte-identity with a full rebuild.
+    /// Normalize the body rows' snapshot columns to the full walk's convention.
+    /// A fresh walk records, for each row, `start_col` = the column where the
+    /// PREVIOUS row broke (its emission width — so 0 after a row that emitted
+    /// nothing, like an empty line), and `end_col` = the row's own emission
+    /// width, which for a row that emits nothing stays at its start column.
+    /// Reused rows carry their OLD values, which go stale exactly when the row
+    /// above them changed width (an edit) or when the boundary row is fresh (a
+    /// scroll), so replays re-derive the chain for byte-identity with a full
+    /// rebuild. Empty rows are recognized by their pen not having moved
+    /// (`end_x == start_x`).
     pub(crate) fn normalize_body_start_cols(&mut self) {
         let mut body: Vec<&mut DisplayRowSnapshot> = self
             .rows
@@ -1164,10 +1147,14 @@ impl WindowOutputEmitter {
             .filter(|row| row.start_buffer_pos.is_some())
             .collect();
         body.sort_by_key(|row| row.row);
-        let mut prev_end: i64 = 0;
+        let mut prev_break_col: i64 = 0;
         for row in body {
-            row.start_col = prev_end;
-            prev_end = row.end_col;
+            let empty = row.end_x == row.start_x;
+            row.start_col = prev_break_col;
+            if empty {
+                row.end_col = row.start_col;
+            }
+            prev_break_col = if empty { 0 } else { row.end_col };
         }
     }
 

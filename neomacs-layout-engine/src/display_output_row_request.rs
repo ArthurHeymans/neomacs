@@ -1,5 +1,6 @@
 //! Typed output row lifecycle requests.
 
+use crate::types::LayoutCharPos0;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::Rect;
@@ -9,6 +10,13 @@ pub(crate) struct OutputRowBeginRequest {
     pub(crate) row: usize,
     pub(crate) role: GlyphRowRole,
     pub(crate) mode_line: bool,
+    /// Buffer position where this row's walk begins. `Some` for every
+    /// buffer-text row begun by the display walk; the begin stamps the row's
+    /// `start/end_charpos` with it, so a row's bounds are REAL from birth
+    /// (GNU display_line takes MATRIX_ROW_START_CHARPOS from the iterator at
+    /// row entry) and no "unset (0, 0)" construction state ever exists.
+    /// Chrome rows and wholesale row installs pass `None`.
+    pub(crate) start_charpos: Option<LayoutCharPos0>,
 }
 
 #[derive(Clone, Debug)]
@@ -73,10 +81,25 @@ impl OutputRowBeginRequest {
             row,
             role,
             mode_line,
+            start_charpos: None,
+        }
+    }
+
+    pub(crate) fn text_at(row: usize, start_charpos: LayoutCharPos0) -> Self {
+        Self {
+            row,
+            role: GlyphRowRole::Text,
+            mode_line: false,
+            start_charpos: Some(start_charpos),
         }
     }
 
     pub(crate) fn apply_to_row(self, row: &mut GlyphRow) {
+        if let Some(start) = self.start_charpos {
+            let charpos = start.get().max(0) as usize;
+            row.start_charpos = charpos;
+            row.end_charpos = charpos;
+        }
         row.role = self.role;
         row.enabled = true;
         row.mode_line = self.mode_line;
@@ -157,6 +180,10 @@ impl OutputRowMetricsRequest {
 impl OutputRowLifecycleRequest {
     pub(crate) fn begin(row: usize, role: GlyphRowRole, mode_line: bool) -> Self {
         Self::Begin(OutputRowBeginRequest::new(row, role, mode_line))
+    }
+
+    pub(crate) fn begin_text_at(row: usize, start_charpos: LayoutCharPos0) -> Self {
+        Self::Begin(OutputRowBeginRequest::text_at(row, start_charpos))
     }
 
     pub(crate) fn complete(
