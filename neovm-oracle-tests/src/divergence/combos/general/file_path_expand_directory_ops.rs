@@ -8,7 +8,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_expand_file_name_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/foo/bar\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/bar\" \"/home/exec/test\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/foo/bar\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/bar\" \"/home/exec/test\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (list (expand-file-name \"foo/bar\")\n\

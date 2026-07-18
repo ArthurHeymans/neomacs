@@ -28,7 +28,9 @@ fn div_g0_user_identity() {
 #[test]
 fn div_g0_file_paths_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/\" \"[SESSION-TMPDIR]/\" t t t)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/\" \"[SESSION-TMPDIR]/\" t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list default-directory

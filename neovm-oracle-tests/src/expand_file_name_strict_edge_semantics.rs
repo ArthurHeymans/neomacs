@@ -134,6 +134,8 @@ fn oracle_expand_file_name_handler_dispatch_edges() {
     (makunbound 'neomacs--oracle-expand-file-name-calls)))
 "#;
 
-    let expect = expect_test::expect![[r#""OK (\"/handled/1\" ((expand-file-name \"/oracle-expand:name\" \"/plain/default/\")) nil \"/handled/1\" ((expand-file-name \"leaf\" \"/oracle-expand:default/\")) nil \"/handled/1/leaf\" ((expand-file-name \"relative/default/\" \"/oracle-expand:base/\")) nil (\"relative/default/relative/default/\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/relative/default/relative/default/\") (error (\"Invalid handler in ‘file-name-handler-alist’\")))""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"/handled/1\" ((expand-file-name \"/oracle-expand:name\" \"/plain/default/\")) nil \"/handled/1\" ((expand-file-name \"leaf\" \"/oracle-expand:default/\")) nil \"/handled/1/leaf\" ((expand-file-name \"relative/default/\" \"/oracle-expand:base/\")) nil (\"relative/default/relative/default/\" \"[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/relative/default/relative/default/\") (error (\"Invalid handler in ‘file-name-handler-alist’\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

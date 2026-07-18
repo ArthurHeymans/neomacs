@@ -11,7 +11,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h8_parsec_collect_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/parsec.el\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/parsec.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (parsec-parse "abc123"
@@ -27,7 +29,9 @@ fn div_h8_parsec_collect_regexp() {
 #[test]
 fn div_h8_parsec_choice_and_many() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/parsec.el\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/parsec.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (parsec-parse "foo42"
@@ -64,7 +68,9 @@ fn div_h8_outline_levels() {
 #[test]
 fn div_h8_add_log_current_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/progmodes/add-log.el\")""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/progmodes/add-log.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer

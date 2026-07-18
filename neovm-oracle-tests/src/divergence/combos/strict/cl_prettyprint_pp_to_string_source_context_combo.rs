@@ -24,7 +24,9 @@ fn div_v8_cl_prettyprint_to_buffer_pp_to_string() {
         (cl-prettyprint '(lambda (x) (* x 2)) (current-buffer))
         (buffer-string)))
 "##;
-    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (closure (cl-struct-cl--random-state-tags t) (form) (let ((pt (point)) last) (insert \"\n\" (prin1-to-string form) \"\n\") (setq last (point)) (goto-char (1+ pt)) (while (search-forward \"(quote \" last t) (delete-char -7) (insert \"'\") (forward-sexp) (delete-char 1)) (goto-char (1+ pt)) (cl--do-prettyprint))) 2)""#]];
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (cl-struct-cl--random-state-tags t) (form) (let ((pt (point)) last) (insert \"\n\" (prin1-to-string form) \"\n\") (setq last (point)) (goto-char (1+ pt)) (while (search-forward \"(quote \" last t) (delete-char -7) (insert \"'\") (forward-sexp) (delete-char 1)) (goto-char (1+ pt)) (cl--do-prettyprint))) 2)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -63,6 +65,8 @@ fn div_v8_cl_setf_get_macroexpand_setf_place() {
       (macroexpand-all '(cl-incf (car x)))
       (macroexpand-all '(cl-pushnew 1 lst)))
 "##;
-    let expect = expect_test::expect![[r#""OK ((let* ((v x)) ((car v) closure ((vars v) (setter closure (t) (val &rest args) (cons 'setcar (append args (list val))))) (v) (apply setter v vars))) t (let* ((v x)) (setcar v (+ (car v) 1))) (if (memql 1 lst) (with-no-warnings lst) (setq lst (cons 1 lst))))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((let* ((v x)) ((car v) closure ((vars v) (setter closure (t) (val &rest args) (cons 'setcar (append args (list val))))) (v) (apply setter v vars))) t (let* ((v x)) (setcar v (+ (car v) 1))) (if (memql 1 lst) (with-no-warnings lst) (setq lst (cons 1 lst))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
