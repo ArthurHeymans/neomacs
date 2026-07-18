@@ -60,7 +60,7 @@ fn div_i2_shr_render_list_and_link() {
 fn div_i2_css_expand_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/textmodes/css.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/textmodes/css.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -76,7 +76,7 @@ fn div_i2_css_expand_value() {
 fn div_i2_css_color_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/textmodes/css.el\")""#
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"[ORACLE-LOAD-ROOT]/textmodes/css.el\")""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
