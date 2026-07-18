@@ -101,13 +101,17 @@ fn div_wc_define_widget_type_props() {
 #[test]
 fn div_wc_widget_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((default :convert-widget widget-value-convert-widget :keymap (keymap (5 . widget-end-of-line) (11 . widget-kill-line) (13 . widget-field-activate) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-complete)) (9 . widget-forward)) :format \"%v\" :help-echo \"M-TAB: complete field; RET: enter value\" :value \"\" :prompt-internal widget-field-prompt-internal :prompt-history widget-field-history :prompt-value widget-field-prompt-value :action widget-field-action :validate widget-field-validate :valid-regexp \"\" :error \"Field's value doesn't match allowed forms\" :value-create widget-field-value-create :value-set widget-field-value-set :value-delete widget-field-value-delete :value-get widget-field-value-get :match widget-field-match) (default :convert-widget widget-value-convert-widget :value-create widget-item-value-create :value-delete ignore :value-get widget-value-value-get :match widget-item-match :match-inline widget-item-match-inline :action widget-item-action :format \"%t\n\") nil (default :convert-widget widget-types-convert-widget :copy widget-types-copy :format \"%[%t%]: %v\" :case-fold t :tag \"choice\" :void (item :format \"invalid (%t)\n\") :value-create widget-choice-value-create :value-get widget-child-value-get :value-inline widget-child-value-inline :default-get widget-choice-default-get :mouse-down-action widget-choice-mouse-down-action :action widget-choice-action :error \"Make a choice\" :validate widget-choice-validate :match widget-choice-match :match-inline widget-choice-match-inline) (toggle :button-suffix \"\" :button-prefix \"\" :format \"%[%v%]\" :on \"[X]\" :on-glyph \"checked\" :off \"[ ]\" :off-glyph \"unchecked\" :help-echo \"Toggle this item.\" :action widget-checkbox-action) (item :format \"%[%v%]\n\" :value-create widget-toggle-value-create :action widget-toggle-action :match #[514 \"\\300\\207\" [t] 3 (\"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/wid-edit.elc\" . 47492)] :on \"on\" :off \"off\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
+        // `widgetp` returns the raw `widget-type` plist (GNU wid-edit.el
+        // widgetp), whose printed form embeds byte-compile state (an .elc
+        // docstring pair inside a byte-code object) — environment-bound and
+        // unnormalizable. The predicate CONTRACT is non-nil/nil, so lock the
+        // boolean projection instead.
         r##"
-(list (widgetp 'editable-field) (widgetp 'item) (widgetp 'button)
-      (widgetp 'menu-choice) (widgetp 'checkbox) (widgetp 'toggle))
+(list (and (widgetp 'editable-field) t) (and (widgetp 'item) t)
+      (and (widgetp 'button) t) (and (widgetp 'menu-choice) t)
+      (and (widgetp 'checkbox) t) (and (widgetp 'toggle) t))
 "##,
         expect,
     );
