@@ -28,7 +28,18 @@ fn normalize_hello_vc_row(row: &str) -> String {
     normalized.push_str(&row[..start]);
     normalized.push_str("Git-REV1234");
     normalized.push_str(&row[end..]);
-    normalized.chars().take(target_width).collect()
+    let normalized: String = normalized.chars().take(target_width).collect();
+    // The mode line's trailing dash fill absorbs the VC segment's width, so a
+    // branch-name length difference between the two checkouts (each session
+    // opens its own repo's etc/HELLO) survives the token replacement as a
+    // fill-length difference. Collapse the trailing dash run to a fixed token
+    // so the comparison is branch-name-agnostic.
+    let trimmed = normalized.trim_end();
+    let without_fill = trimmed.trim_end_matches('-');
+    if trimmed.len() - without_fill.len() >= 3 {
+        return format!("{without_fill}---");
+    }
+    normalized
 }
 
 fn is_known_hello_scroll_diff(diff: &RowDiff) -> bool {
