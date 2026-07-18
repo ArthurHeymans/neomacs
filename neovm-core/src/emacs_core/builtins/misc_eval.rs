@@ -2359,11 +2359,20 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
 pub(crate) fn builtin_current_cpu_time(args: Vec<Value>) -> EvalResult {
     expect_args("current-cpu-time", &args, 0)?;
 
-    use std::sync::OnceLock;
-    use std::time::Instant;
-    static CPU_TIME_START: OnceLock<Instant> = OnceLock::new();
-    let start = CPU_TIME_START.get_or_init(Instant::now);
-    let ticks = start.elapsed().as_micros() as i64;
+    // GNU timefns.c Fcurrent_cpu_time: (clock() . CLOCKS_PER_SEC) — CPU time
+    // consumed by the process (all threads), not wall time, so a sleeping or
+    // descheduled process accrues nothing. glibc clock() reads
+    // CLOCK_PROCESS_CPUTIME_ID truncated to CLOCKS_PER_SEC (1e6) ticks;
+    // do the same directly.
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    let ticks = if unsafe { libc::clock_gettime(libc::CLOCK_PROCESS_CPUTIME_ID, &mut ts) } == 0 {
+        ts.tv_sec as i64 * 1_000_000 + ts.tv_nsec as i64 / 1_000
+    } else {
+        0
+    };
     Ok(Value::cons(Value::fixnum(ticks), Value::fixnum(1_000_000)))
 }
 

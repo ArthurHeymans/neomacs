@@ -1805,3 +1805,32 @@ fn decode_time_bad_time_value_signals_invalid_time_specification() {
     );
     reset_tz_rule();
 }
+
+/// GNU timefns.c Fcurrent_cpu_time returns (clock() . CLOCKS_PER_SEC) —
+/// PROCESS CPU time, not wall time: a process asleep on the wall clock
+/// accrues (nearly) none of it. The pre-fix NeoMacs implementation returned
+/// wall time since first call, so this asserts the distinguishing property.
+#[test]
+fn current_cpu_time_is_cpu_not_wall_time() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::builtins::misc_eval::builtin_current_cpu_time;
+    let read_ticks = || {
+        let pair = builtin_current_cpu_time(vec![]).expect("current-cpu-time succeeds");
+        let ticks = pair.cons_car().as_fixnum().expect("ticks fixnum");
+        let hz = pair.cons_cdr().as_fixnum().expect("hz fixnum");
+        assert_eq!(hz, 1_000_000, "CLOCKS_PER_SEC ticks");
+        ticks
+    };
+    let before = read_ticks();
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let after = read_ticks();
+    assert!(after >= before, "CPU time is monotonic");
+    // 400ms of wall sleep must not register as anything close to 400ms of
+    // CPU time (allow generous slack for test-harness background threads).
+    assert!(
+        after - before < 200_000,
+        "slept 400ms wall but CPU ticks advanced by {} us — current-cpu-time \
+         is reporting wall time",
+        after - before
+    );
+}
