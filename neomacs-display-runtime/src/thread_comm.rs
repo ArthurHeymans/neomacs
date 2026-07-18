@@ -740,6 +740,22 @@ pub struct WakeupPipe {
 impl WakeupPipe {
     pub fn new() -> std::io::Result<Self> {
         let (read, write) = os_pipe::pipe()?;
+        // GNU child_signal_init (src/process.c) puts BOTH ends of its
+        // self-wake pipe in O_NONBLOCK: a full pipe means a wake is already
+        // pending, so the writer must fail with EAGAIN (harmless) instead of
+        // BLOCKING the producing thread until the evaluator drains — a
+        // blocking write end can freeze the render/input threads whenever
+        // the evaluator stalls long enough for ~64K wake bytes to pile up.
+        #[cfg(unix)]
+        unsafe {
+            use std::os::unix::io::AsRawFd;
+            for fd in [read.as_raw_fd(), write.as_raw_fd()] {
+                let flags = libc::fcntl(fd, libc::F_GETFL);
+                if flags >= 0 {
+                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+                }
+            }
+        }
         Ok(Self {
             reader: WakeupReader {
                 endpoint: read.into(),
