@@ -1850,7 +1850,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 // the `:align-to` operand to `calc_pixel_width_or_height` with
                 // `*align_to == -1`, then takes the difference from the current
                 // pen X. We mirror the buffer text path exactly (see
-                // `DisplayReplacementSpaceWidthPolicy::resolve`), substituting
+                // `DisplaySpaceWidthPolicy::resolve`), substituting
                 // the chrome row's pen X as `current_x`. For window chrome
                 // rows, GNU then adds `window_box_left_offset (TEXT_AREA)` to
                 // raw numeric targets; region-symbol targets have already set

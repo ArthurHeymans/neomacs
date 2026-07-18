@@ -76,10 +76,10 @@ use crate::display_source::*;
 use crate::display_source::{
     DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
     DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementSpaceAscentPolicy,
-    DisplayReplacementSpaceHeightPolicy, DisplayReplacementSpaceWidthPolicy,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
-    DisplaySourceRenderPlanRequest, DisplaySourceSpecialDisplay,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem, DisplaySourceRenderPlanRequest,
+    DisplaySourceSpecialDisplay, DisplaySpaceAscentPolicy, DisplaySpaceHeightPolicy,
+    DisplaySpaceWidthPolicy,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -4703,7 +4703,9 @@ fn display_row_prefix_source_builds_append_request_with_prefix_source_id() {
         .source_for_value(value, CharPos0::new(4))
         .expect("prefix source");
 
-    let request = source.append_request(DisplayRowPosition::new(10.0, 2));
+    let request = source
+        .append_request(DisplayRowPosition::new(10.0, 2))
+        .expect("string prefix append request");
 
     assert_eq!(request.value, value);
     assert_eq!(request.source_id, LispStringSourceId::PREFIX);
@@ -4751,6 +4753,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let values = DisplayRowPrefixValues::default_values(Some(Value::string("=>")), None);
     let mut prefix_request = DisplayRowPrefixRequest::Line;
+    let params = test_display_space_window_params();
 
     let end = BufferLinePrefixRenderRequest::new(
         values,
@@ -4760,6 +4763,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowPosition::new(0.0, 0),
+        &params,
     )
     .render_requested_to_text_row_and_emit(
         &mut prefix_request,
@@ -4785,6 +4789,103 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
             assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
             assert_eq!(text[0].face_id, FaceId::new(0));
             assert_eq!(text[1].face_id, FaceId::new(0));
+        })
+        .expect("current row");
+}
+
+#[test]
+fn buffer_line_prefix_render_context_appends_gnu_space_align_to_prefix() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("ISSUE-170-CENTERED");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-space-line-prefix", 248, 34, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(FaceId::new(7), 1.0);
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceIdAllocator::new(20);
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 248, Rect::new(0.0, 0.0, 248.0, 34.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    let surface = DisplayRowAppendSurface::new(
+        DisplayRowAppendArea::new(0.0, 248.0, 248.0, 0.0),
+        DisplayTabPolicy::every(8),
+    );
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 1.0, 1.0);
+    let prefix = Value::list(vec![
+        Value::symbol("space"),
+        Value::keyword(":align-to"),
+        Value::list(vec![
+            Value::symbol("-"),
+            Value::symbol("center"),
+            Value::fixnum(9),
+        ]),
+    ]);
+    let values = DisplayRowPrefixValues::default_values(Some(prefix), None);
+    let mut prefix_request = DisplayRowPrefixRequest::Line;
+    let mut params = test_display_space_window_params();
+    params.bounds = Rect::new(0.0, 0.0, 248.0, 34.0);
+    params.text_bounds = params.bounds;
+    params.char_width = 1.0;
+    params.char_height = 1.0;
+    params.font_ascent = 1.0;
+    params.window_system = false;
+
+    let end = BufferLinePrefixRenderRequest::new(
+        values,
+        &surface,
+        &geometry,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(1.0, 1.0, 1.0),
+        DisplayRowPosition::new(0.0, 0),
+        &params,
+    )
+    .render_requested_to_text_row_and_emit(
+        &mut prefix_request,
+        &mut text_row_source_render_state(
+            &mut builder,
+            &mut output_emitter,
+            &mut eval,
+            &mut font_metrics,
+            &face_resolver,
+        ),
+        &snapshot,
+        0,
+        &mut face_ids,
+    );
+
+    assert_eq!(prefix_request, DisplayRowPrefixRequest::None);
+    assert_eq!(end, DisplayRowPosition::new(115.0, 115));
+    builder
+        .edit_current_row_for_test(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert_eq!(text[0].pixel_width, 115.0);
+            assert!(matches!(
+                text[0].glyph_type,
+                GlyphType::Stretch { width_cols: 115 }
+            ));
         })
         .expect("current row");
 }
@@ -4832,6 +4933,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let mut prefix_request = DisplayRowPrefixRequest::Line;
     let mut x = 0.0;
     let mut col = 0;
+    let params = test_display_space_window_params();
 
     {
         let mut source_render = text_row_source_render_state(
@@ -4849,6 +4951,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
             0.0,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             DisplayRowPosition::new(x, col),
+            &params,
         )
         .render_requested_with_source_state_and_apply(
             &mut prefix_request,
@@ -10268,28 +10371,28 @@ fn display_replacement_space_width_policy_names_width_sources() {
     let default = Value::list(vec![Value::symbol("space")]);
 
     assert!(matches!(
-        DisplayReplacementSpaceWidthPolicy::from_items(
+        DisplaySpaceWidthPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&explicit).expect("explicit list")
         ),
-        DisplayReplacementSpaceWidthPolicy::Explicit(_)
+        DisplaySpaceWidthPolicy::Explicit(_)
     ));
     assert!(matches!(
-        DisplayReplacementSpaceWidthPolicy::from_items(
+        DisplaySpaceWidthPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&relative).expect("relative list")
         ),
-        DisplayReplacementSpaceWidthPolicy::Relative { factor } if factor == 2.0
+        DisplaySpaceWidthPolicy::Relative { factor } if factor == 2.0
     ));
     assert!(matches!(
-        DisplayReplacementSpaceWidthPolicy::from_items(
+        DisplaySpaceWidthPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&align_to).expect("align list")
         ),
-        DisplayReplacementSpaceWidthPolicy::AlignTo(_)
+        DisplaySpaceWidthPolicy::AlignTo(_)
     ));
     assert!(matches!(
-        DisplayReplacementSpaceWidthPolicy::from_items(
+        DisplaySpaceWidthPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
         ),
-        DisplayReplacementSpaceWidthPolicy::Default
+        DisplaySpaceWidthPolicy::Default
     ));
 }
 
@@ -10309,22 +10412,22 @@ fn display_replacement_space_height_policy_names_height_sources() {
     let default = Value::list(vec![Value::symbol("space")]);
 
     assert!(matches!(
-        DisplayReplacementSpaceHeightPolicy::from_items(
+        DisplaySpaceHeightPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&explicit).expect("explicit list")
         ),
-        DisplayReplacementSpaceHeightPolicy::Explicit(_)
+        DisplaySpaceHeightPolicy::Explicit(_)
     ));
     assert!(matches!(
-        DisplayReplacementSpaceHeightPolicy::from_items(
+        DisplaySpaceHeightPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&relative).expect("relative list")
         ),
-        DisplayReplacementSpaceHeightPolicy::Relative { factor } if factor == 2.0
+        DisplaySpaceHeightPolicy::Relative { factor } if factor == 2.0
     ));
     assert!(matches!(
-        DisplayReplacementSpaceHeightPolicy::from_items(
+        DisplaySpaceHeightPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
         ),
-        DisplayReplacementSpaceHeightPolicy::Default
+        DisplaySpaceHeightPolicy::Default
     ));
 }
 
@@ -10344,22 +10447,22 @@ fn display_replacement_space_ascent_policy_names_ascent_sources() {
     let default = Value::list(vec![Value::symbol("space")]);
 
     assert!(matches!(
-        DisplayReplacementSpaceAscentPolicy::from_items(
+        DisplaySpaceAscentPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&percent).expect("percent list")
         ),
-        DisplayReplacementSpaceAscentPolicy::Percent { percent } if percent == 40.0
+        DisplaySpaceAscentPolicy::Percent { percent } if percent == 40.0
     ));
     assert!(matches!(
-        DisplayReplacementSpaceAscentPolicy::from_items(
+        DisplaySpaceAscentPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&pixel).expect("pixel list")
         ),
-        DisplayReplacementSpaceAscentPolicy::Pixel(_)
+        DisplaySpaceAscentPolicy::Pixel(_)
     ));
     assert!(matches!(
-        DisplayReplacementSpaceAscentPolicy::from_items(
+        DisplaySpaceAscentPolicy::from_items(
             &neovm_core::emacs_core::value::list_to_vec(&default).expect("default list")
         ),
-        DisplayReplacementSpaceAscentPolicy::Default
+        DisplaySpaceAscentPolicy::Default
     ));
 }
 

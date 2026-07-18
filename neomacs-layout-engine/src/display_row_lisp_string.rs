@@ -1,7 +1,7 @@
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItem, RenderFaceRef, SourceSpan};
 use crate::display_origin::DisplayOrigin;
 #[cfg(test)]
 use crate::display_output_builder::DisplayOutputBuilder;
@@ -18,17 +18,22 @@ use crate::display_row_source_append::SingleDisplayItemAppendContext;
 use crate::display_row_source_render::TextRowSourceRenderState;
 use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::TextRowTransitionPrefixAction;
-use crate::display_source::{LispStringSourceCursor, LispStringSourceOrigin};
+use crate::display_source::{
+    DisplayItemOnceSource, DisplaySpaceGeometry, LispStringSourceCursor, LispStringSourceOrigin,
+};
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::DisplayStringBaseFace;
 #[cfg(test)]
 use crate::display_source_resolver::PendingDisplaySourceFace;
+use crate::display_spec::is_display_space_spec;
 #[cfg(test)]
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustTextPropAccess};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
+
+use crate::types::WindowParams;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct LispStringSourceId(pub(crate) u64);
@@ -53,6 +58,7 @@ pub(crate) struct LispStringRowAppendContext<'row> {
 }
 
 impl<'row> LispStringRowAppendContext<'row> {
+    #[cfg(test)]
     pub(crate) fn new(
         append_surface: &'row DisplayRowAppendSurface,
         geometry: &'row DisplayRowGeometryState,
@@ -87,24 +93,89 @@ impl<'row> LispStringRowAppendContext<'row> {
             .map(|outcome| outcome.end_position())
             .unwrap_or(position)
     }
+}
 
-    pub(crate) fn render_prefix_source_to_text_row_and_emit(
+#[derive(Clone, Copy)]
+struct DisplayRowPrefixAppendContext<'row> {
+    active_face_context: DisplayRowActiveFaceAppendContext<'row, 'row>,
+    content_x: f32,
+}
+
+impl<'row> DisplayRowPrefixAppendContext<'row> {
+    fn new(
+        append_surface: &'row DisplayRowAppendSurface,
+        geometry: &'row DisplayRowGeometryState,
+        active_face: &'row DisplayRowActiveFaceState,
+        glyph_y_offset: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> Self {
+        Self {
+            active_face_context: DisplayRowActiveFaceAppendContext::new(
+                append_surface,
+                geometry,
+                active_face,
+                glyph_y_offset,
+                fallback_metrics,
+            ),
+            content_x: append_surface.content_x(),
+        }
+    }
+
+    fn render_source_to_text_row_and_emit(
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceIdAllocator,
         base_face: &DisplayStringBaseFace,
         prefix_source: DisplayRowPrefixSource,
         position: DisplayRowPosition,
+        params: &WindowParams,
     ) -> DisplayRowPosition {
-        self.render_active_face_source_request_to_text_row_and_emit(
-            state,
-            face_ids,
-            LispStringSourceAppendSessionRequest::new(
-                prefix_source.append_request(position),
-                base_face.face_id(),
-                base_face.face(),
+        match prefix_source.value {
+            DisplayRowPrefixValue::LispString(value) => LispStringRowAppendContext {
+                active_face_context: self.active_face_context,
+            }
+            .render_active_face_source_request_to_text_row_and_emit(
+                state,
+                face_ids,
+                LispStringSourceAppendSessionRequest::new(
+                    LispStringSourceAppendRequest::new(position, LispStringSourceId::PREFIX, value),
+                    base_face.face_id(),
+                    base_face.face(),
+                ),
             ),
-        )
+            DisplayRowPrefixValue::Stretch(spec) => {
+                let metrics = self.active_face_context.active_face().metrics();
+                let space = DisplaySpaceGeometry::from_display_space_spec(
+                    &spec,
+                    position.x_px(),
+                    self.content_x,
+                    metrics.char_width(),
+                    metrics.space_width(),
+                    metrics.row_height(),
+                    metrics.ascent(),
+                    params,
+                );
+                if space.width_px() <= 0.0 {
+                    return position;
+                }
+                let item = DisplayItem::new(
+                    SourceSpan::synthetic(LispStringSourceId::PREFIX.raw(), 0, 1),
+                    RenderFaceRef::FaceId(base_face.face_id()),
+                    space.display_item_kind(),
+                );
+                render_single_display_item_source_append_to_text_row_and_emit(
+                    state,
+                    item,
+                    base_face.face(),
+                    base_face.face_id(),
+                    face_ids,
+                    self.active_face_context.active_face_frame(),
+                    position,
+                )
+                .map(|outcome| outcome.end_position())
+                .unwrap_or(position)
+            }
+        }
     }
 }
 
@@ -125,6 +196,31 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
         face_ids,
         source,
         source_state,
+        position,
+        DisplayRowAppendKind::SourceText,
+        &mut render_policy,
+        base_face_id,
+    )
+}
+
+fn render_single_display_item_source_append_to_text_row_and_emit(
+    state: &mut TextRowSourceRenderState<'_>,
+    item: DisplayItem,
+    base_face: &ResolvedFace,
+    base_face_id: FaceId,
+    face_ids: &mut FrameFaceIdAllocator,
+    frame: DisplayRowAppendFrame,
+    position: DisplayRowPosition,
+) -> Option<CurrentTextRowRenderOutcome> {
+    let mut source = DisplayItemOnceSource::new(item);
+    let mut source_state = DisplayRowSourceState::default();
+    let append_context = SingleDisplayItemAppendContext::new(base_face, base_face_id, frame);
+    let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
+    append_context.render_source_with_policy(
+        state,
+        face_ids,
+        &mut source,
+        &mut source_state,
         position,
         DisplayRowAppendKind::SourceText,
         &mut render_policy,
@@ -245,10 +341,10 @@ pub(crate) enum DisplayRowPrefixRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowPrefixValues {
-    line_property: Option<Value>,
-    wrap_property: Option<Value>,
-    line_default: Option<Value>,
-    wrap_default: Option<Value>,
+    line_property: Option<DisplayRowPrefixValue>,
+    wrap_property: Option<DisplayRowPrefixValue>,
+    line_default: Option<DisplayRowPrefixValue>,
+    wrap_default: Option<DisplayRowPrefixValue>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -257,21 +353,20 @@ enum DisplayRowPrefixKind {
     Wrap,
 }
 
-#[derive(Clone, Copy)]
-enum BufferAnchoredLispStringSourceKind {
-    Prefix(DisplayRowPrefixKind),
-}
-
-#[derive(Clone, Copy)]
-struct BufferAnchoredLispStringSource {
-    value: Value,
-    anchor_charpos: CharPos0,
-    kind: BufferAnchoredLispStringSourceKind,
+/// GNU line and wrap prefixes accept strings and a bare `(space ...)` display
+/// spec.  Keep that contract typed at the Lisp/layout boundary so a stretch
+/// prefix is not mistaken for an arbitrary list or discarded as a non-string.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DisplayRowPrefixValue {
+    LispString(Value),
+    Stretch(Value),
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct DisplayRowPrefixSource {
-    source: BufferAnchoredLispStringSource,
+    value: DisplayRowPrefixValue,
+    anchor_charpos: CharPos0,
+    kind: DisplayRowPrefixKind,
 }
 
 impl DisplayRowPrefixRequest {
@@ -316,18 +411,22 @@ impl DisplayRowPrefixRequest {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn source_for_value(
         self,
         value: Value,
         anchor_charpos: CharPos0,
     ) -> Option<DisplayRowPrefixSource> {
+        let value = DisplayRowPrefixValue::classify(value)?;
         let kind = match self {
             Self::Line => DisplayRowPrefixKind::Line,
             Self::Wrap => DisplayRowPrefixKind::Wrap,
             Self::None => return None,
         };
         Some(DisplayRowPrefixSource {
-            source: BufferAnchoredLispStringSource::prefix(value, anchor_charpos, kind),
+            value,
+            anchor_charpos,
+            kind,
         })
     }
 
@@ -341,7 +440,35 @@ impl DisplayRowPrefixRequest {
             Self::Wrap => values.wrap_property.or(values.wrap_default),
             Self::None => None,
         }?;
-        self.source_for_value(value, anchor_charpos)
+        let kind = match self {
+            Self::Line => DisplayRowPrefixKind::Line,
+            Self::Wrap => DisplayRowPrefixKind::Wrap,
+            Self::None => return None,
+        };
+        Some(DisplayRowPrefixSource {
+            value,
+            anchor_charpos,
+            kind,
+        })
+    }
+}
+
+impl DisplayRowPrefixValue {
+    fn classify(value: Value) -> Option<Self> {
+        if value.as_lisp_string().is_some() {
+            Some(Self::LispString(value))
+        } else if is_display_space_spec(&value) {
+            Some(Self::Stretch(value))
+        } else {
+            None
+        }
+    }
+
+    #[cfg(test)]
+    fn value(self) -> Value {
+        match self {
+            Self::LispString(value) | Self::Stretch(value) => value,
+        }
     }
 }
 
@@ -353,15 +480,11 @@ impl DisplayRowPrefixValues {
         wrap_default: Option<Value>,
     ) -> Self {
         Self {
-            line_property: Self::lisp_string_value(line_property),
-            wrap_property: Self::lisp_string_value(wrap_property),
-            line_default: Self::lisp_string_value(line_default),
-            wrap_default: Self::lisp_string_value(wrap_default),
+            line_property: line_property.and_then(DisplayRowPrefixValue::classify),
+            wrap_property: wrap_property.and_then(DisplayRowPrefixValue::classify),
+            line_default: line_default.and_then(DisplayRowPrefixValue::classify),
+            wrap_default: wrap_default.and_then(DisplayRowPrefixValue::classify),
         }
-    }
-
-    fn lisp_string_value(value: Option<Value>) -> Option<Value> {
-        value.filter(|value| value.as_lisp_string().is_some())
     }
 
     pub(crate) fn default_values(line_default: Option<Value>, wrap_default: Option<Value>) -> Self {
@@ -373,12 +496,11 @@ impl DisplayRowPrefixValues {
         line_property: Option<Value>,
         wrap_property: Option<Value>,
     ) -> Self {
-        Self::new(
-            line_property,
-            wrap_property,
-            self.line_default,
-            self.wrap_default,
-        )
+        Self {
+            line_property: line_property.and_then(DisplayRowPrefixValue::classify),
+            wrap_property: wrap_property.and_then(DisplayRowPrefixValue::classify),
+            ..self
+        }
     }
 
     pub(crate) fn has_default_prefix(self) -> bool {
@@ -390,71 +512,41 @@ impl DisplayRowPrefixValues {
     }
 }
 
-impl BufferAnchoredLispStringSource {
-    fn prefix(value: Value, anchor_charpos: CharPos0, kind: DisplayRowPrefixKind) -> Self {
-        Self {
-            value,
-            anchor_charpos,
-            kind: BufferAnchoredLispStringSourceKind::Prefix(kind),
-        }
-    }
-
-    #[cfg(test)]
-    fn value(self) -> Value {
-        self.value
-    }
-
-    fn origin(self) -> DisplayOrigin {
-        match self.kind {
-            BufferAnchoredLispStringSourceKind::Prefix(DisplayRowPrefixKind::Line) => {
-                DisplayOrigin::LinePrefix {
-                    anchor_charpos: self.anchor_charpos,
-                }
-            }
-            BufferAnchoredLispStringSourceKind::Prefix(DisplayRowPrefixKind::Wrap) => {
-                DisplayOrigin::WrapPrefix {
-                    anchor_charpos: self.anchor_charpos,
-                }
-            }
-        }
-    }
-
-    #[cfg(test)]
-    fn base_face_policy(self) -> BaseFacePolicy {
-        self.origin().default_base_face_policy()
-    }
-
-    fn source_id(self) -> LispStringSourceId {
-        match self.kind {
-            BufferAnchoredLispStringSourceKind::Prefix(_) => LispStringSourceId::PREFIX,
-        }
-    }
-
-    fn append_request(self, position: DisplayRowPosition) -> LispStringSourceAppendRequest {
-        LispStringSourceAppendRequest::new(position, self.source_id(), self.value)
-    }
-}
-
 impl DisplayRowPrefixSource {
     #[cfg(test)]
     pub(crate) fn value(self) -> Value {
-        self.source.value()
+        self.value.value()
     }
 
     pub(crate) fn origin(self) -> DisplayOrigin {
-        self.source.origin()
+        match self.kind {
+            DisplayRowPrefixKind::Line => DisplayOrigin::LinePrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
+            DisplayRowPrefixKind::Wrap => DisplayOrigin::WrapPrefix {
+                anchor_charpos: self.anchor_charpos,
+            },
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn base_face_policy(self) -> BaseFacePolicy {
-        self.source.base_face_policy()
+        self.origin().default_base_face_policy()
     }
 
+    #[cfg(test)]
     pub(crate) fn append_request(
         self,
         position: DisplayRowPosition,
-    ) -> LispStringSourceAppendRequest {
-        self.source.append_request(position)
+    ) -> Option<LispStringSourceAppendRequest> {
+        let DisplayRowPrefixValue::LispString(value) = self.value else {
+            return None;
+        };
+        Some(LispStringSourceAppendRequest::new(
+            position,
+            LispStringSourceId::PREFIX,
+            value,
+        ))
     }
 }
 
@@ -466,6 +558,7 @@ pub(crate) struct BufferLinePrefixRenderRequest<'a> {
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
     position: DisplayRowPosition,
+    params: &'a WindowParams,
 }
 
 impl<'a> BufferLinePrefixRenderRequest<'a> {
@@ -478,6 +571,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
         glyph_y_offset: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
         position: DisplayRowPosition,
+        params: &'a WindowParams,
     ) -> Self {
         Self {
             values,
@@ -487,6 +581,7 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
             glyph_y_offset,
             fallback_metrics,
             position,
+            params,
         }
     }
 
@@ -518,19 +613,20 @@ impl<'a> BufferLinePrefixRenderRequest<'a> {
 
         let prefix_base_face =
             state.default_display_string_base_face(buffer, prefix_source.origin(), face_ids);
-        LispStringRowAppendContext::new(
+        DisplayRowPrefixAppendContext::new(
             self.append_surface,
             self.row_geometry,
             self.active_face_state,
             self.glyph_y_offset,
             self.fallback_metrics,
         )
-        .render_prefix_source_to_text_row_and_emit(
+        .render_source_to_text_row_and_emit(
             state,
             face_ids,
             &prefix_base_face,
             prefix_source,
             position,
+            self.params,
         )
     }
 

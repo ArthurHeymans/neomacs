@@ -34,7 +34,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 .row_geometry
                 .current_row_is_visible(loop_context.row_visibility_limit())
         {
-            self.render_row_prelude(row_prelude_context, active_face_state, buffer);
+            self.render_row_prelude(row_prelude_context, params, active_face_state, buffer);
 
             if self
                 .render_invisible_text_for_context(
@@ -83,6 +83,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
         context: BufferSourceRowPreludeRequestContext,
+        params: &WindowParams,
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
@@ -107,6 +108,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 active_face_state,
                 0.0,
                 row_position,
+                params,
             )
             .render_requested_with_source_state_and_apply(
                 self.prefix_request,

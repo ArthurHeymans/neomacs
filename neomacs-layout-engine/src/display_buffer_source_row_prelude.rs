@@ -10,6 +10,7 @@ use crate::display_row_geometry::DisplayRowGeometryState;
 use crate::display_row_line_number_margin::BufferLineNumberMarginRenderRequest;
 use crate::display_row_lisp_string::{BufferLinePrefixRenderRequest, DisplayRowPrefixValues};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::types::WindowParams;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceRowPreludeRequestContext {
@@ -61,6 +62,7 @@ impl BufferSourceRowPreludeRequestContext {
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         position: DisplayRowPosition,
+        params: &'a WindowParams,
     ) -> BufferLinePrefixRenderRequest<'a> {
         BufferLinePrefixRenderRequest::new(
             self.prefix_values,
@@ -70,6 +72,7 @@ impl BufferSourceRowPreludeRequestContext {
             glyph_y_offset,
             self.fallback_metrics,
             position,
+            params,
         )
     }
 

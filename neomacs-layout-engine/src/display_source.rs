@@ -1463,22 +1463,25 @@ pub(crate) struct DisplayReplacementStretchSourceItem {
     cursor_slot_width_px: f32,
 }
 
+/// Geometry resolved from GNU's `(space ...)` display spec.  This is shared
+/// by buffer display replacements and line/wrap prefixes; cursor policy stays
+/// in `DisplayReplacementStretchSourceItem`, where it belongs.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct DisplayReplacementSpaceGeometry {
+pub(crate) struct DisplaySpaceGeometry {
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum DisplayReplacementSpaceWidthPolicy {
+pub(crate) enum DisplaySpaceWidthPolicy {
     Explicit(Value),
     Relative { factor: f32 },
     AlignTo(Value),
     Default,
 }
 
-impl DisplayReplacementSpaceWidthPolicy {
+impl DisplaySpaceWidthPolicy {
     pub(crate) fn from_items(items: &[Value]) -> Self {
         if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Width)
             && !prop.is_nil()
@@ -1537,13 +1540,13 @@ impl DisplayReplacementSpaceWidthPolicy {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum DisplayReplacementSpaceHeightPolicy {
+pub(crate) enum DisplaySpaceHeightPolicy {
     Explicit(Value),
     Relative { factor: f32 },
     Default,
 }
 
-impl DisplayReplacementSpaceHeightPolicy {
+impl DisplaySpaceHeightPolicy {
     pub(crate) fn from_items(items: &[Value]) -> Self {
         if let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Height)
             && !prop.is_nil()
@@ -1580,13 +1583,13 @@ impl DisplayReplacementSpaceHeightPolicy {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum DisplayReplacementSpaceAscentPolicy {
+pub(crate) enum DisplaySpaceAscentPolicy {
     Percent { percent: f32 },
     Pixel(Value),
     Default,
 }
 
-impl DisplayReplacementSpaceAscentPolicy {
+impl DisplaySpaceAscentPolicy {
     pub(crate) fn from_items(items: &[Value]) -> Self {
         let Some(prop) = display_space_plist_value(items, DisplaySpaceKey::Ascent) else {
             return Self::Default;
@@ -1660,9 +1663,11 @@ impl DisplayReplacementStretchSourceItem {
         item.cursor_slot_width_px = item.width_px.max(fallback_cursor_width_px);
         item
     }
+}
 
+impl DisplaySpaceGeometry {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn display_space_geometry(
+    pub(crate) fn from_display_space_spec(
         spec: &Value,
         current_x: f32,
         content_x: f32,
@@ -1671,7 +1676,7 @@ impl DisplayReplacementStretchSourceItem {
         default_height: f32,
         default_ascent: f32,
         params: &WindowParams,
-    ) -> DisplayReplacementSpaceGeometry {
+    ) -> Self {
         use crate::display_pixel_calc::PixelCalcContext;
 
         let default_width = params.char_width.max(1.0);
@@ -1686,7 +1691,7 @@ impl DisplayReplacementStretchSourceItem {
             default_height
         };
         let Some(items) = list_to_vec(spec) else {
-            return DisplayReplacementSpaceGeometry {
+            return Self {
                 width: default_width,
                 height: default_height,
                 ascent: default_ascent,
@@ -1720,7 +1725,7 @@ impl DisplayReplacementStretchSourceItem {
             symbol_values: std::collections::HashMap::new(),
         };
 
-        let width_policy = DisplayReplacementSpaceWidthPolicy::from_items(&items);
+        let width_policy = DisplaySpaceWidthPolicy::from_items(&items);
         let mut width = width_policy.resolve(
             &pctx,
             current_x,
@@ -1733,13 +1738,13 @@ impl DisplayReplacementStretchSourceItem {
         }
 
         let (height, ascent) = if params.window_system {
-            let height_policy = DisplayReplacementSpaceHeightPolicy::from_items(&items);
+            let height_policy = DisplaySpaceHeightPolicy::from_items(&items);
             let mut height = height_policy.resolve(&pctx, default_height);
             if height <= 0.0 && (height < 0.0 || !height_policy.zero_height_allowed()) {
                 height = 1.0;
             }
 
-            let ascent = DisplayReplacementSpaceAscentPolicy::from_items(&items).resolve(
+            let ascent = DisplaySpaceAscentPolicy::from_items(&items).resolve(
                 &pctx,
                 height,
                 default_ascent,
@@ -1750,13 +1755,27 @@ impl DisplayReplacementStretchSourceItem {
             (1.0, 1.0)
         };
 
-        DisplayReplacementSpaceGeometry {
+        Self {
             width,
             height,
             ascent: ascent.max(0.0).min(height),
         }
     }
 
+    pub(crate) fn width_px(self) -> f32 {
+        self.width
+    }
+
+    pub(crate) fn display_item_kind(self) -> DisplayItemKind {
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(self.width)),
+            height: Some(DisplayLength::Pixels(self.height)),
+            ascent: Some(DisplayLength::Pixels(self.ascent)),
+        })
+    }
+}
+
+impl DisplayReplacementStretchSourceItem {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_display_space_spec(
         spec: &Value,
@@ -1769,7 +1788,7 @@ impl DisplayReplacementStretchSourceItem {
         fallback_cursor_width_px: f32,
         params: &WindowParams,
     ) -> Self {
-        let geometry = Self::display_space_geometry(
+        let geometry = DisplaySpaceGeometry::from_display_space_spec(
             spec,
             current_x,
             content_x,
