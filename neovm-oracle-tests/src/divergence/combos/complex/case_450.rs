@@ -180,9 +180,27 @@ fn div_cx450_make_temp_file_name() {
 #[test]
 fn div_cx450_file_name_all_completions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 33""#]];
-    crate::common::assert_oracle_parity_expect(
-        r##"(length (file-name-all-completions "" "/tmp"))"##,
+    // Hermetic: completes over a fixture directory created inside the
+    // harness-controlled shared tempdir, not live /tmp, whose entry count
+    // drifts with machine state (33 at the 2026-07-14 bless, 165 three days
+    // later).  Locks GNU src/dired.c `file_name_completion` (all_flag=1)
+    // semantics: "." and ".." stay included (TRIVIAL_DIRECTORY_ENTRY
+    // exclusion applies only when !all_flag), directories gain a trailing
+    // slash via Ffile_name_as_directory, and the FILE argument is a prefix
+    // filter.  Results are sorted because readdir order is arbitrary.
+    let expect = expect_test::expect![[r#""OK (6 (\"../\" \"./\" \"alpha.txt\" \"beta.txt\" \"beta2.log\" \"gamma-dir/\") (\"beta.txt\" \"beta2.log\") nil)""#]];
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
+        r##"(let* ((base (file-name-as-directory
+              (or (getenv "NEOVM_ORACLE_TEST_TMPDIR") temporary-file-directory)))
+       (dir (expand-file-name "completion-fixture" base)))
+  (make-directory dir t)
+  (make-directory (expand-file-name "gamma-dir" dir) t)
+  (dolist (f '("alpha.txt" "beta.txt" "beta2.log"))
+    (write-region "" nil (expand-file-name f dir) nil 'silent))
+  (list (length (file-name-all-completions "" dir))
+        (sort (file-name-all-completions "" dir) #'string<)
+        (sort (file-name-all-completions "beta" dir) #'string<)
+        (file-name-all-completions "nomatch" dir)))"##,
         expect,
     );
 }
