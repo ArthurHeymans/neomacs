@@ -286,59 +286,55 @@ pub(crate) fn eval_region_source_text_in_state(
     buffers: &crate::buffer::BufferManager,
     args: &[Value],
 ) -> Result<crate::heap_types::LispString, Flow> {
+    let (raw_start, raw_end) = eval_region_bounds_in_state(buffers, args)?;
+    let buffer = buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+
+    if raw_start >= raw_end {
+        return Ok(crate::heap_types::LispString::new(
+            String::new(),
+            buffer.get_multibyte(),
+        ));
+    }
+
+    let byte_range = EmacsByteRange::new(
+        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(raw_start)),
+        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(raw_end)),
+    );
+    Ok(buffer.buffer_substring_lisp_string_range(byte_range))
+}
+
+fn eval_region_bounds_in_state(
+    buffers: &crate::buffer::BufferManager,
+    args: &[Value],
+) -> Result<(i64, i64), Flow> {
     expect_min_args("eval-region", args, 2)?;
     expect_max_args("eval-region", args, 4)?;
 
-    let (source, start_char_pos, end_char_pos) = {
-        let buffer = buffers
-            .current_buffer()
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-
-        let point_char_pos = buffer.point_lisp_char_pos().as_i64();
-        let max_char_pos = buffer.point_max_lisp_char_pos().as_i64();
-
-        let raw_start = if args[0].is_nil() {
-            point_char_pos
-        } else {
-            expect_integer_or_marker_in_buffers(buffers, &args[0])?
-        };
-        let raw_end = if args[1].is_nil() {
-            point_char_pos
-        } else {
-            expect_integer_or_marker_in_buffers(buffers, &args[1])?
-        };
-
-        if raw_start < 1 || raw_start > max_char_pos || raw_end < 1 || raw_end > max_char_pos {
-            return Err(signal(
-                LispCondition::ArgsOutOfRange,
-                vec![args[0], args[1]],
-            ));
-        }
-
-        if raw_start >= raw_end {
-            return Ok(crate::heap_types::LispString::new(
-                String::new(),
-                buffer.get_multibyte(),
-            ));
-        }
-
-        let start = LispCharPos1::new(raw_start);
-        let end = LispCharPos1::new(raw_end);
-        let byte_range = EmacsByteRange::new(
-            buffer.lisp_pos_to_accessible_emacs_byte_pos(start),
-            buffer.lisp_pos_to_accessible_emacs_byte_pos(end),
-        );
-        let text = buffer.buffer_substring_lisp_string_range(byte_range);
-        (text, raw_start, raw_end)
+    let buffer = buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let point_char_pos = buffer.point_lisp_char_pos().as_i64();
+    let max_char_pos = buffer.point_max_lisp_char_pos().as_i64();
+    let raw_start = if args[0].is_nil() {
+        point_char_pos
+    } else {
+        expect_integer_or_marker_in_buffers(buffers, &args[0])?
+    };
+    let raw_end = if args[1].is_nil() {
+        point_char_pos
+    } else {
+        expect_integer_or_marker_in_buffers(buffers, &args[1])?
     };
 
-    if start_char_pos >= end_char_pos {
-        return Ok(crate::heap_types::LispString::new(
-            String::new(),
-            source.is_multibyte(),
+    if raw_start < 1 || raw_start > max_char_pos || raw_end < 1 || raw_end > max_char_pos {
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![args[0], args[1]],
         ));
     }
-    Ok(source)
+    Ok((raw_start, raw_end))
 }
 
 /// `(eval-buffer &optional BUFFER PRINTFLAG FILENAME UNIBYTE DO-ALLOW-PRINT)`
@@ -454,11 +450,115 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
 ///
 /// Evaluate forms in the [START, END) region of the current buffer.
 pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    if let Some(read_function) = args.get(3).copied().filter(|value| !value.is_nil()) {
+        let (start, end) = eval_region_bounds_in_state(&eval.buffers, &args)?;
+        if start >= end {
+            return Ok(Value::NIL);
+        }
+        return eval_region_with_read_function(eval, start, end, read_function);
+    }
+
     let source = eval_region_source_text_in_state(&eval.buffers, &args)?;
     if source.as_bytes().is_empty() {
         return Ok(Value::NIL);
     }
     eval_forms_from_lisp_source(eval, &source)
+}
+
+fn eval_region_with_read_function(
+    eval: &mut super::eval::Context,
+    start: i64,
+    end: i64,
+    read_function: Value,
+) -> EvalResult {
+    let buffer_id = {
+        let buffer = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        buffer.id
+    };
+    let buffer_value = Value::make_buffer(buffer_id);
+
+    let gc_roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(read_function);
+    eval.push_specpdl_root(buffer_value);
+    let result = (|| {
+        let mut next_start = start;
+        loop {
+            if next_start >= end {
+                return Ok(Value::NIL);
+            }
+
+            // GNU `readevalloop` saves the caller's excursion, switches to the
+            // source buffer, saves that buffer's point/restriction, and only
+            // then invokes READ-FUNCTION.  Crucially it captures the reader's
+            // advanced point *before* evaluating the returned form: Edebug's
+            // transformed form is allowed to move point without changing
+            // where the next read begins.
+            let iteration_specpdl = eval.specpdl.len();
+            eval.record_save_excursion();
+            let read_result = (|| -> Result<(Value, i64, bool), Flow> {
+                eval.set_current_buffer_unrecorded(buffer_id)?;
+                eval.record_save_excursion();
+                if let Some(state) = eval.buffers.save_current_restriction_state() {
+                    eval.specpdl
+                        .push(super::eval::SpecBinding::SaveRestriction { state });
+                }
+
+                let (accessible_start, start_byte, end_byte) = {
+                    let buffer = eval.buffers.get(buffer_id).ok_or_else(|| {
+                        signal("error", vec![Value::string("Reading from killed buffer")])
+                    })?;
+                    (
+                        buffer.accessible_emacs_byte_region().start(),
+                        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(next_start)),
+                        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(end)),
+                    )
+                };
+                let buffer = eval.buffers.get_mut(buffer_id).ok_or_else(|| {
+                    signal("error", vec![Value::string("Reading from killed buffer")])
+                })?;
+                buffer.narrow_to_emacs_byte_range(EmacsByteRange::new(accessible_start, end_byte));
+                buffer.goto_emacs_byte_pos(start_byte);
+
+                let form = eval.funcall_general(read_function, vec![buffer_value])?;
+                let after_read = eval
+                    .buffers
+                    .get(buffer_id)
+                    .ok_or_else(|| {
+                        signal("error", vec![Value::string("Reading from killed buffer")])
+                    })?
+                    .point_lisp_char_pos()
+                    .as_i64();
+                Ok((form, after_read, after_read >= end))
+            })();
+            eval.unbind_to(iteration_specpdl);
+
+            let (form, after_read, reached_end) = read_result?;
+            if after_read <= next_start {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(
+                        "eval-region read function did not advance the input stream",
+                    )],
+                ));
+            }
+            next_start = after_read;
+
+            let form_roots = eval.save_specpdl_roots();
+            eval.push_specpdl_root(form);
+            let eval_result = eval.eval_value(&form);
+            eval.restore_specpdl_roots(form_roots);
+            eval_result?;
+            if reached_end {
+                return Ok(Value::NIL);
+            }
+        }
+    })();
+
+    eval.restore_specpdl_roots(gc_roots);
+    result
 }
 
 fn event_to_int(event: &Value) -> Option<i64> {
