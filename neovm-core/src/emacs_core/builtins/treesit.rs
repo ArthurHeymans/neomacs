@@ -4,12 +4,11 @@ use libloading::Library;
 use std::path::{Path, PathBuf};
 use strum::{EnumString, IntoStaticStr};
 use tree_sitter::{
-    LANGUAGE_VERSION, Language, MIN_COMPATIBLE_LANGUAGE_VERSION, Parser, Point, Query, QueryCursor,
-    Range as TSRange, StreamingIterator,
+    LANGUAGE_VERSION, Language, MIN_COMPATIBLE_LANGUAGE_VERSION, Parser, Point, Range as TSRange,
 };
 use tree_sitter_language::LanguageFn;
 
-use crate::buffer::{Buffer, BufferId, LispCharPos1};
+use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::builtins::buffers::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{SymId, resolve_sym};
@@ -703,7 +702,8 @@ fn ensure_query_compiled(eval: &mut super::eval::Context, query: Value) -> Resul
             resolve_sym(language_sym)
         ))
     })?;
-    let compiled = Query::new(&lang, &source_string).map_err(treesit_query_error_from_query)?;
+    let compiled =
+        runtime::EmacsQuery::new(&lang, &source_string).map_err(treesit_query_error_from_query)?;
     let query_entry = eval
         .treesit
         .query_mut(id)
@@ -2322,6 +2322,293 @@ pub(crate) fn builtin_treesit_pattern_expand(args: Vec<Value>) -> EvalResult {
     Ok(Value::string(expand_pattern_value(args[0])?))
 }
 
+#[derive(Clone, Copy)]
+struct QueryCaptureNode {
+    index: u32,
+    node: tree_sitter::ffi::TSNode,
+    value: Value,
+}
+
+struct QueryMatchNodes {
+    pattern_index: usize,
+    captures: Vec<QueryCaptureNode>,
+}
+
+fn query_predicate_capture(
+    query_match: &QueryMatchNodes,
+    capture_index: u32,
+    capture_names: &[String],
+) -> Result<QueryCaptureNode, Flow> {
+    query_match
+        .captures
+        .iter()
+        // GNU builds the match's capture list with `cons` before predicate
+        // evaluation, so the last occurrence of a repeated capture wins.
+        .rev()
+        .find(|capture| capture.index == capture_index)
+        .copied()
+        .ok_or_else(|| {
+            let name = capture_names
+                .get(capture_index as usize)
+                .map(String::as_str)
+                .unwrap_or("unknown");
+            signal(
+                LispCondition::TreesitQueryError,
+                vec![
+                    Value::string("Cannot find captured node"),
+                    Value::symbol(name),
+                    Value::string(
+                        "A predicate can only refer to captured nodes in the same pattern",
+                    ),
+                ],
+            )
+        })
+}
+
+fn query_predicate_capture_text(
+    source: &LispString,
+    query_match: &QueryMatchNodes,
+    capture_index: u32,
+    capture_names: &[String],
+) -> Result<LispString, Flow> {
+    let capture = query_predicate_capture(query_match, capture_index, capture_names)?;
+    let node = unsafe { tree_sitter::Node::from_raw(capture.node) };
+    source
+        .slice(node.start_byte(), node.end_byte())
+        .ok_or_else(|| treesit_query_error("Captured node falls outside the parser source"))
+}
+
+fn query_predicate_parser_source(
+    eval: &super::eval::Context,
+    parser_id: u64,
+) -> Result<&LispString, Flow> {
+    eval.treesit
+        .parser(parser_id)
+        .and_then(|parser| parser.last_source.as_ref())
+        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser source"))
+}
+
+fn query_predicate_arg_text(
+    source: &LispString,
+    query_match: &QueryMatchNodes,
+    capture_names: &[String],
+    arg: &runtime::QueryPredicateArg,
+) -> Result<LispString, Flow> {
+    match arg {
+        runtime::QueryPredicateArg::Capture(index) => {
+            query_predicate_capture_text(source, query_match, *index, capture_names)
+        }
+        runtime::QueryPredicateArg::String(string) => Ok(LispString::from_utf8(string)),
+    }
+}
+
+fn query_predicate_equal(
+    eval: &super::eval::Context,
+    parser_id: u64,
+    query_match: &QueryMatchNodes,
+    capture_names: &[String],
+    args: &[runtime::QueryPredicateArg],
+) -> Result<bool, Flow> {
+    if args.len() != 2 {
+        return Err(signal(
+            LispCondition::TreesitQueryError,
+            vec![
+                Value::string("Predicate `equal' requires two arguments but got"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    let source = query_predicate_parser_source(eval, parser_id)?;
+    let left = query_predicate_arg_text(source, query_match, capture_names, &args[0])?;
+    let right = query_predicate_arg_text(source, query_match, capture_names, &args[1])?;
+    Ok(left.schars() == right.schars()
+        && left.sbytes() == right.sbytes()
+        && left.as_bytes() == right.as_bytes())
+}
+
+fn query_predicate_match(
+    eval: &mut super::eval::Context,
+    parser_buffer_id: BufferId,
+    parser_source_start: EmacsBytePos,
+    query_match: &QueryMatchNodes,
+    capture_names: &[String],
+    args: &[runtime::QueryPredicateArg],
+) -> Result<bool, Flow> {
+    if args.len() != 2 {
+        return Err(signal(
+            LispCondition::TreesitQueryError,
+            vec![
+                Value::string("Predicate `match?' requires two arguments but got"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    let (regexp, capture_index) = match (&args[0], &args[1]) {
+        (
+            runtime::QueryPredicateArg::String(regexp),
+            runtime::QueryPredicateArg::Capture(index),
+        )
+        | (
+            runtime::QueryPredicateArg::Capture(index),
+            runtime::QueryPredicateArg::String(regexp),
+        ) => (regexp, *index),
+        _ => {
+            return Err(signal(
+                LispCondition::TreesitQueryError,
+                vec![
+                    Value::string(
+                        "Predicate `match?' takes a regexp and a node capture (order doesn't matter), but got",
+                    ),
+                    Value::fixnum(args.len() as i64),
+                ],
+            ));
+        }
+    };
+    let capture = query_predicate_capture(query_match, capture_index, capture_names)?;
+    let node = unsafe { tree_sitter::Node::from_raw(capture.node) };
+    let result = {
+        let buffer = eval.buffers.get(parser_buffer_id).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Parser buffer has been killed")],
+            )
+        })?;
+        let start = parser_source_start
+            .get()
+            .checked_add(node.start_byte())
+            .ok_or_else(|| treesit_query_error("Captured node byte range overflow"))?;
+        let end = parser_source_start
+            .get()
+            .checked_add(node.end_byte())
+            .ok_or_else(|| treesit_query_error("Captured node byte range overflow"))?;
+        let range = EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(end));
+        if range.end() > buffer.full_emacs_byte_range().end() {
+            return Err(treesit_query_error(
+                "Captured node falls outside the parser buffer",
+            ));
+        }
+        crate::emacs_core::regex::treesit_predicate_match_lisp(
+            buffer,
+            &LispString::from_utf8(regexp),
+            range,
+        )
+    };
+    eval.maybe_quit()?;
+    result.map_err(super::search::regex_error_signal)
+}
+
+fn query_predicate_pred(
+    eval: &mut super::eval::Context,
+    parser_id: u64,
+    parser_buffer_id: BufferId,
+    query_match: &QueryMatchNodes,
+    capture_names: &[String],
+    args: &[runtime::QueryPredicateArg],
+) -> Result<bool, Flow> {
+    if args.len() < 2 {
+        return Err(signal(
+            LispCondition::TreesitQueryError,
+            vec![
+                Value::string("Predicate `pred' requires at least two arguments, but only got"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    let runtime::QueryPredicateArg::String(function_name) = &args[0] else {
+        return Err(treesit_query_error(
+            "Predicate `pred' requires a function name followed by node captures",
+        ));
+    };
+    let function = Value::symbol(function_name);
+    let mut nodes = Vec::with_capacity(args.len() - 1);
+    for arg in &args[1..] {
+        let runtime::QueryPredicateArg::Capture(capture_index) = arg else {
+            return Err(treesit_query_error(
+                "Predicate `pred' arguments after the function must be node captures",
+            ));
+        };
+        let capture = query_predicate_capture(query_match, *capture_index, capture_names)?;
+        nodes.push(capture.value);
+    }
+
+    let generation = eval
+        .treesit
+        .parser(parser_id)
+        .ok_or_else(|| treesit_query_error("Missing tree-sitter parser"))?
+        .generation;
+    let saved_buffer = eval.buffers.current_buffer_id();
+    if saved_buffer != Some(parser_buffer_id) {
+        eval.set_current_buffer_unrecorded(parser_buffer_id)?;
+    }
+    let call_result = eval.funcall_general(function, nodes);
+    if let Some(saved_buffer) = saved_buffer {
+        eval.restore_current_buffer_if_live(saved_buffer);
+    }
+    let value = call_result?;
+    if eval
+        .treesit
+        .parser(parser_id)
+        .is_none_or(|parser| parser.generation != generation)
+    {
+        return Err(signal(LispCondition::TreesitQueryError, vec![function]));
+    }
+    Ok(!value.is_nil())
+}
+
+fn query_match_passes_predicates(
+    eval: &mut super::eval::Context,
+    parser_id: u64,
+    parser_buffer_id: BufferId,
+    parser_source_start: EmacsBytePos,
+    query_match: &QueryMatchNodes,
+    capture_names: &[String],
+    predicates: &[runtime::QueryPredicate],
+) -> Result<bool, Flow> {
+    for predicate in predicates {
+        let Some(runtime::QueryPredicateArg::String(operator)) = predicate.steps.first() else {
+            return Err(treesit_query_error(
+                "Tree-sitter predicate must start with a function name",
+            ));
+        };
+        let args = &predicate.steps[1..];
+        let passed = match operator.as_str() {
+            "eq?" => query_predicate_equal(eval, parser_id, query_match, capture_names, args)?,
+            "match?" => query_predicate_match(
+                eval,
+                parser_buffer_id,
+                parser_source_start,
+                query_match,
+                capture_names,
+                args,
+            )?,
+            "pred?" => query_predicate_pred(
+                eval,
+                parser_id,
+                parser_buffer_id,
+                query_match,
+                capture_names,
+                args,
+            )?,
+            _ => {
+                return Err(signal(
+                    LispCondition::TreesitQueryError,
+                    vec![
+                        Value::string("Invalid predicate"),
+                        Value::string(operator),
+                        Value::string(
+                            "Currently Emacs only supports `equal', `match', and `pred' predicates",
+                        ),
+                    ],
+                ));
+            }
+        };
+        if !passed {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 pub(crate) fn builtin_treesit_query_capture(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2349,113 +2636,129 @@ pub(crate) fn builtin_treesit_query_capture(
         })?;
         query_range_bytes(buf, &args, 2, 3)?
     };
+    if byte_range
+        .as_ref()
+        .is_some_and(|range| range.start == 0 && range.end == 0)
+    {
+        return Ok(Value::NIL);
+    }
     let node_only = args.get(4).is_some_and(|value| !value.is_nil());
     let grouped = args.get(5).is_some_and(|value| !value.is_nil());
 
-    enum CaptureResult {
-        Flat(Vec<(u32, tree_sitter::ffi::TSNode)>),
-        Grouped(Vec<Vec<(u32, tree_sitter::ffi::TSNode)>>),
-    }
-
-    let (capture_names, captures) = {
+    let (capture_names, predicates, raw_matches, parser_buffer_id, parser_source_start) = {
         let parser = eval
             .treesit
             .parser(input.parser_id)
             .ok_or_else(|| parser_deleted_error(input.parser_value))?;
+        if parser.last_source.is_none() {
+            return Err(treesit_parse_error(input.parser_value));
+        }
         let query = eval
             .treesit
             .query(query_id)
             .and_then(|entry| entry.compiled.as_ref())
             .ok_or_else(|| compiled_query_type_error("treesit-query-capture", compiled_query))?;
-        let source = parser
-            .last_source
-            .as_ref()
-            .ok_or_else(|| treesit_parse_error(input.parser_value))?;
-        // Issue #131: query against the exact Emacs bytes so capture byte ranges
-        // line up with the buffer and raw bytes survive.
-        let source_bytes = source.as_bytes();
-        let capture_names = query
-            .capture_names()
-            .iter()
-            .map(|name| (*name).to_owned())
-            .collect::<Vec<_>>();
-        let node = unsafe { tree_sitter::Node::from_raw(input.node_raw) };
-        let mut cursor = QueryCursor::new();
-        if let Some(range) = byte_range.clone() {
-            cursor.set_byte_range(range);
-        }
-        if grouped {
-            let mut matches = cursor.matches(query, node, source_bytes);
-            matches.advance();
-            let mut out = Vec::new();
-            while let Some(query_match) = matches.get() {
-                out.push(
-                    query_match
-                        .captures
-                        .iter()
-                        .map(|capture| (capture.index, capture.node.into_raw()))
-                        .collect::<Vec<_>>(),
-                );
-                matches.advance();
-            }
-            (capture_names, CaptureResult::Grouped(out))
-        } else {
-            let mut matches = cursor.captures(query, node, source_bytes);
-            matches.advance();
-            let mut out = Vec::new();
-            while let Some((query_match, capture_index)) = matches.get() {
-                let capture = query_match.captures[*capture_index];
-                out.push((capture.index, capture.node.into_raw()));
-                matches.advance();
-            }
-            (capture_names, CaptureResult::Flat(out))
-        }
+        let capture_names = query.capture_names().to_vec();
+        let predicates = query.predicates().to_vec();
+        let raw_matches = query
+            .matches(input.node_raw, byte_range)
+            .map_err(treesit_query_error)?;
+        (
+            capture_names,
+            predicates,
+            raw_matches,
+            parser.orig_buffer_id,
+            eval.buffers
+                .get(parser.orig_buffer_id)
+                .expect("parser buffer checked above")
+                .accessible_emacs_byte_range()
+                .start(),
+        )
     };
 
-    let result = match captures {
-        CaptureResult::Flat(items) => Value::list(
-            items
-                .into_iter()
-                .map(|(capture_index, raw)| {
-                    let node = make_node_value_for_parser(eval, input.parser_id, unsafe {
-                        tree_sitter::Node::from_raw(raw)
-                    });
-                    if node_only {
-                        node
-                    } else {
-                        Value::cons(Value::symbol(&capture_names[capture_index as usize]), node)
-                    }
-                })
-                .collect(),
-        ),
-        CaptureResult::Grouped(groups) => Value::list(
-            groups
-                .into_iter()
-                .map(|group| {
-                    Value::list(
-                        group
-                            .into_iter()
-                            .map(|(capture_index, raw)| {
-                                let node =
-                                    make_node_value_for_parser(eval, input.parser_id, unsafe {
-                                        tree_sitter::Node::from_raw(raw)
-                                    });
-                                if node_only {
-                                    node
-                                } else {
-                                    Value::cons(
-                                        Value::symbol(&capture_names[capture_index as usize]),
-                                        node,
-                                    )
-                                }
-                            })
-                            .collect(),
-                    )
-                })
-                .collect(),
-        ),
-    };
-    Ok(result)
+    let root_scope = eval.save_specpdl_roots();
+    let result = (|| -> EvalResult {
+        let mut matches = Vec::new();
+        for raw_match in raw_matches {
+            let mut captures = Vec::with_capacity(raw_match.captures.len());
+            for raw_capture in raw_match.captures {
+                let value = make_node_value_for_parser(eval, input.parser_id, unsafe {
+                    tree_sitter::Node::from_raw(raw_capture.node)
+                });
+                eval.push_specpdl_root(value);
+                captures.push(QueryCaptureNode {
+                    index: raw_capture.index,
+                    node: raw_capture.node,
+                    value,
+                });
+            }
+            let query_match = QueryMatchNodes {
+                pattern_index: raw_match.pattern_index,
+                captures,
+            };
+            let pattern_predicates = predicates
+                .get(query_match.pattern_index)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            if query_match_passes_predicates(
+                eval,
+                input.parser_id,
+                parser_buffer_id,
+                parser_source_start,
+                &query_match,
+                &capture_names,
+                pattern_predicates,
+            )? {
+                matches.push(query_match);
+            }
+        }
+
+        let result = if grouped {
+            Value::list(
+                matches
+                    .into_iter()
+                    .map(|query_match| {
+                        Value::list(
+                            query_match
+                                .captures
+                                .into_iter()
+                                .map(|capture| {
+                                    if node_only {
+                                        capture.value
+                                    } else {
+                                        Value::cons(
+                                            Value::symbol(&capture_names[capture.index as usize]),
+                                            capture.value,
+                                        )
+                                    }
+                                })
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            )
+        } else {
+            Value::list(
+                matches
+                    .into_iter()
+                    .flat_map(|query_match| query_match.captures)
+                    .map(|capture| {
+                        if node_only {
+                            capture.value
+                        } else {
+                            Value::cons(
+                                Value::symbol(&capture_names[capture.index as usize]),
+                                capture.value,
+                            )
+                        }
+                    })
+                    .collect(),
+            )
+        };
+        Ok(result)
+    })();
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 pub(crate) fn builtin_treesit_query_compile(
@@ -2887,6 +3190,36 @@ mod tests {
         }
     }
 
+    fn captured_texts(
+        eval: &mut super::super::eval::Context,
+        parser: Value,
+        query: Value,
+    ) -> Vec<String> {
+        let captures = builtin_treesit_query_capture(eval, vec![parser, query])
+            .expect("tree-sitter query captures");
+        crate::emacs_core::value::list_to_vec(&captures)
+            .expect("capture list")
+            .into_iter()
+            .map(|capture| {
+                let node_value = capture.cons_cdr();
+                let node = ensure_current_node(eval, "test", node_value).expect("current node");
+                let parser = eval.treesit.parser(node.parser_id).expect("node parser");
+                let source = parser.last_source.as_ref().expect("parsed source");
+                let raw = unsafe { tree_sitter::Node::from_raw(node.raw) };
+                String::from_utf8_lossy(&source.as_bytes()[raw.start_byte()..raw.end_byte()])
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    fn string_capture_query(predicate: Value) -> Value {
+        Value::list(vec![Value::list(vec![
+            Value::list(vec![Value::symbol("string")]),
+            Value::symbol("@item"),
+            predicate,
+        ])])
+    }
+
     #[test]
     fn treesit_node_property_domain_matches_gnu_symbols() {
         assert_eq!(
@@ -2939,6 +3272,219 @@ mod tests {
             "treesit-query-error",
         );
         assert_eq!(signal.symbol_name(), "treesit-query-error");
+    }
+
+    #[test]
+    fn treesit_query_compile_accepts_emacs_match_predicate_argument_order() {
+        crate::test_utils::init_test_tracing();
+        let mut eval = super::super::eval::Context::new();
+        let language_sym = Value::symbol("json").as_symbol_id().expect("json symbol");
+        eval.treesit.cache_loaded_language(
+            language_sym,
+            runtime::LoadedLanguage {
+                language: Language::new(tree_sitter_json::LANGUAGE),
+                filename: None,
+                _library: None,
+            },
+        );
+        let query = Value::list(vec![Value::list(vec![
+            Value::list(vec![Value::symbol("string")]),
+            Value::symbol("@doc"),
+            Value::list(vec![
+                Value::keyword(":match"),
+                Value::string("\\`doc"),
+                Value::symbol("@doc"),
+            ]),
+        ])]);
+
+        let compiled =
+            builtin_treesit_query_compile(&mut eval, vec![Value::symbol("json"), query, Value::T]);
+
+        assert!(
+            compiled.is_ok(),
+            "GNU accepts regexp-first `:match` predicates: {compiled:?}"
+        );
+    }
+
+    #[test]
+    fn treesit_query_capture_filters_regex_first_match_with_emacs_regexp() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["doc", "other"]"#);
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":match"),
+            Value::string("\\`\\\"doc"),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""doc""#]);
+    }
+
+    #[test]
+    fn treesit_query_match_is_case_sensitive_even_when_case_fold_search_is_true() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["DOC", "doc"]"#);
+        eval.eval_str("(setq case-fold-search t)")
+            .expect("enable case folding");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":match"),
+            Value::string("doc"),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""doc""#]);
+    }
+
+    #[test]
+    fn treesit_query_match_uses_parser_buffer_point_for_at_point_anchor() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["doc"]"#);
+        let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+        eval.buffers
+            .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(1));
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":match"),
+            Value::string("\\="),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""doc""#]);
+    }
+
+    #[test]
+    fn treesit_query_capture_filters_equal_with_either_argument_kind() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["keep", "drop"]"#);
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":equal"),
+            Value::string(r#""keep""#),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""keep""#]);
+    }
+
+    #[test]
+    fn treesit_query_capture_calls_emacs_predicate_with_captured_nodes() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first", "second"]"#);
+        eval.eval_str(
+            "(defalias 'neomacs--treesit-first-p (lambda (node) (= (treesit-node-start node) 2)))",
+        )
+        .expect("predicate function");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":pred"),
+            Value::string("neomacs--treesit-first-p"),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""first""#]);
+    }
+
+    #[test]
+    fn treesit_query_predicate_runs_in_parser_buffer_and_restores_current_buffer() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        eval.eval_str(
+            "(defalias 'neomacs--treesit-parser-buffer-p
+               (lambda (node)
+                 (eq (current-buffer)
+                     (treesit-parser-buffer (treesit-node-parser node)))))",
+        )
+        .expect("predicate function");
+        let other_buffer = eval.buffers.create_buffer(" *treesit-predicate-other*");
+        eval.set_current_buffer_unrecorded(other_buffer)
+            .expect("switch current buffer");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":pred"),
+            Value::string("neomacs--treesit-parser-buffer-p"),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""first""#]);
+        assert_eq!(eval.buffers.current_buffer_id(), Some(other_buffer));
+    }
+
+    #[test]
+    fn treesit_query_predicate_restores_parser_buffer_after_callback_switches_away() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        let parser_buffer = eval.buffers.current_buffer_id().expect("parser buffer");
+        eval.buffers.create_buffer(" *treesit-predicate-away*");
+        eval.eval_str(
+            "(defalias 'neomacs--treesit-switch-buffer-p
+               (lambda (node) (set-buffer \" *treesit-predicate-away*\") t))",
+        )
+        .expect("predicate function");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":pred"),
+            Value::string("neomacs--treesit-switch-buffer-p"),
+            Value::symbol("@item"),
+        ]));
+
+        assert_eq!(captured_texts(&mut eval, parser, query), vec![r#""first""#]);
+        assert_eq!(eval.buffers.current_buffer_id(), Some(parser_buffer));
+    }
+
+    #[test]
+    fn treesit_query_predicate_receives_the_returned_capture_node() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        eval.eval_str(
+            "(defalias 'neomacs--treesit-save-node-p
+               (lambda (node)
+                 (setq neomacs--treesit-saved-node node)
+                 (garbage-collect)
+                 t))",
+        )
+        .expect("predicate function");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":pred"),
+            Value::string("neomacs--treesit-save-node-p"),
+            Value::symbol("@item"),
+        ]));
+
+        let captures =
+            builtin_treesit_query_capture(&mut eval, vec![parser, query]).expect("query captures");
+        let returned_node =
+            crate::emacs_core::value::list_to_vec(&captures).expect("capture list")[0].cons_cdr();
+        let saved_node = eval
+            .eval_str("neomacs--treesit-saved-node")
+            .expect("saved predicate node");
+        assert_eq!(returned_node, saved_node);
+    }
+
+    #[test]
+    fn treesit_query_predicate_rejects_parser_buffer_mutation() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        eval.eval_str("(defalias 'neomacs--treesit-mutating-p (lambda (node) (insert \"x\") t))")
+            .expect("predicate function");
+        let query = string_capture_query(Value::list(vec![
+            Value::keyword(":pred"),
+            Value::string("neomacs--treesit-mutating-p"),
+            Value::symbol("@item"),
+        ]));
+
+        expect_signal(
+            builtin_treesit_query_capture(&mut eval, vec![parser, query]),
+            "treesit-query-error",
+        );
+    }
+
+    #[test]
+    fn treesit_query_capture_rejects_predicates_gnu_does_not_support() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        let query = Value::string(r#"(string) @item (#not-eq? @item "\"other\"")"#);
+
+        expect_signal(
+            builtin_treesit_query_capture(&mut eval, vec![parser, query]),
+            "treesit-query-error",
+        );
+    }
+
+    #[test]
+    fn treesit_query_capture_empty_range_at_buffer_start_returns_no_matches() {
+        let (mut eval, parser) = eval_with_json_parser(r#"["first"]"#);
+        let query = Value::string("(string) @item");
+
+        let captures = builtin_treesit_query_capture(
+            &mut eval,
+            vec![parser, query, Value::fixnum(1), Value::fixnum(1)],
+        )
+        .expect("empty range query");
+
+        assert!(captures.is_nil());
     }
 
     #[test]

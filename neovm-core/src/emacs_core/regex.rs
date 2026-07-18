@@ -1846,6 +1846,48 @@ fn with_buffer_emacs_bytes_for_search<R>(
     with_buffer_emacs_bytes(buf, range, f)
 }
 
+/// Match a Tree-sitter predicate regexp against a captured buffer region.
+///
+/// GNU narrows the parser buffer to the captured node and calls its buffer
+/// regexp engine.  Supplying only that region to the matcher gives anchors
+/// the same narrowed-buffer bounds while retaining the buffer's syntax and
+/// current point for assertions such as `\\=`.
+pub(crate) fn treesit_predicate_match_lisp(
+    buf: &Buffer,
+    pattern: &LispString,
+    range: EmacsByteRange,
+) -> Result<bool, String> {
+    let syntax = buffer_syntax_lookup(buf);
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        false,
+        false,
+        buf.get_multibyte(),
+        None,
+        &syntax,
+    )?;
+    let point = buf.point_emacs_byte_pos();
+    let point_relative = if point >= range.start() && point <= range.end() {
+        point.get() - range.start().get()
+    } else {
+        usize::MAX
+    };
+    let found = with_buffer_emacs_bytes_for_search(buf, range, |text| {
+        regex_emacs::re_search(
+            compiled.as_ref(),
+            text,
+            0,
+            text.len() as isize,
+            &syntax,
+            point_relative,
+        )
+    });
+    if found.is_none() && regex_emacs::take_matcher_overflow() {
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
+    Ok(found.is_some())
+}
+
 /// Search forward from point for a literal string PATTERN.
 ///
 /// If found, returns the end of match as the point position the caller should

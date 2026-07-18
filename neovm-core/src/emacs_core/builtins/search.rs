@@ -7,7 +7,7 @@ use crate::emacs_core::value::ValueKind;
 /// errors are `invalid-regexp`; the matcher's fail-stack overflow is a
 /// plain `error` in GNU (`search.c:matcher_overflow`: `error ("Stack
 /// overflow in regexp matcher")`).
-fn regex_error_signal(msg: String) -> crate::emacs_core::error::Flow {
+pub(crate) fn regex_error_signal(msg: String) -> crate::emacs_core::error::Flow {
     if msg == crate::emacs_core::regex_emacs::MATCHER_OVERFLOW_MESSAGE {
         signal("error", vec![Value::string(msg)])
     } else {

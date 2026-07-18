@@ -1,7 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
+use std::mem::MaybeUninit;
+use std::ops::Range;
+use std::ptr::NonNull;
 
 use libloading::Library;
-use tree_sitter::{InputEdit, Language, Parser, Point, Query, Tree};
+use tree_sitter::{InputEdit, Language, Parser, Point, Query, QueryError, Tree, ffi};
 
 use super::intern::SymId;
 use super::value::Value;
@@ -92,7 +95,224 @@ pub(crate) struct NodeEntry {
 pub(crate) struct QueryEntry {
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) language: SymId,
-    pub(crate) compiled: Option<Query>,
+    pub(crate) compiled: Option<EmacsQuery>,
+}
+
+/// One argument in a tree-sitter query predicate.
+///
+/// GNU Emacs deliberately interprets these itself instead of adopting the
+/// Rust binding's predicate rules.  Keeping the raw distinction lets the
+/// builtin layer implement GNU's accepted argument orders for `eq?`,
+/// `match?`, and `pred?`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum QueryPredicateArg {
+    Capture(u32),
+    String(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct QueryPredicate {
+    pub(crate) steps: Vec<QueryPredicateArg>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RawQueryCapture {
+    pub(crate) index: u32,
+    pub(crate) node: ffi::TSNode,
+}
+
+#[derive(Clone)]
+pub(crate) struct RawQueryMatch {
+    pub(crate) pattern_index: usize,
+    pub(crate) captures: Vec<RawQueryCapture>,
+}
+
+/// An owning wrapper around `TSQuery` which intentionally bypasses the Rust
+/// binding's built-in predicate validation and filtering.
+///
+/// GNU Emacs accepts predicate forms that the Rust wrapper rejects (notably
+/// regex-first `#match?`) and evaluates them with Emacs Lisp semantics.  The
+/// raw C query API preserves those predicate steps for the builtin layer.
+pub(crate) struct EmacsQuery {
+    raw: NonNull<ffi::TSQuery>,
+    capture_names: Vec<String>,
+    predicates: Vec<Vec<QueryPredicate>>,
+}
+
+impl EmacsQuery {
+    pub(crate) fn new(language: &Language, source: &str) -> Result<Self, QueryError> {
+        let raw = NonNull::new(Query::new_raw(language, source)?)
+            .expect("tree-sitter returned a null query without an error");
+        let mut query = Self {
+            raw,
+            capture_names: Vec::new(),
+            predicates: Vec::new(),
+        };
+        query.capture_names = query.read_capture_names();
+        query.predicates = query.read_predicates();
+        Ok(query)
+    }
+
+    pub(crate) fn capture_names(&self) -> &[String] {
+        &self.capture_names
+    }
+
+    pub(crate) fn predicates(&self) -> &[Vec<QueryPredicate>] {
+        &self.predicates
+    }
+
+    pub(crate) fn matches(
+        &self,
+        node: ffi::TSNode,
+        byte_range: Option<Range<usize>>,
+    ) -> Result<Vec<RawQueryMatch>, &'static str> {
+        let cursor = RawQueryCursor::new(self.raw, node, byte_range)?;
+        let mut matches = Vec::new();
+        loop {
+            let mut raw_match = MaybeUninit::<ffi::TSQueryMatch>::uninit();
+            if !unsafe {
+                ffi::ts_query_cursor_next_match(cursor.raw.as_ptr(), raw_match.as_mut_ptr())
+            } {
+                break;
+            }
+            // SAFETY: tree-sitter returned true and initialized `raw_match`.
+            matches.push(unsafe { copy_raw_query_match(raw_match.assume_init_ref()) });
+        }
+        Ok(matches)
+    }
+
+    fn read_capture_names(&self) -> Vec<String> {
+        let count = unsafe { ffi::ts_query_capture_count(self.raw.as_ptr()) };
+        (0..count)
+            .map(|index| unsafe { query_text(self.raw, index, ffi::ts_query_capture_name_for_id) })
+            .collect()
+    }
+
+    fn read_predicates(&self) -> Vec<Vec<QueryPredicate>> {
+        let pattern_count = unsafe { ffi::ts_query_pattern_count(self.raw.as_ptr()) };
+        (0..pattern_count)
+            .map(|pattern_index| {
+                let mut step_count = 0u32;
+                let raw_steps = unsafe {
+                    ffi::ts_query_predicates_for_pattern(
+                        self.raw.as_ptr(),
+                        pattern_index,
+                        &mut step_count,
+                    )
+                };
+                let steps = if step_count == 0 {
+                    &[][..]
+                } else {
+                    // SAFETY: the query owns this array, which remains valid
+                    // for the duration of this immutable borrow.
+                    unsafe { std::slice::from_raw_parts(raw_steps, step_count as usize) }
+                };
+                steps
+                    .split(|step| step.type_ == ffi::TSQueryPredicateStepTypeDone)
+                    .filter(|predicate| !predicate.is_empty())
+                    .map(|predicate| QueryPredicate {
+                        steps: predicate
+                            .iter()
+                            .filter_map(|step| match step.type_ {
+                                ffi::TSQueryPredicateStepTypeCapture => {
+                                    Some(QueryPredicateArg::Capture(step.value_id))
+                                }
+                                ffi::TSQueryPredicateStepTypeString => {
+                                    Some(QueryPredicateArg::String(unsafe {
+                                        query_text(
+                                            self.raw,
+                                            step.value_id,
+                                            ffi::ts_query_string_value_for_id,
+                                        )
+                                    }))
+                                }
+                                _ => None,
+                            })
+                            .collect(),
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+}
+
+impl Drop for EmacsQuery {
+    fn drop(&mut self) {
+        unsafe { ffi::ts_query_delete(self.raw.as_ptr()) }
+    }
+}
+
+// The underlying tree-sitter query is immutable after construction, matching
+// the guarantees of the crate's high-level `Query` wrapper.
+unsafe impl Send for EmacsQuery {}
+unsafe impl Sync for EmacsQuery {}
+
+struct RawQueryCursor {
+    raw: NonNull<ffi::TSQueryCursor>,
+}
+
+impl RawQueryCursor {
+    fn new(
+        query: NonNull<ffi::TSQuery>,
+        node: ffi::TSNode,
+        byte_range: Option<Range<usize>>,
+    ) -> Result<Self, &'static str> {
+        let raw = NonNull::new(unsafe { ffi::ts_query_cursor_new() })
+            .expect("tree-sitter failed to allocate a query cursor");
+        let cursor = Self { raw };
+        if let Some(range) = byte_range {
+            let start = u32::try_from(range.start)
+                .map_err(|_| "tree-sitter query range exceeds 32-bit byte offsets")?;
+            let end = u32::try_from(range.end)
+                .map_err(|_| "tree-sitter query range exceeds 32-bit byte offsets")?;
+            if !unsafe { ffi::ts_query_cursor_set_byte_range(cursor.raw.as_ptr(), start, end) } {
+                return Err("invalid tree-sitter query byte range");
+            }
+        }
+        unsafe { ffi::ts_query_cursor_exec(cursor.raw.as_ptr(), query.as_ptr(), node) };
+        Ok(cursor)
+    }
+}
+
+impl Drop for RawQueryCursor {
+    fn drop(&mut self) {
+        unsafe { ffi::ts_query_cursor_delete(self.raw.as_ptr()) }
+    }
+}
+
+unsafe fn query_text(
+    query: NonNull<ffi::TSQuery>,
+    index: u32,
+    getter: unsafe extern "C" fn(*const ffi::TSQuery, u32, *mut u32) -> *const std::ffi::c_char,
+) -> String {
+    let mut length = 0u32;
+    let ptr = unsafe { getter(query.as_ptr(), index, &mut length) }.cast::<u8>();
+    if length == 0 {
+        return String::new();
+    }
+    // SAFETY: tree-sitter returns `length` bytes owned by the live query.
+    String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(ptr, length as usize) })
+        .into_owned()
+}
+
+unsafe fn copy_raw_query_match(raw: &ffi::TSQueryMatch) -> RawQueryMatch {
+    let captures = if raw.capture_count == 0 {
+        Vec::new()
+    } else {
+        // SAFETY: this is copied before advancing the query cursor, while the
+        // match's capture array is still valid.
+        unsafe { std::slice::from_raw_parts(raw.captures, raw.capture_count as usize) }
+            .iter()
+            .map(|capture| RawQueryCapture {
+                index: capture.index,
+                node: capture.node,
+            })
+            .collect()
+    };
+    RawQueryMatch {
+        pattern_index: raw.pattern_index as usize,
+        captures,
+    }
 }
 
 #[derive(Clone, Copy)]
