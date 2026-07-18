@@ -2361,19 +2361,65 @@ pub(crate) fn builtin_current_cpu_time(args: Vec<Value>) -> EvalResult {
 
     // GNU timefns.c Fcurrent_cpu_time: (clock() . CLOCKS_PER_SEC) — CPU time
     // consumed by the process (all threads), not wall time, so a sleeping or
-    // descheduled process accrues nothing. glibc clock() reads
-    // CLOCK_PROCESS_CPUTIME_ID truncated to CLOCKS_PER_SEC (1e6) ticks;
-    // do the same directly.
-    let mut ts = libc::timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-    let ticks = if unsafe { libc::clock_gettime(libc::CLOCK_PROCESS_CPUTIME_ID, &mut ts) } == 0 {
-        ts.tv_sec as i64 * 1_000_000 + ts.tv_nsec as i64 / 1_000
-    } else {
-        0
-    };
-    Ok(Value::cons(Value::fixnum(ticks), Value::fixnum(1_000_000)))
+    // descheduled process accrues nothing.
+    Ok(Value::cons(
+        Value::fixnum(process_cpu_time_micros()),
+        Value::fixnum(1_000_000),
+    ))
+}
+
+fn process_cpu_time_micros() -> i64 {
+    std::cfg_select! {
+        unix => {
+            // glibc clock() reads CLOCK_PROCESS_CPUTIME_ID truncated to
+            // CLOCKS_PER_SEC (1e6) ticks; do the same directly.
+            let mut ts = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            if unsafe {
+                libc::clock_gettime(libc::CLOCK_PROCESS_CPUTIME_ID, &mut ts)
+            } == 0 {
+                ts.tv_sec as i64 * 1_000_000 + ts.tv_nsec as i64 / 1_000
+            } else {
+                0
+            }
+        }
+        windows => {
+            use windows_sys::Win32::Foundation::FILETIME;
+            use windows_sys::Win32::System::Threading::{
+                GetCurrentProcess, GetProcessTimes,
+            };
+
+            let mut creation = FILETIME::default();
+            let mut exit = FILETIME::default();
+            let mut kernel = FILETIME::default();
+            let mut user = FILETIME::default();
+            let ok = unsafe {
+                GetProcessTimes(
+                    GetCurrentProcess(),
+                    &mut creation,
+                    &mut exit,
+                    &mut kernel,
+                    &mut user,
+                )
+            };
+            if ok == 0 {
+                return 0;
+            }
+
+            let filetime_ticks = |time: FILETIME| {
+                ((time.dwHighDateTime as u64) << 32) | time.dwLowDateTime as u64
+            };
+            // FILETIME counts 100 ns intervals. GNU-compatible ticks are
+            // microseconds.
+            let micros = filetime_ticks(kernel).saturating_add(filetime_ticks(user)) / 10;
+            micros.min(i64::MAX as u64) as i64
+        }
+        _ => {
+            0
+        }
+    }
 }
 
 pub(crate) fn builtin_current_idle_time(
