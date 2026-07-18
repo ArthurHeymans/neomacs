@@ -175,7 +175,8 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 }
             }
             Ok(Event::Text(ref e)) => {
-                let text = e.unescape().ok()?;
+                let decoded = e.decode().ok()?;
+                let text = quick_xml::escape::unescape(decoded.as_ref()).ok()?;
                 if !is_xml_blank_text(text.as_ref()) {
                     let node = Value::string(text.as_ref());
                     if let Some((_, _, children)) = stack.last_mut() {
