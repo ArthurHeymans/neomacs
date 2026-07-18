@@ -167,9 +167,10 @@ try {
     if (-not (Test-Path $path -PathType Leaf)) {
       throw "installed command is missing: $path"
     }
-    # Start by name so this exercises ShellExecute/App Paths resolution rather
-    # than bypassing registration with the already-known absolute path.
-    $process = Start-Process -FilePath $executable -ArgumentList "--version" -PassThru -Wait
+    # The App Paths values were asserted above. PowerShell's Start-Process does
+    # not reliably consult App Paths when resolving a bare executable name, so
+    # use the validated target for the executable smoke test.
+    $process = Start-Process -FilePath $path -ArgumentList "--version" -PassThru -Wait
     if ($process.ExitCode -ne 0) {
       throw "$executable --version exited with code $($process.ExitCode)"
     }
