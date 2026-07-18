@@ -2,13 +2,22 @@ use super::tls::{
     GnutlsCredentialType, TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus,
     certificate_details_value_pem, der_certificate_to_pem, format_x509_certificate_pem,
     gnutls_available_capabilities, gnutls_close_notify_result_value, gnutls_peer_status_to_value,
-    parse_gnutls_boot_parameters,
+    parse_gnutls_boot_parameters, read_rustls_process_output,
 };
 use super::value::Value;
 use crate::emacs_core::builtins::gnutls::{
     builtin_gnutls_error_fatalp, builtin_gnutls_error_string,
     builtin_gnutls_peer_status_warning_describe,
 };
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::{
+    ClientConfig, ClientConnection, DigitallySignedStruct, Error, ServerConfig, ServerConnection,
+    SignatureScheme,
+};
+use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime, pem::PemObject};
+use std::io::{Cursor, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 
 const TEST_CERTIFICATE_PEM: &str = concat!(
     "-----BEGIN CERTIFICATE-----\n",
@@ -43,6 +52,211 @@ const TEST_CERTIFICATE_PEM: &str = concat!(
     "Fcix40FKEeiE093Aj3cweMYxNLPgwgQP8Xu3kA5QEw==\n",
     "-----END CERTIFICATE-----\n",
 );
+
+#[derive(Debug)]
+struct AcceptAnyServerCertificate;
+
+impl ServerCertVerifier for AcceptAnyServerCertificate {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::RSA_PKCS1_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512,
+        ]
+    }
+}
+
+#[test]
+fn nonblocking_tls_reads_drain_buffered_plaintext_before_waiting_for_ciphertext() {
+    let certificate = CertificateDer::from_pem_slice(include_bytes!(
+        "../../../test/lisp/net/network-stream-resources/cert.pem"
+    ))
+    .expect("test certificate");
+    let private_key = PrivateKeyDer::from_pem_slice(include_bytes!(
+        "../../../test/lisp/net/network-stream-resources/key.pem"
+    ))
+    .expect("test private key");
+    let server_config = ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(vec![certificate], private_key)
+        .expect("server certificate and key");
+    let client_config = ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCertificate))
+        .with_no_client_auth();
+    let server_name = ServerName::try_from("localhost").expect("valid server name");
+    let mut connection =
+        ClientConnection::new(Arc::new(client_config), server_name).expect("TLS client connection");
+    let mut server_connection =
+        ServerConnection::new(Arc::new(server_config)).expect("TLS server connection");
+
+    for _ in 0..10 {
+        let mut client_wire = Vec::new();
+        connection
+            .write_tls(&mut client_wire)
+            .expect("write client handshake records");
+        if !client_wire.is_empty() {
+            server_connection
+                .read_tls(&mut Cursor::new(client_wire))
+                .expect("read client handshake records");
+            server_connection
+                .process_new_packets()
+                .expect("process client handshake records");
+        }
+
+        let mut server_wire = Vec::new();
+        server_connection
+            .write_tls(&mut server_wire)
+            .expect("write server handshake records");
+        if !server_wire.is_empty() {
+            connection
+                .read_tls(&mut Cursor::new(server_wire))
+                .expect("read server handshake records");
+            connection
+                .process_new_packets()
+                .expect("process server handshake records");
+        }
+        if !connection.is_handshaking() && !server_connection.is_handshaking() {
+            break;
+        }
+    }
+    assert!(
+        !connection.is_handshaking(),
+        "client handshake should finish"
+    );
+    assert!(
+        !server_connection.is_handshaking(),
+        "server handshake should finish"
+    );
+    // Flush post-handshake records (for example TLS 1.3 tickets and the
+    // client's Finished) before constructing the application-data scenario.
+    for _ in 0..4 {
+        let mut client_wire = Vec::new();
+        connection
+            .write_tls(&mut client_wire)
+            .expect("flush client post-handshake records");
+        if !client_wire.is_empty() {
+            server_connection
+                .read_tls(&mut Cursor::new(client_wire))
+                .expect("read client post-handshake records");
+            server_connection
+                .process_new_packets()
+                .expect("process client post-handshake records");
+        }
+
+        let mut server_wire = Vec::new();
+        server_connection
+            .write_tls(&mut server_wire)
+            .expect("flush server post-handshake records");
+        if !server_wire.is_empty() {
+            connection
+                .read_tls(&mut Cursor::new(server_wire))
+                .expect("read server post-handshake records");
+            connection
+                .process_new_packets()
+                .expect("process server post-handshake records");
+        }
+        if !connection.wants_write() && !server_connection.wants_write() {
+            break;
+        }
+    }
+
+    let expected = vec![b'x'; 8_000];
+    server_connection
+        .writer()
+        .write_all(&expected)
+        .expect("buffer TLS test plaintext");
+    let mut application_records = Vec::new();
+    server_connection
+        .write_tls(&mut application_records)
+        .expect("write TLS application records");
+    let application_records_len = application_records.len() as u64;
+    let mut application_records = Cursor::new(application_records);
+    let mut plaintext_bytes = 0;
+    while application_records.position() < application_records_len {
+        connection
+            .read_tls(&mut application_records)
+            .expect("read TLS application records");
+        plaintext_bytes = connection
+            .process_new_packets()
+            .expect("decrypt TLS application records")
+            .plaintext_bytes_to_read();
+        if plaintext_bytes == expected.len() {
+            break;
+        }
+    }
+    assert_eq!(plaintext_bytes, expected.len());
+
+    // Give the helper a live nonblocking socket with no bytes ready. The only
+    // readable bytes are the plaintext already buffered inside rustls.
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind empty test socket");
+    let mut socket = TcpStream::connect(listener.local_addr().expect("listener address"))
+        .expect("connect empty test socket");
+    let (_peer, _) = listener.accept().expect("accept empty test socket");
+    socket
+        .set_nonblocking(true)
+        .expect("set TLS test client nonblocking");
+    // Make an outstanding TLS write hit WouldBlock. `rustls::Stream::read'
+    // flushes such writes before exposing already-decrypted plaintext.
+    let filler = vec![0; 65_536];
+    loop {
+        match socket.write(&filler) {
+            Ok(0) => panic!("test socket stopped accepting filler bytes"),
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(err) => panic!("fill test socket send buffer: {err}"),
+        }
+    }
+    connection
+        .writer()
+        .write_all(b"pending TLS transport write")
+        .expect("queue pending TLS write");
+    assert!(connection.wants_write(), "TLS write should remain queued");
+
+    let mut actual = Vec::new();
+    let mut chunk = vec![0; 65_536];
+    while actual.len() < expected.len() {
+        let read = read_rustls_process_output(&mut connection, &mut socket, &mut chunk)
+            .expect("buffered plaintext must not report WouldBlock");
+        assert!(read > 0, "the complete TLS payload should remain readable");
+        actual.extend_from_slice(&chunk[..read]);
+    }
+
+    assert_eq!(actual.len(), expected.len());
+    assert!(actual.iter().all(|byte| *byte == b'x'));
+}
 
 #[test]
 fn backend_errors_render_boundary_messages() {

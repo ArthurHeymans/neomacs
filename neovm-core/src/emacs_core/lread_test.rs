@@ -306,6 +306,137 @@ fn eval_region_evaluates_forms_in_range() {
 }
 
 #[test]
+fn eval_region_uses_read_function_result_instead_of_source_text() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(fset 'lread-er-read-function
+                 (lambda (stream)
+                   (setq lread-er-read-function-got-buffer (bufferp stream))
+                   (goto-char (point-max))
+                   '(setq lread-er-read-function-result 'transformed)))"#,
+    )
+    .expect("define eval-region read function");
+    {
+        let buf = ev.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert("(setq lread-er-read-function-result 'source)");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    let end = {
+        let buf = ev.buffers.current_buffer().expect("current buffer");
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
+    };
+
+    let result = builtin_eval_region(
+        &mut ev,
+        vec![
+            Value::fixnum(1),
+            end,
+            Value::NIL,
+            Value::symbol("lread-er-read-function"),
+        ],
+    )
+    .expect("eval-region with read function");
+
+    assert!(result.is_nil());
+    assert_eq!(
+        ev.obarray
+            .symbol_value("lread-er-read-function-result")
+            .copied(),
+        Some(Value::symbol("transformed"))
+    );
+    assert_eq!(
+        ev.obarray
+            .symbol_value("lread-er-read-function-got-buffer")
+            .copied(),
+        Some(Value::T)
+    );
+    assert_eq!(
+        ev.buffers
+            .current_buffer()
+            .expect("current buffer")
+            .point_lisp_char_pos()
+            .as_i64(),
+        1,
+        "eval-region preserves point"
+    );
+}
+
+#[test]
+fn eval_region_advances_from_reader_point_before_evaluating_returned_form() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(progn
+             (setq lread-er-point-reader-count 0)
+             (fset 'lread-er-point-reader
+                   (lambda (stream)
+                     (setq lread-er-point-reader-count
+                           (1+ lread-er-point-reader-count))
+                     (let ((form (read stream)))
+                       (list 'progn
+                             '(goto-char (point-min))
+                             form)))))"#,
+    )
+    .expect("define point-moving eval-region reader");
+    {
+        let buf = ev.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert("(setq lread-er-point-a 1)\n(setq lread-er-point-b 2)");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    let end = {
+        let buf = ev.buffers.current_buffer().expect("current buffer");
+        Value::fixnum(buf.z_lisp_char_pos().as_i64())
+    };
+
+    let eval_result = builtin_eval_region(
+        &mut ev,
+        vec![
+            Value::fixnum(1),
+            end,
+            Value::NIL,
+            Value::symbol("lread-er-point-reader"),
+        ],
+    );
+    if let Err(flow) = eval_result {
+        match flow {
+            Flow::Signal(signal) => panic!(
+                "eval-region must keep the reader's stream point across evaluation: {} {:?}",
+                signal.symbol_name(),
+                signal.data
+            ),
+            other => panic!(
+                "eval-region must keep the reader's stream point across evaluation: {other:?}"
+            ),
+        }
+    }
+
+    assert_eq!(
+        ev.obarray.symbol_value("lread-er-point-a").copied(),
+        Some(Value::fixnum(1))
+    );
+    assert_eq!(
+        ev.obarray.symbol_value("lread-er-point-b").copied(),
+        Some(Value::fixnum(2))
+    );
+    assert_eq!(
+        ev.obarray
+            .symbol_value("lread-er-point-reader-count")
+            .copied(),
+        Some(Value::fixnum(2))
+    );
+    assert_eq!(
+        ev.buffers
+            .current_buffer()
+            .expect("current buffer")
+            .point_lisp_char_pos()
+            .as_i64(),
+        1,
+        "eval-region preserves point even when returned forms move it"
+    );
+}
+
+#[test]
 fn eval_region_preserves_unibyte_string_literals() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

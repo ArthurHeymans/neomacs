@@ -16162,6 +16162,13 @@ impl Context {
         self.command_loop.recursive_depth.saturating_sub(1)
     }
 
+    /// Lisp-visible recursive-edit depth, matching GNU's
+    /// `command_loop_level + minibuf_level`.
+    pub(crate) fn recursion_depth(&self) -> usize {
+        self.recursive_command_loop_depth()
+            .saturating_add(self.minibuffers.depth())
+    }
+
     pub(crate) fn interactive_minibuffer_read_count(&self) -> u64 {
         self.interactive_minibuffer_read_count
     }

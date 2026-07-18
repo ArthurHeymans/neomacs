@@ -613,6 +613,33 @@ fn recursion_depth_zero() {
     assert!(eq_value(&result, &Value::fixnum(0)));
 }
 
+#[test]
+fn recursion_depth_counts_recursive_command_loops_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    // Neomacs stores one raw command-loop level for GNU's visible top level.
+    // A second active level is therefore one recursive edit.
+    eval.command_loop.recursive_depth = 2;
+
+    let result = builtin_recursion_depth(&mut eval, vec![]).unwrap();
+
+    assert_eq!(result, Value::fixnum(1));
+}
+
+#[test]
+fn recursion_depth_includes_active_minibuffers_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.command_loop.recursive_depth = 2;
+    eval.minibuffers
+        .read_from_minibuffer(crate::buffer::BufferId(1), "Prompt: ", None, None)
+        .unwrap();
+
+    let result = builtin_recursion_depth(&mut eval, vec![]).unwrap();
+
+    assert_eq!(result, Value::fixnum(2));
+}
+
 // Regression tests for `backtrace-frame--internal` — the real
 // introspection primitive that walks the specpdl. GNU's
 // `backtrace_frame_apply` (eval.c:3984) reads each SPECPDL_BACKTRACE

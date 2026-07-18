@@ -918,15 +918,13 @@ pub(crate) fn builtin_mapbacktrace(
     Ok(Value::NIL)
 }
 
-/// `(recursion-depth)` -- return the current Lisp recursion depth.
-/// Uses the dynamic binding stack depth as a proxy (the true depth counter
-/// is private to the Context).
+/// `(recursion-depth)` -- return the current depth in recursive edits.
 pub(crate) fn builtin_recursion_depth(
-    _eval: &mut super::eval::Context,
+    eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("recursion-depth", &args, 0)?;
-    Ok(Value::fixnum(0))
+    Ok(Value::fixnum(eval.recursion_depth() as i64))
 }
 
 // ===========================================================================

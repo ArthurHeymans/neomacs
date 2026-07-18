@@ -1914,31 +1914,44 @@ fn process_status_code_message(code: Value) -> String {
         .unwrap_or_else(|| "0".to_string())
 }
 
+/// The ambient inputs GNU's `set_network_socket_coding_system` consults when
+/// `make-network-process :coding` is nil.  Keeping them together prevents a
+/// connection path (TCP, local, datagram, deferred DNS/TLS) from silently
+/// omitting one level of the coding-system precedence chain.
+#[derive(Clone, Copy)]
+struct NetworkProcessCodingDefaults {
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+    operation_coding_system: Value,
+    default_process_coding_system: Value,
+    current_buffer_multibyte: bool,
+}
+
 /// Resolve the (decode . encode) coding pair for a network process, mirroring
 /// GNU `set_network_socket_coding_system` (src/process.c:3291-3367).
 ///
 /// * An explicit `:coding` value supplies both directions (its car/cdr if a
 ///   cons, else the whole symbol for both).
-/// * When `:coding` is nil GNU does NOT fall back to `binary`.  Instead it
-///   consults `coding-system-for-read/write` and, failing those, the buffer's
-///   multibyteness:
+/// * When `:coding` is nil GNU does NOT immediately fall back to the process
+///   default.  It first consults `coding-system-for-read/write`, then the
+///   process/current buffer's multibyteness, then the operation coding pair,
+///   and finally `default-process-coding-system`.
+///
+/// In particular, `url-open-stream` dynamically binds
+/// `coding-system-for-read` to `binary`; losing that binding decodes font bytes
+/// as UTF-8 and makes the URL buffer shorter than its HTTP Content-Length.
+///
+/// The buffer-dependent fallbacks are:
 ///     - DECODE: if the process buffer (or, when absent, the default buffer)
 ///       is UNIBYTE, decode is left nil/raw so libraries receive bare CR LF;
-///       otherwise decode comes from `find-operation-coding-system`, which for
-///       a plain local socket has no alist entry and falls through to the car
+///       otherwise decode comes from `find-operation-coding-system` or the car
 ///       of `default-process-coding-system` (`utf-8-unix`).
-///     - ENCODE: comes from the cdr of `default-process-coding-system`.
-///
-/// `default_coding` is the runtime value of `default-process-coding-system`
-/// (a cons `(decode . encode)`, normally `(utf-8-unix . utf-8-unix)`); a nil
-/// or malformed value falls back to `binary`.  `buffer_multibyte` is the
-/// multibyteness of the process buffer (true when there is no buffer, since
-/// the default buffer is multibyte), matching GNU's `p->buffer` /
-/// `buffer_defaults` test.
+///     - ENCODE: a unibyte current buffer stays raw; otherwise use the operation
+///       coding or the default process coding's cdr.
 fn network_process_coding_pair(
     coding: Value,
-    default_coding: Value,
-    buffer_multibyte: bool,
+    defaults: NetworkProcessCodingDefaults,
+    process_buffer_multibyte: bool,
 ) -> (Value, Value) {
     if coding.is_cons() {
         return (coding.cons_car(), coding.cons_cdr());
@@ -1946,37 +1959,81 @@ fn network_process_coding_pair(
     if !coding.is_nil() {
         return (coding, coding);
     }
-    // `:coding` unspecified: derive from `default-process-coding-system`.
-    // GNU `set_network_socket_coding_system` (process.c:3331-3336, 3361-3366)
-    // uses the car/cdr of `Vdefault_process_coding_system` when it is a cons,
-    // and otherwise falls back to `Qnil` (NOT `binary`) — so an unset default
-    // yields a nil decode/encode, matching `(process-coding-system)` of `(nil)`.
-    let (default_decode, default_encode) = if default_coding.is_cons() {
-        (default_coding.cons_car(), default_coding.cons_cdr())
+    let (default_decode, default_encode) = if defaults.default_process_coding_system.is_cons() {
+        (
+            defaults.default_process_coding_system.cons_car(),
+            defaults.default_process_coding_system.cons_cdr(),
+        )
     } else {
         (Value::NIL, Value::NIL)
     };
-    // GNU leaves the decode side as nil (raw) for a unibyte buffer so the
-    // process receives bare bytes; a multibyte (or absent) buffer decodes via
-    // the default process coding system.
-    let decode = if buffer_multibyte {
-        default_decode
-    } else {
+
+    let decode = if !defaults.coding_system_for_read.is_nil() {
+        defaults.coding_system_for_read
+    } else if !process_buffer_multibyte {
         Value::NIL
+    } else if defaults.operation_coding_system.is_cons() {
+        defaults.operation_coding_system.cons_car()
+    } else {
+        default_decode
     };
-    (decode, default_encode)
+    let encode = if !defaults.coding_system_for_write.is_nil() {
+        defaults.coding_system_for_write
+    } else if !defaults.current_buffer_multibyte {
+        Value::NIL
+    } else if defaults.operation_coding_system.is_cons() {
+        defaults.operation_coding_system.cons_cdr()
+    } else {
+        default_encode
+    };
+    (decode, encode)
 }
 
 fn set_network_process_coding(
     proc: &mut Process,
     coding: Value,
-    default_coding: Value,
-    buffer_multibyte: bool,
+    defaults: NetworkProcessCodingDefaults,
+    process_buffer_multibyte: bool,
 ) {
-    let (decode, encode) = network_process_coding_pair(coding, default_coding, buffer_multibyte);
+    let (decode, encode) = network_process_coding_pair(coding, defaults, process_buffer_multibyte);
     proc.coding_decode = decode;
     proc.decoding_carryover.clear();
     proc.coding_encode = encode;
+}
+
+fn find_network_operation_coding_system(
+    eval: &mut super::eval::Context,
+    name: &LispString,
+    buffer: Value,
+    host: Value,
+    service: Value,
+) -> EvalResult {
+    if host.is_nil()
+        || service.is_nil()
+        || eval
+            .visible_variable_value_or_nil("network-coding-system-alist")
+            .is_nil()
+    {
+        return Ok(Value::NIL);
+    }
+
+    // GNU calls `(find-operation-coding-system 'open-network-stream NAME
+    // BUFFER HOST SERVICE)`.  Root every heap value because a user-supplied
+    // network-coding callback can run arbitrary Lisp and trigger GC.
+    let args = vec![
+        Value::symbol("open-network-stream"),
+        Value::heap_string(name.clone()),
+        buffer,
+        host,
+        service,
+    ];
+    let roots = eval.save_specpdl_roots();
+    for value in &args {
+        eval.push_specpdl_root(*value);
+    }
+    let result = super::builtins::builtin_find_operation_coding_system(eval, args);
+    eval.restore_specpdl_roots(roots);
+    result
 }
 
 fn explicit_process_coding_pair(coding: Value) -> (Value, Value) {
@@ -5078,6 +5135,23 @@ impl ProcessManager {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.pending_network_connect = None;
             proc.status = process_status_run_value();
+        }
+        let tls_parameters = self
+            .processes
+            .get(&id)
+            .map(|proc| proc.gnutls_boot_parameters)
+            .filter(|parameters| !parameters.is_nil())
+            .map(parse_make_network_tls_parameters)
+            .transpose()?
+            .flatten();
+        if let Some(parameters) = tls_parameters {
+            upgrade_process_to_tls::<RustlsBackend>(
+                self,
+                id,
+                &parameters.hostname,
+                "make-network-process",
+                signal_gnutls_boot_error,
+            )?;
         }
         self.register_socket_fd(id).ok();
         Ok(PendingNetworkConnectCompletion::Connected { sentinel })
@@ -8509,7 +8583,7 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
     let parameters = parse_gnutls_boot_parameters(args[1], args[2])?;
     upgrade_process_to_tls::<RustlsBackend>(
-        eval,
+        &mut eval.processes,
         id,
         &parameters.hostname,
         "gnutls-boot",
@@ -8628,7 +8702,7 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
     )?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &process)?;
     upgrade_process_to_tls::<RustlsBackend>(
-        eval,
+        &mut eval.processes,
         id,
         &host,
         "neomacs-open-tls-stream",
@@ -8638,14 +8712,13 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
 }
 
 fn upgrade_process_to_tls<B: TlsClientBackend>(
-    eval: &mut super::eval::Context,
+    processes: &mut ProcessManager,
     id: ProcessId,
     host: &str,
     operation: &str,
     map_error: fn(TlsBackendError) -> Flow,
 ) -> Result<(), Flow> {
-    let proc = eval
-        .processes
+    let proc = processes
         .get_mut(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
 
@@ -9200,7 +9273,8 @@ fn connect_network_process_at_explicit_address(
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
     tls_parameters: Option<super::tls::GnutlsBootParameters>,
-    default_process_coding: Value,
+    tls_parameters_value: Value,
+    default_process_coding: NetworkProcessCodingDefaults,
     network_buffer_multibyte: bool,
 ) -> EvalResult {
     let address = parse_network_address_spec(&explicit_address)?;
@@ -9517,6 +9591,9 @@ fn connect_network_process_at_explicit_address(
                             proc.status = process_status_failed_value(code);
                         }
                     }
+                    if proc.pending_network_connect.is_some() {
+                        proc.gnutls_boot_parameters = tls_parameters_value;
+                    }
                     apply_connection_process_flags(proc, noquery, stop);
                 }
                 if eval
@@ -9594,7 +9671,7 @@ fn connect_network_process_at_explicit_address(
             }
             if let Some(parameters) = tls_parameters.clone() {
                 upgrade_process_to_tls::<RustlsBackend>(
-                    eval,
+                    &mut eval.processes,
                     id,
                     &parameters.hostname,
                     "make-network-process",
@@ -10105,7 +10182,7 @@ fn connect_datagram_network_process(
     stop: bool,
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
-    default_process_coding: Value,
+    default_process_coding: NetworkProcessCodingDefaults,
     network_buffer_multibyte: bool,
 ) -> EvalResult {
     let port = parse_network_service_port(&service, server, socket_type)?;
@@ -10271,7 +10348,7 @@ fn listen_stream_network_process(
     server_backlog: Option<i32>,
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
-    default_process_coding: Value,
+    default_process_coding: NetworkProcessCodingDefaults,
     network_buffer_multibyte: bool,
 ) -> EvalResult {
     let port = parse_network_service_port(&service, true, socket_type)?;
@@ -10375,7 +10452,7 @@ fn connect_local_socket_process(
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
     tls_parameters: Option<super::tls::GnutlsBootParameters>,
-    default_process_coding: Value,
+    default_process_coding: NetworkProcessCodingDefaults,
     network_buffer_multibyte: bool,
     remote_address_value: Value,
 ) -> EvalResult {
@@ -10754,7 +10831,7 @@ fn connect_local_socket_process(
             }
             if let Some(parameters) = tls_parameters.clone() {
                 upgrade_process_to_tls::<RustlsBackend>(
-                    eval,
+                    &mut eval.processes,
                     id,
                     &parameters.hostname,
                     "make-network-process",
@@ -10993,13 +11070,22 @@ pub(crate) fn builtin_make_network_process(
         Value::NIL
     };
 
-    // Default coding resolution for `:coding nil`, mirroring GNU
-    // `set_network_socket_coding_system` (src/process.c:3291-3367): the decode
-    // side depends on the process buffer's multibyteness (raw for a unibyte
-    // buffer, `default-process-coding-system` otherwise) and a missing buffer
-    // uses the default buffer's multibyteness (multibyte by default).
-    let default_process_coding =
-        eval.visible_variable_value_or_nil("default-process-coding-system");
+    // Capture the dynamic coding environment once and pass it through every
+    // connection strategy.  GNU's `set_network_socket_coding_system` gives
+    // `coding-system-for-read/write` precedence over the operation/default
+    // codings; URL binds the read side to `binary` around this call.
+    let mut default_process_coding = NetworkProcessCodingDefaults {
+        coding_system_for_read: eval.visible_variable_value_or_nil("coding-system-for-read"),
+        coding_system_for_write: eval.visible_variable_value_or_nil("coding-system-for-write"),
+        operation_coding_system: Value::NIL,
+        default_process_coding_system: eval
+            .visible_variable_value_or_nil("default-process-coding-system"),
+        current_buffer_multibyte: eval
+            .buffers
+            .current_buffer()
+            .map(|buffer| buffer.get_multibyte())
+            .unwrap_or(true),
+    };
     let network_buffer_multibyte =
         match resolve_buffer_for_process_lookup_in_state(&eval.frames, &eval.buffers, &buffer) {
             Ok(Some(bid)) => eval
@@ -11037,6 +11123,7 @@ pub(crate) fn builtin_make_network_process(
             socket_type,
             socket_options,
             tls_parameters,
+            tls_parameters_val,
             default_process_coding,
             network_buffer_multibyte,
         );
@@ -11048,6 +11135,10 @@ pub(crate) fn builtin_make_network_process(
     let service = service.unwrap_or(Value::NIL);
     if service.is_nil() {
         return Err(signal_wrong_type_string(Value::NIL));
+    }
+    if coding_val.is_nil() {
+        default_process_coding.operation_coding_system =
+            find_network_operation_coding_system(eval, &name, buffer, host_value, service)?;
     }
 
     if family.is_local() {
@@ -11216,6 +11307,9 @@ pub(crate) fn builtin_make_network_process(
             } else if let Some(pending_dns) = pending_dns {
                 proc.pending_network_connect = Some(PendingNetworkConnect::Dns(pending_dns));
             }
+            if proc.pending_network_connect.is_some() {
+                proc.gnutls_boot_parameters = tls_parameters_val;
+            }
             apply_connection_process_flags(proc, noquery, stop);
         }
         if eval.processes.get(id).is_some_and(|proc| {
@@ -11289,7 +11383,7 @@ pub(crate) fn builtin_make_network_process(
 
     if let Some(parameters) = tls_parameters {
         upgrade_process_to_tls::<RustlsBackend>(
-            eval,
+            &mut eval.processes,
             id,
             &parameters.hostname,
             "make-network-process",
@@ -14341,6 +14435,7 @@ impl GcTrace for ProcessManager {
             roots.push(process.coding_decode);
             roots.push(process.coding_encode);
             roots.push(process.thread);
+            roots.push(process.gnutls_boot_parameters);
         }
     }
 }

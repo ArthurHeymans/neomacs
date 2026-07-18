@@ -5712,6 +5712,25 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
 }
 
 #[test]
+fn make_network_process_honors_dynamic_coding_system_for_read_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                  (coding-system-for-read 'binary))
+             (let ((process
+                    (make-network-process
+                     :name "network-dynamic-read-coding"
+                     :server t
+                     :service 0)))
+               (unwind-protect
+                   (process-coding-system process)
+                 (delete-process process))))"#,
+    );
+
+    assert_eq!(results, ["OK (binary . utf-8-unix)"]);
+}
+
+#[test]
 fn process_list_network_serial_runtime_surface() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(
@@ -6269,6 +6288,47 @@ fn make_network_process_nowait_tcp_loopback_opens_like_gnu() {
     assert_eq!(
         results[0],
         "OK ((connect (connect stop) t t) open (open listen connect stop) ((:cli \"open\" open)) t t)"
+    );
+}
+
+#[test]
+fn make_network_process_nowait_retains_tls_parameters_until_connect_completes() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    let port = listener.local_addr().expect("listener address").port();
+    let tls_parameters = Value::list(vec![
+        Value::symbol("gnutls-x509pki"),
+        Value::keyword(":hostname"),
+        Value::string("localhost"),
+    ]);
+    let mut eval = Context::new();
+
+    let process = builtin_make_network_process(
+        &mut eval,
+        vec![
+            Value::keyword(":name"),
+            Value::string("nowait-tls-parameters"),
+            Value::keyword(":host"),
+            Value::string("127.0.0.1"),
+            Value::keyword(":service"),
+            Value::fixnum(i64::from(port)),
+            Value::keyword(":family"),
+            Value::symbol("ipv4"),
+            Value::keyword(":nowait"),
+            Value::T,
+            Value::keyword(":tls-parameters"),
+            tls_parameters,
+        ],
+    )
+    .expect("start deferred TLS connection");
+    let id = process.as_process_id().expect("network process id");
+
+    assert_eq!(
+        eval.processes
+            .get(id)
+            .expect("network process")
+            .gnutls_boot_parameters,
+        tls_parameters,
+        "the TCP completion path must still know that TLS negotiation is pending"
     );
 }
 

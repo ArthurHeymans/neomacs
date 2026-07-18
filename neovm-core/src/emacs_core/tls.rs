@@ -391,7 +391,9 @@ impl TlsStream {
 
     pub(crate) fn read_process_output(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
-            Self::Rustls(stream) => rustls_read_process_output(stream, buf),
+            Self::Rustls(stream) => {
+                read_rustls_process_output(&mut stream.inner.conn, &mut stream.inner.sock, buf)
+            }
         }
     }
 
@@ -421,8 +423,9 @@ impl TlsStream {
     }
 }
 
-fn rustls_read_process_output(
-    stream: &mut RustlsTlsStream,
+pub(crate) fn read_rustls_process_output(
+    connection: &mut rustls::ClientConnection,
+    socket: &mut TcpStream,
     buf: &mut [u8],
 ) -> std::io::Result<usize> {
     if buf.is_empty() {
@@ -430,8 +433,19 @@ fn rustls_read_process_output(
     }
 
     loop {
-        match stream.inner.read(buf) {
-            Ok(n) => return Ok(n),
+        // Rustls may already have decrypted application data from a previous
+        // socket read. Drain it before asking the nonblocking socket for
+        // another TLS record: `rustls::Stream::read' flushes pending writes
+        // first and can return WouldBlock with plaintext still available.
+        match connection.reader().read(buf) {
+            Ok(read) => return Ok(read),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(err),
+        }
+
+        match connection.complete_io(socket) {
+            Ok(_) => {}
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(err) => return Err(err),
         }
