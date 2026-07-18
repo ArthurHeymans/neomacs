@@ -10,7 +10,7 @@ concurrency:
 jobs:
   build-and-test:
     name: build & test (linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 120
     env:
       CARGO_TERM_COLOR: always
@@ -54,7 +54,8 @@ jobs:
             libsqlite3-dev \
             libxml2-dev \
             gnutls-bin \
-            libgnutls28-dev
+            libgnutls28-dev \
+            zlib1g-dev
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -91,7 +92,7 @@ jobs:
 
   lint:
     name: lint & clippy (frontend, linux)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: always
@@ -135,7 +136,8 @@ jobs:
             libsqlite3-dev \
             libxml2-dev \
             gnutls-bin \
-            libgnutls28-dev
+            libgnutls28-dev \
+            zlib1g-dev
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable

@@ -1,0 +1,69 @@
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG RUST_TOOLCHAIN=1.96.1
+
+ENV CARGO_HOME=/opt/rust/cargo \
+    RUSTUP_HOME=/opt/rust/rustup \
+    PATH=/opt/rust/cargo/bin:${PATH}
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        binutils \
+        build-essential \
+        ca-certificates \
+        cmake \
+        cpio \
+        curl \
+        file \
+        fontconfig \
+        git \
+        gnutls-bin \
+        libbz2-dev \
+        libcairo2-dev \
+        libcurl4-openssl-dev \
+        libdbus-1-dev \
+        libfontconfig1-dev \
+        libfreetype-dev \
+        libglib2.0-dev \
+        libgnutls28-dev \
+        libgstreamer-plugins-base1.0-dev \
+        libgstreamer1.0-dev \
+        libharfbuzz-dev \
+        liblzma-dev \
+        libpango1.0-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libsystemd-dev \
+        libvulkan-dev \
+        libwayland-dev \
+        libxcb1-dev \
+        libxcursor-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxkbcommon-dev \
+        libxkbcommon-x11-dev \
+        libxml2-dev \
+        libxrandr-dev \
+        m4 \
+        mesa-vulkan-drivers \
+        pkg-config \
+        rpm \
+        wayland-protocols \
+        zlib1g-dev \
+    && apt-get clean \
+    && find /var/lib/apt/lists -mindepth 1 -delete
+
+# Keep build scratch data on the mounted workspace instead of the container's
+# small /tmp filesystem. The directory is normally shadowed by `-v "$PWD:/workspace"`.
+RUN mkdir -p /workspace/tmp "$CARGO_HOME" "$RUSTUP_HOME"
+ENV TMPDIR=/workspace/tmp
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --profile minimal --default-toolchain "$RUST_TOOLCHAIN" \
+    && rustc --version \
+    && cargo --version
+
+WORKDIR /workspace
+
+CMD ["bash"]

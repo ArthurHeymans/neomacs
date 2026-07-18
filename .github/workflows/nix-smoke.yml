@@ -16,7 +16,7 @@ concurrency:
 jobs:
   nix-smoke:
     name: nix build and startup smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 240
     steps:
       - name: Checkout

@@ -1,4 +1,8 @@
 rust/neomacs-display/target/
+target/
+tmp/
+dist/
+result
 .git
 *.o
 *.elc

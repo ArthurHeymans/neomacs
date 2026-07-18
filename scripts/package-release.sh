@@ -138,7 +138,9 @@ built: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 VERSION
 
 if ((smoke)); then
-  smoke_dir="$(mktemp -d "${TMPDIR:-/tmp}/neomacs-release-smoke.XXXXXX")"
+  smoke_base="${TMPDIR:-$repo_root/tmp}"
+  mkdir -p "$smoke_base"
+  smoke_dir="$(mktemp -d "$smoke_base/neomacs-release-smoke.XXXXXX")"
   trap 'rm -rf "$smoke_dir"' EXIT
   tar -C "$dist_dir" -czf "$archive" "$package_name"
   tar -C "$smoke_dir" -xzf "$archive"
