@@ -77,6 +77,7 @@ jobs:
             libfontconfig1-dev \
             libfreetype-dev \
             libglib2.0-dev \
+            libunwind-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libxkbcommon-dev \
