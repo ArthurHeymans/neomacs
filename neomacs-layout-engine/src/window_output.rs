@@ -484,7 +484,15 @@ pub(crate) fn finish_pending_text_window_row(
     // the source is exhausted (ZV reached), GNU sets row->ends_at_zv_p on it —
     // both on a final text row and on the empty EOB placeholder, which the
     // guard below leaves unfinished yet enabled. Mark it before the guard.
-    if request.source_exhausted {
+    //
+    // Only within the row limit: a row-BOUNDED walk (the below-reuse edit
+    // replay relaying just the edited line) can consume the final newline and
+    // reach ZV while the limit suppressed beginning the placeholder row — the
+    // grid's current row is then the finalized CONTENT row, which a full
+    // rebuild does not tag (the reused placeholder below it already carries
+    // the flag). Same for a full walk whose window is exactly filled: the
+    // ZV row was never begun, so no visible row reports it.
+    if request.source_exhausted && request.row_geometry.is_within_row_limit(request.row_limit) {
         output.current_row_output().mark_text_row_ends_at_zv();
     }
 

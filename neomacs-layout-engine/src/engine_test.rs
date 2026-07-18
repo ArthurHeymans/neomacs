@@ -17484,3 +17484,189 @@ fn non_selected_unchanged_window_reuses_via_cursor_only() {
         "both the selected and the non-selected unchanged window must reuse via cursor-only"
     );
 }
+
+/// REVIEW GOLDEN (Codex P2): editing the LAST non-empty line of a
+/// newline-terminated buffer under below-reuse bounds the walk to that one
+/// row; consuming the final newline reaches ZV, but the row limit suppresses
+/// beginning the placeholder, so the walk must NOT tag the finalized content
+/// row ends_at_zv — the reused placeholder below it already carries the flag,
+/// and a full rebuild tags only the placeholder.
+#[test]
+fn edit_below_reuse_last_line_leaves_zv_flag_to_the_placeholder() {
+    let text = "alpha\ndelta\n";
+    let edit_byte: usize = 8; // inside "delta", the LAST non-empty line
+
+    let run = |incremental: bool| -> Vec<(usize, usize, bool, bool)> {
+        let (mut eval, frame_id, buf_id, _w) = incr_editing_frame(text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.allow_below_reuse = true;
+        if incremental {
+            engine.layout_frame_rust(&mut eval, frame_id);
+        }
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+            buffer.insert("X");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        if incremental {
+            assert_eq!(
+                engine.last_layout_stats().edit_windows,
+                1,
+                "the edit must take the edit fast path (got {:?})",
+                engine.last_layout_stats()
+            );
+        }
+        selected_window_layout_trace(&eval, &engine, frame_id)
+            .matrix_rows
+            .iter()
+            .filter(|r| r.role == GlyphRowRole::Text)
+            .map(|r| {
+                (
+                    r.start_charpos,
+                    r.end_charpos,
+                    r.displays_text,
+                    r.ends_at_zv,
+                )
+            })
+            .collect()
+    };
+    let incremental = run(true);
+    let reference = run(false);
+    assert_eq!(
+        incremental, reference,
+        "only the placeholder reports ends_at_zv, on both paths"
+    );
+}
+
+/// Per-row buffer-pointer identities (mouse-face source ranges etc.) of the
+/// selected window's enabled body rows, keyed by row start charpos.
+fn selected_pointer_identities(
+    engine: &LayoutEngine,
+    win: neovm_core::window::WindowId,
+) -> Vec<(
+    usize,
+    Vec<neomacs_display_protocol::glyph_matrix::GlyphPointerSourceIdentity>,
+)> {
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|e| e.window_id.get() == win.0 as i64)
+        .expect("selected window matrix");
+    entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|r| r.enabled && r.role == GlyphRowRole::Text)
+        .map(|r| {
+            (
+                r.start_charpos,
+                r.pointer_appearances()
+                    .iter()
+                    .map(|appearance| appearance.source)
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// REVIEW GOLDEN (Codex P2): a mouse-face source range on the rows BELOW the
+/// edit carries buffer positions in its pointer identity; below-reuse must
+/// shift them with the insert or hover would key the reused rows differently
+/// from a fresh walk.
+#[test]
+fn edit_below_reuse_shifts_pointer_identities_below_the_insert() {
+    let text = "alpha\nbeta\ngamma\ndelta\n";
+    let edit_byte: usize = 8; // inside "beta"
+    // mouse-face over gamma+delta (1-based 12..23), entirely below the edit.
+    let put_prop = "(put-text-property 12 23 'mouse-face 'highlight)";
+
+    let run = |incremental: bool| {
+        let (mut eval, frame_id, buf_id, win) = incr_editing_frame(text, 800, 600);
+        eval.eval_str(put_prop).expect("put-text-property");
+        let mut engine = LayoutEngine::new();
+        engine.allow_below_reuse = true;
+        if incremental {
+            engine.layout_frame_rust(&mut eval, frame_id);
+        }
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+            buffer.insert("X");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        let stats = engine.last_layout_stats().clone();
+        (selected_pointer_identities(&engine, win), stats)
+    };
+    let (incremental, stats) = run(true);
+    let (reference, _) = run(false);
+    assert_eq!(stats.edit_windows, 1, "edit fast path engaged ({stats:?})");
+    assert!(
+        stats.relaid_body_rows <= 2,
+        "below-reuse relays only the edited line ({stats:?})"
+    );
+    assert!(
+        incremental
+            .iter()
+            .any(|(_, identities)| !identities.is_empty()),
+        "the walk must record pointer identities for the mouse-face range: {incremental:?}"
+    );
+    assert_eq!(
+        incremental, reference,
+        "reused rows report the identities a fresh walk produces"
+    );
+}
+
+/// REVIEW GOLDEN (Codex P2): a pointer range that BEGINS above the edit can be
+/// restructured by the insert itself (interval split around non-inheriting
+/// text), which no shift reproduces — below-reuse must fall back to the
+/// above-only path (which relays the rows below) and stay canonical.
+#[test]
+fn edit_below_reuse_bails_on_pointer_range_crossing_the_edit() {
+    let text = "alpha\nbeta\ngamma\ndelta\n";
+    let edit_byte: usize = 8; // inside "beta"
+    // mouse-face from inside "alpha" through "delta" (1-based 3..23) — its
+    // identity on the rows below begins ABOVE the edit point.
+    let put_prop = "(put-text-property 3 23 'mouse-face 'highlight)";
+
+    let run = |incremental: bool| {
+        let (mut eval, frame_id, buf_id, win) = incr_editing_frame(text, 800, 600);
+        eval.eval_str(put_prop).expect("put-text-property");
+        let mut engine = LayoutEngine::new();
+        engine.allow_below_reuse = true;
+        if incremental {
+            engine.layout_frame_rust(&mut eval, frame_id);
+        }
+        {
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_byte));
+            buffer.insert("X");
+        }
+        engine.layout_frame_rust(&mut eval, frame_id);
+        let stats = engine.last_layout_stats().clone();
+        (selected_pointer_identities(&engine, win), stats)
+    };
+    let (incremental, stats) = run(true);
+    let (reference, _) = run(false);
+    // The range reaches the edit point from the very first row, so no reuse
+    // prefix is provably stable and the replay degrades to a full rebuild —
+    // canonical, at the price of the fast path for this (uncommon) shape.
+    assert_eq!(
+        stats.edit_windows, 0,
+        "no stable prefix -> no edit replay ({stats:?})"
+    );
+    assert!(
+        incremental
+            .iter()
+            .any(|(_, identities)| !identities.is_empty()),
+        "the walk must record pointer identities for the mouse-face range: {incremental:?}"
+    );
+    assert_eq!(
+        incremental, reference,
+        "crossing ranges must not survive reuse with stale identities"
+    );
+}

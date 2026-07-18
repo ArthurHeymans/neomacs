@@ -18,7 +18,8 @@ use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
-    GlyphArea, GlyphMatrix, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
+    GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind, GlyphRow,
+    NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
@@ -635,12 +636,43 @@ impl RetainedWindowMatrix {
         }
         // First dirty row = first body row whose OLD extent reaches `dirty_start`.
         // Rows above it end before the edit, so their charpos is unchanged.
-        let first_dirty = body
+        let first_dirty_by_charpos = body
             .iter()
             .position(|(_, row)| row.end_charpos as i64 >= dirty_start)?;
+        if first_dirty_by_charpos == 0 {
+            return None;
+        }
+        // A row's CHARPOS is unchanged above the edit, but its pointer
+        // identities (mouse-face source ranges, display-replacement anchors)
+        // carry the RANGE's positions, and a range reaching the edit point is
+        // restructured by the insert itself — the end shifts, or the interval
+        // splits around non-inheriting inserted text — which verbatim reuse
+        // cannot reproduce. Reuse only the leading rows whose identities
+        // provably cannot change (every buffer range strictly before the
+        // edit), relaying the rest.
+        let row_pointers_stable = |row: &GlyphRow| {
+            row.pointer_appearances().iter().all(|appearance| {
+                let identity = appearance.source;
+                let range_ok = identity.kind != GlyphPointerSourceKind::Buffer
+                    || (identity.range_end as i64) < dirty_start;
+                let anchor_ok = match identity.occurrence {
+                    GlyphPointerOccurrenceIdentity::BufferDisplayReplacement { anchor, .. } => {
+                        (anchor as i64) < dirty_start
+                    }
+                    _ => true,
+                };
+                range_ok && anchor_ok
+            })
+        };
+        let stable_prefix = body[..first_dirty_by_charpos]
+            .iter()
+            .take_while(|(_, row)| row_pointers_stable(row))
+            .count();
+        let first_dirty = first_dirty_by_charpos.min(stable_prefix);
         if first_dirty == 0 {
             return None;
         }
+        let pointer_shrunk_prefix = first_dirty < first_dirty_by_charpos;
         let cursor_style = body
             .iter()
             .find_map(|(_, row)| row.cursor_type)
@@ -694,7 +726,33 @@ impl RetainedWindowMatrix {
             // caller's ASCII check), so `(cols + delta) * char_width` is exact.
             let stays_one_row = (text_glyphs.len() as f32 + delta as f32) * curr.char_width
                 <= curr.partition.text_body().width;
-            if delta > 0 && first_dirty + 1 < body.len() && monospace && stays_one_row {
+            // Pointer identities on the rows below shift with the insert only
+            // when their buffer positions lie entirely at/after it. A range
+            // that BEGINS above the edit can be restructured by the insert
+            // itself (a text-property interval splits around non-inheriting
+            // inserted text), which no position shift reproduces — such rows
+            // fall back to the above-only reuse below, which relays them.
+            let below_pointers_shiftable = body.iter().skip(first_dirty + 1).all(|(_, row)| {
+                row.pointer_appearances().iter().all(|appearance| {
+                    let identity = appearance.source;
+                    let range_ok = identity.kind != GlyphPointerSourceKind::Buffer
+                        || identity.range_start as i64 >= dirty_start;
+                    let anchor_ok = match identity.occurrence {
+                        GlyphPointerOccurrenceIdentity::BufferDisplayReplacement {
+                            anchor, ..
+                        } => anchor as i64 >= dirty_start,
+                        _ => true,
+                    };
+                    range_ok && anchor_ok
+                })
+            });
+            if delta > 0
+                && !pointer_shrunk_prefix
+                && first_dirty + 1 < body.len()
+                && monospace
+                && stays_one_row
+                && below_pointers_shiftable
+            {
                 let shift = |p: LispCharPos1| {
                     LispCharPos1::from_one_based_usize(
                         (p.to_one_based_usize() as i64 + delta) as usize,
@@ -724,6 +782,15 @@ impl RetainedWindowMatrix {
                             }
                         }
                     }
+                    // Pointer identities carry buffer positions too (mouse-face
+                    // source ranges, display-replacement anchors); a range that
+                    // crosses the relaid row into these reused rows must key
+                    // identically to the fresh appearance the relaid row got,
+                    // or hover paints the pieces separately.
+                    row.shift_pointer_appearance_buffer_positions(
+                        dirty_start.max(0) as u64,
+                        delta as u64,
+                    );
                     below_indices.insert(idx as i64);
                     reused_rows.push((idx, row));
                 }

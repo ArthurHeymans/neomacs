@@ -686,6 +686,34 @@ impl GlyphRow {
         }
     }
 
+    /// Adjust the buffer positions carried by this row's pointer appearances
+    /// for an insertion of `delta` characters at `from` (0-based charpos, the
+    /// same space as glyph `charpos`): endpoints at or past the insertion
+    /// point move; endpoints before it stay. Buffer-kind source ranges and
+    /// buffer display-replacement anchors are positional; Lisp-string ranges
+    /// are string-internal offsets and synthetic sources carry ids, so both
+    /// are left untouched. Used by the edit fast path's below-reuse so reused
+    /// rows report the same pointer identities a full rebuild produces.
+    pub fn shift_pointer_appearance_buffer_positions(&mut self, from: u64, delta: u64) {
+        for appearance in &mut self.pointer_appearances {
+            let identity = &mut appearance.source;
+            if identity.kind == GlyphPointerSourceKind::Buffer {
+                if identity.range_start >= from {
+                    identity.range_start += delta;
+                }
+                if identity.range_end >= from {
+                    identity.range_end += delta;
+                }
+            }
+            if let GlyphPointerOccurrenceIdentity::BufferDisplayReplacement { anchor, .. } =
+                &mut identity.occurrence
+                && *anchor >= from
+            {
+                *anchor += delta;
+            }
+        }
+    }
+
     pub fn truncate_pointer_appearances(&mut self, len: usize) {
         self.pointer_appearances.truncate(len);
     }
