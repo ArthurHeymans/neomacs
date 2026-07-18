@@ -49,9 +49,7 @@ fn div_n3_custom_introspection() {
 #[test]
 fn div_n3_eldoc_argstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/eldoc.el\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (void-function eldoc-function-argstring)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (progn
@@ -60,7 +58,7 @@ fn div_n3_eldoc_argstring() {
         (help-function-arglist 'probe-eldoc-fn)
         (help-function-arglist 'car)))
 "##,
-        &["eldoc.el"],
+        &["emacs-lisp/eldoc.el"],
         expect,
     );
 }
@@ -68,16 +66,14 @@ fn div_n3_eldoc_argstring() {
 #[test]
 fn div_n3_find_func_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs/lisp/find-func.el\")""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (error \"Don’t know where ‘car’ is defined\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((buf (find-function-search-for-symbol 'car nil nil)))
   (list (bufferp (car buf))
         (consp buf)))
 "##,
-        &["find-func.el"],
+        &["emacs-lisp/find-func.el"],
         expect,
     );
 }
