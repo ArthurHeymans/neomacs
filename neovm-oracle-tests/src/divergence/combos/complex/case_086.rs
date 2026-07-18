@@ -59,7 +59,9 @@ fn div_cx86_locate_library_for_known_libs() {
     // dynamic variables `load-suffixes` x `load-file-rep-suffixes` bound
     // here.  The checkout-root prefix in the result is squashed to
     // [ORACLE-LOAD-ROOT] by the harness normalizer.
-    let expect = expect_test::expect![[r#""OK (\"[ORACLE-LOAD-ROOT]/emacs-lisp/cl-lib.el\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/subr-x.el\" \"cl-lib.el\" nil)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"[ORACLE-LOAD-ROOT]/emacs-lisp/cl-lib.el\" \"[ORACLE-LOAD-ROOT]/emacs-lisp/subr-x.el\" \"cl-lib.el\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((load-suffixes '(".el"))

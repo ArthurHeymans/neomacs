@@ -188,7 +188,9 @@ fn div_cx450_file_name_all_completions() {
     // exclusion applies only when !all_flag), directories gain a trailing
     // slash via Ffile_name_as_directory, and the FILE argument is a prefix
     // filter.  Results are sorted because readdir order is arbitrary.
-    let expect = expect_test::expect![[r#""OK (6 (\"../\" \"./\" \"alpha.txt\" \"beta.txt\" \"beta2.log\" \"gamma-dir/\") (\"beta.txt\" \"beta2.log\") nil)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (6 (\"../\" \"./\" \"alpha.txt\" \"beta.txt\" \"beta2.log\" \"gamma-dir/\") (\"beta.txt\" \"beta2.log\") nil)""#
+    ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(let* ((base (file-name-as-directory
               (or (getenv "NEOVM_ORACLE_TEST_TMPDIR") temporary-file-directory)))
