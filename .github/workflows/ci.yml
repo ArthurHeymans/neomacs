@@ -199,7 +199,7 @@ jobs:
 
       - name: Build and archive workspace tests
         run: |
-          /usr/bin/time -v cargo nextest archive \
+          cargo nextest archive \
             --release \
             --workspace \
             --archive-file neomacs-workspace-tests.tar.zst
