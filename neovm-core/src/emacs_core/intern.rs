@@ -585,8 +585,9 @@ pub fn intern(s: &str) -> SymId {
     }
     let mut registry = global_symbol_registry().write();
     let sym_id = registry.intern(s);
+    let canonical_name = registry.resolve(sym_id);
     drop(registry);
-    thread_local_record_interned_str(s, sym_id);
+    thread_local_record_interned_str(canonical_name, sym_id);
     sym_id
 }
 
@@ -800,7 +801,7 @@ pub(crate) fn collect_symbol_name_gc_roots(roots: &mut Vec<TaggedValue>, heap_id
 
 thread_local! {
     static THREAD_CACHE_EPOCH: RefCell<u64> = const { RefCell::new(0) };
-    static INTERN_STR_CACHE: RefCell<FxHashMap<String, SymId>> = RefCell::new(FxHashMap::default());
+    static INTERN_STR_CACHE: RefCell<FxHashMap<&'static str, SymId>> = RefCell::new(FxHashMap::default());
     static SYM_NAME_CACHE: RefCell<Vec<Option<&'static str>>> = const { RefCell::new(Vec::new()) };
     static SYM_NAME_ID_CACHE: RefCell<Vec<Option<NameId>>> = const { RefCell::new(Vec::new()) };
     static SYM_CANONICAL_CACHE: RefCell<Vec<Option<bool>>> = const { RefCell::new(Vec::new()) };
@@ -831,9 +832,9 @@ fn thread_local_interned_str(s: &str) -> Option<SymId> {
 }
 
 #[inline]
-fn thread_local_record_interned_str(s: &str, id: SymId) {
+fn thread_local_record_interned_str(s: &'static str, id: SymId) {
     INTERN_STR_CACHE.with(|cache| {
-        cache.borrow_mut().insert(s.to_owned(), id);
+        cache.borrow_mut().insert(s, id);
     });
 }
 

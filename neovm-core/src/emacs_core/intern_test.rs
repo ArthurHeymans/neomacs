@@ -30,6 +30,23 @@ fn runtime_intern() {
 }
 
 #[test]
+fn runtime_intern_cache_borrows_canonical_name_storage() {
+    crate::test_utils::init_test_tracing();
+    let input = String::from("runtime-intern-cache-borrowed-name");
+    let id = intern(&input);
+    let canonical_name = resolve_sym(id);
+
+    INTERN_STR_CACHE.with(|cache| {
+        let cache = cache.borrow();
+        let (cached_name, cached_id) = cache
+            .get_key_value(input.as_str())
+            .expect("intern should populate the thread-local string cache");
+        assert_eq!(*cached_id, id);
+        assert_eq!(cached_name.as_ptr(), canonical_name.as_ptr());
+    });
+}
+
+#[test]
 fn runtime_symbol_name_id_stable_across_growth() {
     crate::test_utils::init_test_tracing();
     let early = intern("early-runtime-name");
