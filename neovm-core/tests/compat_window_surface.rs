@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use common::{gnu_window_c_path, oracle_enabled, run_neovm_eval, run_oracle_eval};
-use regex::Regex;
+use native_regex::Regex as NativeRegex;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum ImplBucket {
@@ -32,7 +32,7 @@ fn crate_root() -> &'static Path {
 
 fn parse_gnu_window_defuns(path: &Path) -> BTreeSet<String> {
     let source = fs::read_to_string(path).expect("read GNU window.c");
-    let re = Regex::new(r#"DEFUN \("([^"]+)","#).expect("window.c DEFUN regex");
+    let re = NativeRegex::new(r#"DEFUN \("([^"]+)","#).expect("window.c DEFUN regex");
     re.captures_iter(&source)
         .map(|caps| caps[1].to_string())
         .collect()
@@ -81,7 +81,7 @@ fn parse_defsubr_targets(path: &Path) -> BTreeMap<String, String> {
     // path identifier (super::window_cmds::builtin_foo) or a closure
     // (|ctx, args| super::window_cmds::builtin_foo(args)); accept
     // both by allowing `|...|` and dotted path tokens.
-    let re = Regex::new(
+    let re = NativeRegex::new(
         r#"BuiltinRegistration::[A-Za-z0-9_]+\(\s*"([^"]+)"\s*,\s*((?:\|[^|]*\|\s*)?[^,)]+)"#,
     )
     .expect("builtin reg regex");
@@ -95,7 +95,7 @@ fn parse_defsubr_targets(path: &Path) -> BTreeMap<String, String> {
 }
 
 fn extract_defsubr_name_and_target(block: &str) -> Option<(String, String)> {
-    let re = Regex::new(r#"ctx\.defsubr\(\s*"([^"]+)""#).expect("defsubr regex");
+    let re = NativeRegex::new(r#"ctx\.defsubr\(\s*"([^"]+)""#).expect("defsubr regex");
     let caps = re.captures(block)?;
     let name = caps.get(1)?.as_str().to_string();
     let full = caps.get(0)?;
@@ -136,7 +136,7 @@ fn extract_defsubr_name_and_target(block: &str) -> Option<(String, String)> {
 }
 
 fn builtin_ident_in_target(target: &str) -> Option<String> {
-    let re = Regex::new(r#"(builtin_[A-Za-z0-9_]+)"#).expect("builtin ident regex");
+    let re = NativeRegex::new(r#"(builtin_[A-Za-z0-9_]+)"#).expect("builtin ident regex");
     re.captures(target).map(|caps| caps[1].to_string())
 }
 

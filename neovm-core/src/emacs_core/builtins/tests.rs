@@ -6102,6 +6102,26 @@ fn pure_dispatch_record_query_placeholders_match_compat_contracts() {
 }
 
 #[test]
+fn query_fontset_matches_emacs_regexp_syntax() {
+    crate::test_utils::init_test_tracing();
+    super::symbols::reset_symbols_thread_locals();
+
+    // `[([]` is the character class emitted by GNU `rx` for `[` or `(`.
+    // The second Emacs-regexp alternative matches the default fontset.
+    let query_fontset = dispatch_builtin_pure(
+        "query-fontset",
+        vec![Value::string("[([]\\|fontset-default"), Value::T],
+    )
+    .expect("builtin query-fontset should resolve")
+    .expect("valid Emacs regexp should evaluate");
+
+    assert_eq!(
+        query_fontset,
+        Value::string("-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default")
+    );
+}
+
+#[test]
 fn pure_dispatch_reconsider_redirect_placeholders_match_compat_contracts() {
     crate::test_utils::init_test_tracing();
     let reconsider = dispatch_builtin_pure("reconsider-frame-fonts", vec![Value::NIL])

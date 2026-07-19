@@ -21,7 +21,6 @@ pub(super) use super::keyboard::pure::{
     key_sequence_values,
 };
 pub(super) use super::value::*;
-pub(super) use ::regex::Regex;
 pub(crate) use buffers::lisp_string_from_buffer_bytes;
 pub(super) use std::cell::RefCell;
 pub(super) use std::collections::{HashMap, HashSet};

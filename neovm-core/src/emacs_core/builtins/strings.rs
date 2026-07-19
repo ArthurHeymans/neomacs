@@ -10,6 +10,7 @@ use malachite::base::num::basic::traits::Zero;
 use malachite::base::num::conversion::traits::{FromStringBase, RoundingFrom, ToStringBase};
 use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
+use native_regex::Regex as NativeRegex;
 
 // ===========================================================================
 // String operations
@@ -555,8 +556,9 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
 
     let s = s.trim_start_matches(|c: char| c == ' ' || c == '\t');
     if base == 10 {
-        let special_float = Regex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)")
-            .expect("special float prefix regexp should compile");
+        let special_float =
+            NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)")
+                .expect("special float prefix regexp should compile");
         if let Some(m) = special_float.find(s)
             && let Some(f) = crate::emacs_core::value_reader::parse_emacs_special_float(m.as_str())
         {
@@ -568,7 +570,7 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
         // OR if it has leading digits and an exponent (LEAD_INT & E_EXP).
         // "100." is integer (no trailing digits), "100.0" is float, "1e10" is float.
         let number_prefix =
-            Regex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+            NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
                 .expect("number prefix regexp should compile");
         if let Some(m) = number_prefix.find(s) {
             let token = m.as_str();

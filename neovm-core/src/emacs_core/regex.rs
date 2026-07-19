@@ -3,6 +3,9 @@
 //! Uses a direct translation of GNU Emacs's `regex-emacs.c` as the backend.
 //! All pattern compilation, matching, and searching goes through the
 //! `regex_emacs` module, ensuring 100% semantic compatibility with GNU.
+//! Any pattern originating from Lisp must enter through this module; the
+//! separately named `native-regex` dependency is reserved for patterns defined
+//! entirely by Rust implementation code.
 //!
 //! # Audit-tracked boundaries vs GNU
 //!
@@ -68,6 +71,25 @@ const LISP_REGEX_PATTERN_CACHE_SIZE: usize = 128;
 // matching buffer byte address, so pass an unreachable point to the translated
 // matcher instead of treating the START argument as point.
 const STRING_MATCH_AT_DOT_UNREACHABLE: usize = usize::MAX;
+
+/// Failure while applying a Lisp-visible regexp as a boolean predicate.
+///
+/// Keeping this error at the Emacs-regexp boundary prevents callers from
+/// exposing errors from an implementation-specific native regexp dialect.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum EmacsRegexpError {
+    Compile(String),
+    MatcherOverflow,
+}
+
+impl std::fmt::Display for EmacsRegexpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Compile(message) => f.write_str(message),
+            Self::MatcherOverflow => f.write_str(regex_emacs::MATCHER_OVERFLOW_MESSAGE),
+        }
+    }
+}
 
 fn buffer_syntax_lookup(buf: &Buffer) -> BufferSyntaxLookup {
     let category_table = crate::emacs_core::category::active_category_table_for_buffer(Some(buf))
@@ -1844,6 +1866,65 @@ fn with_buffer_emacs_bytes_for_search<R>(
 ) -> R {
     buf.try_make_emacs_byte_range_contiguous(range);
     with_buffer_emacs_bytes(buf, range, f)
+}
+
+/// Apply a Lisp-originated regexp to UTF-8 text as a boolean predicate.
+///
+/// This is the compatibility seam for Lisp-facing APIs that receive an Emacs
+/// regexp but do not need match data.  It mirrors GNU's `fast_c_string_match`:
+/// matching is case-sensitive, uses the standard syntax table, and reuses the
+/// shared compiled-pattern cache.
+pub(crate) fn predicate_match(pattern: &LispString, text: &str) -> Result<bool, EmacsRegexpError> {
+    if pattern.is_multibyte() {
+        let unibyte_pattern = LispString::from_unibyte(
+            crate::emacs_core::emacs_char::str_to_unibyte(pattern.as_bytes()),
+        );
+        predicate_match_with_case_fold(&unibyte_pattern, text, false, false)
+    } else {
+        predicate_match_with_case_fold(pattern, text, false, false)
+    }
+}
+
+/// Case-insensitive counterpart to [`predicate_match`].
+///
+/// GNU's font APIs use `fast_string_match_ignore_case` for Lisp-supplied
+/// patterns.  Keeping that policy as a named operation avoids exposing engine
+/// flags or translation tables to callers.
+pub(crate) fn predicate_match_ignore_case(
+    pattern: &LispString,
+    text: &str,
+) -> Result<bool, EmacsRegexpError> {
+    predicate_match_with_case_fold(pattern, text, true, true)
+}
+
+fn predicate_match_with_case_fold(
+    pattern: &LispString,
+    text: &str,
+    case_fold: bool,
+    target_multibyte: bool,
+) -> Result<bool, EmacsRegexpError> {
+    let syntax = DefaultSyntaxLookup;
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        false,
+        target_multibyte,
+        None,
+        &syntax,
+    )
+    .map_err(EmacsRegexpError::Compile)?;
+    let found = regex_emacs::re_search(
+        compiled.as_ref(),
+        text.as_bytes(),
+        0,
+        text.len() as isize,
+        &syntax,
+        STRING_MATCH_AT_DOT_UNREACHABLE,
+    );
+    if found.is_none() && regex_emacs::take_matcher_overflow() {
+        return Err(EmacsRegexpError::MatcherOverflow);
+    }
+    Ok(found.is_some())
 }
 
 /// Match a Tree-sitter predicate regexp against a captured buffer region.

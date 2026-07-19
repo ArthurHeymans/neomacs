@@ -1,5 +1,4 @@
 use super::*;
-use ::regex::Regex;
 use libloading::Library;
 use std::path::{Path, PathBuf};
 use strum::{EnumString, IntoStaticStr};
@@ -1111,10 +1110,9 @@ fn predicate_matches_node(
         return Ok(false);
     }
 
-    if let Some(pattern) = predicate.as_str_owned() {
-        let regex = Regex::new(&pattern)
-            .map_err(|err| treesit_invalid_predicate(err.to_string(), predicate))?;
-        return Ok(regex.is_match(node.kind()));
+    if let Some(pattern) = predicate.as_lisp_string() {
+        return crate::emacs_core::regex::predicate_match(pattern, node.kind())
+            .map_err(|err| treesit_invalid_predicate(err.to_string(), predicate));
     }
 
     if let Some(builtin) = TreesitBuiltinPredicate::from_symbol_value(predicate) {
@@ -1232,16 +1230,16 @@ fn predicate_matches_node(
         };
     }
 
-    if let Some(pattern) = head.as_str_owned() {
+    if let Some(pattern) = head.as_lisp_string() {
         if !predicate_function_p(eval, tail) {
             return Err(treesit_invalid_predicate(
                 "Dotted tree-sitter predicates expect a callable cdr",
                 predicate,
             ));
         }
-        let regex = Regex::new(&pattern)
-            .map_err(|err| treesit_invalid_predicate(err.to_string(), predicate))?;
-        if !regex.is_match(node.kind()) {
+        if !crate::emacs_core::regex::predicate_match(pattern, node.kind())
+            .map_err(|err| treesit_invalid_predicate(err.to_string(), predicate))?
+        {
             return Ok(false);
         }
         return call_node_predicate(eval, tail, parser_id, node);
@@ -3177,6 +3175,15 @@ mod tests {
         (eval, parser)
     }
 
+    fn json_opening_bracket_node(eval: &mut super::super::eval::Context, parser: Value) -> Value {
+        let root = builtin_treesit_parser_root_node(eval, vec![parser])
+            .expect("root node for json parser");
+        let array =
+            builtin_treesit_node_child(eval, vec![root, Value::fixnum(0)]).expect("array node");
+        builtin_treesit_node_child(eval, vec![array, Value::fixnum(0)])
+            .expect("opening bracket node")
+    }
+
     fn expect_signal(
         result: EvalResult,
         symbol: &str,
@@ -3520,6 +3527,41 @@ mod tests {
             None
         );
         assert_eq!(TreesitBooleanPredicate::And.name(), "and");
+    }
+
+    #[test]
+    fn treesit_node_match_accepts_rx_bracket_character_class() {
+        let (mut eval, parser) = eval_with_json_parser("[]");
+        let opening_bracket = json_opening_bracket_node(&mut eval, parser);
+        // GNU `rx` emits this valid Emacs regexp for `(rx (or "[" "("))`.
+        // C mode uses the same bracket character-class form in its tree-sitter
+        // thing settings (issue #176).
+        let pattern = Value::string("[([]");
+
+        assert_eq!(
+            builtin_treesit_node_type(&mut eval, vec![opening_bracket])
+                .expect("opening bracket node type"),
+            Value::string("[")
+        );
+        assert_eq!(pattern.as_str_owned().as_deref(), Some("[([]"));
+        assert_eq!(
+            builtin_treesit_node_match_p(&mut eval, vec![opening_bracket, pattern])
+                .expect("Emacs regexp should match anonymous node type"),
+            Value::T
+        );
+    }
+
+    #[test]
+    fn treesit_node_match_dotted_predicate_accepts_rx_bracket_character_class() {
+        let (mut eval, parser) = eval_with_json_parser("[]");
+        let opening_bracket = json_opening_bracket_node(&mut eval, parser);
+        let predicate = Value::cons(Value::string("[([]"), Value::symbol("identity"));
+
+        assert_eq!(
+            builtin_treesit_node_match_p(&mut eval, vec![opening_bracket, predicate])
+                .expect("Emacs regexp should gate the callable predicate"),
+            Value::T
+        );
     }
 
     #[test]

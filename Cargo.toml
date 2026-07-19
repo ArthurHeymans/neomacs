@@ -83,7 +83,9 @@ base64 = "0.22"
 x509-parser = "0.18"
 
 # Misc
-regex = "1"
+# Rust-native regexp dialect for patterns defined inside Rust. Lisp-visible
+# patterns must go through `neovm_core::emacs_core::regex` instead.
+native-regex = { package = "regex", version = "1" }
 # Direct dep for the regex-emacs multi-literal SIMD prefilter
 # (`util::prefilter::Prefilter` — memchr/Teddy/Aho-Corasick auto-select).
 # Only the literal-prefilter machinery is needed, so skip the heavy

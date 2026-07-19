@@ -6,11 +6,8 @@ use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::face::{FontSlant, FontWeight, FontWidth};
 use crate::heap_types::LispString;
-use regex::Regex;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
-use std::thread::LocalKey;
 use strum::{EnumString, IntoStaticStr};
 
 pub const DEFAULT_FONTSET_NAME: &str = "-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default";
@@ -32,32 +29,6 @@ fn fontset_name_lisp_string(name: &str) -> LispString {
 
 fn fontset_name_runtime(name: &LispString) -> String {
     crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes())
-}
-
-thread_local! {
-    static FONTSET_WILDCARD_REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
-    static FONTSET_REGEXP_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
-    static FONT_ENCODING_REGEX_CACHE: RefCell<HashMap<String, Regex>> = RefCell::new(HashMap::new());
-}
-
-fn clear_regex_cache(cache: &'static LocalKey<RefCell<HashMap<String, Regex>>>) {
-    cache.with(|cache| cache.borrow_mut().clear());
-}
-
-fn cached_regex(
-    cache: &'static LocalKey<RefCell<HashMap<String, Regex>>>,
-    key: &str,
-    build: impl FnOnce() -> Option<Regex>,
-) -> Option<Regex> {
-    if let Some(cached) = cache.with(|cache| cache.borrow().get(key).cloned()) {
-        return Some(cached);
-    }
-
-    let compiled = build()?;
-    cache.with(|cache| {
-        cache.borrow_mut().insert(key.to_string(), compiled.clone());
-    });
-    Some(compiled)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -477,17 +448,10 @@ fn registry() -> &'static RwLock<FontsetRegistry> {
     FONTSET_REGISTRY.get_or_init(|| RwLock::new(FontsetRegistry::with_defaults()))
 }
 
-fn clear_fontset_regex_caches() {
-    clear_regex_cache(&FONTSET_WILDCARD_REGEX_CACHE);
-    clear_regex_cache(&FONTSET_REGEXP_CACHE);
-    clear_regex_cache(&FONT_ENCODING_REGEX_CACHE);
-}
-
 pub(crate) fn reset_fontset_registry() {
     if let Ok(mut slot) = registry().write() {
         *slot = FontsetRegistry::with_defaults();
     }
-    clear_fontset_regex_caches();
 }
 
 pub(crate) fn snapshot_fontset_registry() -> FontsetRegistrySnapshot {
@@ -582,7 +546,6 @@ pub(crate) fn restore_fontset_registry(snapshot: FontsetRegistrySnapshot) {
     if let Ok(mut slot) = registry().write() {
         *slot = restored;
     }
-    clear_fontset_regex_caches();
 }
 
 pub fn fontset_generation() -> u64 {
@@ -626,30 +589,46 @@ pub(crate) fn fontset_registry_alias_from_xlfd(name: &str) -> Option<String> {
     }
 }
 
-fn wildcard_fontset_pattern_to_regex(pattern: &str) -> Option<Regex> {
-    cached_regex(&FONTSET_WILDCARD_REGEX_CACHE, pattern, || {
-        let escaped = regex::escape(pattern);
-        let wildcard = escaped.replace(r"\*", ".*").replace(r"\?", ".");
-        Regex::new(&format!("^{wildcard}$")).ok()
-    })
+fn wildcard_fontset_pattern_to_regexp(pattern: &str) -> LispString {
+    let full_xlfd = pattern.bytes().filter(|byte| *byte == b'-').count() >= 14;
+    let mut regexp = String::with_capacity(pattern.len() + 3);
+    regexp.push('^');
+    for ch in pattern.chars() {
+        match ch {
+            '*' if full_xlfd => regexp.push_str("[^-]*"),
+            '*' => regexp.push_str(".*"),
+            '?' => regexp.push('.'),
+            '[' | '.' | '\\' | '+' | '^' | '$' => {
+                regexp.push('\\');
+                regexp.push(ch);
+            }
+            _ => regexp.push(ch),
+        }
+    }
+    regexp.push('$');
+    LispString::from_utf8(&regexp)
 }
 
 pub(crate) fn query_fontset_registry(pattern: &str, regexpp: bool) -> Option<String> {
     let pattern = normalize_fontset_name(pattern);
     registry().read().ok().and_then(|registry| {
-        if regexpp {
-            let regex = cached_regex(&FONTSET_REGEXP_CACHE, &pattern, || {
-                Regex::new(&pattern).ok()
-            })?;
+        if regexpp || pattern.contains('*') || pattern.contains('?') {
+            let regexp = if regexpp {
+                LispString::from_utf8(&pattern)
+            } else {
+                wildcard_fontset_pattern_to_regexp(&pattern)
+            };
             for name in &registry.ordered_names {
                 let rendered = fontset_name_runtime(name);
-                if regex.is_match(&rendered) {
+                if crate::emacs_core::regex::predicate_match_ignore_case(&regexp, &rendered).ok()? {
                     return Some(rendered);
                 }
             }
             for (alias, name) in &registry.alias_to_name {
                 let rendered_alias = fontset_name_runtime(alias);
-                if regex.is_match(&rendered_alias) {
+                if crate::emacs_core::regex::predicate_match_ignore_case(&regexp, &rendered_alias)
+                    .ok()?
+                {
                     return Some(fontset_name_runtime(name));
                 }
             }
@@ -662,19 +641,6 @@ pub(crate) fn query_fontset_registry(pattern: &str, regexpp: bool) -> Option<Str
                 .map(|name| fontset_name_runtime(&name));
         }
 
-        let regex = wildcard_fontset_pattern_to_regex(&pattern)?;
-        for name in &registry.ordered_names {
-            let rendered = fontset_name_runtime(name);
-            if regex.is_match(&rendered) {
-                return Some(rendered);
-            }
-        }
-        for (alias, name) in &registry.alias_to_name {
-            let rendered_alias = fontset_name_runtime(alias);
-            if regex.is_match(&rendered_alias) {
-                return Some(fontset_name_runtime(name));
-            }
-        }
         None
     })
 }
@@ -997,22 +963,12 @@ fn lookup_font_encoding(font_encoding_alist: &Value, font_name: &str) -> Option<
         };
         let pair_car = entry.cons_car();
         let pair_cdr = entry.cons_cdr();
-        let Some(pattern) = value_text(&pair_car) else {
+        let Some(pattern) = pair_car.as_lisp_string() else {
             continue;
         };
-        let translated = pattern
-            .replace("\\|", "|")
-            .replace("\\(", "(")
-            .replace("\\)", ")");
-        let Some(regex) = cached_regex(&FONT_ENCODING_REGEX_CACHE, &translated, || {
-            regex::RegexBuilder::new(&translated)
-                .case_insensitive(true)
-                .build()
-                .ok()
-        }) else {
-            continue;
-        };
-        if regex.is_match(font_name) {
+        if crate::emacs_core::regex::predicate_match_ignore_case(pattern, font_name)
+            .unwrap_or(false)
+        {
             return Some(pair_cdr);
         }
     }
