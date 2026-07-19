@@ -57,6 +57,27 @@ wpr -stop neomacs.etl
 wpa neomacs.etl
 ```
 
+## Doom resident-memory A/B
+
+On Linux, the release binary defaults mimalloc arenas to commit physical pages
+on use. This avoids eagerly faulting an arena's entire virtual reservation into
+the resident set. An explicit `MIMALLOC_ARENA_EAGER_COMMIT` environment value
+still overrides Neomacs' default.
+
+After a release fresh build, compare the shipped policy with mimalloc's Linux
+eager-commit behavior against the same installed Doom configuration:
+
+```sh
+cargo xtask fresh-build --release
+scripts/profile-doom-memory.sh
+```
+
+The harness interleaves five runs of each mode, waits for Doom startup and an
+explicit Lisp GC, idles for 30 seconds, and records `/proc/PID/smaps_rollup`
+RSS, PSS, private, anonymous, and swap counters. Raw samples go to
+`target/profiling/doom-memory.tsv`. Override `RUNS`, `SETTLE_SECONDS`,
+`STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`, or `REPORT` when needed.
+
 For interpreter opcode frequencies, use the existing zero-default-overhead VM
 instrumentation:
 
