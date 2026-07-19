@@ -10,6 +10,14 @@ use crate::emacs_core::value::{LambdaParams, Value, ValueKind};
 use crate::heap_types::LispString;
 
 static NEXT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
+static EAGER_GNU_BYTECODE: OnceLock<bool> = OnceLock::new();
+
+fn eager_gnu_bytecode() -> bool {
+    *EAGER_GNU_BYTECODE.get_or_init(|| {
+        std::env::var_os("NEOMACS_EAGER_GNU_BYTECODE")
+            .is_some_and(|value| !value.is_empty() && value != "0")
+    })
+}
 
 pub(crate) fn fresh_bytecode_source_id() -> u64 {
     NEXT_SOURCE_ID.fetch_add(1, AtomicOrdering::Relaxed)
@@ -230,6 +238,9 @@ impl ByteCodeFunction {
     /// Release already-validated GNU decoded IR until it is first needed.
     /// The original byte string remains the single source of truth.
     pub(crate) fn defer_gnu_decode(&mut self) {
+        if eager_gnu_bytecode() {
+            return;
+        }
         assert!(
             self.gnu_bytecode_bytes.is_some(),
             "deferred GNU decode requires original bytecode bytes"

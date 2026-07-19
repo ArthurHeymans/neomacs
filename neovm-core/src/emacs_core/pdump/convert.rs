@@ -3913,7 +3913,7 @@ fn load_bytecode_owned(
         .arglist
         .map(|value| decoder.load_value_owned(value))
         .unwrap_or_else(|| crate::emacs_core::builtins::lambda_params_to_value(&params));
-    Ok(ByteCodeFunction {
+    let mut function = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops: bc
             .ops
@@ -3946,7 +3946,11 @@ fn load_bytecode_owned(
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
         lazy_gnu_code: None,
-    })
+    };
+    if function.gnu_bytecode_bytes.is_some() {
+        function.defer_gnu_decode();
+    }
+    Ok(function)
 }
 
 // --- Hash tables ---

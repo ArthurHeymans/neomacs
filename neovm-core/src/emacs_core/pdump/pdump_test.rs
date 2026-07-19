@@ -86,6 +86,13 @@ fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
             .bytecode_arena_owns_for_test(post.as_veclike_ptr().unwrap() as *const u8),
         "pdump-restored bytecode must be constructed through the page allocator",
     );
+    assert!(
+        post.get_bytecode_data()
+            .expect("restored bytecode data")
+            .resident_ops()
+            .is_empty(),
+        "pdump-restored GNU bytecode should stay cold until execution",
+    );
 
     // The restored function executes (payload round-tripped intact), and
     // still does after a full GC in the restored evaluator.
@@ -93,6 +100,14 @@ fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
         .eval_str("(funcall bcarena-pdump-fn)")
         .expect("restored bytecode runs");
     assert_eq!(out, Value::fixnum(42));
+    assert!(
+        !post
+            .get_bytecode_data()
+            .expect("restored bytecode data")
+            .resident_ops()
+            .is_empty(),
+        "executing restored GNU bytecode should initialize its decoded IR",
+    );
     restored.gc_collect();
     let out2 = restored
         .eval_str("(funcall bcarena-pdump-fn)")

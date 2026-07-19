@@ -42,6 +42,10 @@ processing, set `PROFILE_DELAY_SECONDS` to delay the explicit GC, heap snapshot,
 and readiness marker until that work has settled. The delay is intentionally
 opt-in because it is included in the harness's startup timestamp.
 
+Set `NEOMACS_EAGER_GNU_BYTECODE=1` to keep validated GNU bytecode decoded at
+load time. This diagnostic switch provides a same-binary control for measuring
+the resident-memory and execution-latency effects of deferred decoding.
+
 ## Native sampling
 
 The `profiling` Cargo profile keeps release optimizations and native debug
