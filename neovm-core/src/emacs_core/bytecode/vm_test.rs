@@ -2162,6 +2162,7 @@ fn vm_switch_branches_using_hash_table_jump_table() {
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
     };
 
     let mut vm = new_vm(&mut eval);
@@ -2321,6 +2322,7 @@ fn vm_throw_restores_saved_stack_before_resuming_catch() {
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
     };
 
     let mut eval = Context::new_vm_runtime_harness();
@@ -9699,6 +9701,7 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
         extra_slots: Vec::new(),
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
     };
 
     let mut eval = Context::new_vm_runtime_harness();

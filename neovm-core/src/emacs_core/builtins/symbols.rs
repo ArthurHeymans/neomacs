@@ -6644,7 +6644,7 @@ fn make_byte_code_from_parts_with_slots(
     };
 
     // 7. Build ByteCodeFunction
-    let bc = ByteCodeFunction {
+    let mut bc = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
         constants,
@@ -6673,7 +6673,9 @@ fn make_byte_code_from_parts_with_slots(
         extra_slots: extra_slots.to_vec(),
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
     };
+    bc.defer_gnu_decode();
 
     Ok(Value::make_bytecode(bc))
 }

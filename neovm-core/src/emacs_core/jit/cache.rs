@@ -145,7 +145,7 @@ fn register_inline_deps(id: u64, leaf: &CompiledLeaf) {
 fn compile_cache_entry(id: u64, func: &ByteCodeFunction, obarray: Option<&Obarray>) -> CacheEntry {
     let started = Instant::now();
     let result = compile_bytecode_function_with(func, obarray);
-    stats::record_compile(started.elapsed(), func.ops.len(), &result);
+    stats::record_compile(started.elapsed(), func.executable_ops().len(), &result);
     match result {
         Ok(leaf) => {
             register_inline_deps(id, &leaf);
@@ -449,7 +449,7 @@ pub fn try_run_compiled(
             eprintln!(
                 "[jit-debug] id={id} args={} ops={:?} constants={consts:?}",
                 args.len(),
-                func.ops,
+                func.executable_ops(),
             );
         }
     }
@@ -483,12 +483,15 @@ pub fn try_run_compiled(
                 && func.params.rest.is_none()
             {
                 let native_arity = func.params.required.len();
-                if let Some(leaf) =
-                    super::aot::try_load_leaf(&func.ops, &func.constants, native_arity, obarray)
-                {
+                if let Some(leaf) = super::aot::try_load_leaf(
+                    func.executable_ops(),
+                    &func.constants,
+                    native_arity,
+                    obarray,
+                ) {
                     // AOT leaves never inline → no inline deps to register. Their
                     // reloc consts are rooted via the COMPILED walk (R1c-8).
-                    stats::record_aot_load(func.ops.len());
+                    stats::record_aot_load(func.executable_ops().len());
                     return CacheEntry::Compiled(Rc::new(leaf));
                 }
             }

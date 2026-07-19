@@ -1356,6 +1356,7 @@ impl<'a> LoadDecoder<'a> {
                 extra_slots: Vec::new(),
                 #[cfg(feature = "jit")]
                 runtime: crate::emacs_core::jit::Runtime::new(),
+                lazy_gnu_code: None,
             }),
             DumpHeapObject::Record(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
@@ -2263,8 +2264,9 @@ pub(crate) fn dump_bytecode(
     encoder: &mut DumpEncoder,
     bc: &ByteCodeFunction,
 ) -> DumpByteCodeFunction {
+    let ops = bc.executable_ops();
     DumpByteCodeFunction {
-        ops: bc.ops.iter().map(dump_op).collect(),
+        ops: ops.iter().map(dump_op).collect(),
         constants: bc
             .constants
             .iter()
@@ -2275,7 +2277,7 @@ pub(crate) fn dump_bytecode(
         arglist: Some(encoder.dump_value(&bc.arglist)),
         lexical: bc.lexical,
         env: encoder.dump_opt_value(&bc.env),
-        gnu_byte_offset_map: bc.gnu_byte_offset_map.as_ref().map(|map| {
+        gnu_byte_offset_map: bc.executable_gnu_byte_offset_map().map(|map| {
             map.iter()
                 .map(|entry| (entry.byte_offset as u32, entry.instruction_index as u32))
                 .collect()
@@ -3943,6 +3945,7 @@ fn load_bytecode_owned(
             .collect(),
         #[cfg(feature = "jit")]
         runtime: crate::emacs_core::jit::Runtime::new(),
+        lazy_gnu_code: None,
     })
 }
 

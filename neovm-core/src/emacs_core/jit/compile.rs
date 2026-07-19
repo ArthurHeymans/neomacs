@@ -3339,7 +3339,7 @@ fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: b
     let Some(path) = jit_profile_path() else {
         return;
     };
-    let ops = &f.ops;
+    let ops = f.executable_ops();
     let mut arith = 0u32;
     let mut calls = 0u32;
     let mut alloc = 0u32;
@@ -3398,7 +3398,7 @@ fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: b
     let arity =
         f.params.required.len() + f.params.optional.len() + usize::from(f.params.rest.is_some());
     let inlinable = match obarray {
-        Some(ob) => analyze_cfg(ops, &f.constants, f.gnu_byte_offset_map.as_deref(), arity)
+        Some(ob) => analyze_cfg(ops, &f.constants, f.executable_gnu_byte_offset_map(), arity)
             .map(|cfg| {
                 find_spec_sites(ops, &f.constants, &cfg.leaders, ob)
                     .values()
@@ -3545,13 +3545,14 @@ fn resolve_inline_callee(ob: &Obarray, sym: Value) -> Option<mir::MirFunction> {
     {
         return None;
     }
-    mir::build_mir(&bc.ops, &bc.constants, bc.params.required.len()).ok()
+    mir::build_mir(bc.executable_ops(), &bc.constants, bc.params.required.len()).ok()
 }
 
 fn compile_bytecode_function_inner(
     f: &ByteCodeFunction,
     obarray: Option<&Obarray>,
 ) -> Result<CompiledLeaf, CompileError> {
+    let ops = f.executable_ops();
     let required = f.params.required.len();
     let nonrest = required + f.params.optional.len();
     let has_rest = f.params.rest.is_some();
@@ -3567,7 +3568,7 @@ fn compile_bytecode_function_inner(
     // any bail (calls, cons, optional/&rest args, ...). Restricted to no
     // optional/&rest so the MIR's argument seeding matches `native_arity`.
     if !has_rest && f.params.optional.is_empty() {
-        if let Ok(mut mir) = mir::build_mir(&f.ops, &f.constants, native_arity) {
+        if let Ok(mut mir) = mir::build_mir(ops, &f.constants, native_arity) {
             // Inline pure single-block callees (resolved through the obarray). When
             // a call is inlined the body can become pure (no Opaque), so
             // lower_mir_pure handles it and unboxing/guard-elision flow ACROSS the
@@ -3608,14 +3609,14 @@ fn compile_bytecode_function_inner(
     // The MIR tier above already claimed any body its inlining/unboxing makes
     // worthwhile. What's left goes to the baseline, whose per-op call shims aren't
     // worth it for a call-dominated body — keep those on the interpreter.
-    if !body_is_jit_profitable(&f.ops) {
+    if !body_is_jit_profitable(ops) {
         return Err(CompileError::NotProfitable);
     }
     let mut leaf = lower_leaf_full(
-        &f.ops,
+        ops,
         &f.constants,
         native_arity,
-        f.gnu_byte_offset_map.as_deref(),
+        f.executable_gnu_byte_offset_map(),
         obarray,
     )?;
     leaf.required = required;

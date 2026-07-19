@@ -440,13 +440,14 @@ fn trace_invalid_bytecode_site(
         return;
     }
 
-    let gnu_byte_offset = func.gnu_byte_offset_map.as_ref().and_then(|map| {
+    let ops = func.executable_ops();
+    let gnu_byte_offset = func.executable_gnu_byte_offset_map().and_then(|map| {
         map.iter()
             .find_map(|entry| (entry.instruction_index == pc).then_some(entry.byte_offset))
     });
     let op_window_start = pc.saturating_sub(8);
-    let op_window_end = (pc + 8).min(func.ops.len());
-    let op_window = func.ops[op_window_start..op_window_end]
+    let op_window_end = (pc + 8).min(ops.len());
+    let op_window = ops[op_window_start..op_window_end]
         .iter()
         .enumerate()
         .map(|(idx, op)| format!("{}:{:?}", op_window_start + idx, op))
@@ -472,7 +473,7 @@ fn trace_invalid_bytecode_site(
         frame_base,
         frame_limit,
         max_stack = func.max_stack,
-        ops_len = func.ops.len(),
+        ops_len = ops.len(),
         constants_len = func.constants.len(),
         lexical = func.lexical,
         "Invalid byte-code"
@@ -1463,7 +1464,7 @@ impl<'a> Vm<'a> {
         handlers: &mut HandlerStack,
         bind_stack: &mut BindStack,
     ) -> EvalResult {
-        let ops = &func.ops;
+        let ops = func.executable_ops();
         let constants = &func.constants;
         let ops_len = ops.len();
         let ops_ptr = ops.as_ptr();
@@ -5353,7 +5354,7 @@ fn resolve_switch_target(func: &ByteCodeFunction, raw_addr: i64) -> Result<usize
         )
     })?;
 
-    if let Some(offset_map) = &func.gnu_byte_offset_map {
+    if let Some(offset_map) = func.executable_gnu_byte_offset_map() {
         offset_map
             .binary_search_by_key(&raw_addr, |entry| entry.byte_offset)
             .map(|index| offset_map[index].instruction_index)

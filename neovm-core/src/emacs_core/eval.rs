@@ -12154,6 +12154,7 @@ impl Context {
             extra_slots: Vec::new(),
             #[cfg(feature = "jit")]
             runtime: crate::emacs_core::jit::Runtime::new(),
+            lazy_gnu_code: None,
         };
 
         let mut vm = super::bytecode::Vm::from_context(self);
@@ -12163,7 +12164,7 @@ impl Context {
             tracing::info!(
                 "TOPLEVEL-BYTECODE exec   file={} ops={} elapsed={:.2?}",
                 load_file_name,
-                bc.ops.len(),
+                bc.executable_ops().len(),
                 start.elapsed()
             );
         }

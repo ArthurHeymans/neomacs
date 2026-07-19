@@ -7592,6 +7592,14 @@ fn make_byte_code_pins_bytecode_string_like_gnu() {
     .expect("builtin make-byte-code should evaluate");
     assert!(value.is_bytecode());
     assert!(
+        value
+            .get_bytecode_data()
+            .expect("bytecode payload")
+            .resident_ops()
+            .is_empty(),
+        "validated GNU IR should stay deferred until execution"
+    );
+    assert!(
         bytecode
             .as_lisp_string()
             .expect("bytecode string")

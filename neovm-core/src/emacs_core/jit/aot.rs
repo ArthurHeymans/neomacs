@@ -1797,12 +1797,13 @@ pub fn enumerate_loadup_leaves(
             continue;
         }
         let arity = bc.params.required.len();
-        if d0_filter && !is_d0_aot_candidate(&bc.ops, &bc.constants, arity, Some(&ctx.obarray)) {
+        let ops = bc.executable_ops();
+        if d0_filter && !is_d0_aot_candidate(ops, &bc.constants, arity, Some(&ctx.obarray)) {
             continue;
         }
         out.push(LoadupLeaf {
             name: name.to_string(),
-            ops: &bc.ops,
+            ops,
             constants: &bc.constants,
             arity,
         });
@@ -3954,6 +3955,7 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             continue;
         }
         let arity = bc.params.required.len();
+        let ops = bc.executable_ops();
         // MANIFEST PRE-FILTER (task #11): skip WITHOUT hashing exactly when the
         // dump-time manifest carries a VERIFIED non-member pre-key for this
         // name — `x` class with matching ops-count + arity, i.e. the body still
@@ -3968,14 +3970,14 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             .as_ref()
             .and_then(|map| map.get(crate::emacs_core::intern::resolve_name(name_id)))
             && !key.member
-            && key.ops_len == bc.ops.len()
+            && key.ops_len == ops.len()
             && key.arity == arity
         {
             stats.candidates += 1; // same outcome the hash+dlsym path counted.
             stats.missed += 1;
             continue;
         }
-        let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
+        let Some(content_hash) = leaf_content_hash(ops, &bc.constants, arity) else {
             continue;
         };
         stats.candidates += 1;
@@ -4002,7 +4004,7 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
         // hashable body is recipe-able, and the producer only emitted recipe-able
         // leaves); kept as a counted miss for visibility.
         let Some(live_reloc) =
-            live_reloc_for_emit_tier(&bc.ops, &bc.constants, arity, Some(&ctx.obarray))
+            live_reloc_for_emit_tier(ops, &bc.constants, arity, Some(&ctx.obarray))
         else {
             stats.missed += 1;
             continue;
@@ -4175,7 +4177,8 @@ pub(crate) fn drain_aot_pgo_to_dir(
             continue;
         }
         let arity = bc.params.required.len();
-        let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
+        let ops = bc.executable_ops();
+        let Some(content_hash) = leaf_content_hash(ops, &bc.constants, arity) else {
             continue; // non-canonical / non-recipe-able → skip (fail-closed).
         };
         cands.push((bc.runtime.heat(), content_hash, bc, arity));
@@ -4192,7 +4195,8 @@ pub(crate) fn drain_aot_pgo_to_dir(
         if pgo_final_path(dir, content_hash).exists() {
             continue;
         }
-        match compile_leaf_to_object(&bc.ops, &bc.constants, arity, Some(&ctx.obarray)) {
+        let ops = bc.executable_ops();
+        match compile_leaf_to_object(ops, &bc.constants, arity, Some(&ctx.obarray)) {
             Ok(Some((obj, h))) => {
                 // content_hash == h by construction (both are leaf_content_hash of the
                 // same body); place under the OBJECT's own hash so the filename the

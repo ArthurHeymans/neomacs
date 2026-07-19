@@ -5300,6 +5300,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 extra_slots: Vec::new(),
                 #[cfg(feature = "jit")]
                 runtime: crate::emacs_core::jit::Runtime::new(),
+                lazy_gnu_code: None,
             };
 
             ctx.refresh_features_from_variable();

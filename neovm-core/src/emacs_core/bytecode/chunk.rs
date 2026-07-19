@@ -1,5 +1,6 @@
 //! ByteCode chunk — compiled function representation.
 
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -12,6 +13,50 @@ static NEXT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
 
 pub(crate) fn fresh_bytecode_source_id() -> u64 {
     NEXT_SOURCE_ID.fetch_add(1, AtomicOrdering::Relaxed)
+}
+
+#[derive(Debug)]
+struct DecodedGnuCode {
+    ops: Vec<Op>,
+    byte_offset_map: Vec<GnuByteOffsetMapEntry>,
+}
+
+/// Lazily decoded IR for a GNU byte-code string.
+///
+/// Loading validates each byte-code string once before installing this cell,
+/// so initialization here is infallible unless the decoder itself regresses.
+/// Keeping the cell behind a box costs one pointer in every bytecode object
+/// and allocates the synchronization state only for GNU-backed functions.
+#[derive(Debug)]
+pub(crate) struct LazyGnuCode {
+    decoded: OnceLock<DecodedGnuCode>,
+}
+
+impl LazyGnuCode {
+    fn new() -> Self {
+        Self {
+            decoded: OnceLock::new(),
+        }
+    }
+
+    fn get_or_decode(&self, raw_bytes: &[u8]) -> &DecodedGnuCode {
+        self.decoded.get_or_init(|| {
+            // The decoder currently does not modify the constant pool. Keep
+            // the compatibility argument local so cold functions need not
+            // clone or synchronize their Lisp constants merely to decode IR.
+            let mut unused_constants = Vec::new();
+            let (ops, byte_offset_map) = super::decode::decode_gnu_bytecode_with_offset_map(
+                raw_bytes,
+                &mut unused_constants,
+            )
+            .expect("validated GNU bytecode failed deferred decoding");
+            debug_assert!(unused_constants.is_empty());
+            DecodedGnuCode {
+                ops,
+                byte_offset_map,
+            }
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -106,6 +151,10 @@ pub struct ByteCodeFunction {
     /// each clone. Present only under the `jit` feature. See `jit.rs`.
     #[cfg(feature = "jit")]
     pub runtime: crate::emacs_core::jit::Runtime,
+    /// Present for GNU-backed functions whose validated decoded IR has been
+    /// released until first execution. Boxed so ordinary bytecode objects pay
+    /// only one pointer and continue to fit the existing 384-byte arena slot.
+    pub(crate) lazy_gnu_code: Option<Box<LazyGnuCode>>,
 }
 
 #[cfg(test)]
@@ -145,6 +194,10 @@ impl Clone for ByteCodeFunction {
             // A cloned function starts cold (profiling is per-instance).
             #[cfg(feature = "jit")]
             runtime: crate::emacs_core::jit::Runtime::new(),
+            lazy_gnu_code: self
+                .lazy_gnu_code
+                .as_ref()
+                .map(|_| Box::new(LazyGnuCode::new())),
         }
     }
 }
@@ -170,6 +223,101 @@ impl ByteCodeFunction {
             extra_slots: Vec::new(),
             #[cfg(feature = "jit")]
             runtime: crate::emacs_core::jit::Runtime::new(),
+            lazy_gnu_code: None,
+        }
+    }
+
+    /// Release already-validated GNU decoded IR until it is first needed.
+    /// The original byte string remains the single source of truth.
+    pub(crate) fn defer_gnu_decode(&mut self) {
+        assert!(
+            self.gnu_bytecode_bytes.is_some(),
+            "deferred GNU decode requires original bytecode bytes"
+        );
+        self.ops = Vec::new();
+        self.gnu_byte_offset_map = None;
+        self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
+    }
+
+    /// Executable instructions, decoding a cold GNU byte string on first use.
+    #[inline]
+    pub fn executable_ops(&self) -> &[Op] {
+        match &self.lazy_gnu_code {
+            Some(lazy) => {
+                let raw_bytes = self
+                    .gnu_bytecode_bytes
+                    .as_deref()
+                    .expect("lazy GNU bytecode lost its original bytes");
+                &lazy.get_or_decode(raw_bytes).ops
+            }
+            None => &self.ops,
+        }
+    }
+
+    /// GNU byte offsets corresponding to [`Self::executable_ops`].
+    #[inline]
+    pub fn executable_gnu_byte_offset_map(&self) -> Option<&[GnuByteOffsetMapEntry]> {
+        match &self.lazy_gnu_code {
+            Some(lazy) => {
+                let raw_bytes = self
+                    .gnu_bytecode_bytes
+                    .as_deref()
+                    .expect("lazy GNU bytecode lost its original bytes");
+                let map = &lazy.get_or_decode(raw_bytes).byte_offset_map;
+                (!map.is_empty()).then_some(map)
+            }
+            None => self.gnu_byte_offset_map.as_deref(),
+        }
+    }
+
+    /// Decoded instructions that are resident now, without materializing a
+    /// cold function. Used by heap diagnostics and capacity accounting.
+    #[inline]
+    pub(crate) fn resident_ops(&self) -> &[Op] {
+        match &self.lazy_gnu_code {
+            Some(lazy) => lazy
+                .decoded
+                .get()
+                .map(|decoded| decoded.ops.as_slice())
+                .unwrap_or_default(),
+            None => &self.ops,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn resident_ops_capacity(&self) -> usize {
+        match &self.lazy_gnu_code {
+            Some(lazy) => lazy
+                .decoded
+                .get()
+                .map(|decoded| decoded.ops.capacity())
+                .unwrap_or(0),
+            None => self.ops.capacity(),
+        }
+    }
+
+    /// Resident GNU offset map without forcing deferred IR initialization.
+    #[inline]
+    pub(crate) fn resident_gnu_byte_offset_map(&self) -> Option<&[GnuByteOffsetMapEntry]> {
+        match &self.lazy_gnu_code {
+            Some(lazy) => lazy
+                .decoded
+                .get()
+                .map(|decoded| decoded.byte_offset_map.as_slice())
+                .filter(|map| !map.is_empty()),
+            None => self.gnu_byte_offset_map.as_deref(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn resident_gnu_byte_offset_map_capacity(&self) -> usize {
+        match &self.lazy_gnu_code {
+            Some(lazy) => lazy
+                .decoded
+                .get()
+                .map(|decoded| decoded.byte_offset_map.capacity())
+                .unwrap_or(0),
+            None => self.gnu_byte_offset_map.as_ref().map_or(0, Vec::capacity),
         }
     }
 
@@ -243,10 +391,11 @@ impl ByteCodeFunction {
 
     /// Disassemble to a human-readable string.
     pub fn disassemble(&self) -> String {
+        let ops = self.executable_ops();
         let mut out = String::new();
         out.push_str(&format!(
             "bytecode function ({} ops, {} constants, stack {})\n",
-            self.ops.len(),
+            ops.len(),
             self.constants.len(),
             self.max_stack
         ));
@@ -257,7 +406,7 @@ impl ByteCodeFunction {
         }
 
         out.push_str("code:\n");
-        for (i, op) in self.ops.iter().enumerate() {
+        for (i, op) in ops.iter().enumerate() {
             out.push_str(&format!("  {:4}: {}\n", i, op.disasm(&self.constants)));
         }
         out

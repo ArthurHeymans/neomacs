@@ -30,6 +30,8 @@
 
 use super::header::*;
 use super::value::TaggedValue;
+use crate::emacs_core::bytecode::Op;
+use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashKey, HashTableWeakness};
 use malachite::integer::Integer;
@@ -3890,7 +3892,7 @@ impl TaggedHeap {
     fn bytecode_object_bytes(obj: &ByteCodeObj) -> usize {
         let data = &obj.data;
         size_of::<ByteCodeObj>()
-            .saturating_add(Self::vector_storage_bytes(&data.ops))
+            .saturating_add(data.resident_ops_capacity().saturating_mul(size_of::<Op>()))
             .saturating_add(Self::vector_storage_bytes(&data.constants))
             .saturating_add(
                 data.params
@@ -3905,9 +3907,8 @@ impl TaggedHeap {
                     .saturating_mul(size_of::<SymId>()),
             )
             .saturating_add(
-                data.gnu_byte_offset_map
-                    .as_ref()
-                    .map_or(0, Self::vector_storage_bytes),
+                data.resident_gnu_byte_offset_map_capacity()
+                    .saturating_mul(size_of::<GnuByteOffsetMapEntry>()),
             )
             .saturating_add(
                 data.gnu_bytecode_bytes
@@ -4027,10 +4028,11 @@ impl TaggedHeap {
 
     fn bytecode_payload_layout(obj: &ByteCodeObj) -> PayloadLayout {
         let data = &obj.data;
+        let resident_ops = data.resident_ops();
         let mut stats = PayloadLayout {
-            logical_bytes: std::mem::size_of_val(data.ops.as_slice()),
-            capacity_bytes: Self::vector_storage_bytes(&data.ops),
-            owned: data.ops.capacity() > 0,
+            logical_bytes: std::mem::size_of_val(resident_ops),
+            capacity_bytes: data.resident_ops_capacity().saturating_mul(size_of::<Op>()),
+            owned: !resident_ops.is_empty(),
             mapped: false,
         };
         stats = stats.add(PayloadLayout {
@@ -4043,11 +4045,13 @@ impl TaggedHeap {
             mapped: false,
         });
         stats = stats.add(Self::lambda_params_payload_layout(&data.params));
-        if let Some(offsets) = &data.gnu_byte_offset_map {
+        if let Some(offsets) = data.resident_gnu_byte_offset_map() {
             stats = stats.add(PayloadLayout {
-                logical_bytes: std::mem::size_of_val(offsets.as_slice()),
-                capacity_bytes: Self::vector_storage_bytes(offsets),
-                owned: offsets.capacity() > 0,
+                logical_bytes: std::mem::size_of_val(offsets),
+                capacity_bytes: data
+                    .resident_gnu_byte_offset_map_capacity()
+                    .saturating_mul(size_of::<GnuByteOffsetMapEntry>()),
+                owned: !offsets.is_empty(),
                 mapped: false,
             });
         }

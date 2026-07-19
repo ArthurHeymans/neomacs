@@ -45,3 +45,39 @@ fn disassemble_output() {
     assert!(dis.contains("constant 0 ; 42"));
     assert!(dis.contains("return"));
 }
+
+#[test]
+fn gnu_ir_is_decoded_only_on_first_access() {
+    crate::test_utils::init_test_tracing();
+    let raw = vec![182, 3, 135]; // discardN 3; return
+    let mut constants = Vec::new();
+    let (ops, offset_map) =
+        super::super::decode::decode_gnu_bytecode_with_offset_map(&raw, &mut constants).unwrap();
+    let mut func = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    func.ops = ops.clone();
+    func.gnu_byte_offset_map = Some(offset_map);
+    func.gnu_bytecode_bytes = Some(raw);
+
+    func.defer_gnu_decode();
+    assert!(func.resident_ops().is_empty());
+    assert_eq!(func.resident_ops_capacity(), 0);
+
+    assert_eq!(func.executable_ops(), ops);
+    assert_eq!(func.resident_ops(), ops);
+    assert!(func.executable_gnu_byte_offset_map().is_none());
+}
+
+#[test]
+fn cloning_deferred_gnu_code_does_not_copy_decoded_ir() {
+    let raw = vec![135]; // return
+    let mut func = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    func.ops = vec![Op::Return];
+    func.gnu_byte_offset_map = Some(Vec::new());
+    func.gnu_bytecode_bytes = Some(raw);
+    func.defer_gnu_decode();
+    assert_eq!(func.executable_ops(), &[Op::Return]);
+
+    let cloned = func.clone();
+    assert!(cloned.resident_ops().is_empty());
+    assert_eq!(cloned.executable_ops(), &[Op::Return]);
+}
