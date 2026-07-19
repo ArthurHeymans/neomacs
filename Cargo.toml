@@ -207,6 +207,11 @@ codegen-units = 1
 debug = false
 strip = "debuginfo"
 
+# This test-only crate is a 52 MiB corpus compiled into one test harness.
+# Keep production dependencies in release mode without optimizing test bodies.
+[profile.release.package.neovm-oracle-tests]
+opt-level = 0
+
 [profile.profiling]
 inherits = "release"
 debug = true

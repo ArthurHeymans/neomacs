@@ -180,12 +180,6 @@ jobs:
       - &prepare_workspace_tmp
         name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR"
-      - name: Add swap for release test linking
-        run: |
-          sudo fallocate -l 4G /mnt/neomacs-build.swap
-          sudo chmod 600 /mnt/neomacs-build.swap
-          sudo mkswap /mnt/neomacs-build.swap
-          sudo swapon /mnt/neomacs-build.swap
       - *install_linux_deps
       - *install_rust
       - &cache_cargo
