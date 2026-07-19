@@ -8604,9 +8604,9 @@ impl TaggedHeap {
         }
     }
 
-    /// Tag-less union oracle: owned by ANY class arena or the residual
-    /// addr-set. For callers without a decoded tag (tests, generic probes);
-    /// the mark paths use the tag-first per-kind forms above.
+    /// Tag-less union oracle used by debug checks that have not decoded the
+    /// value's heap tag yet.
+    #[cfg(debug_assertions)]
     fn owns_non_cons_object(&self, ptr: *const u8) -> bool {
         !ptr.is_null()
             && (self.string_arena.owns(ptr)
