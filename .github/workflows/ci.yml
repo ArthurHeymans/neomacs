@@ -169,7 +169,11 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
+      # A release workspace test archive links several large test binaries.
+      # Bound compiler and linker parallelism to fit GitHub's hosted runner.
+      CARGO_BUILD_JOBS: "1"
       CARGO_PROFILE_RELEASE_LTO: "false"
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld -C link-arg=-Wl,--threads=1"
       TMPDIR: ${{ github.workspace }}/tmp
     steps:
       - *checkout
@@ -195,7 +199,7 @@ jobs:
 
       - name: Build and archive workspace tests
         run: |
-          cargo nextest archive \
+          /usr/bin/time -v cargo nextest archive \
             --release \
             --workspace \
             --archive-file neomacs-workspace-tests.tar.zst
