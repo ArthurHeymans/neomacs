@@ -13,13 +13,28 @@
 // folding them into structs is a separate refactor, out of scope for the gate.
 #![allow(clippy::too_many_arguments)]
 
-// Global allocator: TiKV jemalloc is the production default; mimalloc remains
-// available for allocation-throughput comparisons. `--no-default-features`
-// with neither feature uses the system allocator. These affect Rust
-// allocations, not linked C libraries.
+// Global allocator: TiKV jemalloc is the Linux production default; mimalloc
+// remains the default elsewhere and is available for Linux throughput
+// comparisons. `--no-default-features` with neither explicit allocator feature
+// uses the system allocator. These affect Rust allocations, not linked C
+// libraries.
 cfg_select! {
-    all(feature = "mimalloc", feature = "jemalloc") => {
-        compile_error!("features `mimalloc` and `jemalloc` are mutually exclusive");
+    any(
+        all(feature = "mimalloc", feature = "jemalloc"),
+        all(feature = "platform-allocator", feature = "mimalloc"),
+        all(feature = "platform-allocator", feature = "jemalloc"),
+    ) => {
+        compile_error!(
+            "features `platform-allocator`, `mimalloc`, and `jemalloc` are mutually exclusive"
+        );
+    }
+    all(feature = "platform-allocator", target_os = "linux") => {
+        #[global_allocator]
+        static GLOBAL: linux_default_jemalloc::Jemalloc = linux_default_jemalloc::Jemalloc;
+    }
+    feature = "platform-allocator" => {
+        #[global_allocator]
+        static GLOBAL: other_default_mimalloc::MiMalloc = other_default_mimalloc::MiMalloc;
     }
     all(feature = "mimalloc", target_os = "linux") => {
         // mimalloc initializes its environment options from an ELF constructor
@@ -44,7 +59,18 @@ cfg_select! {
         #[global_allocator]
         static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
     }
-    all(feature = "jemalloc", target_os = "linux") => {
+    feature = "jemalloc" => {
+        #[global_allocator]
+        static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+    }
+    _ => {}
+}
+
+cfg_select! {
+    all(
+        target_os = "linux",
+        any(feature = "platform-allocator", feature = "jemalloc"),
+    ) => {
         // jemalloc reads this symbol before main. Keep dirty and muzzy extents
         // out of RSS and use two arenas for the main and render workloads,
         // while still allowing _RJEM_MALLOC_CONF to override these defaults.
@@ -60,13 +86,6 @@ cfg_select! {
             }
             .c_char
         });
-
-        #[global_allocator]
-        static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-    }
-    feature = "jemalloc" => {
-        #[global_allocator]
-        static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
     }
     _ => {}
 }

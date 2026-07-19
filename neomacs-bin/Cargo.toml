@@ -9,11 +9,17 @@ description = "Standalone Rust binary for Neomacs (no C dependency)"
 build = "build.rs"
 
 [features]
-default = ["video", "jit", "jemalloc"]
+default = ["video", "jit", "platform-allocator"]
+# Use the memory-efficient allocator on Linux without changing the established
+# allocator on macOS and Windows.
+platform-allocator = [
+    "dep:linux-default-jemalloc",
+    "dep:other-default-mimalloc",
+]
 # Use mimalloc as the global allocator. Select this instead of `jemalloc` when
 # allocation throughput matters more than settled resident memory.
 mimalloc = ["dep:mimalloc", "dep:libmimalloc-sys"]
-# Use TiKV's jemalloc fork as the global allocator. This is the production
+# Use TiKV's jemalloc fork as the global allocator. This is the Linux production
 # default because it packs Doom's long-lived heap into substantially less
 # resident memory. These allocator features affect Rust allocations only, not
 # linked C libraries. `--no-default-features` with neither feature drops back
@@ -76,6 +82,12 @@ tracing.workspace = true
 crossbeam-channel.workspace = true
 libc.workspace = true
 crossterm = "0.29"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-default-jemalloc = { package = "tikv-jemallocator", version = "0.7", optional = true, default-features = false }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+other-default-mimalloc = { package = "mimalloc", version = "0.1", optional = true, default-features = false }
 
 [dev-dependencies]
 hostname.workspace = true
