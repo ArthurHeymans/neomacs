@@ -35,6 +35,9 @@
 (defvar command-line-processed nil
   "Non-nil once command line has been processed.")
 
+(defvar neomacs--startup-gc-ceiling-active nil
+  "Non-nil while Neomacs bounds startup GC allocation intervals.")
+
 (defgroup initialization nil
   "Emacs start-up procedure."
   :group 'environment)
@@ -847,6 +850,11 @@ It is the default value of the variable `top-level'."
 	    (font-menu-add-default))
 	(unless inhibit-startup-hooks
 	  (run-hooks 'window-setup-hook))))
+
+    ;; Neomacs bounds GC allocation intervals while the complete GNU startup
+    ;; sequence runs, including after-init and window setup hooks.  Release the
+    ;; internal ceiling here; the user's `gc-cons-threshold' remains unchanged.
+    (setq neomacs--startup-gc-ceiling-active nil)
 
     ;; Subprocesses of Emacs do not have direct access to the terminal, so
     ;; unless told otherwise they should only assume a dumb terminal.

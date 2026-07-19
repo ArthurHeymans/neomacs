@@ -85,7 +85,7 @@ const LEXENV_SPECIAL_CACHE_CAPACITY: usize = 16;
 const GC_DEFAULT_THRESHOLD_BYTES: usize = 100_000 * std::mem::size_of::<usize>();
 const GC_THRESHOLD_FLOOR_BYTES: usize = GC_DEFAULT_THRESHOLD_BYTES / 10;
 /// Bound peak arena growth while startup configs deliberately defer Lisp GC.
-/// The ceiling is released as soon as `after-init-time` becomes non-nil.
+/// The host releases the ceiling when GNU's `normal-top-level` finishes.
 const GC_STARTUP_THRESHOLD_CEILING_BYTES: usize = 4 * 1024 * 1024;
 const GC_HI_THRESHOLD_BYTES: usize = (i64::MAX as usize) / 2;
 const GC_PERCENT_SCALE: u64 = 1_000_000;
@@ -1055,7 +1055,10 @@ cached_symbol_id!(byte_code_literal_symbol, "byte-code-literal");
 cached_symbol_id!(byte_code_symbol, "byte-code");
 cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
 cached_symbol_id!(gc_cons_percentage_symbol, "gc-cons-percentage");
-cached_symbol_id!(after_init_time_symbol, "after-init-time");
+cached_symbol_id!(
+    startup_gc_ceiling_active_symbol,
+    "neomacs--startup-gc-ceiling-active"
+);
 cached_symbol_id!(memory_full_symbol, "memory-full");
 cached_symbol_id!(gc_elapsed_symbol, "gc-elapsed");
 cached_symbol_id!(gcs_done_symbol, "gcs-done");
@@ -6093,7 +6096,7 @@ impl Context {
     fn is_gc_runtime_setting_symbol(sym_id: SymId) -> bool {
         sym_id == gc_cons_threshold_symbol()
             || sym_id == gc_cons_percentage_symbol()
-            || sym_id == after_init_time_symbol()
+            || sym_id == startup_gc_ceiling_active_symbol()
             || sym_id == memory_full_symbol()
     }
 
@@ -6162,9 +6165,9 @@ impl Context {
             .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
         threshold = threshold.max(live_growth);
         let mut threshold = threshold.clamp(1, GC_HI_THRESHOLD_BYTES);
-        if self
+        if !self
             .obarray
-            .symbol_value_id_or_nil(after_init_time_symbol())
+            .symbol_value_id_or_nil(startup_gc_ceiling_active_symbol())
             .is_nil()
         {
             threshold = threshold.min(GC_STARTUP_THRESHOLD_CEILING_BYTES);

@@ -18302,6 +18302,7 @@ fn gc_startup_ceiling_bounds_explicit_huge_cons_threshold() {
     let mut ev = Context::new();
     ev.eval_str_each(
         "(progn
+           (setq neomacs--startup-gc-ceiling-active t)
            (setq gc-cons-percentage nil)
            (setq gc-cons-threshold 268435456))",
     );
@@ -18316,14 +18317,15 @@ fn gc_explicit_huge_cons_threshold_stays_the_floor_after_startup() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     // Once startup is complete, an explicit `gc-cons-threshold` far above the
-    // live-proportional term wins exactly. Setting `after-init-time` itself
+    // live-proportional term wins exactly. Clearing the host's startup flag
     // releases the ceiling; no later threshold mutation or collection is
     // needed.
     ev.eval_str_each(
         "(progn
+           (setq neomacs--startup-gc-ceiling-active t)
            (setq gc-cons-percentage nil)
            (setq gc-cons-threshold 268435456)
-           (setq after-init-time t))",
+           (setq neomacs--startup-gc-ceiling-active nil))",
     );
     assert_eq!(ev.tagged_heap.gc_threshold(), 268_435_456);
 }
