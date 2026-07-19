@@ -22,54 +22,23 @@ cfg_select! {
         compile_error!("features `mimalloc` and `jemalloc` are mutually exclusive");
     }
     all(feature = "mimalloc", target_os = "linux") => {
-        struct NeomacsMiMalloc;
-
-        impl NeomacsMiMalloc {
-            #[inline]
-            fn configure() {
-                static CONFIGURE: std::sync::Once = std::sync::Once::new();
-                CONFIGURE.call_once(|| {
-                    // mimalloc option 4 is `mi_option_arena_eager_commit`.
-                    // `set_default` runs before mimalloc's first allocation,
-                    // while still allowing MIMALLOC_ARENA_EAGER_COMMIT to
-                    // override the project default during initialization.
-                    unsafe { libmimalloc_sys::mi_option_set_default(4, 0) };
-                });
-            }
+        // mimalloc initializes its environment options from an ELF constructor
+        // with priority 101. Install Neomacs' default immediately before that:
+        // `set_default` changes the compiled fallback without marking the
+        // option initialized, so MIMALLOC_ARENA_EAGER_COMMIT can still override
+        // it when mimalloc processes the environment.
+        unsafe extern "C" fn configure_mimalloc_before_process_init() {
+            // mimalloc option 4 is `mi_option_arena_eager_commit`.
+            unsafe { libmimalloc_sys::mi_option_set_default(4, 0) };
         }
 
-        // SAFETY: this delegates every operation to mimalloc after configuring
-        // its process-wide default exactly once, before the first allocation.
-        unsafe impl std::alloc::GlobalAlloc for NeomacsMiMalloc {
-            unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-                Self::configure();
-                unsafe { std::alloc::GlobalAlloc::alloc(&mimalloc::MiMalloc, layout) }
-            }
-
-            unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
-                Self::configure();
-                unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, layout) }
-            }
-
-            unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
-                unsafe { std::alloc::GlobalAlloc::dealloc(&mimalloc::MiMalloc, ptr, layout) }
-            }
-
-            unsafe fn realloc(
-                &self,
-                ptr: *mut u8,
-                layout: std::alloc::Layout,
-                new_size: usize,
-            ) -> *mut u8 {
-                Self::configure();
-                unsafe {
-                    std::alloc::GlobalAlloc::realloc(&mimalloc::MiMalloc, ptr, layout, new_size)
-                }
-            }
-        }
+        #[used]
+        #[unsafe(link_section = ".init_array.00100")]
+        static CONFIGURE_MIMALLOC: unsafe extern "C" fn() =
+            configure_mimalloc_before_process_init;
 
         #[global_allocator]
-        static GLOBAL: NeomacsMiMalloc = NeomacsMiMalloc;
+        static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
     }
     feature = "mimalloc" => {
         #[global_allocator]
