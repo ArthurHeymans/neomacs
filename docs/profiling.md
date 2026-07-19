@@ -156,8 +156,13 @@ RSS, PSS, private, anonymous, and swap counters. Raw samples go to
 `target/profiling/doom-memory.tsv`. It also writes paired startup deltas to the
 adjacent `.startup-pairs.tsv` file. Override `RUNS`, `SETTLE_SECONDS`,
 `PROFILE_DELAY_SECONDS`, `HEAP_REPORT_DIR`, `SMAPS_REPORT_DIR`,
-`STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`, `REPORT`, or `STARTUP_REPORT` when
-needed.
+`LOG_REPORT_DIR`, `GC_REPORT_DIR`, `STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`,
+`REPORT`, or `STARTUP_REPORT` when needed.
+
+For configs that deliberately defer collection during startup, set
+`NEOVM_GC_THRESHOLD_CAP_BYTES` to measure the startup-time versus settled-RSS
+curve without editing the config. This is an opt-in profiling control; normal
+runs continue to honor Lisp's `gc-cons-threshold` exactly.
 
 Memory runs intentionally settle long enough to stabilize RSS, so use a
 separate higher-repetition panel to enforce startup neutrality. This example

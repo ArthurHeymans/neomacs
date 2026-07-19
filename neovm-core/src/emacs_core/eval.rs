@@ -50,6 +50,22 @@ fn gc_stress_from_env() -> bool {
     std::env::var("NEOVM_GC_STRESS").as_deref() == Ok("1")
 }
 
+/// Optional process-wide cap for controlled GC pacing experiments.
+///
+/// Lisp's `gc-cons-threshold` remains authoritative in normal runs. Setting
+/// this hook lets the profiler measure the memory/time curve of configs that
+/// deliberately defer GC (Doom uses `most-positive-fixnum` during startup)
+/// without editing the user's configuration.
+fn gc_threshold_cap_from_env() -> Option<usize> {
+    static CAP: OnceLock<Option<usize>> = OnceLock::new();
+    *CAP.get_or_init(|| {
+        std::env::var("NEOVM_GC_THRESHOLD_CAP_BYTES")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .filter(|cap| *cap > 0)
+    })
+}
+
 const EVAL_STACK_RED_ZONE: usize = 128 * 1024;
 const EVAL_STACK_SEGMENT: usize = 2 * 1024 * 1024;
 const STACK_GROWTH_PROBE_START_DEPTH: usize = 16;
@@ -6140,7 +6156,8 @@ impl Context {
             / GC_LIVE_GROWTH_DEN)
             .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
         threshold = threshold.max(live_growth);
-        threshold.clamp(1, GC_HI_THRESHOLD_BYTES)
+        let threshold = threshold.clamp(1, GC_HI_THRESHOLD_BYTES);
+        gc_threshold_cap_from_env().map_or(threshold, |cap| threshold.min(cap))
     }
 
     fn sync_gc_threshold_from_runtime_settings(&mut self) {
