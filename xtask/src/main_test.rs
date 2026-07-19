@@ -2,6 +2,105 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+#[cfg(unix)]
+fn doom_install_contract_uses_neomacs_in_an_isolated_home() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf();
+    let fixture = tempdir();
+    let doom_repository = fixture.join("doomemacs");
+    let doom_bin = doom_repository.join("bin");
+    let fake_neomacs = fixture.join("neomacs");
+    let caller_home = fixture.join("caller-home");
+    let report = fixture.join("doom-contract-report");
+
+    fs::create_dir_all(&doom_bin).unwrap();
+    fs::create_dir_all(&caller_home).unwrap();
+    fs::write(
+        &fake_neomacs,
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest \"$1\" = --batch\n",
+    )
+    .unwrap();
+    fs::set_permissions(&fake_neomacs, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::write(
+        doom_bin.join("doom"),
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+test "$*" = "--force install"
+test "$EMACS" = "$DOOM_TEST_EXPECTED_EMACS"
+test "$HOME" != "$DOOM_TEST_CALLER_HOME"
+test "$XDG_CONFIG_HOME" = "$HOME/.config"
+test "$XDG_CACHE_HOME" = "$HOME/.cache"
+test "$XDG_DATA_HOME" = "$HOME/.local/share"
+test "$XDG_STATE_HOME" = "$HOME/.local/state"
+test "$EMACSDIR" = "$XDG_CONFIG_HOME/emacs"
+test "$DOOMDIR" = "$XDG_CONFIG_HOME/doom"
+"$EMACS" --batch
+mkdir -p "$DOOMDIR"
+touch "$DOOMDIR/init.el" "$DOOMDIR/config.el" "$DOOMDIR/packages.el"
+printf 'args=%s\nemacs=%s\nhome=%s\n' "$*" "$EMACS" "$HOME" > "$DOOM_TEST_REPORT"
+"#,
+    )
+    .unwrap();
+    fs::set_permissions(doom_bin.join("doom"), fs::Permissions::from_mode(0o755)).unwrap();
+
+    for args in [
+        ["init", "--initial-branch=main"].as_slice(),
+        ["config", "user.email", "ci@example.invalid"].as_slice(),
+        ["config", "user.name", "CI"].as_slice(),
+        ["add", "."].as_slice(),
+        ["commit", "-m", "fixture"].as_slice(),
+    ] {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(&doom_repository)
+            .status()
+            .expect("run git for Doom fixture");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/test-doom-install.sh"))
+        .env("HOME", &caller_home)
+        .env("NEOMACS_BIN", &fake_neomacs)
+        .env("DOOM_REPOSITORY", &doom_repository)
+        .env("DOOM_TEST_CALLER_HOME", &caller_home)
+        .env("DOOM_TEST_EXPECTED_EMACS", &fake_neomacs)
+        .env("DOOM_TEST_REPORT", &report)
+        .output()
+        .expect("run Doom installation contract");
+    assert!(
+        output.status.success(),
+        "contract failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report = fs::read_to_string(report).unwrap();
+    assert!(report.contains("args=--force install\n"));
+    assert!(report.contains(&format!("emacs={}\n", fake_neomacs.display())));
+    assert!(!report.contains(&format!("home={}\n", caller_home.display())));
+}
+
+#[test]
+fn ci_runs_the_doom_install_contract_against_the_shared_runtime() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let job = workflow
+        .split_once("\n  doom-install-compatibility:\n")
+        .map(|(_, job)| job)
+        .expect("ci must define a Doom installation compatibility job");
+
+    assert!(job.contains("needs: neomacs-test-runtime"));
+    assert!(job.contains("- *download_test_runtime"));
+    assert!(job.contains("- *unpack_test_runtime"));
+    assert!(job.contains("NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs"));
+    assert!(job.contains("run: ./scripts/test-doom-install.sh"));
+}
+
+#[test]
 fn windows_installer_removes_the_legacy_path_rewrite_implementation() {
     let installer = include_str!("../../assets/windows-installer.nsi");
 

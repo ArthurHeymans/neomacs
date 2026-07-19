@@ -366,3 +366,22 @@ jobs:
             --workspace-remap "$GITHUB_WORKSPACE" \
             --partition slice:${{ matrix.partition }}/20 \
             --no-fail-fast
+
+  doom-install-compatibility:
+    name: doom install compatibility (linux x86_64)
+    needs: neomacs-test-runtime
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - *install_linux_deps
+      - *download_test_runtime
+      - *unpack_test_runtime
+
+      - name: Install unmodified Doom with Neomacs
+        run: ./scripts/test-doom-install.sh
