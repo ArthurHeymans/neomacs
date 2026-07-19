@@ -259,7 +259,7 @@ fn yank_rectangle_loaded_function_is_simple_bytecode_call() {
             vec![Some("killed-rectangle"), Some("insert-rectangle")]
         );
         assert_eq!(
-            bytecode.ops,
+            bytecode.executable_ops(),
             vec![Op::Constant(1), Op::VarRef(0), Op::Call(1), Op::Return]
         );
     }
