@@ -12,6 +12,8 @@ startup_timeout_seconds="${STARTUP_TIMEOUT_SECONDS:-180}"
 max_startup_regression_pct="${MAX_STARTUP_REGRESSION_PCT:-}"
 heap_report_dir="${HEAP_REPORT_DIR:-}"
 smaps_report_dir="${SMAPS_REPORT_DIR:-}"
+log_report_dir="${LOG_REPORT_DIR:-}"
+gc_report_dir="${GC_REPORT_DIR:-}"
 minimum_startup_gate_runs=20
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -53,6 +55,14 @@ fi
 if [[ -n "$smaps_report_dir" ]]; then
   mkdir -p "$smaps_report_dir"
   smaps_report_dir="$(cd "$smaps_report_dir" && pwd)"
+fi
+if [[ -n "$log_report_dir" ]]; then
+  mkdir -p "$log_report_dir"
+  log_report_dir="$(cd "$log_report_dir" && pwd)"
+fi
+if [[ -n "$gc_report_dir" ]]; then
+  mkdir -p "$gc_report_dir"
+  gc_report_dir="$(cd "$gc_report_dir" && pwd)"
 fi
 work_dir="$(mktemp -d "$repo_root/target/profiling/doom-memory.XXXXXX")"
 report="${REPORT:-$repo_root/target/profiling/doom-memory.tsv}"
@@ -97,6 +107,7 @@ run_sample() {
   local log="$work_dir/$mode-$pair.log"
   local marker_elisp="$marker"
   local form command quoted_bin quoted_form heap_report heap_report_elisp
+  local gc_report gc_report_elisp
   local start_ms deadline ready_ms startup_ms smaps snapshot
 
   marker_elisp="${marker_elisp//\\/\\\\}"
@@ -107,6 +118,12 @@ run_sample() {
     heap_report_elisp="${heap_report//\\/\\\\}"
     heap_report_elisp="${heap_report_elisp//\"/\\\"}"
     form+=" (with-temp-file \"$heap_report_elisp\" (prin1 (neomacs--heap-layout-stats) (current-buffer)))"
+  fi
+  if [[ -n "$gc_report_dir" ]]; then
+    gc_report="$gc_report_dir/$mode-$pair.gc-runtime.el"
+    gc_report_elisp="${gc_report//\\/\\\\}"
+    gc_report_elisp="${gc_report_elisp//\"/\\\"}"
+    form+=" (with-temp-file \"$gc_report_elisp\" (prin1 (list (cons 'gc-cons-threshold gc-cons-threshold) (cons 'gc-cons-percentage gc-cons-percentage) (cons 'gcs-done gcs-done) (cons 'gc-elapsed gc-elapsed)) (current-buffer)))"
   fi
   form+=" (with-temp-file \"$marker_elisp\" (insert (number-to-string (truncate (* 1000 (float-time)))))))"
   if (( profile_delay_seconds > 0 )); then
@@ -165,6 +182,9 @@ run_sample() {
   cp "$smaps" "$snapshot"
   if [[ -n "$smaps_report_dir" ]]; then
     cp "/proc/$active_pid/smaps" "$smaps_report_dir/$mode-$pair.smaps"
+  fi
+  if [[ -n "$log_report_dir" ]]; then
+    cp "$log" "$log_report_dir/$mode-$pair.log"
   fi
 
   local rss_kib pss_kib private_clean_kib private_dirty_kib private_kib anon_kib swap_kib
