@@ -16,6 +16,8 @@ use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::hash::{BuildHasher, Hash, Hasher};
+use std::mem::MaybeUninit;
+use std::ptr::NonNull;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -36,9 +38,90 @@ pub const NIL_SYM_ID: SymId = SymId(0);
 pub const T_SYM_ID: SymId = SymId(1);
 pub const UNBOUND_SYM_ID: SymId = SymId(2);
 
+/// Number of symbol-name atoms stored in each non-moving allocation.
+const NAME_ATOM_CHUNK: usize = 4096;
+
+/// Append-only, process-lifetime storage for interned symbol names.
+///
+/// The symbol registry exposes name atoms as `&'static LispString`, so the
+/// backing allocations are intentionally leaked just as the former per-name
+/// `Box::leak` allocations were. Chunking removes one allocator allocation and
+/// one `Vec` pointer per distinct name while preserving stable addresses.
+struct NameAtomStorage {
+    chunks: Vec<NonNull<LispString>>,
+    len: usize,
+}
+
+// SAFETY: chunks are appended and initialized only through `&mut self` while
+// the enclosing `StringInterner` is write-locked. Published `LispString`s are
+// immutable and their leaked backing allocations never move or disappear.
+unsafe impl Send for NameAtomStorage {}
+unsafe impl Sync for NameAtomStorage {}
+
+impl NameAtomStorage {
+    fn new() -> Self {
+        Self {
+            chunks: Vec::new(),
+            len: 0,
+        }
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn reserve(&mut self, additional: usize) {
+        let required_chunks = self
+            .len
+            .saturating_add(additional)
+            .div_ceil(NAME_ATOM_CHUNK);
+        self.chunks
+            .reserve(required_chunks.saturating_sub(self.chunks.len()));
+    }
+
+    fn push(&mut self, value: LispString) -> &'static LispString {
+        let chunk_index = self.len / NAME_ATOM_CHUNK;
+        let slot_index = self.len % NAME_ATOM_CHUNK;
+        if slot_index == 0 {
+            let chunk = Box::<[LispString]>::new_uninit_slice(NAME_ATOM_CHUNK);
+            let raw = Box::into_raw(chunk) as *mut MaybeUninit<LispString>;
+            self.chunks.push(
+                NonNull::new(raw.cast::<LispString>())
+                    .expect("a non-empty Box allocation must not be null"),
+            );
+        }
+
+        // SAFETY: `chunk_index` exists after the allocation above and
+        // `slot_index` selects the next, as-yet-uninitialized slot. No slot is
+        // ever written twice. The allocation is intentionally leaked and the
+        // initialized value is never mutated, so the returned reference stays
+        // valid for the remainder of the process.
+        let slot = unsafe { self.chunks[chunk_index].as_ptr().add(slot_index) };
+        unsafe { slot.write(value) };
+        self.len += 1;
+        unsafe { &*slot }
+    }
+
+    #[inline]
+    fn get(&self, id: NameId) -> &'static LispString {
+        let index = id.0 as usize;
+        assert!(index < self.len, "invalid symbol name id {id:?}");
+        let chunk_index = index / NAME_ATOM_CHUNK;
+        let slot_index = index % NAME_ATOM_CHUNK;
+        // SAFETY: the bounds check above proves this slot was initialized.
+        // Chunks are leaked and initialized values never move or mutate.
+        unsafe { &*self.chunks[chunk_index].as_ptr().add(slot_index) }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &'static LispString> + '_ {
+        (0..self.len).map(|index| self.get(NameId(index as u32)))
+    }
+}
+
 /// Append-only string interner used only for symbol names.
 pub struct StringInterner {
-    strings: Vec<&'static LispString>,
+    strings: NameAtomStorage,
     map: HashMap<&'static LispString, NameId, FxBuildHasher>,
 }
 
@@ -59,7 +142,7 @@ impl StringInterner {
 
     pub fn new() -> Self {
         Self {
-            strings: Vec::new(),
+            strings: NameAtomStorage::new(),
             map: HashMap::with_hasher(FxBuildHasher),
         }
     }
@@ -127,9 +210,8 @@ impl StringInterner {
             "NameId space exhausted: a real symbol name collided with the \
              obarray empty-slot presence sentinel (u32::MAX)",
         );
-        let leaked = Box::leak(Box::new(normalized.into_owned())) as &'static LispString;
-        self.strings.push(leaked);
-        self.map.insert(leaked, idx);
+        let interned = self.strings.push(normalized.into_owned());
+        self.map.insert(interned, idx);
         idx
     }
 
@@ -155,7 +237,7 @@ impl StringInterner {
     /// Resolve a name id back to its exact Lisp-string storage.
     #[inline]
     pub fn resolve_lisp_string(&self, id: NameId) -> &'static LispString {
-        self.strings[id.0 as usize]
+        self.strings.get(id)
     }
 }
 
@@ -368,12 +450,7 @@ impl SymbolRegistry {
     }
 
     fn dump_symbol_table(&self) -> DumpedSymbolTable {
-        let names = self
-            .names
-            .strings
-            .iter()
-            .map(|name| (*name).clone())
-            .collect();
+        let names = self.names.strings.iter().map(LispString::clone).collect();
         let mut symbol_names = Vec::with_capacity(self.symbols.len());
         let mut canonical = Vec::with_capacity(self.symbols.len());
         for slot in &self.symbols {

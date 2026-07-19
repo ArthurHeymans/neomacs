@@ -118,6 +118,28 @@ fn name_interner_many_strings() {
 }
 
 #[test]
+fn name_interner_keeps_addresses_stable_across_chunk_growth() {
+    crate::test_utils::init_test_tracing();
+    let mut interner = StringInterner::new();
+    let first = interner.intern("first-chunked-name");
+    let first_address = interner.resolve_lisp_string(first) as *const _;
+
+    for i in 1..=NAME_ATOM_CHUNK {
+        interner.intern(&format!("chunked-name-{i}"));
+    }
+
+    assert_eq!(
+        interner.resolve_lisp_string(first) as *const _,
+        first_address
+    );
+    assert_eq!(interner.resolve(first), "first-chunked-name");
+    assert_eq!(
+        interner.resolve(NameId(NAME_ATOM_CHUNK as u32)),
+        format!("chunked-name-{NAME_ATOM_CHUNK}")
+    );
+}
+
+#[test]
 fn name_interner_idempotent() {
     crate::test_utils::init_test_tracing();
     let mut interner = StringInterner::new();
