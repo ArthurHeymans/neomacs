@@ -21,6 +21,56 @@ cfg_select! {
     all(feature = "mimalloc", feature = "jemalloc") => {
         compile_error!("features `mimalloc` and `jemalloc` are mutually exclusive");
     }
+    all(feature = "mimalloc", target_os = "linux") => {
+        struct NeomacsMiMalloc;
+
+        impl NeomacsMiMalloc {
+            #[inline]
+            fn configure() {
+                static CONFIGURE: std::sync::Once = std::sync::Once::new();
+                CONFIGURE.call_once(|| {
+                    // mimalloc option 4 is `mi_option_arena_eager_commit`.
+                    // `set_default` runs before mimalloc's first allocation,
+                    // while still allowing MIMALLOC_ARENA_EAGER_COMMIT to
+                    // override the project default during initialization.
+                    unsafe { libmimalloc_sys::mi_option_set_default(4, 0) };
+                });
+            }
+        }
+
+        // SAFETY: this delegates every operation to mimalloc after configuring
+        // its process-wide default exactly once, before the first allocation.
+        unsafe impl std::alloc::GlobalAlloc for NeomacsMiMalloc {
+            unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+                Self::configure();
+                unsafe { std::alloc::GlobalAlloc::alloc(&mimalloc::MiMalloc, layout) }
+            }
+
+            unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+                Self::configure();
+                unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, layout) }
+            }
+
+            unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
+                unsafe { std::alloc::GlobalAlloc::dealloc(&mimalloc::MiMalloc, ptr, layout) }
+            }
+
+            unsafe fn realloc(
+                &self,
+                ptr: *mut u8,
+                layout: std::alloc::Layout,
+                new_size: usize,
+            ) -> *mut u8 {
+                Self::configure();
+                unsafe {
+                    std::alloc::GlobalAlloc::realloc(&mimalloc::MiMalloc, ptr, layout, new_size)
+                }
+            }
+        }
+
+        #[global_allocator]
+        static GLOBAL: NeomacsMiMalloc = NeomacsMiMalloc;
+    }
     feature = "mimalloc" => {
         #[global_allocator]
         static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;

@@ -136,11 +136,10 @@ meaning of `prof`, `prof_active`, `lg_prof_sample`, and `lg_prof_interval`.
 
 ## Doom resident-memory A/B
 
-On Linux, mimalloc eagerly commits arenas by default. Commit-on-demand retains
-substantially less resident memory after Doom startup, but also made startup
-measurably slower in the controlled panel, so Neomacs keeps mimalloc's upstream
-default. Memory-constrained users can opt in with
-`MIMALLOC_ARENA_EAGER_COMMIT=0`.
+On Linux, Neomacs defaults mimalloc arenas to commit-on-demand because it
+retains substantially less resident memory after Doom startup. Set
+`MIMALLOC_ARENA_EAGER_COMMIT=2` to restore mimalloc's upstream eager-commit
+policy for workloads that prefer its small startup-time advantage.
 
 After a release fresh build, compare commit-on-demand with mimalloc's Linux
 eager-commit behavior against the same installed Doom configuration:
@@ -159,10 +158,14 @@ adjacent `.startup-pairs.tsv` file. Override `RUNS`, `SETTLE_SECONDS`,
 `LOG_REPORT_DIR`, `GC_REPORT_DIR`, `STARTUP_TIMEOUT_SECONDS`, `NEOMACS_BIN`,
 `REPORT`, or `STARTUP_REPORT` when needed.
 
-For configs that deliberately defer collection during startup, set
+Neomacs also caps the collector's startup allocation interval at 4 MiB until
+`after-init-time` becomes non-nil. This bounds peak arena fragmentation while
+leaving Lisp's explicit post-startup threshold unchanged. For controlled
+experiments, set
 `NEOVM_GC_THRESHOLD_CAP_BYTES` to measure the startup-time versus settled-RSS
 curve without editing the config. This is an opt-in profiling control; normal
-runs continue to honor Lisp's `gc-cons-threshold` exactly.
+runs apply only the startup ceiling and otherwise honor Lisp's
+`gc-cons-threshold` exactly.
 
 Memory runs intentionally settle long enough to stabilize RSS, so use a
 separate higher-repetition panel to enforce startup neutrality. This example

@@ -18297,16 +18297,33 @@ fn gc_threshold_grows_with_live_heap() {
 }
 
 #[test]
-fn gc_explicit_huge_cons_threshold_stays_the_floor() {
+fn gc_startup_ceiling_bounds_explicit_huge_cons_threshold() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    // An explicit `gc-cons-threshold` far above the live-proportional term
-    // must win exactly: elisp settings are floors the adaptive term never
-    // trims (and here it is also the max, so the threshold equals it).
     ev.eval_str_each(
         "(progn
            (setq gc-cons-percentage nil)
            (setq gc-cons-threshold 268435456))",
+    );
+    assert_eq!(
+        ev.tagged_heap.gc_threshold(),
+        GC_STARTUP_THRESHOLD_CEILING_BYTES
+    );
+}
+
+#[test]
+fn gc_explicit_huge_cons_threshold_stays_the_floor_after_startup() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    // Once startup is complete, an explicit `gc-cons-threshold` far above the
+    // live-proportional term wins exactly. Setting `after-init-time` itself
+    // releases the ceiling; no later threshold mutation or collection is
+    // needed.
+    ev.eval_str_each(
+        "(progn
+           (setq gc-cons-percentage nil)
+           (setq gc-cons-threshold 268435456)
+           (setq after-init-time t))",
     );
     assert_eq!(ev.tagged_heap.gc_threshold(), 268_435_456);
 }

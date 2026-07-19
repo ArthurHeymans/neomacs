@@ -15,7 +15,7 @@ default = ["video", "jit", "mimalloc"]
 # Vec/String temporaries); mimalloc is markedly faster for that churn. Affects
 # only Rust allocations, not the linked C libraries. `--no-default-features`
 # drops back to the system allocator.
-mimalloc = ["dep:mimalloc"]
+mimalloc = ["dep:mimalloc", "dep:libmimalloc-sys"]
 # Use TiKV's jemalloc fork as the global allocator. Select this instead of
 # `mimalloc`.
 jemalloc = ["dep:tikv-jemallocator"]
@@ -68,6 +68,7 @@ neovm-core.workspace = true
 serde.workspace = true
 serde_json = "1"
 mimalloc = { version = "0.1", optional = true, default-features = false }
+libmimalloc-sys = { version = "0.1", optional = true, default-features = false, features = ["extended"] }
 tikv-jemallocator = { version = "0.7", optional = true, default-features = false }
 
 # Utilities
