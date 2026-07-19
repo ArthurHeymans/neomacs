@@ -1,5 +1,8 @@
 //! Divergence oracle parity tests.
 
+// The large `combos` families are separate integration-test targets under
+// `tests/` so each family is compiled by its own rustc process.
+
 mod abbrev_syntax_charfold_runtime;
 mod advice_deep;
 mod advice_hooks_deep;
@@ -67,7 +70,6 @@ mod coding_systems_roundtrip_runtime;
 mod collate_keymap_iter_runtime;
 mod color_values_matrix;
 mod column_indent_motion_runtime;
-mod combos;
 mod compat_legacy;
 mod compile;
 mod completion;

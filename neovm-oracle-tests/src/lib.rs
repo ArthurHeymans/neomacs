@@ -1,6 +1,9 @@
 //! Oracle-backed Elisp parity tests.
 #![allow(non_snake_case)]
 
+// Keep the largest source trees as integration-test targets under `tests/` so
+// release archives compile them in separate, memory-bounded rustc processes.
+
 mod abbrev_comprehensive_patterns;
 mod abs;
 mod accessible_keymaps_semantics;
@@ -48,7 +51,6 @@ mod cl;
 mod clear_string_semantics;
 mod closure;
 mod coding;
-mod combination;
 mod combine_and_quote_strings_semantics;
 mod command_loop_keyboard_semantics;
 mod command_modes;
@@ -87,7 +89,6 @@ mod delete;
 mod delq;
 mod derived_mode_semantics;
 mod directory;
-mod divergence;
 mod dlet_semantics;
 mod docstring_format_semantics;
 mod dolist;
@@ -109,7 +110,6 @@ mod event;
 mod executable_find_strict_edge_semantics;
 mod expand_file_name_strict_edge_semantics;
 mod expt_sqrt_log_patterns;
-mod face_theme;
 mod field_at_pos_semantics;
 mod file;
 mod fillarray_advanced;
@@ -243,7 +243,6 @@ mod oclosure;
 mod oclosure_advanced;
 mod or;
 mod oracle_harness_semantics;
-mod org_mode;
 mod overlay_comprehensive_patterns;
 mod overlay_helper_semantics;
 mod parse_colon_path_strict_edge_semantics;
